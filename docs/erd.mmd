@@ -1,0 +1,454 @@
+%% ============================================================
+%% ERD-0 — المخطط الشامل المفصل (النظرة العامة الكاملة لقاعدة البيانات)
+%% النسخة النهائية — متوافق مع قيود 3.10.8
+%% ============================================================
+%%{init: {'theme': 'default', 'themeVariables': {'fontSize': '13px', 'primaryColor': '#ffffff', 'primaryBorderColor': '#1F2937', 'primaryTextColor': '#111827', 'lineColor': '#374151'}}}%%
+erDiagram
+
+    %% ========= (1) الهوية والجهات والصلاحيات =========
+    ROLES {
+        int role_id PK
+        varchar role_name UK
+        varchar description
+    }
+    PERMISSIONS {
+        int permission_id PK
+        varchar permission_code UK
+        varchar permission_name
+        varchar description
+    }
+    ROLE_PERMISSIONS {
+        int role_id PK,FK
+        int permission_id PK,FK
+        datetime assigned_at
+    }
+    SCHOOLS {
+        int school_id PK
+        varchar school_name
+        varchar educational_stage
+        varchar identification_data
+        varchar educational_district
+        varchar governorate
+        varchar status
+    }
+    MINISTRIES {
+        int ministry_id PK
+        varchar ministry_name
+        varchar description
+    }
+    USERS {
+        int user_id PK
+        int school_id FK
+        int ministry_id FK
+        varchar username UK
+        varchar password_hash
+        varchar full_name
+        varchar email
+        varchar user_type
+        varchar status
+        datetime created_at
+        datetime updated_at
+    }
+    USER_ROLES {
+        int user_id PK,FK
+        int role_id PK,FK
+        datetime assigned_at
+        datetime revoked_at
+        boolean active
+    }
+    SESSIONS {
+        int session_id PK
+        int user_id FK
+        varchar session_token UK
+        datetime started_at
+        datetime ended_at
+        boolean active
+        datetime created_at
+        datetime updated_at
+    }
+
+    %% ========= (2) الإطار المرجعي والإصدارات وأدوات التحقق =========
+    STANDARD_VERSIONS {
+        int version_id PK
+        varchar version_no UK
+        date issue_date
+        varchar source_organization
+        varchar source_number
+        varchar source_description
+        varchar status
+        datetime created_at
+        datetime updated_at
+    }
+    STANDARDS {
+        int standard_id PK
+        int version_id FK
+        varchar code
+        varchar name
+        varchar description
+        decimal weight
+        datetime created_at
+        datetime updated_at
+    }
+    SUB_STANDARDS {
+        int sub_standard_id PK
+        int standard_id FK
+        varchar code
+        varchar name
+        varchar description
+        datetime created_at
+        datetime updated_at
+    }
+    INDICATORS {
+        int indicator_id PK
+        int sub_standard_id FK
+        varchar code
+        varchar name
+        varchar description
+        decimal weight
+        varchar status
+        datetime created_at
+        datetime updated_at
+    }
+    SCORE_LEVELS {
+        int score_level_id PK
+        int standard_version_id FK
+        int score_value
+        varchar label
+        varchar general_description
+        int display_order
+    }
+    INDICATOR_SCORE_DESCRIPTORS {
+        int descriptor_id PK
+        int indicator_id FK
+        int score_level_id FK
+        int standard_version_id FK
+        varchar label
+        varchar description
+        int display_order
+        boolean is_active
+    }
+    INDICATOR_EVIDENCE_REQUIREMENTS {
+        int requirement_id PK
+        int indicator_id FK
+        int standard_version_id FK
+        varchar title
+        varchar description
+        boolean required
+        int display_order
+    }
+    VERIFICATION_TOOLS {
+        int tool_id PK
+        varchar name
+        varchar tool_type
+        varchar description
+        boolean approved
+        datetime created_at
+        datetime updated_at
+    }
+    INDICATOR_VERIFICATION_METHODS {
+        int id PK
+        int indicator_id FK
+        int tool_id FK
+        boolean required
+        varchar usage_guidance
+        datetime created_at
+    }
+
+    %% ========= (3) الدورات والتقييم والنتائج والشواهد =========
+    EVALUATION_CYCLES {
+        int cycle_id PK
+        int version_id FK
+        varchar academic_year
+        date start_date
+        date end_date
+        varchar status
+        datetime created_at
+        datetime updated_at
+    }
+    CYCLE_PARTICIPATIONS {
+        int cycle_id PK,FK
+        int school_id PK,FK
+        datetime created_at
+        datetime updated_at
+    }
+    EVALUATIONS {
+        int evaluation_id PK
+        int cycle_id FK
+        int school_id FK
+        int created_by_user_id FK
+        varchar status
+        datetime created_at
+        datetime updated_at
+    }
+    EVALUATION_RESULTS {
+        int result_id PK
+        int evaluation_id FK
+        int indicator_id FK
+        int score_descriptor_id FK
+        int standard_version_id FK
+        int evaluator_user_id FK
+        int score
+        varchar textual_result
+        varchar completion_status
+        datetime created_at
+        datetime updated_at
+    }
+    EVIDENCES {
+        int evidence_id PK
+        int result_id FK
+        int indicator_id FK
+        varchar title
+        varchar description
+        varchar justification
+        datetime created_at
+        datetime updated_at
+    }
+    EVIDENCE_VERSIONS {
+        int evidence_version_id PK
+        int evidence_id FK
+        int version_no
+        boolean current
+        datetime created_at
+        datetime updated_at
+    }
+    ATTACHMENTS {
+        int attachment_id PK
+        varchar target_type
+        int target_id
+        varchar file_name
+        varchar file_type
+        bigint file_size
+        varchar storage_uri
+        datetime created_at
+        datetime updated_at
+    }
+    NOTES {
+        int note_id PK
+        int result_id FK
+        int author_user_id FK
+        varchar text
+        datetime created_at
+        datetime updated_at
+    }
+    EVALUATION_RESULT_VERIFICATION_METHODS {
+        int id PK
+        int evaluation_result_id FK
+        int tool_id FK
+    }
+
+    %% ========= (4) خطط التحسين وإجراءاتها =========
+    IMPROVEMENT_AREAS {
+        int area_id PK
+        int result_id FK
+        int indicator_id FK
+        varchar name
+        varchar description
+        varchar priority
+        datetime created_at
+        datetime updated_at
+    }
+    IMPROVEMENT_PLANS {
+        int plan_id PK
+        int cycle_id FK
+        int school_id FK
+        int created_by_user_id FK
+        varchar title
+        date start_date
+        date end_date
+        varchar status
+        varchar progress_description
+        datetime created_at
+        datetime updated_at
+    }
+    PLAN_IMPROVEMENT_AREAS {
+        int plan_id PK,FK
+        int area_id PK,FK
+        datetime created_at
+    }
+    IMPROVEMENT_ACTIONS {
+        int action_id PK
+        int plan_id FK
+        int area_id FK
+        varchar title
+        varchar responsible_person_description
+        date start_date
+        date due_date
+        varchar status
+        varchar progress_description
+        datetime created_at
+        datetime updated_at
+    }
+
+    %% ========= (5) المخرجات والاستكمال والإشعارات والذكاء الاصطناعي =========
+    REPORTS {
+        int report_id PK
+        int evaluation_id FK
+        datetime generated_at
+        datetime updated_at
+        varchar status
+    }
+    EVALUATION_SUBMISSIONS {
+        int submission_id PK
+        int report_id FK
+        int submitted_by_user_id FK
+        int attempt_no
+        datetime submitted_at
+        datetime updated_at
+        varchar status
+    }
+    INTERNAL_REVIEW_NOTES {
+        int note_id PK
+        int report_id FK
+        int author_user_id FK
+        varchar text
+        datetime created_at
+        datetime updated_at
+    }
+    PLAN_REVIEW_NOTES {
+        int note_id PK
+        int plan_id FK
+        int author_user_id FK
+        varchar text
+        datetime created_at
+        datetime updated_at
+    }
+    SUPERVISOR_NOTES {
+        int note_id PK
+        int submission_id FK
+        int author_user_id FK
+        varchar text
+        datetime created_at
+        datetime updated_at
+    }
+    COMPLETION_REQUESTS {
+        int request_id PK
+        int submission_id FK
+        int issued_by_user_id FK
+        datetime created_at
+        datetime resolved_at
+        datetime updated_at
+        varchar status
+    }
+    COMPLETION_REQUEST_ITEMS {
+        int request_item_id PK
+        int request_id FK
+        int indicator_id FK
+        int evidence_id FK
+        varchar missing_description
+        varchar status
+        datetime created_at
+        datetime updated_at
+    }
+    NOTIFICATIONS {
+        int notification_id PK
+        int recipient_user_id FK
+        varchar title
+        varchar message
+        varchar type
+        varchar related_entity_type
+        int related_entity_id
+        boolean is_read
+        datetime created_at
+        datetime read_at
+    }
+    AI_ANALYSIS {
+        int analysis_id PK
+        int evaluation_id FK
+        int requested_by_user_id FK
+        datetime analysis_date
+        varchar input_scope
+        varchar summary
+        varchar status
+        datetime created_at
+        datetime updated_at
+    }
+    AI_RECOMMENDATIONS {
+        int recommendation_id PK
+        int analysis_id FK
+        int improvement_action_id FK
+        varchar type
+        varchar title
+        varchar description
+        varchar priority
+        varchar human_modifications
+        varchar status
+        datetime created_at
+        datetime updated_at
+    }
+
+    %% ========= العلاقات =========
+    %% --- الهوية والصلاحيات ---
+    ROLES ||--o{ ROLE_PERMISSIONS : "تمنح صلاحيات"
+    PERMISSIONS ||--o{ ROLE_PERMISSIONS : "تُمنح عبر الدور"
+    ROLES ||--o{ USER_ROLES : "تُسند إلى مستخدمين"
+    USERS ||--o{ USER_ROLES : "له أدوار مسندة"
+    SCHOOLS ||--o{ USERS : "لديها مستخدمو مدرسة"
+    MINISTRIES ||--o{ USERS : "لديها مستخدمو وزارة"
+    USERS ||--o{ SESSIONS : "يُنشئ جلسات دخول"
+
+    %% --- الإطار المرجعي ---
+    STANDARD_VERSIONS ||--o{ STANDARDS : "تحتوي معايير رئيسة"
+    STANDARDS ||--o{ SUB_STANDARDS : "تحتوي معايير فرعية"
+    SUB_STANDARDS ||--o{ INDICATORS : "تحتوي مؤشرات"
+    STANDARD_VERSIONS ||--o{ SCORE_LEVELS : "تحدد سلم درجات"
+    INDICATORS ||--o{ INDICATOR_SCORE_DESCRIPTORS : "له أوصاف درجات رسمية"
+    SCORE_LEVELS ||--o{ INDICATOR_SCORE_DESCRIPTORS : "تصنف الأوصاف"
+    STANDARD_VERSIONS ||--o{ INDICATOR_SCORE_DESCRIPTORS : "تنتمي إلى إصدار"
+    INDICATORS ||--o{ INDICATOR_EVIDENCE_REQUIREMENTS : "يتطلب أدلة مرجعية"
+    STANDARD_VERSIONS ||--o{ INDICATOR_EVIDENCE_REQUIREMENTS : "تنتمي إلى إصدار"
+    INDICATORS ||--o{ INDICATOR_VERIFICATION_METHODS : "يسمح بأساليب تحقق"
+    VERIFICATION_TOOLS ||--o{ INDICATOR_VERIFICATION_METHODS : "مهيأة لمؤشرات محددة"
+
+    %% --- الدورات والتقييم (التصميم المركزي) ---
+    EVALUATION_CYCLES ||--o{ CYCLE_PARTICIPATIONS : "تضم مدارس مشاركة"
+    SCHOOLS ||--o{ CYCLE_PARTICIPATIONS : "تشارك في الدورات"
+    STANDARD_VERSIONS ||--o{ EVALUATION_CYCLES : "تحكم دورة التقييم"
+    EVALUATION_CYCLES ||--o{ EVALUATIONS : "تحتوي تقييمات"
+    SCHOOLS ||--o{ EVALUATIONS : "تنفذ تقييمها الذاتي"
+    USERS ||--o{ EVALUATIONS : "أنشأها مستخدم"
+    EVALUATIONS ||--o{ EVALUATION_RESULTS : "له نتائج تقييم"
+    INDICATORS ||--o{ EVALUATION_RESULTS : "تُقيَّم فيها المؤشرات"
+    INDICATOR_SCORE_DESCRIPTORS ||--o{ EVALUATION_RESULTS : "وصف الدرجة المختارة"
+    STANDARD_VERSIONS ||--o{ EVALUATION_RESULTS : "وفق إصدار رسمي"
+    USERS ||--o{ EVALUATION_RESULTS : "سجلها مقيم"
+    EVALUATION_RESULTS ||--o{ EVIDENCES : "تدعمها شواهد"
+    INDICATORS ||--o{ EVIDENCES : "شواهد خاصة بمؤشر"
+    EVIDENCES ||--o{ EVIDENCE_VERSIONS : "لها نسخ تاريخية"
+    EVALUATION_RESULTS ||--o{ NOTES : "لها ملاحظات"
+    USERS ||--o{ NOTES : "كتبها مستخدم"
+    VERIFICATION_TOOLS ||--o{ EVALUATION_RESULT_VERIFICATION_METHODS : "أسلوب مستخدم فعليًا"
+    EVALUATION_RESULTS ||--o{ EVALUATION_RESULT_VERIFICATION_METHODS : "سجل لها أسلوب"
+    %% ملاحظة: ATTACHMENTS متعددة الأهداف (target_type + target_id):
+    %% ترتبط بنسخ الشواهد أو التقارير وفق نوع الهدف ومعرفه — لذا لا خط علاقة مباشر
+    %% (نفس النمط المعتمد في NOTIFICATIONS — قيد 3.10.8)
+
+    %% --- خطط التحسين ---
+    EVALUATION_RESULTS ||--o{ IMPROVEMENT_AREAS : "تحدد مجالات تحسين"
+    INDICATORS ||--o{ IMPROVEMENT_AREAS : "قد يكون مصدر مجال تحسين"
+    EVALUATION_CYCLES ||--o{ IMPROVEMENT_PLANS : "تنسق خطط تحسين"
+    SCHOOLS ||--o{ IMPROVEMENT_PLANS : "تدير خطط تحسين"
+    USERS ||--o{ IMPROVEMENT_PLANS : "أنشأها مستخدم"
+    IMPROVEMENT_PLANS ||--o{ PLAN_IMPROVEMENT_AREAS : "تستهدف مجالات"
+    IMPROVEMENT_AREAS ||--o{ PLAN_IMPROVEMENT_AREAS : "تستهدف عبر خطط"
+    PLAN_IMPROVEMENT_AREAS ||--o{ IMPROVEMENT_ACTIONS : "تضبط بالقيد المركب (plan_id, area_id)"
+
+    %% --- المخرجات والاستكمال والإشعارات والذكاء ---
+    EVALUATIONS ||--o{ REPORTS : "تنتج تقريرًا"
+    REPORTS ||--o{ EVALUATION_SUBMISSIONS : "لها محاولات رفع"
+    USERS ||--o{ EVALUATION_SUBMISSIONS : "يرفعها مستخدم"
+    REPORTS ||--o{ INTERNAL_REVIEW_NOTES : "لها ملاحظات مراجعة داخلية"
+    USERS ||--o{ INTERNAL_REVIEW_NOTES : "كتبها مدير المدرسة"
+    IMPROVEMENT_PLANS ||--o{ PLAN_REVIEW_NOTES : "لها ملاحظات مراجعة الخطة"
+    USERS ||--o{ PLAN_REVIEW_NOTES : "كتبها مستخدم"
+    EVALUATION_SUBMISSIONS ||--o{ SUPERVISOR_NOTES : "لها ملاحظات إشرافية وزارية"
+    USERS ||--o{ SUPERVISOR_NOTES : "كتبها مشرف وزاري"
+    EVALUATION_SUBMISSIONS ||--o{ COMPLETION_REQUESTS : "قد تتطلب طلب استكمال"
+    USERS ||--o{ COMPLETION_REQUESTS : "أصدره مشرف وزاري"
+    COMPLETION_REQUESTS ||--o{ COMPLETION_REQUEST_ITEMS : "تحدد بنود استكمال"
+    INDICATORS ||--o{ COMPLETION_REQUEST_ITEMS : "بند استكمال خاص بمؤشر"
+    EVIDENCES ||--o{ COMPLETION_REQUEST_ITEMS : "بند قد يستهدف شاهدًا"
+    USERS ||--o{ NOTIFICATIONS : "يستلم إشعارات"
+    EVALUATIONS ||--o{ AI_ANALYSIS : "يُطلب تحليلها بالذكاء الاصطناعي"
+    USERS ||--o{ AI_ANALYSIS : "يطلب التحليل"
+    AI_ANALYSIS ||--o{ AI_RECOMMENDATIONS : "تنتج توصيات"
+    IMPROVEMENT_ACTIONS ||--o{ AI_RECOMMENDATIONS : "قد تدعم إجراء بعد المراجعة البشرية"

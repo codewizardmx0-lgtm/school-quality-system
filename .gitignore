@@ -1,0 +1,58 @@
+﻿# Environment variables and secrets
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# Dependencies
+/vendor/
+/node_modules/
+/school-eval-api/vendor/
+/school-eval-web/node_modules/
+
+# Build outputs
+/school-eval-api/public/build/
+/school-eval-api/public/hot
+/school-eval-web/dist/
+/school-eval-web/dist-ssr/
+
+# Logs and temporary files
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+*.local
+.phpunit.result.cache
+
+# Runtime-generated Laravel files
+/school-eval-api/storage/*.key
+/school-eval-api/storage/pail
+/school-eval-api/public/storage
+
+# Operating system and editor files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.suo
+
+# Local database files and backups
+*.sqlite
+*.sqlite3
+*.db
+*.sql
+*.sql.gz
+*.dump
+
+# Private keys and certificates
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Laravel generated cache files
+/school-eval-api/bootstrap/cache/*.php
+/school-eval-api/storage/framework/cache/
+/school-eval-api/storage/framework/sessions/
+/school-eval-api/storage/framework/views/
+/school-eval-api/storage/logs/

@@ -1,0 +1,701 @@
+[HEADING/TEXT] قاموس البيانات — Data Dictionary
+[HEADING/TEXT] النسخة النهائية المولدة من مخطط ERD-0 المفصل (40 جدولًا • 63 علاقة) — متوافقة مع قيود 3.10.8
+[HEADING/TEXT] منصة التقييم الذاتي والتحسين المدرسي — 12 أكتوبر 2026
+[HEADING/TEXT] تمهيد: كيف تقرأ هذا القاموس
+[HEADING/TEXT] هذا القاموس هو الترجمة الحرفية لمخطط ERD-0 المفصل النهائي إلى مواصفة تنفيذية: منه تُكتب Migrations مباشرة، ومنه تُبنى حقول الـAPI وأنواع TypeScript ونماذج الواجهات. أسماء الجداول في ERD بحروف كبيرة والتنفيذ المتفق عليه بأحرف صغيرة (اتفاقية MySQL).
+[HEADING/TEXT] • أضفت عمود Length بقيم مقترحة لأن ERD لا يحدد الأطوال — عدّلها بحرية بما لا يخالف الأنواع.
+[HEADING/TEXT] • أضفت أسفل الجداول ذات القيود المركبة سطر «قيود الجدول» — لأن أعمدة الجدول الثمانية تعرض قيود العمود المفرد فقط، والقيد المركب صفّي.
+[HEADING/TEXT] • قيمة «شرطي» في عمود Required تعني: العمود اختياري في قاعدة البيانات لكن إلزامي بموجب شرط (مثل قاعدة الجهة الواحدة أو قيد CHECK لمصدر واحد على الأقل).
+[HEADING/TEXT] • اتفاقية التسمية الموحدة: قيم حالات الكيانات (Enums) بصيغة PascalCase — مطابقة للحالات الخمس المنصوصة في 3.10.8 — بينما قيم الأنواع والمعرفات المركبة (target_type، أنواع الإشعارات، input_scope) بصيغة snake_case. ثبّتها كـEnum واحد في الكود (PHP Enum + ثوابت TypeScript) ولا تبعثرها نصوصًا.
+[HEADING/TEXT] أولًا: ملخص الكيانات (40 جدولًا)
+
+=== TABLE START ===
+| اسم الجدول | الحزمة / المخطط | عدد الحقول | الغرض من الجدول |
+| roles | ERD-01 — الهوية والجهات والصلاحيات | 3 | الأدوار الوظيفية في المنصة (مستخدم تقييم، مدير مدرسة، مشرف وزاري، مسؤول المرجعية، مسؤول نظام). |
+| permissions | ERD-01 — الهوية والجهات والصلاحيات | 4 | الصلاحيات الذرية التي يسمح بها النظام (أساس التحكم بالوصول). |
+| role_permissions | ERD-01 — الهوية والجهات والصلاحيات | 3 | ربط الأدوار بالصلاحيات (علاقة many-to-many). |
+| schools | ERD-01 — الهوية والجهات والصلاحيات | 7 | بيانات المدارس المرتبطة بالمنصة. |
+| ministries | ERD-01 — الهوية والجهات والصلاحيات | 3 | الجهات الوزارية التي ينتمي إليها المستخدمون الوزاريون. |
+| users | ERD-01 — الهوية والجهات والصلاحيات | 11 | حسابات المستخدمين وربطها بجهتهم حسب النوع. |
+| user_roles | ERD-01 — الهوية والجهات والصلاحيات | 5 | أدوار المستخدمين مع تاريخ الإسناد والسحب. |
+| sessions | ERD-01 — الهوية والجهات والصلاحيات | 8 | جلسات الدخول — تدعم إنهاء الجلسة تلقائيًا بعد 30 دقيقة خمول (FR-GEN-02). |
+| standard_versions | ERD-02 — الإطار المرجعي والإصدارات وأدوات التحقق | 9 | الإصدارات المعيارية للمعايير مع توثيق مصدرها الرسمي وحالتها. |
+| standards | ERD-02 — الإطار المرجعي والإصدارات وأدوات التحقق | 8 | المعايير الرئيسة داخل كل إصدار وأوزانها. |
+| sub_standards | ERD-02 — الإطار المرجعي والإصدارات وأدوات التحقق | 7 | المعايير الفرعية تحت كل معيار رئيس. |
+| indicators | ERD-02 — الإطار المرجعي والإصدارات وأدوات التحقق | 9 | المؤشرات — وحدة التقييم الذرية (قرار RC-06). |
+| score_levels | ERD-02 — الإطار المرجعي والإصدارات وأدوات التحقق | 6 | سلم الدرجات الرسمي (0–3) المعتمد لكل إصدار. |
+| indicator_score_descriptors | ERD-02 — الإطار المرجعي والإصدارات وأدوات التحقق | 8 | الأوصاف الرسمية لتقدير كل مؤشر عند كل درجة (0–3). |
+| indicator_evidence_requirements | ERD-02 — الإطار المرجعي والإصدارات وأدوات التحقق | 7 | متطلبات الشواهد المرجعية لكل مؤشر. |
+| verification_tools | ERD-02 — الإطار المرجعي والإصدارات وأدوات التحقق | 7 | أدوات التحقق المعتمدة رسميًا. |
+| indicator_verification_methods | ERD-02 — الإطار المرجعي والإصدارات وأدوات التحقق | 6 | أساليب التحقق المسموح باستخدامها لكل مؤشر. |
+| evaluation_cycles | ERD-03 — دورات التقييم والنتائج والشواهد | 8 | الدورات التقييمية المركزية وفتراتها وحالتها. |
+| cycle_participations | ERD-03 — دورات التقييم والنتائج والشواهد | 4 | مشاركة المدارس في الدورات (جدول الربط المركزي). |
+| evaluations | ERD-03 — دورات التقييم والنتائج والشواهد | 7 | ملف التقييم الذاتي للمدرسة ضمن دورة محددة. |
+| evaluation_results | ERD-03 — دورات التقييم والنتائج والشواهد | 11 | نتائج التقدير لكل مؤشر — مقرونة بالوصف والإصدار. |
+| evidences | ERD-03 — دورات التقييم والنتائج والشواهد | 8 | الشواهد المرتبطة بالنتائج والمؤشرات. |
+| evidence_versions | ERD-03 — دورات التقييم والنتائج والشواهد | 6 | النسخ التاريخية للشواهد عند الاستبدال. |
+| attachments | ERD-03 — دورات التقييم والنتائج والشواهد | 9 | ملفات المرفقات — مرجع متعدد الأهداف. |
+| notes | ERD-03 — دورات التقييم والنتائج والشواهد | 6 | الملاحظات النصية على نتائج التقييم. |
+| evaluation_result_verification_methods | ERD-03 — دورات التقييم والنتائج والشواهد | 3 | أساليب التحقق المستخدمة فعليًا لكل نتيجة. |
+| improvement_areas | ERD-04 — خطط التحسين وإجراءاتها | 8 | مجالات التحسين المستخلصة من النتائج أو المؤشرات. |
+| improvement_plans | ERD-04 — خطط التحسين وإجراءاتها | 11 | خطط تحسين الأداء المرتبطة بالدورة والمدرسة. |
+| plan_improvement_areas | ERD-04 — خطط التحسين وإجراءاتها | 3 | ربط الخطط بمجالات متعددة (many-to-many). |
+| improvement_actions | ERD-04 — خطط التحسين وإجراءاتها | 11 | إجراءات التحسين بمسؤوليها ومواعيدها. |
+| reports | ERD-05 — المخرجات والاستكمال والإشعارات والذكاء الاصطناعي | 5 | تقارير التقييم المولدة من ملف التقييم. |
+| evaluation_submissions | ERD-05 — المخرجات والاستكمال والإشعارات والذكاء الاصطناعي | 7 | محاولات رفع مخرج التقييم إلى المستوى الوزاري. |
+| internal_review_notes | ERD-05 — المخرجات والاستكمال والإشعارات والذكاء الاصطناعي | 6 | ملاحظات المراجعة الداخلية (مدير المدرسة) على التقرير. |
+| plan_review_notes | ERD-05 — المخرجات والاستكمال والإشعارات والذكاء الاصطناعي | 6 | ملاحظات مراجعة مدير المدرسة على خطة التحسين. |
+| supervisor_notes | ERD-05 — المخرجات والاستكمال والإشعارات والذكاء الاصطناعي | 6 | ملاحظات المشرف الوزاري الإدارية/الإشرافية على المخرج. |
+| completion_requests | ERD-05 — المخرجات والاستكمال والإشعارات والذكاء الاصطناعي | 7 | طلبات الاستكمال الصادرة عن محاولة إرسال محددة. |
+| completion_request_items | ERD-05 — المخرجات والاستكمال والإشعارات والذكاء الاصطناعي | 8 | بنود طلب الاستكمال — كل بند يستهدف مؤشرًا أو شاهدًا. |
+| notifications | ERD-05 — المخرجات والاستكمال والإشعارات والذكاء الاصطناعي | 10 | سجل الإشعارات الدائم للمستخدمين. |
+| ai_analysis | ERD-05 — المخرجات والاستكمال والإشعارات والذكاء الاصطناعي | 9 | طلبات التحليل بالذكاء الاصطناعي وحالتها. |
+| ai_recommendations | ERD-05 — المخرجات والاستكمال والإشعارات والذكاء الاصطناعي | 11 | توصيات الذكاء الاصطناعي ومراجعتها البشرية. |
+=== TABLE END ===
+
+[HEADING/TEXT] الإجمالي: 40 جدولًا • 281 حقلًا • 63 علاقة (المصدر: ERD-0 النهائي).
+[HEADING/TEXT] ثانيًا: التوافق بين ERD ومخططات الفئات
+[HEADING/TEXT] مخططات الفئات تمثل المستوى الهيكلي (الكيانات والسلوك وEnums)، وERD يمثل المستوى المنطقي للتخزين (الجداول والمفاتيح والعلاقات). الجدول التالي يوضح المقابلة البسيطة بينها:
+
+=== TABLE START ===
+| مخطط الفئات | مقابله في ERD | الكيانات / الجداول | ملاحظة التوافق |
+| CD-01 الهوية والجهات والصلاحيات | ERD-01 | User, Session, School, Ministry + نظام RBAC ↔ users, sessions, schools, ministries, roles, permissions + جدولا الربط | تطابق مباشر؛ جولا الربط (role_permissions, user_roles) يمثلان جمعيات many-to-many في مخطط الفئات |
+| CD-02 الإطار المرجعي والإصدارات | ERD-02 | StandardVersion, Standard, SubStandard, Indicator, IndicatorScoreDescriptor, ScoreLevel ↔ الجداول التسعة نفسها | تطابق تام؛ الأدلة المرجعية (المتطلبات والأساليب) جداول تكاملية في ERD |
+| CD-03 التقييم والشواهد | ERD-03 | EvaluationCycle, Evaluation, EvaluationResult, Evidence, EvidenceVersion, Attachment, Note ↔ 9 جداول | تطابق؛ cycle_participations تفصّل علاقة المدرسة-بالدورة (many-to-many) في ERD فقط |
+| CD-04 خطط التحسين | ERD-04 | ImprovementArea, ImprovementPlan, ImprovementAction ↔ 4 جداول | تطابق؛ plan_improvement_areas يمثل جمعية الخطة-بالمجالات |
+| CD-05 التقارير والإرسال والاستكمال والإشعارات | ERD-05 (الجزء الأول) | Report, EvaluationSubmission, الملاحظات الثلاث, CompletionRequest وبنوده, Notification ↔ 8 جداول | تطابق؛ محاولات الإرسال المتتابعة علاقة 1..* تحملها evaluation_submissions |
+| CD-06 الذكاء الاصطناعي | ERD-05 (الجزء الثاني) | AIAnalysis, AIRecommendation ↔ ai_analysis, ai_recommendations | دُمج المجالان في ERD-05 لترابطهما التشغيلي؛ ربط التوصية بالإجراء FK اختياري بعد المراجعة البشرية |
+| عام — المراجع متعددة الأشكال | attachments + notifications | Attachment (target_type + target_id) وNotification (related_entity_type + related_entity_id) | النمط نفسه معتمد في المستويين — بلا خطوط علاقة مباشرة، يوثق بقيد طبقة التطبيق |
+| عام — Enums | أعمدة الحالات | Enums في مخططات الفئات (مثل SubmissionStatus) | يقابلها عمود Allowed Values في هذا القاموس — مصدر واحد للحقيقة في الكود |
+=== TABLE END ===
+
+[HEADING/TEXT] ثالثًا: القاموس التفصيلي — ERD-01: الهوية والجهات والصلاحيات
+[HEADING/TEXT] لكل حزمة: شرح موجز ثم جداول حقولها بالأعمدة الثمانية المعتمدة.
+[HEADING/TEXT] يغطي إدارة الهوية والوصول (RBAC): حسابات المستخدمين وربطهم بجهة واحدة حسب نوعهم (مدرسة أو وزارة — ولا جهة لمسؤول النظام)، والأدوار والصلاحيات وجداول ربطها، وجلسات الدخول. القرار التصميمي الحاكم: لا يجوز الجمع بين مدرسة ووزارة في الحساب الواحد.
+[HEADING/TEXT] جدول roles
+[HEADING/TEXT] الأدوار الوظيفية في المنصة (مستخدم تقييم، مدير مدرسة، مشرف وزاري، مسؤول المرجعية، مسؤول نظام).
+
+=== TABLE START ===
+| Field | Type | Length | Key | Required | References | Allowed Values | Description |
+| role_id | int | — | PK | نعم | — | — | المعرف الفريد للدور |
+| role_name | varchar | 50 | UK | نعم | — | — | اسم الدور — فريد |
+| description | varchar | 255 | — | لا | — | — | وصف الدور واختصاصه |
+=== TABLE END ===
+
+[HEADING/TEXT] جدول permissions
+[HEADING/TEXT] الصلاحيات الذرية التي يسمح بها النظام (أساس التحكم بالوصول).
+
+=== TABLE START ===
+| Field | Type | Length | Key | Required | References | Allowed Values | Description |
+| permission_id | int | — | PK | نعم | — | — | المعرف الفريد للصلاحية |
+| permission_code | varchar | 50 | UK | نعم | — | — | رمز الصلاحية — فريد (مثل evaluations.create) |
+| permission_name | varchar | 100 | — | نعم | — | — | اسم الصلاحية بالعربية |
+| description | varchar | 255 | — | لا | — | — | وصف الصلاحية |
+=== TABLE END ===
+
+[HEADING/TEXT] جدول role_permissions
+[HEADING/TEXT] ربط الأدوار بالصلاحيات (علاقة many-to-many).
+
+=== TABLE START ===
+| Field | Type | Length | Key | Required | References | Allowed Values | Description |
+| role_id | int | — | PK,FK | نعم | roles.role_id | — | الدور الممنوحة له الصلاحية |
+| permission_id | int | — | PK,FK | نعم | permissions.permission_id | — | الصلاحية الممنوحة |
+| assigned_at | datetime | — | — | نعم | — | — | تاريخ منح الصلاحية |
+=== TABLE END ===
+
+[HEADING/TEXT] 🔗 قيود الجدول: مفتاح أساسي مركب (role_id, permission_id) يمنع تكرار منح الصلاحية نفسها للدور نفسه.
+[HEADING/TEXT] جدول schools
+[HEADING/TEXT] بيانات المدارس المرتبطة بالمنصة.
+
+=== TABLE START ===
+| Field | Type | Length | Key | Required | References | Allowed Values | Description |
+| school_id | int | — | PK | نعم | — | — | المعرف الفريد للمدرسة |
+| school_name | varchar | 150 | — | نعم | — | — | الاسم الرسمي للمدرسة |
+| educational_stage | varchar | 50 | — | نعم | — | — | المرحلة التعليمية |
+| identification_data | varchar | 100 | — | لا | — | — | بيانات التمييز الرسمية (رقم المدرسة ونحوه) |
+| educational_district | varchar | 100 | — | نعم | — | — | المديرية التعليمية |
+| governorate | varchar | 100 | — | نعم | — | — | المحافظة |
+| status | varchar | 20 | — | نعم | — | Active | Inactive | حالة المدرسة لدى المنصة |
+=== TABLE END ===
+
+[HEADING/TEXT] جدول ministries
+[HEADING/TEXT] الجهات الوزارية التي ينتمي إليها المستخدمون الوزاريون.
+
+=== TABLE START ===
+| Field | Type | Length | Key | Required | References | Allowed Values | Description |
+| ministry_id | int | — | PK | نعم | — | — | المعرف الفريد للجهة الوزارية |
+| ministry_name | varchar | 150 | — | نعم | — | — | الاسم الرسمي للجهة |
+| description | varchar | 255 | — | لا | — | — | وصف الجهة |
+=== TABLE END ===
+
+[HEADING/TEXT] جدول users
+[HEADING/TEXT] حسابات المستخدمين وربطها بجهتهم حسب النوع.
+
+=== TABLE START ===
+| Field | Type | Length | Key | Required | References | Allowed Values | Description |
+| user_id | int | — | PK | نعم | — | — | المعرف الفريد للمستخدم |
+| school_id | int | — | FK | شرطي | schools.school_id | — | جهة المستخدم إذا كان من مدرسة |
+| ministry_id | int | — | FK | شرطي | ministries.ministry_id | — | جهة المستخدم إذا كان من الوزارة |
+| username | varchar | 50 | UK | نعم | — | — | اسم الدخول — فريد (3.10.8) |
+| password_hash | varchar | 255 | — | نعم | — | — | كلمة المرور مجزأة بخوارزمية آمنة — لا تُخزن نصًا (NFR-SEC-02) |
+| full_name | varchar | 150 | — | نعم | — | — | الاسم الكامل |
+| email | varchar | 150 | — | نعم | — | — | البريد الإلكتروني — يستخدم لاستعادة كلمة المرور (FR-GEN-01) |
+| user_type | varchar | 20 | — | نعم | — | school | ministry | system | نوع المستخدم — يحدد جهته وطريقة عزله |
+| status | varchar | 20 | — | نعم | — | Active | Disabled | حالة الحساب |
+| created_at | datetime | — | — | نعم | — | — | تاريخ إنشاء السجل — يدعم التتبع الزمني والتدقيق (3.10.8) |
+| updated_at | datetime | — | — | نعم | — | — | تاريخ آخر تحديث — يدعم التتبع الزمني والتدقيق (3.10.8) |
+=== TABLE END ===
+
+[HEADING/TEXT] 🔗 قيود الجدول: قاعدة الجهة الواحدة (XOR): school_id أو ministry_id حسب user_type، ولا جهة لمسؤول النظام — تُفرض في طبقة التطبيق (3.10.8).
+[HEADING/TEXT] جدول user_roles
+[HEADING/TEXT] أدوار المستخدمين مع تاريخ الإسناد والسحب.
+
+=== TABLE START ===
+| Field | Type | Length | Key | Required | References | Allowed Values | Description |
+| user_id | int | — | PK,FK | نعم | users.user_id | — | المستخدم صاحب الدور |
+| role_id | int | — | PK,FK | نعم | roles.role_id | — | الدور المسند |
+| assigned_at | datetime | — | — | نعم | — | — | تاريخ إسناد الدور |
+| revoked_at | datetime | — | — | لا | — | — | تاريخ سحب الدور — فارغ ما دام مسندًا |
+| active | boolean | — | — | نعم | — | true | false | هل الإسناد نشط حاليًا |
+=== TABLE END ===
+
+[HEADING/TEXT] 🔗 قيود الجدول: لا يتكرر الدور النشط للمستخدم نفسه (3.10.8) — المفتاح المركب يضمنه بنيويًا. إعادة إسناد دور سابق تتم بتحديث الصف نفسه (active=true وrevoked_at=NULL) — لا صف جديد؛ فالجدول يحفظ آخر حالة إسناد لكل (مستخدم، دور).
+[HEADING/TEXT] جدول sessions
+[HEADING/TEXT] جلسات الدخول — تدعم إنهاء الجلسة تلقائيًا بعد 30 دقيقة خمول (FR-GEN-02).
+
+=== TABLE START ===
+| Field | Type | Length | Key | Required | References | Allowed Values | Description |
+| session_id | int | — | PK | نعم | — | — | المعرف الفريد للجلسة |
+| user_id | int | — | FK | نعم | users.user_id | — | صاحب الجلسة |
+| session_token | varchar | 255 | UK | نعم | — | — | رمز الجلسة — فريد |
+| started_at | datetime | — | — | نعم | — | — | بداية الجلسة |
+| ended_at | datetime | — | — | لا | — | — | نهاية الجلسة — فارغة ما دامت جارية |
+| active | boolean | — | — | نعم | — | true | false | هل الجلسة نشطة |
+| created_at | datetime | — | — | نعم | — | — | تاريخ إنشاء السجل — يدعم التتبع الزمني والتدقيق (3.10.8) |
+| updated_at | datetime | — | — | نعم | — | — | تاريخ آخر تحديث — يدعم التتبع الزمني والتدقيق (3.10.8) |
+=== TABLE END ===
+
+[HEADING/TEXT] ERD-02: الإطار المرجعي والإصدارات وأدوات التحقق
+[HEADING/TEXT] يغطي المرجعية الرسمية للمعايير: الإصدارات المعيارية الموثقة المصدر وهيكلها الهرمي (إصدار ← معيار رئيس ← معيار فرعي ← مؤشر)، وسلم الدرجات (0–3)، والأوصاف الرسمية لتقدير كل مؤشر، ومتطلبات الشواهد وأدوات وأساليب التحقق. القراران الحاكمان: المؤشر هو وحدة التقييم الذرية، ولا يُعدَّل محتوى الإصدار بعد اعتماده.
+[HEADING/TEXT] جدول standard_versions
+[HEADING/TEXT] الإصدارات المعيارية للمعايير مع توثيق مصدرها الرسمي وحالتها.
+
+=== TABLE START ===
+| Field | Type | Length | Key | Required | References | Allowed Values | Description |
+| version_id | int | — | PK | نعم | — | — | المعرف الفريد للإصدار |
+| version_no | varchar | 20 | UK | نعم | — | — | رقم الإصدار الرسمي — فريد |
+| issue_date | date | — | — | نعم | — | — | تاريخ إصدار الوثيقة الرسمية |
+| source_organization | varchar | 150 | — | نعم | — | — | الجهة المصدرة (بالاسم الرسمي) |
+| source_number | varchar | 100 | — | لا | — | — | رقم الوثيقة المصدر |
+| source_description | text | — | — | لا | — | — | وصف المصدر وتوثيقه |
+| status | varchar | 20 | — | نعم | — | Draft | Active | Retired | حالة الإصدار — إصدار واحد نشط للحالات الجديدة |
+| created_at | datetime | — | — | نعم | — | — | تاريخ إنشاء السجل — يدعم التتبع الزمني والتدقيق (3.10.8) |
+| updated_at | datetime | — | — | نعم | — | — | تاريخ آخر تحديث — يدعم التتبع الزمني والتدقيق (3.10.8) |
+=== TABLE END ===
+
+[HEADING/TEXT] 🔗 قيود الجدول: رقم الإصدار فريد (3.10.8)؛ تفعيل إصدار جديد لا يغيّر الدورات السابقة ولا نتائجها (3.10.8).
+[HEADING/TEXT] جدول standards
+[HEADING/TEXT] المعايير الرئيسة داخل كل إصدار وأوزانها.
+
+=== TABLE START ===
+| Field | Type | Length | Key | Required | References | Allowed Values | Description |
+| standard_id | int | — | PK | نعم | — | — | المعرف الفريد للمعيار |
+| version_id | int | — | FK | نعم | standard_versions.version_id | — | الإصدار الذي ينتمي إليه |
+| code | varchar | 20 | — | نعم | — | — | رمز المعيار داخل الإصدار |
+| name | varchar | 200 | — | نعم | — | — | اسم المعيار |
+| description | text | — | — | لا | — | — | وصف المعيار |
+| weight | decimal | 5,2 | — | لا | — | — | وزن المعيار في الاحتساب (RC-09) |
+| created_at | datetime | — | — | نعم | — | — | تاريخ إنشاء السجل — يدعم التتبع الزمني والتدقيق (3.10.8) |
+| updated_at | datetime | — | — | نعم | — | — | تاريخ آخر تحديث — يدعم التتبع الزمني والتدقيق (3.10.8) |
+=== TABLE END ===
+
+[HEADING/TEXT] جدول sub_standards
+[HEADING/TEXT] المعايير الفرعية تحت كل معيار رئيس.
+
+=== TABLE START ===
+| Field | Type | Length | Key | Required | References | Allowed Values | Description |
+| sub_standard_id | int | — | PK | نعم | — | — | المعرف الفريد للمعيار الفرعي |
+| standard_id | int | — | FK | نعم | standards.standard_id | — | المعيار الرئيس |
+| code | varchar | 20 | — | نعم | — | — | رمز المعيار الفرعي |
+| name | varchar | 200 | — | نعم | — | — | اسم المعيار الفرعي |
+| description | text | — | — | لا | — | — | وصف المعيار الفرعي |
+| created_at | datetime | — | — | نعم | — | — | تاريخ إنشاء السجل — يدعم التتبع الزمني والتدقيق (3.10.8) |
+| updated_at | datetime | — | — | نعم | — | — | تاريخ آخر تحديث — يدعم التتبع الزمني والتدقيق (3.10.8) |
+=== TABLE END ===
+
+[HEADING/TEXT] جدول indicators
+[HEADING/TEXT] المؤشرات — وحدة التقييم الذرية (قرار RC-06).
+
+=== TABLE START ===
+| Field | Type | Length | Key | Required | References | Allowed Values | Description |
+| indicator_id | int | — | PK | نعم | — | — | المعرف الفريد للمؤشر |
+| sub_standard_id | int | — | FK | نعم | sub_standards.sub_standard_id | — | المعيار الفرعي الحاوي |
+| code | varchar | 20 | — | نعم | — | — | رمز المؤشر |
+| name | varchar | 200 | — | نعم | — | — | نص المؤشر الرسمي |
+| description | text | — | — | لا | — | — | شرح المؤشر |
+| weight | decimal | 5,2 | — | لا | — | — | وزن المؤشر |
+| status | varchar | 20 | — | نعم | — | Active | Inactive | توافر المؤشر للتقييم داخل إصداره |
+| created_at | datetime | — | — | نعم | — | — | تاريخ إنشاء السجل — يدعم التتبع الزمني والتدقيق (3.10.8) |
+| updated_at | datetime | — | — | نعم | — | — | تاريخ آخر تحديث — يدعم التتبع الزمني والتدقيق (3.10.8) |
+=== TABLE END ===
+
+[HEADING/TEXT] جدول score_levels
+[HEADING/TEXT] سلم الدرجات الرسمي (0–3) المعتمد لكل إصدار.
+
+=== TABLE START ===
+| Field | Type | Length | Key | Required | References | Allowed Values | Description |
+| score_level_id | int | — | PK | نعم | — | — | المعرف الفريد لمستوى الدرجة |
+| standard_version_id | int | — | FK | نعم | standard_versions.version_id | — | الإصدار الذي يسري عليه السلم |
+| score_value | int | — | — | نعم | — | 0 | 1 | 2 | 3 | قيمة التقدير الرسمية |
+| label | varchar | 100 | — | نعم | — | — | تسمية المستوى |
+| general_description | text | — | — | لا | — | — | الوصف العام للمستوى |
+| display_order | int | — | — | نعم | — | — | ترتيب العرض |
+=== TABLE END ===
+
+[HEADING/TEXT] 🔗 قيود الجدول: قيمة التقدير يجب أن تكون ضمن هذا السلم (3.10.8).
+[HEADING/TEXT] جدول indicator_score_descriptors
+[HEADING/TEXT] الأوصاف الرسمية لتقدير كل مؤشر عند كل درجة (0–3).
+
+=== TABLE START ===
+| Field | Type | Length | Key | Required | References | Allowed Values | Description |
+| descriptor_id | int | — | PK | نعم | — | — | المعرف الفريد للوصف |
+| indicator_id | int | — | FK | نعم | indicators.indicator_id | — | المؤشر الموصوف |
+| score_level_id | int | — | FK | نعم | score_levels.score_level_id | — | مستوى الدرجة الموصوف |
+| standard_version_id | int | — | FK | نعم | standard_versions.version_id | — | الإصدار المعياري المرجعي |
+| label | varchar | 100 | — | نعم | — | — | عنوان الوصف |
+| description | text | — | — | نعم | — | — | نص الوصف الرسمي للتقدير عند هذه الدرجة |
+| display_order | int | — | — | نعم | — | — | ترتيب العرض |
+| is_active | boolean | — | — | نعم | — | true | false | هل الوصف معتمد للاستخدام |
+=== TABLE END ===
+
+[HEADING/TEXT] 🔗 قيود الجدول: أربعة أوصاف لكل مؤشر ضمن الإصدار الواحد (0–3)، مع تطابق المؤشر والإصدار بين الحقول — قيدا طبقة الأعمال (3.10.8).
+[HEADING/TEXT] جدول indicator_evidence_requirements
+[HEADING/TEXT] متطلبات الشواهد المرجعية لكل مؤشر.
+
+=== TABLE START ===
+| Field | Type | Length | Key | Required | References | Allowed Values | Description |
+| requirement_id | int | — | PK | نعم | — | — | المعرف الفريد للمتطلب |
+| indicator_id | int | — | FK | نعم | indicators.indicator_id | — | المؤشر صاحب المتطلب |
+| standard_version_id | int | — | FK | نعم | standard_versions.version_id | — | الإصدار المعياري |
+| title | varchar | 200 | — | نعم | — | — | عنوان المتطلب |
+| description | text | — | — | لا | — | — | شرح المتطلب |
+| required | boolean | — | — | نعم | — | true | false | هل الشاهد إلزامي لهذا المؤشر |
+| display_order | int | — | — | نعم | — | — | ترتيب العرض |
+=== TABLE END ===
+
+[HEADING/TEXT] جدول verification_tools
+[HEADING/TEXT] أدوات التحقق المعتمدة رسميًا.
+
+=== TABLE START ===
+| Field | Type | Length | Key | Required | References | Allowed Values | Description |
+| tool_id | int | — | PK | نعم | — | — | المعرف الفريد للأداة |
+| name | varchar | 150 | — | نعم | — | — | اسم أداة التحقق |
+| tool_type | varchar | 50 | — | نعم | — | — | نوع الأداة |
+| description | text | — | — | لا | — | — | وصف الأداة |
+| approved | boolean | — | — | نعم | — | true | false | اعتماد الأداة رسميًا |
+| created_at | datetime | — | — | نعم | — | — | تاريخ إنشاء السجل — يدعم التتبع الزمني والتدقيق (3.10.8) |
+| updated_at | datetime | — | — | نعم | — | — | تاريخ آخر تحديث — يدعم التتبع الزمني والتدقيق (3.10.8) |
+=== TABLE END ===
+
+[HEADING/TEXT] جدول indicator_verification_methods
+[HEADING/TEXT] أساليب التحقق المسموح باستخدامها لكل مؤشر.
+
+=== TABLE START ===
+| Field | Type | Length | Key | Required | References | Allowed Values | Description |
+| id | int | — | PK | نعم | — | — | المعرف الفريد للسجل |
+| indicator_id | int | — | FK | نعم | indicators.indicator_id | — | المؤشر |
+| tool_id | int | — | FK | نعم | verification_tools.tool_id | — | أداة التحقق المهيأة |
+| required | boolean | — | — | نعم | — | true | false | هل الأسلوب إلزامي |
+| usage_guidance | varchar | 255 | — | لا | — | — | إرشادات الاستخدام |
+| created_at | datetime | — | — | نعم | — | — | تاريخ إنشاء السجل — يدعم التتبع الزمني والتدقيق (3.10.8) |
+=== TABLE END ===
+
+[HEADING/TEXT] ERD-03: دورات التقييم والنتائج والشواهد
+[HEADING/TEXT] قلب المنصة: الدورات التقييمية المركزية (تصبح متاحة لجميع المدارس — لا school_id هنا) ومشاركات المدارس فيها، وملفات التقييم ونتائجها المقرونة بالمؤشر ووصف الدرجة والإصدار، والشواهد وإصداراتها التاريخية، والمرفقات متعددة الأهداف، والملاحظات، وأساليب التحقق المستخدمة فعليًا.
+[HEADING/TEXT] جدول evaluation_cycles
+[HEADING/TEXT] الدورات التقييمية المركزية وفتراتها وحالتها.
+
+=== TABLE START ===
+| Field | Type | Length | Key | Required | References | Allowed Values | Description |
+| cycle_id | int | — | PK | نعم | — | — | المعرف الفريد للدورة |
+| version_id | int | — | FK | نعم | standard_versions.version_id | — | الإصدار المعياري الحاكم للدورة |
+| academic_year | varchar | 20 | — | نعم | — | — | العام الدراسي |
+| start_date | date | — | — | نعم | — | — | بداية فترة الدورة |
+| end_date | date | — | — | نعم | — | — | نهاية فترة الدورة |
+| status | varchar | 20 | — | نعم | — | Active | Closed | حالة الدورة — تُغلق تلقائيًا عند انتهاء الفترة |
+| created_at | datetime | — | — | نعم | — | — | تاريخ إنشاء السجل — يدعم التتبع الزمني والتدقيق (3.10.8) |
+| updated_at | datetime | — | — | نعم | — | — | تاريخ آخر تحديث — يدعم التتبع الزمني والتدقيق (3.10.8) |
+=== TABLE END ===
+
+[HEADING/TEXT] 🔗 قيود الجدول: لا عمود school_id — الدورة مركزية والربط عبر cycle_participations؛ يرتبط كل دورة بإصدار معياري محدد (3.10.8)؛ الإغلاق التلقائي عند انتهاء الفترة (FR-SUP-01).
+[HEADING/TEXT] جدول cycle_participations
+[HEADING/TEXT] مشاركة المدارس في الدورات (جدول الربط المركزي).
+
+=== TABLE START ===
+| Field | Type | Length | Key | Required | References | Allowed Values | Description |
+| cycle_id | int | — | PK,FK | نعم | evaluation_cycles.cycle_id | — | الدورة |
+| school_id | int | — | PK,FK | نعم | schools.school_id | — | المدرسة المشاركة |
+| created_at | datetime | — | — | نعم | — | — | تاريخ إنشاء السجل — يدعم التتبع الزمني والتدقيق (3.10.8) |
+| updated_at | datetime | — | — | نعم | — | — | تاريخ آخر تحديث — يدعم التتبع الزمني والتدقيق (3.10.8) |
+=== TABLE END ===
+
+[HEADING/TEXT] 🔗 قيود الجدول: مفتاح أساسي مركب (cycle_id, school_id) يضمن مشاركة واحدة فقط لكل مدرسة في الدورة (3.10.8).
+[HEADING/TEXT] جدول evaluations
+[HEADING/TEXT] ملف التقييم الذاتي للمدرسة ضمن دورة محددة.
+
+=== TABLE START ===
+| Field | Type | Length | Key | Required | References | Allowed Values | Description |
+| evaluation_id | int | — | PK | نعم | — | — | المعرف الفريد للتقييم |
+| cycle_id | int | — | FK | نعم | evaluation_cycles.cycle_id | — | دورة التقييم |
+| school_id | int | — | FK | نعم | schools.school_id | — | المدرسة صاحبة التقييم |
+| created_by_user_id | int | — | FK | نعم | users.user_id | — | المستخدم الذي أنشأ ملف التقييم |
+| status | varchar | 20 | — | نعم | — | InProgress | Completed | حالة التقييم |
+| created_at | datetime | — | — | نعم | — | — | تاريخ إنشاء السجل — يدعم التتبع الزمني والتدقيق (3.10.8) |
+| updated_at | datetime | — | — | نعم | — | — | تاريخ آخر تحديث — يدعم التتبع الزمني والتدقيق (3.10.8) |
+=== TABLE END ===
+
+[HEADING/TEXT] 🔗 قيود الجدول: UNIQUE (cycle_id, school_id) — لكل مدرسة تقييم واحد فقط ضمن الدورة الواحدة (3.10.8).
+[HEADING/TEXT] جدول evaluation_results
+[HEADING/TEXT] نتائج التقدير لكل مؤشر — مقرونة بالوصف والإصدار.
+
+=== TABLE START ===
+| Field | Type | Length | Key | Required | References | Allowed Values | Description |
+| result_id | int | — | PK | نعم | — | — | المعرف الفريد للنتيجة |
+| evaluation_id | int | — | FK | نعم | evaluations.evaluation_id | — | ملف التقييم |
+| indicator_id | int | — | FK | نعم | indicators.indicator_id | — | المؤشر المُقيَّم |
+| score_descriptor_id | int | — | FK | نعم | indicator_score_descriptors.descriptor_id | — | وصف التقدير المختار |
+| standard_version_id | int | — | FK | نعم | standard_versions.version_id | — | الإصدار المعياري المرجعي |
+| evaluator_user_id | int | — | FK | نعم | users.user_id | — | المستخدم الذي سجل التقدير |
+| score | int | — | — | نعم | — | 0 | 1 | 2 | 3 | قيمة التقدير الرقمية |
+| textual_result | text | — | — | لا | — | — | التعليل النصي للنتيجة |
+| completion_status | varchar | 20 | — | نعم | — | Pending | Completed | اكتمال إدخال هذه النتيجة |
+| created_at | datetime | — | — | نعم | — | — | تاريخ إنشاء السجل — يدعم التتبع الزمني والتدقيق (3.10.8) |
+| updated_at | datetime | — | — | نعم | — | — | تاريخ آخر تحديث — يدعم التتبع الزمني والتدقيق (3.10.8) |
+=== TABLE END ===
+
+[HEADING/TEXT] 🔗 قيود الجدول: قيمة التقدير ضمن السلم المعتمد (0–3) وتطابق المؤشر والوصف والإصدار — قيود طبقة الأعمال (3.10.8).
+[HEADING/TEXT] جدول evidences
+[HEADING/TEXT] الشواهد المرتبطة بالنتائج والمؤشرات.
+
+=== TABLE START ===
+| Field | Type | Length | Key | Required | References | Allowed Values | Description |
+| evidence_id | int | — | PK | نعم | — | — | المعرف الفريد للشاهد |
+| result_id | int | — | FK | نعم | evaluation_results.result_id | — | النتيجة التي يدعمها الشاهد |
+| indicator_id | int | — | FK | نعم | indicators.indicator_id | — | سياق المؤشر مباشرة (دون وساطة) |
+| title | varchar | 200 | — | نعم | — | — | عنوان الشاهد |
+| description | text | — | — | لا | — | — | وصف الشاهد |
+| justification | text | — | — | لا | — | — | تبرير الشاهد |
+| created_at | datetime | — | — | نعم | — | — | تاريخ إنشاء السجل — يدعم التتبع الزمني والتدقيق (3.10.8) |
+| updated_at | datetime | — | — | نعم | — | — | تاريخ آخر تحديث — يدعم التتبع الزمني والتدقيق (3.10.8) |
+=== TABLE END ===
+
+[HEADING/TEXT] جدول evidence_versions
+[HEADING/TEXT] النسخ التاريخية للشواهد عند الاستبدال.
+
+=== TABLE START ===
+| Field | Type | Length | Key | Required | References | Allowed Values | Description |
+| evidence_version_id | int | — | PK | نعم | — | — | المعرف الفريد لنسخة الشاهد |
+| evidence_id | int | — | FK | نعم | evidences.evidence_id | — | الشاهد الأم |
+| version_no | int | — | — | نعم | — | ≥ 1 | رقم النسخة المتسلسل |
+| current | boolean | — | — | نعم | — | true | false | هل هذه النسخة الحالية |
+| created_at | datetime | — | — | نعم | — | — | تاريخ إنشاء السجل — يدعم التتبع الزمني والتدقيق (3.10.8) |
+| updated_at | datetime | — | — | نعم | — | — | تاريخ آخر تحديث — يدعم التتبع الزمني والتدقيق (3.10.8) |
+=== TABLE END ===
+
+[HEADING/TEXT] 🔗 قيود الجدول: نسخة واحدة فقط من كل شاهد هي الحالية (current=true)، ولا تُحذف النسخ السابقة عند الاستبدال أثناء الاستكمال (3.10.8).
+[HEADING/TEXT] جدول attachments
+[HEADING/TEXT] ملفات المرفقات — مرجع متعدد الأهداف.
+
+=== TABLE START ===
+| Field | Type | Length | Key | Required | References | Allowed Values | Description |
+| attachment_id | int | — | PK | نعم | — | — | المعرف الفريد للمرفق |
+| target_type | varchar | 30 | — | نعم | — | evidence_version | report | نوع هدف المرفق |
+| target_id | int | — | — | نعم | — | — | معرف الهدف حسب نوعه |
+| file_name | varchar | 255 | — | نعم | — | — | اسم الملف |
+| file_type | varchar | 100 | — | نعم | — | — | النوع الفعلي (MIME) — لا الامتداد فقط |
+| file_size | bigint | — | — | نعم | — | — | الحجم بالبايت |
+| storage_uri | varchar | 500 | — | نعم | — | — | مسار التخزين — خارج مسار التنفيذ |
+| created_at | datetime | — | — | نعم | — | — | تاريخ إنشاء السجل — يدعم التتبع الزمني والتدقيق (3.10.8) |
+| updated_at | datetime | — | — | نعم | — | — | تاريخ آخر تحديث — يدعم التتبع الزمني والتدقيق (3.10.8) |
+=== TABLE END ===
+
+[HEADING/TEXT] 🔗 قيود الجدول: يرتبط كل مرفق بهدفه (نسخة شاهد أو تقرير) وفق نوع الهدف ومعرفه — قيد 3.10.8؛ يفرض في طبقة التطبيق مع فهرس مركب (target_type, target_id). التحقق من النوع الفعلي MIME وقائمة السماح والتخزين خارج مسار التنفيذ (NFR-PER-02).
+[HEADING/TEXT] جدول notes
+[HEADING/TEXT] الملاحظات النصية على نتائج التقييم.
+
+=== TABLE START ===
+| Field | Type | Length | Key | Required | References | Allowed Values | Description |
+| note_id | int | — | PK | نعم | — | — | المعرف الفريد للملاحظة |
+| result_id | int | — | FK | نعم | evaluation_results.result_id | — | النتيجة الموثَّقة بالملاحظة |
+| author_user_id | int | — | FK | نعم | users.user_id | — | كاتب الملاحظة |
+| text | text | — | — | نعم | — | — | نص الملاحظة |
+| created_at | datetime | — | — | نعم | — | — | تاريخ إنشاء السجل — يدعم التتبع الزمني والتدقيق (3.10.8) |
+| updated_at | datetime | — | — | نعم | — | — | تاريخ آخر تحديث — يدعم التتبع الزمني والتدقيق (3.10.8) |
+=== TABLE END ===
+
+[HEADING/TEXT] جدول evaluation_result_verification_methods
+[HEADING/TEXT] أساليب التحقق المستخدمة فعليًا لكل نتيجة.
+
+=== TABLE START ===
+| Field | Type | Length | Key | Required | References | Allowed Values | Description |
+| id | int | — | PK | نعم | — | — | المعرف الفريد للسجل |
+| evaluation_result_id | int | — | FK | نعم | evaluation_results.result_id | — | النتيجة |
+| tool_id | int | — | FK | نعم | verification_tools.tool_id | — | أداة التحقق المستخدمة |
+=== TABLE END ===
+
+[HEADING/TEXT] ERD-04: خطط التحسين وإجراءاتها
+[HEADING/TEXT] مجالات التحسين بمصادرها (نتيجة تقييم أو مؤشر — أحدهما إلزامي)، وخطط التحسين المرتبطة بالدورة والمدرسة معًا، وجدول ربط الخطط بالمجالات، والإجراءات المحكومة بقيد مركب يضمن بقاء الإجراء داخل نطاق خطته. التقدم يوصف نصًا (progress_description) لا بنسبة رقمية مفروضة.
+[HEADING/TEXT] جدول improvement_areas
+[HEADING/TEXT] مجالات التحسين المستخلصة من النتائج أو المؤشرات.
+
+=== TABLE START ===
+| Field | Type | Length | Key | Required | References | Allowed Values | Description |
+| area_id | int | — | PK | نعم | — | — | المعرف الفريد للمجال |
+| result_id | int | — | FK | شرطي | evaluation_results.result_id | — | المصدر: نتيجة تقييم |
+| indicator_id | int | — | FK | شرطي | indicators.indicator_id | — | المصدر: مؤشر |
+| name | varchar | 200 | — | نعم | — | — | اسم المجال |
+| description | text | — | — | لا | — | — | وصف المجال |
+| priority | varchar | 10 | — | نعم | — | Low | Medium | High | أولوية المجال |
+| created_at | datetime | — | — | نعم | — | — | تاريخ إنشاء السجل — يدعم التتبع الزمني والتدقيق (3.10.8) |
+| updated_at | datetime | — | — | نعم | — | — | تاريخ آخر تحديث — يدعم التتبع الزمني والتدقيق (3.10.8) |
+=== TABLE END ===
+
+[HEADING/TEXT] 🔗 قيود الجدول: CHECK: (result_id IS NOT NULL OR indicator_id IS NOT NULL) — مصدر واحد على الأقل (3.10.8).
+[HEADING/TEXT] جدول improvement_plans
+[HEADING/TEXT] خطط تحسين الأداء المرتبطة بالدورة والمدرسة.
+
+=== TABLE START ===
+| Field | Type | Length | Key | Required | References | Allowed Values | Description |
+| plan_id | int | — | PK | نعم | — | — | المعرف الفريد للخطة |
+| cycle_id | int | — | FK | نعم | evaluation_cycles.cycle_id | — | دورة التقييم |
+| school_id | int | — | FK | نعم | schools.school_id | — | المدرسة صاحبة الخطة |
+| created_by_user_id | int | — | FK | نعم | users.user_id | — | منشئ الخطة |
+| title | varchar | 200 | — | نعم | — | — | عنوان الخطة |
+| start_date | date | — | — | نعم | — | — | بداية الخطة |
+| end_date | date | — | — | نعم | — | — | نهاية الخطة |
+| status | varchar | 20 | — | نعم | — | Draft | Active | Completed | Cancelled | حالة الخطة |
+| progress_description | text | — | — | لا | — | — | وصف التقدم نصيًا بدل نسبة رقمية مفروضة (3.10.8) |
+| created_at | datetime | — | — | نعم | — | — | تاريخ إنشاء السجل — يدعم التتبع الزمني والتدقيق (3.10.8) |
+| updated_at | datetime | — | — | نعم | — | — | تاريخ آخر تحديث — يدعم التتبع الزمني والتدقيق (3.10.8) |
+=== TABLE END ===
+
+[HEADING/TEXT] 🔗 قيود الجدول: تبقى الخطة مرتبطة بالدورة والمدرسة معًا (3.10.8).
+[HEADING/TEXT] جدول plan_improvement_areas
+[HEADING/TEXT] ربط الخطط بمجالات متعددة (many-to-many).
+
+=== TABLE START ===
+| Field | Type | Length | Key | Required | References | Allowed Values | Description |
+| plan_id | int | — | PK,FK | نعم | improvement_plans.plan_id | — | الخطة |
+| area_id | int | — | PK,FK | نعم | improvement_areas.area_id | — | المجال المستهدف |
+| created_at | datetime | — | — | نعم | — | — | تاريخ إنشاء السجل — يدعم التتبع الزمني والتدقيق (3.10.8) |
+=== TABLE END ===
+
+[HEADING/TEXT] 🔗 قيود الجدول: مفتاح مركب (plan_id, area_id)؛ الخطة تستهدف عدة مجالات عبر هذا الجدول (3.10.8).
+[HEADING/TEXT] جدول improvement_actions
+[HEADING/TEXT] إجراءات التحسين بمسؤوليها ومواعيدها.
+
+=== TABLE START ===
+| Field | Type | Length | Key | Required | References | Allowed Values | Description |
+| action_id | int | — | PK | نعم | — | — | المعرف الفريد للإجراء |
+| plan_id | int | — | FK | نعم | (مركب) plan_improvement_areas | — | الخطة الحاوية — ضمن المفتاح المركب |
+| area_id | int | — | FK | نعم | (مركب) plan_improvement_areas | — | المجال المستهدف — ضمن المفتاح المركب |
+| title | varchar | 200 | — | نعم | — | — | عنوان الإجراء |
+| responsible_person_description | varchar | 150 | — | نعم | — | — | وصف المسؤول عن التنفيذ |
+| start_date | date | — | — | نعم | — | — | بداية الإجراء |
+| due_date | date | — | — | نعم | — | — | الموعد النهائي — أساس تذكير الاقتراب (FR-GEN-05) |
+| status | varchar | 20 | — | نعم | — | Pending | InProgress | Done | Cancelled | حالة الإجراء |
+| progress_description | text | — | — | لا | — | — | وصف التقدم |
+| created_at | datetime | — | — | نعم | — | — | تاريخ إنشاء السجل — يدعم التتبع الزمني والتدقيق (3.10.8) |
+| updated_at | datetime | — | — | نعم | — | — | تاريخ آخر تحديث — يدعم التتبع الزمني والتدقيق (3.10.8) |
+=== TABLE END ===
+
+[HEADING/TEXT] 🔗 قيود الجدول: قيد مركب: FOREIGN KEY (plan_id, area_id) REFERENCES plan_improvement_areas — الإجراء لا يخرج عن مجالات خطته (3.10.8).
+[HEADING/TEXT] ERD-05: المخرجات والاستكمال والإشعارات والذكاء الاصطناعي
+[HEADING/TEXT] المخرجات ومحاولات إرسالها وحالاتها الخمس (SubmissionStatus)، والملاحظات الثلاث (داخلية / مراجعة خطة / إشرافية)، وطلبات الاستكمال وبنودها (كل بند يستهدف مؤشرًا أو شاهدًا)، والإشعارات كسجل دائم، والتحليل الذكي والتوصيات الخاضعة للمراجعة البشرية الإلزامية.
+[HEADING/TEXT] جدول reports
+[HEADING/TEXT] تقارير التقييم المولدة من ملف التقييم.
+
+=== TABLE START ===
+| Field | Type | Length | Key | Required | References | Allowed Values | Description |
+| report_id | int | — | PK | نعم | — | — | المعرف الفريد للتقرير |
+| evaluation_id | int | — | FK | نعم | evaluations.evaluation_id | — | ملف التقييم المصدر |
+| generated_at | datetime | — | — | نعم | — | — | تاريخ توليد التقرير |
+| updated_at | datetime | — | — | نعم | — | — | تاريخ آخر تحديث |
+| status | varchar | 20 | — | نعم | — | Draft | Final | حالة التقرير |
+=== TABLE END ===
+
+[HEADING/TEXT] 🔗 قيود الجدول: للتقرير محاولة إرسال أولى على الأقل عند بدء التسليم (3.10.8).
+[HEADING/TEXT] جدول evaluation_submissions
+[HEADING/TEXT] محاولات رفع مخرج التقييم إلى المستوى الوزاري.
+
+=== TABLE START ===
+| Field | Type | Length | Key | Required | References | Allowed Values | Description |
+| submission_id | int | — | PK | نعم | — | — | المعرف الفريد للمحاولة |
+| report_id | int | — | FK | نعم | reports.report_id | — | التقرير المرفوع |
+| submitted_by_user_id | int | — | FK | نعم | users.user_id | — | المستخدم المرفِع (المخول دون سواه — FR-SCH-33) |
+| attempt_no | int | — | — | نعم | — | ≥ 1 | رقم المحاولة — يتزايد مع كل إعادة رفع |
+| submitted_at | datetime | — | — | لا | — | — | تاريخ الإرسال الفعلي — فارغ ما دامت الحالة Draft ويُضبط لحظة الإرسال |
+| updated_at | datetime | — | — | نعم | — | — | تاريخ آخر تحديث |
+| status | varchar | 20 | — | نعم | — | Draft | Submitted | UnderReview | NeedsCompletion | Completed | حالة المخرج (SubmissionStatus — الحالات الخمس المعتمدة) |
+=== TABLE END ===
+
+[HEADING/TEXT] 🔗 قيود الجدول: UNIQUE (report_id, attempt_no) — رقم المحاولة فريد داخل التقرير؛ إعادة الإرسال بعد الاستكمال تنشئ محاولة جديدة بحالة Submitted (3.10.8). وsubmitted_at إلزامية لكل حالة غير Draft: CHECK ((status = 'Draft' AND submitted_at IS NULL) OR (status <> 'Draft' AND submitted_at IS NOT NULL)).
+[HEADING/TEXT] جدول internal_review_notes
+[HEADING/TEXT] ملاحظات المراجعة الداخلية (مدير المدرسة) على التقرير.
+
+=== TABLE START ===
+| Field | Type | Length | Key | Required | References | Allowed Values | Description |
+| note_id | int | — | PK | نعم | — | — | المعرف الفريد للملاحظة |
+| report_id | int | — | FK | نعم | reports.report_id | — | التقرير المراجَع |
+| author_user_id | int | — | FK | نعم | users.user_id | — | كاتب الملاحظة (مدير المدرسة) |
+| text | text | — | — | نعم | — | — | نص الملاحظة |
+| created_at | datetime | — | — | نعم | — | — | تاريخ إنشاء السجل — يدعم التتبع الزمني والتدقيق (3.10.8) |
+| updated_at | datetime | — | — | نعم | — | — | تاريخ آخر تحديث — يدعم التتبع الزمني والتدقيق (3.10.8) |
+=== TABLE END ===
+
+[HEADING/TEXT] جدول plan_review_notes
+[HEADING/TEXT] ملاحظات مراجعة مدير المدرسة على خطة التحسين.
+
+=== TABLE START ===
+| Field | Type | Length | Key | Required | References | Allowed Values | Description |
+| note_id | int | — | PK | نعم | — | — | المعرف الفريد للملاحظة |
+| plan_id | int | — | FK | نعم | improvement_plans.plan_id | — | الخطة المراجَعة |
+| author_user_id | int | — | FK | نعم | users.user_id | — | كاتب الملاحظة |
+| text | text | — | — | نعم | — | — | نص الملاحظة |
+| created_at | datetime | — | — | نعم | — | — | تاريخ إنشاء السجل — يدعم التتبع الزمني والتدقيق (3.10.8) |
+| updated_at | datetime | — | — | نعم | — | — | تاريخ آخر تحديث — يدعم التتبع الزمني والتدقيق (3.10.8) |
+=== TABLE END ===
+
+[HEADING/TEXT] جدول supervisor_notes
+[HEADING/TEXT] ملاحظات المشرف الوزاري الإدارية/الإشرافية على المخرج.
+
+=== TABLE START ===
+| Field | Type | Length | Key | Required | References | Allowed Values | Description |
+| note_id | int | — | PK | نعم | — | — | المعرف الفريد للملاحظة |
+| submission_id | int | — | FK | نعم | evaluation_submissions.submission_id | — | محاولة الإرسال الموثَّقة |
+| author_user_id | int | — | FK | نعم | users.user_id | — | كاتب الملاحظة (مشرف وزاري) |
+| text | text | — | — | نعم | — | — | نص الملاحظة |
+| created_at | datetime | — | — | نعم | — | — | تاريخ إنشاء السجل — يدعم التتبع الزمني والتدقيق (3.10.8) |
+| updated_at | datetime | — | — | نعم | — | — | تاريخ آخر تحديث — يدعم التتبع الزمني والتدقيق (3.10.8) |
+=== TABLE END ===
+
+[HEADING/TEXT] جدول completion_requests
+[HEADING/TEXT] طلبات الاستكمال الصادرة عن محاولة إرسال محددة.
+
+=== TABLE START ===
+| Field | Type | Length | Key | Required | References | Allowed Values | Description |
+| request_id | int | — | PK | نعم | — | — | المعرف الفريد للطلب |
+| submission_id | int | — | FK | نعم | evaluation_submissions.submission_id | — | المحاولة التي صدر عنها الطلب |
+| issued_by_user_id | int | — | FK | نعم | users.user_id | — | المشرف الوزاري المُصدر |
+| created_at | datetime | — | — | نعم | — | — | تاريخ إصدار الطلب |
+| resolved_at | datetime | — | — | لا | — | — | تاريخ معالجة الطلب — فارغ حتى الإغلاق |
+| updated_at | datetime | — | — | نعم | — | — | تاريخ آخر تحديث — يدعم التتبع الزمني والتدقيق (3.10.8) |
+| status | varchar | 20 | — | نعم | — | Open | Resolved | حالة الطلب |
+=== TABLE END ===
+
+[HEADING/TEXT] 🔗 قيود الجدول: يرتبط طلب الاستكمال بمحاولة إرسال محددة (3.10.8).
+[HEADING/TEXT] جدول completion_request_items
+[HEADING/TEXT] بنود طلب الاستكمال — كل بند يستهدف مؤشرًا أو شاهدًا.
+
+=== TABLE START ===
+| Field | Type | Length | Key | Required | References | Allowed Values | Description |
+| request_item_id | int | — | PK | نعم | — | — | المعرف الفريد للبند |
+| request_id | int | — | FK | نعم | completion_requests.request_id | — | الطلب الحاوي |
+| indicator_id | int | — | FK | شرطي | indicators.indicator_id | — | المؤشر المستهدف |
+| evidence_id | int | — | FK | شرطي | evidences.evidence_id | — | الشاهد المستهدف |
+| missing_description | text | — | — | نعم | — | — | وصف النقص أو عدم الوضوح |
+| status | varchar | 20 | — | نعم | — | Pending | Resolved | حالة معالجة البند |
+| created_at | datetime | — | — | نعم | — | — | تاريخ إنشاء السجل — يدعم التتبع الزمني والتدقيق (3.10.8) |
+| updated_at | datetime | — | — | نعم | — | — | تاريخ آخر تحديث — يدعم التتبع الزمني والتدقيق (3.10.8) |
+=== TABLE END ===
+
+[HEADING/TEXT] 🔗 قيود الجدول: CHECK: (indicator_id IS NOT NULL OR evidence_id IS NOT NULL) — بند واحد على الأقل (3.10.8).
+[HEADING/TEXT] جدول notifications
+[HEADING/TEXT] سجل الإشعارات الدائم للمستخدمين.
+
+=== TABLE START ===
+| Field | Type | Length | Key | Required | References | Allowed Values | Description |
+| notification_id | int | — | PK | نعم | — | — | المعرف الفريد للإشعار |
+| recipient_user_id | int | — | FK | نعم | users.user_id | — | المستخدم المستلم |
+| title | varchar | 150 | — | نعم | — | — | عنوان الإشعار |
+| message | text | — | — | نعم | — | — | نص الإشعار |
+| type | varchar | 30 | — | نعم | — | cycle_launched | cycle_closed | completion_requested | action_due_soon | version_activated | نوع الحدث — أحداث FR-GEN-05 |
+| related_entity_type | varchar | 30 | — | نعم | — | completion_request | evaluation_cycle | standard_version | improvement_action | نوع الكيان المصدر |
+| related_entity_id | int | — | — | نعم | — | — | معرف الكيان المصدر |
+| is_read | boolean | — | — | نعم | — | true | false | هل قُرئ (افتراضي: false) |
+| created_at | datetime | — | — | نعم | — | — | تاريخ إنشاء السجل — يدعم التتبع الزمني والتدقيق (3.10.8) |
+| read_at | datetime | — | — | لا | — | — | تاريخ القراءة |
+=== TABLE END ===
+
+[HEADING/TEXT] 🔗 قيود الجدول: سجل محفوظ دائمًا لا يُحذف (FR-GEN-05)؛ مرجع متعدد الأشكال (related_entity_type + related_entity_id) — يفرض في طبقة التطبيق مع فهرس مركب.
+[HEADING/TEXT] جدول ai_analysis
+[HEADING/TEXT] طلبات التحليل بالذكاء الاصطناعي وحالتها.
+
+=== TABLE START ===
+| Field | Type | Length | Key | Required | References | Allowed Values | Description |
+| analysis_id | int | — | PK | نعم | — | — | المعرف الفريد للتحليل |
+| evaluation_id | int | — | FK | نعم | evaluations.evaluation_id | — | ملف التقييم المحلَّل |
+| requested_by_user_id | int | — | FK | نعم | users.user_id | — | طالب التحليل |
+| analysis_date | datetime | — | — | نعم | — | — | تاريخ تنفيذ التحليل |
+| input_scope | varchar | 30 | — | نعم | — | results | results_and_notes | نطاق المدخلات |
+| summary | text | — | — | لا | — | — | ملخص التحليل |
+| status | varchar | 20 | — | نعم | — | Pending | Completed | Failed | حالة التحليل |
+| created_at | datetime | — | — | نعم | — | — | تاريخ إنشاء السجل — يدعم التتبع الزمني والتدقيق (3.10.8) |
+| updated_at | datetime | — | — | نعم | — | — | تاريخ آخر تحديث — يدعم التتبع الزمني والتدقيق (3.10.8) |
+=== TABLE END ===
+
+[HEADING/TEXT] 🔗 قيود الجدول: الذكاء الاصطناعي لا يعدل نتائج التقييم الرسمية (3.10.8) — يقرأ فقط.
+[HEADING/TEXT] جدول ai_recommendations
+[HEADING/TEXT] توصيات الذكاء الاصطناعي ومراجعتها البشرية.
+
+=== TABLE START ===
+| Field | Type | Length | Key | Required | References | Allowed Values | Description |
+| recommendation_id | int | — | PK | نعم | — | — | المعرف الفريد للتوصية |
+| analysis_id | int | — | FK | نعم | ai_analysis.analysis_id | — | التحليل المصدر |
+| improvement_action_id | int | — | FK | لا | improvement_actions.action_id | — | الإجراء المدعوم — يُربط بعد القبول والمراجعة فقط |
+| type | varchar | 30 | — | نعم | — | strength | improvement | recommendation | draft | نوع المخرج |
+| title | varchar | 200 | — | نعم | — | — | عنوان التوصية |
+| description | text | — | — | نعم | — | — | نص التوصية |
+| priority | varchar | 10 | — | نعم | — | Low | Medium | High | أولوية مقترحة |
+| human_modifications | text | — | — | لا | — | — | نص تعديل الإنسان على التوصية — محفوظ للمراجعة |
+| status | varchar | 20 | — | نعم | — | PendingReview | Accepted | Modified | Ignored | قرار المراجعة البشرية |
+| created_at | datetime | — | — | نعم | — | — | تاريخ إنشاء السجل — يدعم التتبع الزمني والتدقيق (3.10.8) |
+| updated_at | datetime | — | — | نعم | — | — | تاريخ آخر تحديث — يدعم التتبع الزمني والتدقيق (3.10.8) |
+=== TABLE END ===
+
+[HEADING/TEXT] 🔗 قيود الجدول: لا تتحول التوصية إلى إجراء رسمي إلا بعد المراجعة البشرية (BR-AI-02)؛ عند التعديل يُحفظ نص التعديل البشري في human_modifications (3.10.8).
+[HEADING/TEXT] رابعًا: أمور مهمة لا تظهر في جداول القاموس — لكنها جزء من التصميم
+[HEADING/TEXT] هذه القيود عابرة للجداول أو تخص طبقة التطبيق، ولا يمكن التعبير عنها في أعمدة جدول واحد. لا تسلّمها للنسيان: اجعلها بنود اختبار صريحة.
+[HEADING/TEXT] 1) القيود التكاملية العابرة للجداول (كلها من 3.10.8)
+
+=== TABLE START ===
+| # | القيد | موضعه/نوعه |
+| 1 | PRIMARY KEY (cycle_id, school_id) — مشاركة واحدة لكل مدرسة في الدورة | cycle_participations — قاعدة بيانات |
+| 2 | UNIQUE (cycle_id, school_id) — تقييم واحد لكل مدرسة ضمن الدورة | evaluations — قاعدة بيانات |
+| 3 | UNIQUE (report_id, attempt_no) — رقم المحاولة فريد داخل التقرير | evaluation_submissions — قاعدة بيانات |
+| 4 | FOREIGN KEY (plan_id, area_id) → plan_improvement_areas — الإجراء داخل نطاق خطته | improvement_actions — قاعدة بيانات |
+| 5 | CHECK: result_id IS NOT NULL OR indicator_id IS NOT NULL — مصدر واحد على الأقل للمجال | improvement_areas — قاعدة بيانات |
+| 6 | CHECK: indicator_id IS NOT NULL OR evidence_id IS NOT NULL — هدف واحد على الأقل للبند | completion_request_items — قاعدة بيانات |
+| 7 | قاعدة الجهة الواحدة (XOR): school_id أو ministry_id حسب user_type، ومسؤول النظام بلا جهة، ولا جمع بين مدرسة ووزارة | users — طبقة التطبيق (3.10.8) |
+| 8 | نسخة واحدة فقط من كل شاهد هي الحالية (current=true) ولا تُحذف النسخ السابقة | evidence_versions — طبقة التطبيق (يمكن محاكاته بفهرس فريد شرطي/عمود مولد في MySQL) |
+| 9 | أربعة أوصاف لكل مؤشر (0–3) ضمن الإصدار الواحد، وتطابق المؤشر والإصدار بين النتيجة والوصف، ومطابقة قيمة التقدير للوصف المختار | indicator_score_descriptors + evaluation_results — طبقة الأعمال |
+| 10 | لا يعدّل الذكاء الاصطناعي النتائج الرسمية؛ لا تصبح التوصية إجراء رسميًا إلا بعد مراجعة بشرية؛ حفظ human_modifications عند التعديل | ai_analysis + ai_recommendations — طبقة الأعمال (BR-AI-01/02) |
+| 11 | سجل الإشعارات دائم لا يُحذف | notifications — سياسة تشغيل (FR-GEN-05) |
+| 12 | لا جدول تدقيق مستقل — التتبع عبر الطوابع الزمنية وجداول الإصدارات والمحاولات والملاحظات (قرار موثق) | كل الجداول — قرار تصميمي |
+=== TABLE END ===
+
+[HEADING/TEXT] 2) المراجع متعددة الأشكال (Polymorphic)
+[HEADING/TEXT] جدولان يعتمدان نمط (نوع + معرف) بدل مفاتيح أجنبية مباشرة: attachments (هدفه: نسخة شاهد أو تقرير) وnotifications (مصدره: طلب استكمال أو دورة أو إصدار أو إجراء). لا يستطيع MySQL فرض هذه المرجعية كمفتاح أجنبي — تُفرض في طبقة التطبيق، مع فهرس مركب إلزامي على العمودين معًا في كل جدول.
+[HEADING/TEXT] 3) إعدادات تشغيلية مرتبطة بالقاموس (طبقة التطبيق)
+
+=== TABLE START ===
+| الإعداد | القيمة | المرجع |
+| انتهاء الجلسة بالخمول | 30 دقيقة تلقائيًا | FR-GEN-02 |
+| التحقق من المرفقات | النوع الفعلي (MIME) + قائمة سماح معلنة + حجم أقصى + تخزين خارج مسار التنفيذ | NFR-PER-02 |
+| إغلاق الدورة | تلقائي عند انتهاء الفترة: تجميد التعديلات وأرشفة المسودات غير المرسلة مع إشعار المدارس | FR-SUP-01 |
+| إعادة الإرسال بعد الاستكمال | محاولة جديدة بـ attempt_no أعلى وحالة Submitted — بلا حالة منفصلة | 3.10.8 |
+| مقارنة دورات بإصدارات مختلفة | تقتصر على المؤشرات المشتركة بين الإصدارين | BR-SCH-07 |
+=== TABLE END ===
+
+[HEADING/TEXT] 4) فهارس مقترحة فوق المفاتيح (للأداء)
+[HEADING/TEXT] المفاتيح الأساسية والأجنبية تُفهرس تلقائيًا؛ يوصى إضافة: (target_type, target_id) في attachments، و(related_entity_type, related_entity_id) و(recipient_user_id, is_read) في notifications، و(status) في evaluation_submissions لأغراض قوائم المتابعة، و(evidence_id) في evidence_versions لضبط النسخة الحالية. هذه الفهارس تخدم مباشرة مستهدف الأداء (3 ثوانٍ لـ95% — NFR-PER-01).
