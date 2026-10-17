@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Laravel\Sanctum\HasApiTokens;
 
 /**
  * نموذج المستخدم (User)
@@ -27,7 +28,7 @@ use Illuminate\Notifications\Notifiable;
  */
 class User extends Authenticatable
 {
-    use HasFactory, Notifiable;
+    use HasApiTokens, HasFactory, Notifiable;
 
     /**
      * اسم جدول قاعدة البيانات المرتبط بالنموذج.
@@ -260,4 +261,54 @@ class User extends Authenticatable
     {
         return $this->hasMany(AiAnalysis::class, 'requested_by_user_id', 'user_id');
     }
+
+    /**
+     * الأدوار النشطة فقط للمستخدم (user_roles.active = true).
+     *
+     * @return BelongsToMany
+     */
+    public function activeRoles(): BelongsToMany
+    {
+        return $this->roles()->wherePivot('active', true);
+    }
+
+    /**
+     * التحقق مما إذا كان المستخدم يملك دورًا نشطًا محددًا بالاسم.
+     *
+     * @param string $roleName
+     * @return bool
+     */
+    public function hasRole(string $roleName): bool
+    {
+        return $this->activeRoles->contains('role_name', $roleName);
+    }
+
+    /**
+     * استخراج قائمة أكواد الصلاحيات الممنوحة للمستخدم عبر كافة أدواره النشطة.
+     *
+     * @return array<int, string>
+     */
+    public function getPermissionCodes(): array
+    {
+        return $this->activeRoles
+            ->loadMissing('permissions')
+            ->pluck('permissions')
+            ->flatten()
+            ->pluck('permission_code')
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    /**
+     * التحقق مما إذا كان المستخدم يملك صلاحية محددة بالكود عبر أدواره النشطة.
+     *
+     * @param string $permissionCode
+     * @return bool
+     */
+    public function hasPermission(string $permissionCode): bool
+    {
+        return in_array($permissionCode, $this->getPermissionCodes(), true);
+    }
 }
+
