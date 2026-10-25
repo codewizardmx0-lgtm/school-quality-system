@@ -1,0 +1,463 @@
+<?php
+
+namespace App\Http\Controllers\Api\V1;
+
+use App\Http\Controllers\Controller;
+use App\Http\Resources\EvaluationResource;
+use App\Http\Responses\ApiResponse;
+use App\Models\Evaluation;
+use App\Models\EvaluationResult;
+use App\Models\Indicator;
+use App\Models\IndicatorScoreDescriptor;
+use App\Models\Note;
+use App\Models\StandardVersion;
+use App\Services\EvaluationLockChecker;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Validator;
+
+/**
+ * متحكم استعراض ورصد عمليات التقييم المدرسي الذاتي وإدارة مؤشراته وملاحظاته.
+ *
+ * القواعد الأمنية:
+ * 1. مستخدم مدرسة (بلقيس): لا يرى ولا يستعلم ولا يرصد إلا لتقييم مدرسة بلقيس حصراً.
+ * 2. مستخدم مدرسة (الفاروق): لا يرى ولا يستعلم ولا يرصد إلا لتقييم مدرسة الفاروق حصراً.
+ * 3. في حال محاولة مستخدم مدرسة طلب معرف تقييم يخص مدرسة أخرى يُرجع 404 (القرار المعماري 9).
+ * 4. قفل التقييم (BR-SCH-03): يمنع التعديل بعد الإرسال النهائي عبر EvaluationLockChecker.
+ * 5. مسؤول النظام: ممنوع من الدخول لمنطقة التقييم (فصل السلطات BR-GEN-06).
+ */
+class EvaluationController extends Controller
+{
+    /**
+     * استعراض قائمة التقييمات وفق نطاق الفاعل المصادق.
+     */
+    public function index(Request $request): JsonResponse
+    {
+        $user = $request->user();
+
+        // فحص صلاحية الاطلاع على التقييمات
+        if (!$user->hasPermission('evaluations.view')) {
+            return ApiResponse::forbidden('غير مصرح');
+        }
+
+        $query = Evaluation::with(['school', 'cycle', 'creator', 'results.indicator', 'results.scoreDescriptor', 'results.evidences']);
+
+        // عزل النطاق لمستخدم المدرسة: حصر التقييمات بمدرسته فقط
+        if ($user->user_type === 'school') {
+            $query->where('school_id', $user->school_id);
+        }
+
+        $evaluations = $query->orderBy('evaluation_id', 'desc')->get();
+
+        return ApiResponse::success(
+            data: EvaluationResource::collection($evaluations)->resolve($request),
+            message: null
+        );
+    }
+
+    /**
+     * استعراض ملف تقييم محدد مع التحقق الصارم من العزل.
+     */
+    public function show(Request $request, int $id): JsonResponse
+    {
+        $user = $request->user();
+
+        if (!$user->hasPermission('evaluations.view')) {
+            return ApiResponse::forbidden('غير مصرح');
+        }
+
+        $evaluation = Evaluation::with(['school', 'cycle', 'creator', 'results.indicator', 'results.scoreDescriptor', 'results.evidences'])
+            ->find($id);
+
+        if (!$evaluation) {
+            return ApiResponse::notFound('ملف التقييم المطلوب غير موجود.');
+        }
+
+        // قاعدة القرار 9: إذا كان مستخدم مدرسة وطلب تقييم مدرسة أخرى، يُرجع 404 بدلاً من 403 لمنع كشف وجود التقييم
+        if ($user->user_type === 'school' && (int) $user->school_id !== (int) $evaluation->school_id) {
+            return ApiResponse::notFound('ملف التقييم المطلوب غير موجود.');
+        }
+
+        // فحص السياسة المعتمدة
+        if ($user->cannot('view', $evaluation)) {
+            return ApiResponse::forbidden('غير مصرح');
+        }
+
+        return ApiResponse::success(
+            data: (new EvaluationResource($evaluation))->resolve($request),
+            message: null
+        );
+    }
+
+    /**
+     * استعراض شجرة المعايير والمؤشرات والواصفات لملف التقييم مع حالة الرصد ونسبة الإنجاز.
+     *
+     * GET /api/v1/evaluations/{id}/standards-tree
+     * الصلاحية: standards.view أو evaluations.view
+     */
+    public function standardsTree(Request $request, int $id): JsonResponse
+    {
+        $user = $request->user();
+
+        if (!$user->hasPermission('standards.view') && !$user->hasPermission('evaluations.view')) {
+            return ApiResponse::forbidden('غير مصرح لك باستعراض شجرة التقييم.');
+        }
+
+        $evaluation = Evaluation::with(['cycle'])->find($id);
+
+        if (!$evaluation) {
+            return ApiResponse::notFound('ملف التقييم المطلوب غير موجود.');
+        }
+
+        // عزل المدارس (القرار المعماري 9)
+        if ($user->user_type === 'school' && (int) $user->school_id !== (int) $evaluation->school_id) {
+            return ApiResponse::notFound('ملف التقييم المطلوب غير موجود.');
+        }
+
+        if ($user->cannot('view', $evaluation)) {
+            return ApiResponse::forbidden('غير مصرح');
+        }
+
+        $versionId = $evaluation->cycle?->version_id;
+        $version = StandardVersion::with([
+            'standards' => function ($q) {
+                $q->orderBy('standard_id', 'asc');
+            },
+            'standards.subStandards' => function ($q) {
+                $q->orderBy('sub_standard_id', 'asc');
+            },
+            'standards.subStandards.indicators' => function ($q) {
+                $q->orderBy('indicator_id', 'asc');
+            },
+            'standards.subStandards.indicators.scoreDescriptors' => function ($q) {
+                $q->orderBy('display_order', 'asc');
+            },
+            'standards.subStandards.indicators.scoreDescriptors.scoreLevel',
+        ])->find($versionId);
+
+        if (!$version) {
+            return ApiResponse::notFound('الإصدار المعياري المرتبط بهذه الدورة غير موجود.');
+        }
+
+        // جلب نتائج التقييم المسجلة لهذه المدرسة ومفهرسة برقم المؤشر
+        $existingResults = EvaluationResult::where('evaluation_id', $evaluation->evaluation_id)
+            ->with(['scoreDescriptor', 'evidences'])
+            ->get()
+            ->keyBy('indicator_id');
+
+        $totalActiveIndicators = 0;
+        $completedResultsCount = 0;
+
+        $standardsData = $version->standards->map(function ($std) use ($existingResults, &$totalActiveIndicators, &$completedResultsCount) {
+            return [
+                'standardId'   => $std->standard_id,
+                'code'         => $std->code,
+                'name'         => $std->name,
+                'description'  => $std->description,
+                'weight'       => (float) $std->weight,
+                'subStandards' => $std->subStandards->map(function ($sub) use ($existingResults, &$totalActiveIndicators, &$completedResultsCount) {
+                    return [
+                        'subStandardId' => $sub->sub_standard_id,
+                        'code'          => $sub->code,
+                        'name'          => $sub->name,
+                        'description'   => $sub->description,
+                        'indicators'    => $sub->indicators->map(function ($ind) use ($existingResults, &$totalActiveIndicators, &$completedResultsCount) {
+                            $isActive = $ind->status === 'Active';
+                            if ($isActive) {
+                                $totalActiveIndicators++;
+                            }
+
+                            $result = $existingResults->get($ind->indicator_id);
+                            if ($result && $result->completion_status === 'Completed') {
+                                $completedResultsCount++;
+                            }
+
+                            return [
+                                'indicatorId'          => $ind->indicator_id,
+                                'code'                 => $ind->code,
+                                'name'                 => $ind->name,
+                                'description'          => $ind->description,
+                                'weight'               => (float) $ind->weight,
+                                'status'               => $ind->status,
+                                'resultId'             => $result?->result_id,
+                                'score'                => $result?->score,
+                                'scoreDescriptorId'    => $result?->score_descriptor_id,
+                                'scoreDescriptorLabel' => $result?->scoreDescriptor?->label,
+                                'completionStatus'     => $result?->completion_status,
+                                'textualResult'        => $result?->textual_result,
+                                'evidenceCount'        => $result ? $result->evidences->count() : 0,
+                                'scoreDescriptors'     => $ind->scoreDescriptors->map(function ($desc) {
+                                    return [
+                                        'descriptorId' => $desc->descriptor_id,
+                                        'scoreLevelId' => $desc->score_level_id,
+                                        'scoreValue'   => $desc->scoreLevel?->score_value,
+                                        'label'        => $desc->label,
+                                        'description'  => $desc->description,
+                                        'displayOrder' => $desc->display_order,
+                                    ];
+                                }),
+                            ];
+                        }),
+                    ];
+                }),
+            ];
+        });
+
+        $completionPercentage = $totalActiveIndicators > 0
+            ? round(($completedResultsCount / $totalActiveIndicators) * 100, 2)
+            : 0.0;
+
+        return ApiResponse::success(
+            data: [
+                'evaluationId' => $evaluation->evaluation_id,
+                'cycleId'      => $evaluation->cycle_id,
+                'versionId'    => $version->version_id,
+                'versionName'  => $version->version_name,
+                'standards'    => $standardsData,
+            ],
+            message: null,
+            meta: [
+                'totalActiveIndicators' => $totalActiveIndicators,
+                'completedResults'      => $completedResultsCount,
+                'completionPercentage'  => $completionPercentage,
+            ]
+        );
+    }
+
+    /**
+     * رصد أو تعديل نتيجة مؤشر (Upsert Score).
+     *
+     * PUT /api/v1/evaluations/{evaluationId}/indicators/{indicatorId}/score
+     * الصلاحية: evaluations.edit
+     */
+    public function scoreIndicator(Request $request, int $evaluationId, int $indicatorId): JsonResponse
+    {
+        $user = $request->user();
+
+        // فحص الصلاحية الأساسية
+        if (!$user->hasPermission('evaluations.edit')) {
+            return ApiResponse::forbidden('غير مصرح لك برصد نتائج التقييم.');
+        }
+
+        $evaluation = Evaluation::with('cycle')->find($evaluationId);
+        if (!$evaluation) {
+            return ApiResponse::notFound('ملف التقييم المطلوب غير موجود.');
+        }
+
+        // عزل المدارس (القرار المعماري 9)
+        if ($user->user_type === 'school' && (int) $user->school_id !== (int) $evaluation->school_id) {
+            return ApiResponse::notFound('ملف التقييم المطلوب غير موجود.');
+        }
+
+        if ($user->cannot('update', $evaluation)) {
+            // التحقق مما إذا كان المنع بسبب قفل التقييم
+            $lockCheck = EvaluationLockChecker::canModifyIndicator($evaluation, $indicatorId);
+            if (!$lockCheck['allowed']) {
+                return ApiResponse::validationError([
+                    'evaluation' => [$lockCheck['message']],
+                ], $lockCheck['message']);
+            }
+
+            return ApiResponse::forbidden('غير مصرح لك بتعديل هذا التقييم.');
+        }
+
+        // فحص قفل التعديل الدقيق (BR-SCH-03)
+        $lockCheck = EvaluationLockChecker::canModifyIndicator($evaluation, $indicatorId);
+        if (!$lockCheck['allowed']) {
+            return ApiResponse::validationError([
+                'evaluation' => [$lockCheck['message']],
+            ], $lockCheck['message']);
+        }
+
+        // التحقق من صحة المدخلات
+        $validator = Validator::make($request->all(), [
+            'score'             => ['required', 'integer', 'between:0,3'],
+            'scoreDescriptorId' => ['nullable', 'integer'],
+            'score_descriptor_id' => ['nullable', 'integer'],
+            'textualResult'     => ['nullable', 'string'],
+            'textual_result'    => ['nullable', 'string'],
+        ], [
+            'score.required' => 'تقدير المؤشر إلزامي.',
+            'score.between'  => 'يجب أن يكون التقدير بين 0 و 3 وفق معيار الرصد (BR-SCH-05).',
+        ]);
+
+        if ($validator->fails()) {
+            return ApiResponse::validationError($validator->errors()->toArray());
+        }
+
+        $score = (int) $request->input('score');
+        $descriptorId = $request->input('scoreDescriptorId') ?? $request->input('score_descriptor_id');
+        $textualResult = $request->input('textualResult') ?? $request->input('textual_result');
+
+        // التحقق من وجود المؤشر وصلاحيته
+        $indicator = Indicator::with('subStandard.standard')->find($indicatorId);
+        if (!$indicator) {
+            return ApiResponse::notFound('المؤشر المطلوب غير موجود.');
+        }
+
+        // التحقق من أن المؤشر يتبع إصدار الدورة التقييمية
+        $versionId = (int) $evaluation->cycle?->version_id;
+        if ((int) $indicator->subStandard?->standard?->version_id !== $versionId) {
+            return ApiResponse::validationError([
+                'indicator' => ['المؤشر لا ينتمي للإصدار المعياري المعتمد لدورة التقييم.'],
+            ]);
+        }
+
+        // رفض المؤشرات غير الفعالة
+        if ($indicator->status !== 'Active') {
+            return ApiResponse::validationError([
+                'indicator' => ['المؤشر المحدد غير فعّال ولا يمكن رصده.'],
+            ]);
+        }
+
+        // مطابقة أو اشتقاق الواصفة المعيارية
+        if ($descriptorId) {
+            $descriptor = IndicatorScoreDescriptor::with('scoreLevel')
+                ->where('descriptor_id', $descriptorId)
+                ->where('indicator_id', $indicatorId)
+                ->where('standard_version_id', $versionId)
+                ->first();
+
+            if (!$descriptor || (int) $descriptor->scoreLevel?->score_value !== $score) {
+                return ApiResponse::validationError([
+                    'scoreDescriptorId' => ['الواصفة المحددة لا تنتمي لهذا المؤشر أو لا تطابق التقدير الرقمي المختار (BR-SCH-05).'],
+                ]);
+            }
+        } else {
+            // اشتقاق الواصفة تلقائياً بناءً على التقدير والمؤشر
+            $descriptor = IndicatorScoreDescriptor::where('indicator_id', $indicatorId)
+                ->where('standard_version_id', $versionId)
+                ->whereHas('scoreLevel', function ($q) use ($score) {
+                    $q->where('score_value', $score);
+                })
+                ->first();
+
+            if (!$descriptor) {
+                return ApiResponse::validationError([
+                    'scoreDescriptor' => ['تعذر اشتقاق واصفة أداء مطابقة لهذا التقدير.'],
+                ]);
+            }
+        }
+
+        // تنفيذ الرصد Upsert
+        $result = EvaluationResult::updateOrCreate(
+            [
+                'evaluation_id' => $evaluation->evaluation_id,
+                'indicator_id'  => $indicatorId,
+            ],
+            [
+                'score_descriptor_id' => $descriptor->descriptor_id,
+                'standard_version_id' => $versionId,
+                'evaluator_user_id'   => $user->user_id,
+                'score'               => $score,
+                'textual_result'      => $textualResult,
+                'completion_status'   => 'Completed',
+            ]
+        );
+
+        // حساب نسبة الإنجاز المحدثة
+        $totalActive = Indicator::where('status', 'Active')
+            ->whereHas('subStandard.standard', fn($q) => $q->where('version_id', $versionId))
+            ->count();
+
+        $completedCount = EvaluationResult::where('evaluation_id', $evaluation->evaluation_id)
+            ->where('completion_status', 'Completed')
+            ->count();
+
+        $percentage = $totalActive > 0 ? round(($completedCount / $totalActive) * 100, 2) : 0.0;
+
+        return ApiResponse::success(
+            data: [
+                'resultId'             => $result->result_id,
+                'evaluationId'         => $result->evaluation_id,
+                'indicatorId'          => $result->indicator_id,
+                'score'                => $result->score,
+                'scoreDescriptorId'    => $result->score_descriptor_id,
+                'scoreDescriptorLabel' => $descriptor->label,
+                'textualResult'        => $result->textual_result,
+                'completionStatus'     => $result->completion_status,
+                'evaluatorUserId'      => $result->evaluator_user_id,
+                'updatedAt'            => $result->updated_at?->toIso8601ZuluString(),
+            ],
+            message: 'تم رصد نتيجة المؤشر بنجاح.',
+            meta: [
+                'totalActiveIndicators' => $totalActive,
+                'completedResults'      => $completedCount,
+                'completionPercentage'  => $percentage,
+            ]
+        );
+    }
+
+    /**
+     * تدوين ملاحظة نصية على مؤشر التقييم.
+     *
+     * POST /api/v1/evaluations/{evaluationId}/indicators/{indicatorId}/notes
+     * الصلاحية: evaluations.edit
+     */
+    public function addNote(Request $request, int $evaluationId, int $indicatorId): JsonResponse
+    {
+        $user = $request->user();
+
+        if (!$user->hasPermission('evaluations.edit')) {
+            return ApiResponse::forbidden('غير مصرح لك بإضافة ملاحظات.');
+        }
+
+        $evaluation = Evaluation::find($evaluationId);
+        if (!$evaluation) {
+            return ApiResponse::notFound('ملف التقييم المطلوب غير موجود.');
+        }
+
+        // عزل المدارس
+        if ($user->user_type === 'school' && (int) $user->school_id !== (int) $evaluation->school_id) {
+            return ApiResponse::notFound('ملف التقييم المطلوب غير موجود.');
+        }
+
+        // فحص القفل
+        $lockCheck = EvaluationLockChecker::canModifyIndicator($evaluation, $indicatorId);
+        if (!$lockCheck['allowed']) {
+            return ApiResponse::validationError([
+                'evaluation' => [$lockCheck['message']],
+            ], $lockCheck['message']);
+        }
+
+        // نتيجة المؤشر يجب أن تكون مرصودة مسبقاً لربط الملاحظة بها
+        $result = EvaluationResult::where('evaluation_id', $evaluationId)
+            ->where('indicator_id', $indicatorId)
+            ->first();
+
+        if (!$result) {
+            return ApiResponse::validationError([
+                'result' => ['يجب رصد نتيجة المؤشر أولاً قبل تدوين الملاحظة.'],
+            ]);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'text' => ['required', 'string', 'max:2000'],
+        ], [
+            'text.required' => 'نص الملاحظة إلزامي.',
+            'text.max'      => 'لا يمكن أن يتجاوز نص الملاحظة 2000 حرف.',
+        ]);
+
+        if ($validator->fails()) {
+            return ApiResponse::validationError($validator->errors()->toArray());
+        }
+
+        $note = Note::create([
+            'result_id'      => $result->result_id,
+            'author_user_id' => $user->user_id,
+            'text'           => $request->input('text'),
+        ]);
+
+        return ApiResponse::success(
+            data: [
+                'noteId'       => $note->note_id,
+                'resultId'     => $note->result_id,
+                'authorUserId' => $note->author_user_id,
+                'text'         => $note->text,
+                'createdAt'    => $note->created_at?->toIso8601ZuluString(),
+            ],
+            message: 'تم حفظ الملاحظة بنجاح.',
+            status: 201
+        );
+    }
+}
