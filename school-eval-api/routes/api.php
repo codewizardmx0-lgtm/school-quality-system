@@ -54,5 +54,29 @@ Route::prefix('v1')->group(function () {
             Route::put('/{id}', [\App\Http\Controllers\Api\V1\UserController::class, 'update'])->name('api.v1.users.update');
             Route::patch('/{id}/toggle-status', [\App\Http\Controllers\Api\V1\UserController::class, 'toggleStatus'])->name('api.v1.users.toggle-status');
         });
+
+        // الإصدارات المعيارية وشجرة المعايير والمؤشرات (Standard Versions)
+        Route::prefix('standard-versions')->group(function () {
+            Route::get('/{id}', [\App\Http\Controllers\Api\V1\StandardVersionController::class, 'show'])->name('api.v1.standard-versions.show');
+        });
+
+        // عمليات التقييم المدرسي مع العزل المؤسسي ورصد الدرجات والملاحظات (Evaluations)
+        Route::prefix('evaluations')->group(function () {
+            Route::get('/', [\App\Http\Controllers\Api\V1\EvaluationController::class, 'index'])->name('api.v1.evaluations.index');
+            Route::get('/{id}', [\App\Http\Controllers\Api\V1\EvaluationController::class, 'show'])->name('api.v1.evaluations.show');
+            Route::get('/{id}/standards-tree', [\App\Http\Controllers\Api\V1\EvaluationController::class, 'standardsTree'])->name('api.v1.evaluations.standards-tree');
+            Route::put('/{evaluationId}/indicators/{indicatorId}/score', [\App\Http\Controllers\Api\V1\EvaluationController::class, 'scoreIndicator'])->name('api.v1.evaluations.indicators.score');
+            Route::post('/{evaluationId}/indicators/{indicatorId}/notes', [\App\Http\Controllers\Api\V1\EvaluationController::class, 'addNote'])->name('api.v1.evaluations.indicators.notes');
+        });
+
+        // الشواهد والأدلة الداعمة لنتائج التقييم (Evidences & Results)
+        Route::prefix('evaluation-results')->group(function () {
+            Route::post('/{id}/evidences', [\App\Http\Controllers\Api\V1\EvidenceController::class, 'store'])->name('api.v1.evaluation-results.evidences.store');
+        });
+
+        // النسخ التاريخية للشواهد ومرفقاتها (Evidence Versions)
+        Route::prefix('evidences')->group(function () {
+            Route::post('/{id}/versions', [\App\Http\Controllers\Api\V1\EvidenceController::class, 'addVersion'])->name('api.v1.evidences.versions.store');
+        });
     });
 });

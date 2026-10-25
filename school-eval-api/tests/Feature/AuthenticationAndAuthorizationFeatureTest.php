@@ -54,6 +54,8 @@ class AuthenticationAndAuthorizationFeatureTest extends TestCase
     {
         parent::setUp();
 
+        $this->defaultPassword = env('SEED_DEFAULT_PASSWORD') ?: 'ChangeMeDevPassword@2026';
+
         // استرجاع المدارس التجريبية
         $this->schoolBelqees = School::where('identification_data', 'SCH-SANAA-2026-001')->firstOrFail();
         $this->schoolFarouq  = School::where('identification_data', 'SCH-TAIZ-2026-002')->firstOrFail();

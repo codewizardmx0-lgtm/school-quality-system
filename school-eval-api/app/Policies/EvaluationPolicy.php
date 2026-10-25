@@ -4,6 +4,7 @@ namespace App\Policies;
 
 use App\Models\Evaluation;
 use App\Models\User;
+use App\Services\EvaluationLockChecker;
 
 /**
  * سياسة الوصول لملفات التقييم الذاتي (EvaluationPolicy).
@@ -85,7 +86,16 @@ class EvaluationPolicy
             return false;
         }
 
-        return $user->hasPermission('evaluations.edit');
+        if (!$user->hasPermission('evaluations.edit')) {
+            return false;
+        }
+
+        // فحص قفل التقييم العام (BR-SCH-03)
+        if (EvaluationLockChecker::isEvaluationLocked($evaluation)) {
+            return false;
+        }
+
+        return true;
     }
 
     /**

@@ -31,6 +31,6 @@
         <env name="PULSE_ENABLED" value="false"/>
         <env name="TELESCOPE_ENABLED" value="false"/>
         <env name="NIGHTWATCH_ENABLED" value="false"/>
-        <env name="SEED_DEFAULT_PASSWORD" value=""/>
+        <env name="SEED_DEFAULT_PASSWORD" value="TestingEnv_Seed_Password_2026_Strict!"/>
     </php>
 </phpunit>
