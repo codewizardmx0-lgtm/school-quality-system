@@ -1,5 +1,6 @@
 import React from 'react';
 import { useAuth } from '../features/auth/AuthContext';
+import { apiClient } from '../api/client';
 import { theme } from '../styles/theme';
 import {
   User as UserIcon,
@@ -7,6 +8,7 @@ import {
   Building2,
   KeyRound,
   CheckCircle,
+  Loader2,
 } from 'lucide-react';
 
 export const DashboardPage: React.FC = () => {
@@ -289,6 +291,9 @@ export const DashboardPage: React.FC = () => {
         </div>
       </div>
 
+      {/* قسم معاينة العزل المؤسسي الحي (بيانات التقييم الخاصة بمدرسة الحساب الحالي حصراً) */}
+      <SchoolEvaluationsIsolatedCard />
+
       {/* قائمة الصلاحيات التفصيلية المعتمدة */}
       <div
         style={{
@@ -367,6 +372,269 @@ export const DashboardPage: React.FC = () => {
           ))}
         </div>
       </div>
+    </div>
+  );
+};
+
+interface EvaluationItem {
+  evaluationId: number;
+  schoolId: number;
+  status: string;
+  createdAt: string;
+  school: {
+    schoolId: number;
+    schoolName: string;
+    educationalStage: string;
+    educationalDistrict: string;
+    governorate: string;
+  } | null;
+  cycle: {
+    cycleId: number;
+    academicYear: string;
+    status: string;
+  } | null;
+  creator: {
+    userId: number;
+    fullName: string;
+    username: string;
+  } | null;
+  results: Array<{
+    resultId: number;
+    indicatorId: number;
+    indicatorCode: string;
+    indicatorName: string;
+    score: number;
+    descriptorLabel: string;
+    textualResult: string;
+    completionStatus: string;
+    evidences: Array<{
+      evidenceId: number;
+      title: string;
+      description: string;
+    }>;
+  }>;
+}
+
+const SchoolEvaluationsIsolatedCard: React.FC = () => {
+  const { user } = useAuth();
+  const [evaluations, setEvaluations] = React.useState<EvaluationItem[]>([]);
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    // إذا كان المستخدم لا يملك صلاحية عرض التقييمات، لا تستعلم
+    if (!user?.permissions?.includes('evaluations.view')) {
+      setLoading(false);
+      return;
+    }
+
+    const fetchEvaluations = async () => {
+      try {
+        setLoading(true);
+        const res = await apiClient<EvaluationItem[]>('/evaluations');
+        setEvaluations(res.data || []);
+      } catch (err: unknown) {
+        const errorObj = err as { message?: string };
+        setError(errorObj.message || 'تعذر تحميل بيانات التقييم.');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchEvaluations();
+  }, [user]);
+
+  // لمسؤول النظام أو من لا يملك صلاحية تقييم
+  if (!user?.permissions?.includes('evaluations.view')) {
+    return null;
+  }
+
+  return (
+    <div
+      style={{
+        backgroundColor: theme.colors.neutral.white,
+        borderRadius: theme.radii.lg,
+        padding: '28px',
+        border: `1px solid ${theme.colors.neutral[200]}`,
+        boxShadow: theme.shadows.sm,
+        marginBottom: '32px',
+      }}
+    >
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: '20px',
+          borderBottom: `1px solid ${theme.colors.neutral[200]}`,
+          paddingBottom: '16px',
+          flexWrap: 'wrap',
+          gap: '12px',
+        }}
+      >
+        <div>
+          <div
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '3px 10px',
+              borderRadius: theme.radii.full,
+              backgroundColor: theme.colors.primary[50],
+              color: theme.colors.primary[800],
+              fontSize: '11px',
+              fontWeight: theme.typography.fontWeights.bold,
+              marginBottom: '6px',
+            }}
+          >
+            <ShieldCheck size={13} />
+            <span>نطاق العزل المؤسسي الحي (NFR-SEC-03 & BR-SCH-01)</span>
+          </div>
+          <h2
+            style={{
+              fontSize: theme.typography.fontSizes.lg,
+              fontWeight: theme.typography.fontWeights.bold,
+              color: theme.colors.neutral[900],
+              margin: 0,
+            }}
+          >
+            ملف التقييم الذاتي والشواهد المحصورة للمؤسسة
+          </h2>
+          <p style={{ fontSize: theme.typography.fontSizes.xs, color: theme.colors.neutral[500], margin: '4px 0 0 0' }}>
+            البيانات المسترجعة عبر <code style={{ color: theme.colors.primary[600] }}>GET /api/v1/evaluations</code> —
+            مفصولة ومعزولة تماماً بحسب مدرسة الحساب الحالي المسجل به الدخول.
+          </p>
+        </div>
+
+        {user.school && (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              padding: '6px 14px',
+              borderRadius: theme.radii.md,
+              backgroundColor: '#EFF6FF',
+              border: '1px solid #BFDBFE',
+              color: '#1D4ED8',
+              fontSize: theme.typography.fontSizes.xs,
+              fontWeight: theme.typography.fontWeights.bold,
+            }}
+          >
+            <Building2 size={16} />
+            <span>نطاق المدرسة: {user.school.schoolName}</span>
+          </div>
+        )}
+      </div>
+
+      {loading ? (
+        <div style={{ padding: '40px', textAlign: 'center', color: theme.colors.neutral[500] }}>
+          <Loader2 size={28} className="animate-spin" color={theme.colors.primary[600]} style={{ margin: '0 auto 8px auto' }} />
+          <div style={{ fontSize: theme.typography.fontSizes.xs }}>جاري التحقق وجلب بيانات المدرسة المعتمدة...</div>
+        </div>
+      ) : error ? (
+        <div style={{ padding: '20px', color: theme.colors.status.danger.text, backgroundColor: theme.colors.status.danger.bg, borderRadius: theme.radii.md }}>
+          {error}
+        </div>
+      ) : evaluations.length === 0 ? (
+        <div style={{ padding: '30px', textAlign: 'center', color: theme.colors.neutral[400], fontSize: theme.typography.fontSizes.sm }}>
+          لا توجد عمليات تقييم مدرجة لهذه المدرسة في الدورة الحالية.
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          {evaluations.map((ev) => (
+            <div
+              key={ev.evaluationId}
+              style={{
+                borderRadius: theme.radii.md,
+                border: `1px solid ${theme.colors.neutral[200]}`,
+                backgroundColor: theme.colors.neutral[50],
+                padding: '20px',
+              }}
+            >
+              {/* ترويسة ملف التقييم */}
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  marginBottom: '16px',
+                  flexWrap: 'wrap',
+                  gap: '10px',
+                }}
+              >
+                <div>
+                  <div style={{ fontSize: theme.typography.fontSizes.sm, fontWeight: theme.typography.fontWeights.extrabold, color: theme.colors.neutral[900] }}>
+                    {ev.school?.schoolName} — العام الدراسي ({ev.cycle?.academicYear})
+                  </div>
+                  <div style={{ fontSize: '11px', color: theme.colors.neutral[500], marginTop: '2px' }}>
+                    المحافظة: {ev.school?.governorate} | المديرية: {ev.school?.educationalDistrict} | منشئ التقييم: {ev.creator?.fullName} (@{ev.creator?.username})
+                  </div>
+                </div>
+                <div
+                  style={{
+                    padding: '4px 12px',
+                    borderRadius: theme.radii.full,
+                    backgroundColor: theme.colors.status.warning.badgeBg,
+                    color: theme.colors.status.warning.text,
+                    fontSize: '11px',
+                    fontWeight: theme.typography.fontWeights.bold,
+                  }}
+                >
+                  حالة التقييم: {ev.status === 'InProgress' ? 'قيد الإجراء (InProgress)' : ev.status}
+                </div>
+              </div>
+
+              {/* عينات المؤشرات المرصودة الخاصة بالمدرسة فقط */}
+              <div style={{ fontSize: theme.typography.fontSizes.xs, fontWeight: theme.typography.fontWeights.bold, color: theme.colors.neutral[700], marginBottom: '10px' }}>
+                المؤشرات والشواهد المحصورة والمسجلة للمدرسة ({ev.results?.length || 0} مؤشرات):
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {ev.results?.map((res) => (
+                  <div
+                    key={res.resultId}
+                    style={{
+                      backgroundColor: theme.colors.neutral.white,
+                      borderRadius: theme.radii.sm,
+                      padding: '14px 16px',
+                      border: `1px solid ${theme.colors.neutral[200]}`,
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                      <div style={{ fontWeight: theme.typography.fontWeights.bold, color: theme.colors.primary[800], fontSize: theme.typography.fontSizes.xs }}>
+                        المؤشر [{res.indicatorCode}]: {res.indicatorName}
+                      </div>
+                      <div
+                        style={{
+                          padding: '2px 8px',
+                          borderRadius: theme.radii.sm,
+                          backgroundColor: theme.colors.primary[50],
+                          color: theme.colors.primary[700],
+                          fontSize: '11px',
+                          fontWeight: theme.typography.fontWeights.bold,
+                        }}
+                      >
+                        الدرجة المرصودة: {res.score} ({res.descriptorLabel})
+                      </div>
+                    </div>
+                    <div style={{ fontSize: '12px', color: theme.colors.neutral[700], lineHeight: 1.5 }}>
+                      {res.textualResult}
+                    </div>
+
+                    {res.evidences && res.evidences.length > 0 && (
+                      <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: `1px dashed ${theme.colors.neutral[200]}`, fontSize: '11px', color: theme.colors.neutral[600] }}>
+                        <span style={{ fontWeight: theme.typography.fontWeights.bold, color: theme.colors.neutral[800] }}>الشاهد المرفق: </span>
+                        <span>{res.evidences[0].title} — {res.evidences[0].description}</span>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 };
