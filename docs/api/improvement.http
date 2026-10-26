@@ -1,0 +1,146 @@
+### ==============================================================================
+### ملف تجربة واجهة برمجة التطبيقات: خطط التحسين المدرسي (REST Client)
+### الشريحة الثالثة - Backend API (School Improvement Plans & Actions)
+### ==============================================================================
+### ملاحظة أمنية: لا تحتوي هذه الوثيقة على أي كلمات مرور.
+### يجب الحصول على الرمز (Token) وتعيينه في متغير {{token}} أدناه للمتابعة.
+### ==============================================================================
+
+@baseUrl = http://127.0.0.1:8000
+@token = your_bearer_token_here
+
+@evaluationId = 1
+@cycleId = 1
+@resultId = 1
+@areaId = 1
+@planId = 1
+@actionId = 1
+
+### ------------------------------------------------------------------------------
+### 1. استرجاع اقتراحات مجالات التحسين المبنية على نتائج التقييم (plans.view / plans.manage)
+### ------------------------------------------------------------------------------
+GET {{baseUrl}}/api/v1/evaluations/{{evaluationId}}/improvement-suggestions HTTP/1.1
+Authorization: Bearer {{token}}
+Accept: application/json
+
+### ------------------------------------------------------------------------------
+### 2. استعراض قائمة مجالات التحسين المعتمدة للمدرسة (plans.view / plans.manage)
+### ------------------------------------------------------------------------------
+GET {{baseUrl}}/api/v1/improvement-areas HTTP/1.1
+Authorization: Bearer {{token}}
+Accept: application/json
+
+### ------------------------------------------------------------------------------
+### 3. إنشاء / تبني مجال تحسين جديد مرتبط بنتيجة تقييم (plans.manage)
+### ------------------------------------------------------------------------------
+POST {{baseUrl}}/api/v1/improvement-areas HTTP/1.1
+Authorization: Bearer {{token}}
+Accept: application/json
+Content-Type: application/json
+
+{
+  "resultId": {{resultId}},
+  "name": "تطوير أدوات القياس والتقويم الصفي",
+  "description": "معالجة ضعف توثيق نتائج الاختبارات التشخيصية وتفعيل التغذية الراجعة.",
+  "priority": "High"
+}
+
+### ------------------------------------------------------------------------------
+### 4. تحديث بيانات مجال التحسين (plans.manage)
+### ------------------------------------------------------------------------------
+PATCH {{baseUrl}}/api/v1/improvement-areas/{{areaId}} HTTP/1.1
+Authorization: Bearer {{token}}
+Accept: application/json
+Content-Type: application/json
+
+{
+  "name": "تطوير أدوات القياس والتقويم الصفي (محدث)",
+  "description": "تحديث وصف خطة معالجة نتائج الاختبارات والتحصيل العلمي.",
+  "priority": "Medium"
+}
+
+### ------------------------------------------------------------------------------
+### 5. استعراض قائمة خطط التحسين مع الملخص والإحصائيات (plans.view / plans.manage)
+### ------------------------------------------------------------------------------
+GET {{baseUrl}}/api/v1/improvement-plans HTTP/1.1
+Authorization: Bearer {{token}}
+Accept: application/json
+
+### ------------------------------------------------------------------------------
+### 6. إنشاء خطة تحسين جديدة وربطها بمجالات تحسين (plans.manage)
+### ------------------------------------------------------------------------------
+POST {{baseUrl}}/api/v1/improvement-plans HTTP/1.1
+Authorization: Bearer {{token}}
+Accept: application/json
+Content-Type: application/json
+
+{
+  "cycleId": {{cycleId}},
+  "title": "خطة التطوير الشامل للفصل الدراسي الأول 2026",
+  "startDate": "2026-11-01",
+  "endDate": "2027-01-31",
+  "areaIds": [{{areaId}}]
+}
+
+### ------------------------------------------------------------------------------
+### 7. استعراض تفاصيل خطة التحسين ومجالاتها وإجراءاتها ونظرة التقدم (plans.view / plans.manage)
+### ------------------------------------------------------------------------------
+GET {{baseUrl}}/api/v1/improvement-plans/{{planId}} HTTP/1.1
+Authorization: Bearer {{token}}
+Accept: application/json
+
+### ------------------------------------------------------------------------------
+### 8. تحديث خطة التحسين وحالتها - التفعيل Active (plans.manage)
+### ------------------------------------------------------------------------------
+PATCH {{baseUrl}}/api/v1/improvement-plans/{{planId}} HTTP/1.1
+Authorization: Bearer {{token}}
+Accept: application/json
+Content-Type: application/json
+
+{
+  "title": "خطة التطوير الشامل للفصل الأول (محدثة)",
+  "status": "Active"
+}
+
+### ------------------------------------------------------------------------------
+### 9. إضافة إجراء تنفيذي جديد مرتبط بالمفتاح المركب (plan_id, area_id) (plans.manage)
+### ------------------------------------------------------------------------------
+POST {{baseUrl}}/api/v1/improvement-plans/{{planId}}/actions HTTP/1.1
+Authorization: Bearer {{token}}
+Accept: application/json
+Content-Type: application/json
+
+{
+  "areaId": {{areaId}},
+  "title": "عقد ورش تدريبية للمعلمين على بنوك الأسئلة",
+  "responsiblePersonDescription": "منسق الجودة والتدريب المدرسي",
+  "startDate": "2026-11-05",
+  "dueDate": "2026-11-25",
+  "status": "Pending",
+  "progress": "NotStarted"
+}
+
+### ------------------------------------------------------------------------------
+### 10. تحديث إجراء تنفيذي (الحالة ومستوى التقدم) (plans.manage)
+### ------------------------------------------------------------------------------
+PATCH {{baseUrl}}/api/v1/improvement-plans/{{planId}}/actions/{{actionId}} HTTP/1.1
+Authorization: Bearer {{token}}
+Accept: application/json
+Content-Type: application/json
+
+{
+  "status": "InProgress",
+  "progress": "Moderate"
+}
+
+### ------------------------------------------------------------------------------
+### 11. تدوين ملاحظة مراجعة من قِبل مدير المدرسة (reviews.write)
+### ------------------------------------------------------------------------------
+POST {{baseUrl}}/api/v1/improvement-plans/{{planId}}/review-notes HTTP/1.1
+Authorization: Bearer {{token}}
+Accept: application/json
+Content-Type: application/json
+
+{
+  "text": "تمت مراجعة الخطة والإجراءات التنفيذية، ونؤكد على ضرورة توفير قاعة التدريب المجهزة وتزويد المعلمين بالنماذج التطبيقية."
+}

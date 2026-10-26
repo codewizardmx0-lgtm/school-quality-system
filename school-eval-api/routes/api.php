@@ -65,6 +65,7 @@ Route::prefix('v1')->group(function () {
             Route::get('/', [\App\Http\Controllers\Api\V1\EvaluationController::class, 'index'])->name('api.v1.evaluations.index');
             Route::get('/{id}', [\App\Http\Controllers\Api\V1\EvaluationController::class, 'show'])->name('api.v1.evaluations.show');
             Route::get('/{id}/standards-tree', [\App\Http\Controllers\Api\V1\EvaluationController::class, 'standardsTree'])->name('api.v1.evaluations.standards-tree');
+            Route::get('/{id}/improvement-suggestions', [\App\Http\Controllers\Api\V1\ImprovementSuggestionController::class, 'index'])->name('api.v1.evaluations.improvement-suggestions');
             Route::put('/{evaluationId}/indicators/{indicatorId}/score', [\App\Http\Controllers\Api\V1\EvaluationController::class, 'scoreIndicator'])->name('api.v1.evaluations.indicators.score');
         });
 
@@ -79,6 +80,24 @@ Route::prefix('v1')->group(function () {
         Route::prefix('evidences')->group(function () {
             Route::post('/{id}/versions', [\App\Http\Controllers\Api\V1\EvidenceController::class, 'addVersion'])->name('api.v1.evidences.versions.store');
             Route::get('/{id}/versions/{versionId}/download', [\App\Http\Controllers\Api\V1\EvidenceController::class, 'downloadVersion'])->name('api.v1.evidences.versions.download');
+        });
+
+        // مجالات التحسين المستخلصة من نتائج التقييم (Improvement Areas)
+        Route::prefix('improvement-areas')->group(function () {
+            Route::get('/', [\App\Http\Controllers\Api\V1\ImprovementAreaController::class, 'index'])->name('api.v1.improvement-areas.index');
+            Route::post('/', [\App\Http\Controllers\Api\V1\ImprovementAreaController::class, 'store'])->name('api.v1.improvement-areas.store');
+            Route::patch('/{id}', [\App\Http\Controllers\Api\V1\ImprovementAreaController::class, 'update'])->name('api.v1.improvement-areas.update');
+        });
+
+        // خطط التحسين المدرسي وإجراءاتها وملاحظات المراجعة (Improvement Plans, Actions, Review Notes)
+        Route::prefix('improvement-plans')->group(function () {
+            Route::get('/', [\App\Http\Controllers\Api\V1\ImprovementPlanController::class, 'index'])->name('api.v1.improvement-plans.index');
+            Route::post('/', [\App\Http\Controllers\Api\V1\ImprovementPlanController::class, 'store'])->name('api.v1.improvement-plans.store');
+            Route::get('/{id}', [\App\Http\Controllers\Api\V1\ImprovementPlanController::class, 'show'])->name('api.v1.improvement-plans.show');
+            Route::patch('/{id}', [\App\Http\Controllers\Api\V1\ImprovementPlanController::class, 'update'])->name('api.v1.improvement-plans.update');
+            Route::post('/{id}/actions', [\App\Http\Controllers\Api\V1\ImprovementPlanController::class, 'storeAction'])->name('api.v1.improvement-plans.actions.store');
+            Route::patch('/{id}/actions/{actionId}', [\App\Http\Controllers\Api\V1\ImprovementPlanController::class, 'updateAction'])->name('api.v1.improvement-plans.actions.update');
+            Route::post('/{id}/review-notes', [\App\Http\Controllers\Api\V1\ImprovementPlanController::class, 'storeReviewNote'])->name('api.v1.improvement-plans.review-notes.store');
         });
     });
 });
