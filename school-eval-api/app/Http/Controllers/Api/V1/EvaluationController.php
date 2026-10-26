@@ -135,6 +135,9 @@ class EvaluationController extends Controller
             },
             'standards.subStandards.indicators.scoreDescriptors.scoreLevel',
             'standards.subStandards.indicators.verificationTools',
+            'standards.subStandards.indicators.evidenceRequirements' => function ($q) {
+                $q->orderBy('display_order', 'asc');
+            },
         ])->find($versionId);
 
         if (!$version) {
@@ -164,13 +167,13 @@ class EvaluationController extends Controller
                 'name'         => $std->name,
                 'description'  => $std->description,
                 'weight'       => (float) $std->weight,
-                'subStandards' => $std->subStandards->map(function ($sub) use ($existingResults, &$totalActiveIndicators, &$completedResultsCount) {
+                'subStandards' => $std->subStandards->map(function ($sub) use ($std, $existingResults, &$totalActiveIndicators, &$completedResultsCount) {
                     return [
                         'subStandardId' => $sub->sub_standard_id,
                         'code'          => $sub->code,
                         'name'          => $sub->name,
                         'description'   => $sub->description,
-                        'indicators'    => $sub->indicators->map(function ($ind) use ($existingResults, &$totalActiveIndicators, &$completedResultsCount) {
+                        'indicators'    => $sub->indicators->map(function ($ind) use ($std, $sub, $existingResults, &$totalActiveIndicators, &$completedResultsCount) {
                             $isActive = $ind->status === 'Active';
                             if ($isActive) {
                                 $totalActiveIndicators++;
@@ -192,23 +195,27 @@ class EvaluationController extends Controller
                             })->values()->all() : [];
 
                             return [
-                                'indicatorId'          => $ind->indicator_id,
-                                'code'                 => $ind->code,
-                                'name'                 => $ind->name,
-                                'description'          => $ind->description,
-                                'weight'               => (float) $ind->weight,
-                                'status'               => $ind->status,
-                                'resultId'             => $result?->result_id,
-                                'score'                => $result?->score,
-                                'scoreDescriptorId'    => $result?->score_descriptor_id,
-                                'scoreDescriptorLabel' => $result?->scoreDescriptor?->label,
-                                'completionStatus'     => $result?->completion_status,
-                                'textualResult'        => $result?->textual_result,
-                                'evidenceCount'        => $result ? $result->evidences->count() : 0,
-                                'notesCount'           => $result ? $result->notes->count() : 0,
-                                'notes'                => $notes,
-                                'verificationToolIds'  => $result ? $result->verificationTools->pluck('tool_id')->all() : [],
-                                'verificationTools'    => $ind->verificationTools->map(function ($tool) {
+                                'indicatorId'            => $ind->indicator_id,
+                                'code'                   => $ind->code,
+                                'name'                   => $ind->name,
+                                'description'            => $ind->description,
+                                'standardName'           => $std->name,
+                                'standardDescription'    => $std->description,
+                                'subStandardName'        => $sub->name,
+                                'subStandardDescription' => $sub->description,
+                                'weight'                 => (float) $ind->weight,
+                                'status'                 => $ind->status,
+                                'resultId'               => $result?->result_id,
+                                'score'                  => $result?->score,
+                                'scoreDescriptorId'      => $result?->score_descriptor_id,
+                                'scoreDescriptorLabel'   => $result?->scoreDescriptor?->label,
+                                'completionStatus'       => $result?->completion_status,
+                                'textualResult'          => $result?->textual_result,
+                                'evidenceCount'          => $result ? $result->evidences->count() : 0,
+                                'notesCount'             => $result ? $result->notes->count() : 0,
+                                'notes'                  => $notes,
+                                'verificationToolIds'    => $result ? $result->verificationTools->pluck('tool_id')->all() : [],
+                                'verificationTools'      => $ind->verificationTools->map(function ($tool) {
                                     return [
                                         'toolId'        => $tool->tool_id,
                                         'name'          => $tool->name,
@@ -217,7 +224,16 @@ class EvaluationController extends Controller
                                         'usageGuidance' => $tool->pivot?->usage_guidance,
                                     ];
                                 })->values(),
-                                'scoreDescriptors'     => $ind->scoreDescriptors->map(function ($desc) {
+                                'evidenceRequirements'   => $ind->evidenceRequirements->map(function ($req) {
+                                    return [
+                                        'requirementId' => $req->requirement_id,
+                                        'title'         => $req->title,
+                                        'description'   => $req->description,
+                                        'required'      => (bool) $req->required,
+                                        'displayOrder'  => $req->display_order,
+                                    ];
+                                })->values(),
+                                'scoreDescriptors'       => $ind->scoreDescriptors->map(function ($desc) {
                                     return [
                                         'descriptorId' => $desc->descriptor_id,
                                         'scoreLevelId' => $desc->score_level_id,

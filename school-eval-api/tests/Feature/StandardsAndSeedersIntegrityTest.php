@@ -472,4 +472,15 @@ class StandardsAndSeedersIntegrityTest extends TestCase
             );
         }
     }
+
+    /**
+     * 16. التحقق من عمل أمر التدقيق audit:standards-data ومطابقة مخرجاته للأعداد الرسمية.
+     */
+    public function test_audit_standards_data_artisan_command_verifies_standards_integrity(): void
+    {
+        $this->artisan('audit:standards-data')
+            ->expectsOutputToContain('المعايير الرئيسية')
+            ->expectsOutputToContain('436')
+            ->assertExitCode(0);
+    }
 }

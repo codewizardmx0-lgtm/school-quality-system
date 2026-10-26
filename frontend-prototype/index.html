@@ -43,8 +43,10 @@
       <span id="bc-sep1">/</span>
       <a id="bc-tree" onclick="App.navTo('tree')">شجرة المعايير</a>
       <span id="bc-sep2">/</span>
-      <a id="bc-suggestions" onclick="App.navTo('suggestions')">اقتراحات التحسين</a>
+      <a id="bc-standards-review" onclick="App.navTo('standards-review')">مراجعة المعايير 📖</a>
       <span id="bc-sep3">/</span>
+      <a id="bc-suggestions" onclick="App.navTo('suggestions')">اقتراحات التحسين</a>
+      <span id="bc-sep4">/</span>
       <a id="bc-plans" onclick="App.navTo('plans')">خطط التحسين</a>
     </div>
 
@@ -168,45 +170,52 @@
     <!-- الشاشة 4: رصد التقدير والملاحظات (Modal) -->
     <!-- ========================================================================= -->
     <div id="modal-scoring" class="modal-overlay hidden">
-      <div class="modal-content">
+      <div class="modal-content modal-content-lg">
         <div class="modal-header">
           <div>
-            <h3 id="score-modal-title" style="font-size: 1.1rem; color: var(--primary);">رصد درجة المؤشر</h3>
+            <h3 id="score-modal-title" style="font-size: 1.15rem; color: var(--primary);">رصد درجة المؤشر</h3>
             <span id="score-indicator-code" class="badge badge-gray"></span>
           </div>
           <button class="modal-close" onclick="App.closeScoringModal()">&times;</button>
         </div>
 
-        <p id="score-indicator-desc" style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem;"></p>
+        <!-- سياق المعيار والمجال الفرعي والمؤشر -->
+        <div class="indicator-hierarchy-context" id="score-hierarchy-context">
+          <div><strong>المعيار الرئيسي:</strong> <span id="score-std-info">-</span></div>
+          <div><strong>المجال الفرعي:</strong> <span id="score-substd-info">-</span></div>
+          <div><strong>وصف المؤشر:</strong> <span id="score-indicator-desc">-</span></div>
+        </div>
 
         <!-- تنبيه خطأ رصد خاص بالدورة أو التقييم (422) -->
         <div id="score-modal-alert" class="alert alert-error hidden"></div>
 
         <form id="form-score-indicator" onsubmit="App.handleSaveScore(event)">
-          <!-- اختيار التقدير الرقمي من مستويات التقدير المعرفة (ديناميكي كلياً من الـ API) -->
+          <!-- اختيار التقدير من البطاقات الأربع المتجاورة للواصفات (Score Descriptors Cards) -->
           <div class="form-group">
-            <label class="form-label">اختيار التقدير الرقمي:</label>
-            <div id="score-options-container" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 0.5rem;">
-              <!-- يتم حقن خيارات الدرجات وواصفاتها ديناميكياً بواسطة JavaScript من مصفوفة scoreDescriptors القادمة من الـ API -->
+            <label class="form-label" style="font-weight: 700;">واصفات الأداء المعتمدة لسلم التقدير (انقر على البطاقة المناسبة لاختيار الدرجة):</label>
+            <input type="hidden" id="selected-score-value" name="score">
+            <input type="hidden" id="selected-descriptor-id" name="scoreDescriptorId">
+            <div id="score-descriptor-cards" class="descriptor-cards-grid">
+              <!-- يتم حقن البطاقات الأربع ديناميكياً بواسطة JavaScript من مصفوفة scoreDescriptors القادمة من الـ API -->
             </div>
             <div id="err-score" class="field-error"></div>
           </div>
 
-          <!-- واصفة الأداء المقابلة للتقدير -->
+          <!-- أدوات التحقق المقررة للمؤشر (FR-SCH-13) مع إرشادات الاستخدام -->
           <div class="form-group">
-            <label class="form-label">واصفة الأداء المقابلة للدرجة:</label>
-            <div id="score-descriptor-text" style="font-size: 0.85rem; padding: 0.5rem; background: #f8fafc; border: 1px solid var(--border); border-radius: 4px; min-height: 45px;">
-              (اختر تقديراً لعرض الواصفة المعتمدة للمؤشر)
-            </div>
-          </div>
-
-          <!-- أدوات التحقق المستخدمة فعلياً (FR-SCH-13) -->
-          <div class="form-group">
-            <label class="form-label">أدوات التحقق المستخدمة فعلياً لتقييم المؤشر (FR-SCH-13):</label>
-            <div id="score-verification-tools-container" style="display: flex; flex-direction: column; gap: 0.35rem; max-height: 140px; overflow-y: auto; padding: 0.5rem; border: 1px solid var(--border); border-radius: 4px; background: #fafafa;">
-              <!-- تُحقن بواسطة JavaScript -->
+            <label class="form-label" style="font-weight: 700;">أدوات التحقق المقررة للمؤشر (FR-SCH-13):</label>
+            <div id="score-verification-tools-container" style="display: flex; flex-direction: column; gap: 0.4rem; max-height: 160px; overflow-y: auto; padding: 0.6rem; border: 1px solid var(--border); border-radius: 4px; background: #fafafa;">
+              <!-- تُحقن بواسطة JavaScript مع الاسم والنوع والإلزامية وإرشاد الاستخدام -->
             </div>
             <div id="err-verificationToolIds" class="field-error"></div>
+          </div>
+
+          <!-- متطلبات الشواهد والأدلة الرسمية المقررة لهذا المؤشر -->
+          <div class="form-group">
+            <label class="form-label" style="font-weight: 700;">متطلبات الشواهد والأدلة الرسمية المقررة لهذا المؤشر:</label>
+            <div id="score-evidence-requirements-container" style="display: flex; flex-direction: column; gap: 0.35rem; max-height: 140px; overflow-y: auto; padding: 0.6rem; border: 1px solid var(--border); border-radius: 4px; background: #f8fafc;">
+              <!-- تُحقن بواسطة JavaScript -->
+            </div>
           </div>
 
           <!-- النتيجة والتعليل النصي -->
@@ -650,6 +659,40 @@
         </form>
       </div>
     </div>
+
+    <!-- ========================================================================= -->
+    <!-- شاشة مراجعة المعايير الوطنية (قراءة فقط) -->
+    <!-- ========================================================================= -->
+    <section id="screen-standards-review" class="hidden">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem;">
+        <div>
+          <h2 style="font-size: 1.25rem; color: var(--primary); margin-bottom: 0.25rem;">دليل مراجعة المعايير والمؤشرات الوطنية (قراءة فقط)</h2>
+          <span style="font-size: 0.85rem; color: var(--text-muted);">
+            استعراض شامل للقراءة فقط: المعايير السبعة، والمجالات الفرعية الـ 14، والمؤشرات الـ 109 كاملة مع واصفاتها الأربع وأدوات التحقق ومتطلبات الشواهد.
+          </span>
+        </div>
+        <div style="display: flex; gap: 0.5rem;">
+          <button class="btn btn-sm btn-secondary" onclick="App.toggleAllReviewStandards(true)">توسيع الكل</button>
+          <button class="btn btn-sm btn-secondary" onclick="App.toggleAllReviewStandards(false)">طي الكل</button>
+        </div>
+      </div>
+
+      <!-- حقل البحث في المعايير والمؤشرات -->
+      <div class="card" style="padding: 0.75rem 1rem; margin-bottom: 1rem;">
+        <div style="position: relative;">
+          <input type="text" id="standards-review-search" class="form-control" 
+                 placeholder="🔍 بحث في المعايير والمؤشرات بالاسم أو الكود (مثال: 1-1-1 أو القيادة أو التخطيط)..." 
+                 oninput="App.filterStandardsReview(this.value)">
+        </div>
+        <div id="standards-review-search-meta" style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.35rem;">
+          عرض كافة المؤشرات الـ 109 ضمن 14 مجالاً فرعياً و 7 معايير رئيسية.
+        </div>
+      </div>
+
+      <div id="standards-review-content">
+        <!-- يتم الحقن بواسطة JavaScript -->
+      </div>
+    </section>
 
   </main>
 

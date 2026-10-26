@@ -137,6 +137,7 @@ const App = {
       'login',
       'cycles',
       'standards-tree',
+      'standards-review',
       'suggestions',
       'plans',
     ];
@@ -157,6 +158,8 @@ const App = {
       this.loadEvaluations();
     } else if (screenName === 'standards-tree' && this.state.currentEvaluation) {
       this.loadStandardsTree(this.state.currentEvaluation.evaluationId);
+    } else if (screenName === 'standards-review') {
+      this.loadStandardsReview();
     } else if (screenName === 'suggestions' && this.state.currentEvaluation) {
       this.loadSuggestions();
     } else if (screenName === 'plans') {
@@ -175,10 +178,12 @@ const App = {
 
     bc.classList.remove('hidden');
     const bcTree = document.getElementById('bc-tree');
+    const bcReview = document.getElementById('bc-standards-review');
     const bcSugg = document.getElementById('bc-suggestions');
     const bcPlans = document.getElementById('bc-plans');
 
     if (bcTree) bcTree.style.display = this.state.currentEvaluation ? 'inline' : 'none';
+    if (bcReview) bcReview.style.display = 'inline';
     if (bcSugg) bcSugg.style.display = this.state.currentEvaluation ? 'inline' : 'none';
   },
 
@@ -447,41 +452,77 @@ const App = {
       ? `${indicator.score !== null && indicator.score !== undefined ? 'تعديل' : 'رصد'} درجة المؤشر: ${indicator.name}`
       : `استعراض درجة المؤشر: ${indicator.name} (قراءة فقط)`;
     document.getElementById('score-indicator-code').textContent = indicator.code;
-    document.getElementById('score-indicator-desc').textContent = indicator.description || 'لا يوجد وصف تفصيلي لهذا المؤشر في قاعدة البيانات.';
+
+    // عرض سياق المعيار والمجال الفرعي ووصف المؤشر
+    const stdInfoEl = document.getElementById('score-std-info');
+    if (stdInfoEl) {
+      stdInfoEl.textContent = indicator.standardName 
+        ? `${indicator.standardName}${indicator.standardDescription ? ' — ' + indicator.standardDescription : ''}`
+        : 'المعيار المعتمد';
+    }
+    const subStdInfoEl = document.getElementById('score-substd-info');
+    if (subStdInfoEl) {
+      subStdInfoEl.textContent = indicator.subStandardName 
+        ? `${indicator.subStandardName}${indicator.subStandardDescription ? ' — ' + indicator.subStandardDescription : ''}`
+        : 'المجال الفرعي';
+    }
+    const indDescEl = document.getElementById('score-indicator-desc');
+    if (indDescEl) {
+      indDescEl.textContent = indicator.description || 'لا يوجد وصف تفصيلي لهذا المؤشر في قاعدة البيانات.';
+    }
 
     const alertEl = document.getElementById('score-modal-alert');
     alertEl.classList.add('hidden');
     alertEl.textContent = '';
 
-    // توليد خيارات التقدير الرقمي وواصفاتها ديناميكياً من الـ API (scoreDescriptors)
-    const scoreContainer = document.getElementById('score-options-container');
+    // مسح أخطاء الحقول
+    this.clearErrors(['score', 'verificationToolIds']);
+
+    // بناء بطاقات الواصفات الأربع (Score Descriptors Cards)
+    const cardsContainer = document.getElementById('score-descriptor-cards');
     const descriptors = indicator.scoreDescriptors || [];
+    const valInput = document.getElementById('selected-score-value');
+    const descIdInput = document.getElementById('selected-descriptor-id');
+
+    let currentScore = (indicator.score !== null && indicator.score !== undefined) ? parseInt(indicator.score) : null;
+    let currentDescId = indicator.scoreDescriptorId || null;
+
+    valInput.value = currentScore !== null ? currentScore : '';
+    descIdInput.value = currentDescId !== null ? currentDescId : '';
 
     if (descriptors.length === 0) {
-      scoreContainer.innerHTML = '<div class="alert alert-warning" style="grid-column: 1 / -1; margin-bottom: 0;">لا توجد واصفات أداء معرفة لهذا المؤشر في قاعدة البيانات.</div>';
+      cardsContainer.innerHTML = '<div class="alert alert-warning" style="grid-column: 1 / -1;">لا توجد واصفات أداء معرفة لهذا المؤشر في قاعدة البيانات.</div>';
     } else {
       const sortedDesc = [...descriptors].sort((a, b) => (a.scoreValue ?? a.displayOrder) - (b.scoreValue ?? b.displayOrder));
-      scoreContainer.innerHTML = sortedDesc.map(desc => {
-        const isChecked = (indicator.score !== null && indicator.score !== undefined && indicator.score === desc.scoreValue);
+      
+      // مطابقة descriptorId في حال كان المؤشر مرصوداً ومحفوظاً
+      if (currentScore !== null && !currentDescId) {
+        const match = sortedDesc.find(d => d.scoreValue === currentScore);
+        if (match) {
+          currentDescId = match.descriptorId;
+          descIdInput.value = currentDescId;
+        }
+      }
+
+      cardsContainer.innerHTML = sortedDesc.map(desc => {
+        const isSelected = (currentScore !== null && currentScore === desc.scoreValue);
+        const levelBadgeClass = desc.scoreValue >= 2 ? 'badge-green' : (desc.scoreValue === 1 ? 'badge-yellow' : 'badge-red');
         return `
-          <label class="card" style="padding: 0.5rem; text-align: center; cursor: ${canEdit ? 'pointer' : 'default'}; margin-bottom: 0; ${!canEdit && !isChecked ? 'opacity: 0.5;' : ''}">
-            <input type="radio" name="indicator-score-opt" value="${desc.scoreValue}" required 
-                   ${isChecked ? 'checked' : ''} 
-                   ${!canEdit ? 'disabled' : ''}
-                   onchange="App.onScoreOptionChange(${desc.scoreValue})">
-            <div style="font-weight: 700; margin-top: 0.2rem;">${desc.scoreValue} - ${desc.label}</div>
-          </label>
+          <div class="descriptor-card ${isSelected ? 'selected' : ''}" 
+               id="desc-card-${desc.scoreValue}"
+               ${canEdit ? `onclick="App.selectScoreCard(${desc.scoreValue}, ${desc.descriptorId})"` : ''}
+               style="cursor: ${canEdit ? 'pointer' : 'default'};">
+            <div class="card-score-badge">
+              <span>الدرجة: ${desc.scoreValue}</span>
+              <span class="badge ${levelBadgeClass}">${desc.label}</span>
+            </div>
+            <div class="card-desc-text">${desc.description || 'لا يوجد نص واصفة معتمد'}</div>
+          </div>
         `;
       }).join('');
     }
 
-    if (indicator.score !== null && indicator.score !== undefined) {
-      this.onScoreOptionChange(indicator.score);
-    } else {
-      document.getElementById('score-descriptor-text').textContent = '(اختر تقديراً لعرض الواصفة المعتمدة للمؤشر)';
-    }
-
-    // بناء قائمة أدوات التحقق القابلة للاختيار من verificationTools القادمة من الـ API
+    // بناء قائمة أدوات التحقق من verificationTools مع الاسم والنوع والإلزامية وإرشاد الاستخدام
     const toolsContainer = document.getElementById('score-verification-tools-container');
     const applicableTools = indicator.verificationTools || [];
     const usedToolIds = indicator.verificationToolIds || [];
@@ -490,13 +531,37 @@ const App = {
       toolsContainer.innerHTML = '<span style="font-size: 0.8rem; color: var(--text-muted);">لا توجد أدوات تحقق معتمدة لهذا المؤشر في قاعدة البيانات.</span>';
     } else {
       toolsContainer.innerHTML = applicableTools.map(tool => `
-        <label style="display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; cursor: ${canEdit ? 'pointer' : 'default'};">
-          <input type="checkbox" name="verificationToolIds" value="${tool.toolId}" 
-                 ${usedToolIds.includes(tool.toolId) ? 'checked' : ''}
-                 ${!canEdit ? 'disabled' : ''}>
-          <span>${tool.name} (${tool.toolType})${tool.required ? ' <strong style="color:red">*</strong>' : ''}</span>
-        </label>
+        <div class="tool-item-row">
+          <label style="display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; cursor: ${canEdit ? 'pointer' : 'default'};">
+            <input type="checkbox" name="verificationToolIds" value="${tool.toolId}" 
+                   ${usedToolIds.includes(tool.toolId) ? 'checked' : ''}
+                   ${!canEdit ? 'disabled' : ''}>
+            <span style="font-weight: 600;">${tool.name} (${tool.toolType})</span>
+            ${tool.required ? '<span class="badge badge-red" style="font-size: 0.7rem;">إلزامية *</span>' : '<span class="badge badge-gray" style="font-size: 0.7rem;">اختيارية</span>'}
+          </label>
+          ${tool.usageGuidance ? `<div class="tool-item-guidance">💡 إرشاد: ${tool.usageGuidance}</div>` : ''}
+        </div>
       `).join('');
+    }
+
+    // بناء قائمة متطلبات الشواهد الرسمية المقررة لهذا المؤشر (Evidence Requirements)
+    const reqContainer = document.getElementById('score-evidence-requirements-container');
+    const evidenceReqs = indicator.evidenceRequirements || [];
+
+    if (reqContainer) {
+      if (evidenceReqs.length === 0) {
+        reqContainer.innerHTML = '<span style="font-size: 0.8rem; color: var(--text-muted);">لا توجد متطلبات شواهد مسجلة لهذا المؤشر.</span>';
+      } else {
+        reqContainer.innerHTML = evidenceReqs.map(req => `
+          <div class="evidence-req-item">
+            <div>
+              <strong style="color: #1e293b;">${req.title}</strong>
+              ${req.description ? `<div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.15rem;">${req.description}</div>` : ''}
+            </div>
+            <span class="badge ${req.required ? 'badge-yellow' : 'badge-gray'}">${req.required ? 'إلزامي' : 'اختياري'}</span>
+          </div>
+        `).join('');
+      }
     }
 
     const textualInput = document.getElementById('score-textual-result');
@@ -524,22 +589,24 @@ const App = {
     modal.classList.remove('hidden');
   },
 
+  selectScoreCard(scoreVal, descriptorId) {
+    const cards = document.querySelectorAll('#score-descriptor-cards .descriptor-card');
+    cards.forEach(c => c.classList.remove('selected'));
+
+    const activeCard = document.getElementById(`desc-card-${scoreVal}`);
+    if (activeCard) {
+      activeCard.classList.add('selected');
+    }
+
+    document.getElementById('selected-score-value').value = scoreVal;
+    document.getElementById('selected-descriptor-id').value = descriptorId || '';
+    this.clearErrors(['score']);
+  },
+
   closeScoringModal() {
     const modal = document.getElementById('modal-scoring');
     if (modal) modal.classList.add('hidden');
     this.state.currentIndicator = null;
-  },
-
-  onScoreOptionChange(score) {
-    const ind = this.state.currentIndicator;
-    if (!ind || !ind.scoreDescriptors) {
-      document.getElementById('score-descriptor-text').textContent = 'لا توجد واصفات أداء معرفة لهذا المؤشر في قاعدة البيانات.';
-      return;
-    }
-
-    const desc = (ind.scoreDescriptors || []).find(d => d.scoreValue === score);
-    const descText = desc?.description || (desc?.label ? `المستوى المعياري: ${desc.label}` : 'لا يوجد توصيف معتمد لهذه الدرجة في قاعدة البيانات.');
-    document.getElementById('score-descriptor-text').textContent = descText;
   },
 
   async handleSaveScore(event) {
@@ -556,17 +623,17 @@ const App = {
     alertEl.classList.add('hidden');
     this.clearErrors(['score', 'verificationToolIds']);
 
-    // قراءة التقدير
-    const radios = document.getElementsByName('indicator-score-opt');
-    let selectedScore = null;
-    radios.forEach(r => {
-      if (r.checked) selectedScore = parseInt(r.value);
-    });
+    // قراءة التقدير من البطاقة المحددة
+    const valInput = document.getElementById('selected-score-value');
+    const descIdInput = document.getElementById('selected-descriptor-id');
 
-    if (selectedScore === null) {
-      document.getElementById('err-score').textContent = 'يرجى اختيار التقدير الرقمي.';
+    if (!valInput || valInput.value === '' || valInput.value === null) {
+      document.getElementById('err-score').textContent = 'يرجى النقر على إحدى بطاقات الواصفات الأربع لاختيار التقدير.';
       return;
     }
+
+    const selectedScore = parseInt(valInput.value);
+    const scoreDescriptorId = descIdInput.value ? parseInt(descIdInput.value) : null;
 
     // قراءة أدوات التحقق
     const toolCheckboxes = document.getElementsByName('verificationToolIds');
@@ -579,6 +646,7 @@ const App = {
 
     const body = {
       score: selectedScore,
+      scoreDescriptorId: scoreDescriptorId,
       verificationToolIds: verificationToolIds,
       textualResult: textualResult,
     };
@@ -1484,9 +1552,212 @@ const App = {
       if (el) el.textContent = '';
     });
   },
-};
 
-// تشغيل التطبيق عند اكتمال تحميل الصفحة
-document.addEventListener('DOMContentLoaded', () => {
-  App.init();
-});
+  // ---------------------------------------------------------------------------
+  // شاشة مراجعة المعايير والمؤشرات والواصفات (Standards Review Screen - Read Only)
+  // ---------------------------------------------------------------------------
+  async loadStandardsReview() {
+    const container = document.getElementById('standards-review-content');
+    if (!container) return;
+
+    if (!this.state.standardsTree) {
+      container.innerHTML = '<div class="card" style="text-align: center;">جارِ جلب شجرة المعايير والمؤشرات والواصفات...</div>';
+      
+      if (!this.state.currentEvaluation) {
+        const evRes = await this.request('/evaluations');
+        if (evRes.ok && evRes.data && evRes.data.length > 0) {
+          this.state.currentEvaluation = evRes.data[0];
+        }
+      }
+
+      if (this.state.currentEvaluation) {
+        const treeRes = await this.request(`/evaluations/${this.state.currentEvaluation.evaluationId}/standards-tree`);
+        if (treeRes.ok) {
+          this.state.standardsTree = treeRes.data;
+        } else {
+          container.innerHTML = `<div class="card" style="color: red;">${treeRes.message || 'فشل جلب المعايير.'}</div>`;
+          return;
+        }
+      } else {
+        container.innerHTML = '<div class="card" style="color: red;">لا يوجد ملف تقييم متاح لاستعراض شجرة معاييره.</div>';
+        return;
+      }
+    }
+
+    this.renderStandardsReview();
+  },
+
+  renderStandardsReview() {
+    const container = document.getElementById('standards-review-content');
+    if (!container || !this.state.standardsTree) return;
+
+    const data = this.state.standardsTree;
+    const standards = data.standards || [];
+
+    if (standards.length === 0) {
+      container.innerHTML = '<div class="card" style="text-align: center;">لا توجد معايير مسجلة في هذا الإصدار.</div>';
+      return;
+    }
+
+    container.innerHTML = standards.map((std, sIdx) => `
+      <div class="review-standard-card" id="rev-std-card-${sIdx}">
+        <div class="review-standard-header" onclick="App.toggleAccordion('rev-std-body-${sIdx}')">
+          <div>
+            <span>${std.code} — ${std.name}</span>
+            ${std.description ? `<div style="font-size: 0.8rem; font-weight: normal; color: var(--text-muted); margin-top: 0.2rem;">${std.description}</div>` : ''}
+          </div>
+          <div style="font-size: 0.8rem; color: var(--text-muted);">
+            الوزن: ${std.weight}% | ${std.subStandards?.length || 0} مجالات فرعية ▾
+          </div>
+        </div>
+
+        <div id="rev-std-body-${sIdx}" class="review-standard-body">
+          ${(std.subStandards || []).map((sub, subIdx) => `
+            <div style="border-bottom: 1px solid var(--border);" id="rev-sub-card-${sIdx}-${subIdx}">
+              <div class="review-substandard-header" onclick="App.toggleAccordion('rev-sub-body-${sIdx}-${subIdx}')">
+                <div>
+                  <span>${sub.code} — ${sub.name}</span>
+                  ${sub.description ? `<div style="font-size: 0.75rem; font-weight: normal; color: var(--text-muted);">${sub.description}</div>` : ''}
+                </div>
+                <div style="font-size: 0.75rem; color: var(--text-muted);">
+                  ${sub.indicators?.length || 0} مؤشرات ▾
+                </div>
+              </div>
+
+              <div id="rev-sub-body-${sIdx}-${subIdx}" class="review-substandard-body">
+                ${(sub.indicators || []).map(ind => `
+                  <div class="review-indicator-card" 
+                       id="rev-ind-${ind.indicatorId}" 
+                       data-code="${ind.code}" 
+                       data-name="${ind.name}" 
+                       data-desc="${ind.description || ''}">
+                    <!-- رأس المؤشر -->
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.5rem;">
+                      <div>
+                        <strong style="color: var(--primary); font-size: 0.95rem;">${ind.code} — ${ind.name}</strong>
+                        <div style="font-size: 0.85rem; color: #475569; margin-top: 0.25rem; line-height: 1.4;">
+                          ${ind.description || 'لا يوجد وصف للمؤشر'}
+                        </div>
+                      </div>
+                      <div style="text-align: left; font-size: 0.75rem; color: var(--text-muted); white-space: nowrap;">
+                        الوزن: ${ind.weight || 1} | الحالة: <span class="badge badge-green">${ind.status}</span>
+                      </div>
+                    </div>
+
+                    <!-- الواصفات الأربع كاملة -->
+                    <div style="margin-top: 0.75rem;">
+                      <div style="font-size: 0.8rem; font-weight: 700; color: #334155; margin-bottom: 0.35rem;">
+                        سلم الواصفات المعيارية الأربع (0 - 3):
+                      </div>
+                      <div class="descriptor-cards-grid">
+                        ${(ind.scoreDescriptors || []).sort((a,b)=>(a.scoreValue??a.displayOrder)-(b.scoreValue??b.displayOrder)).map(d => `
+                          <div class="descriptor-card" style="cursor: default;">
+                            <div class="card-score-badge">
+                              <span>المستوى: ${d.scoreValue}</span>
+                              <span class="badge ${d.scoreValue >= 2 ? 'badge-green' : (d.scoreValue === 1 ? 'badge-yellow' : 'badge-red')}">${d.label}</span>
+                            </div>
+                            <div class="card-desc-text">${d.description || 'لا يوجد نص واصفة معتمد'}</div>
+                          </div>
+                        `).join('')}
+                      </div>
+                    </div>
+
+                    <!-- أدوات التحقق ومتطلبات الشواهد -->
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 0.75rem; margin-top: 0.75rem; padding-top: 0.6rem; border-top: 1px dashed var(--border);">
+                      <!-- أدوات التحقق -->
+                      <div>
+                        <div style="font-size: 0.8rem; font-weight: 700; color: #334155; margin-bottom: 0.35rem;">
+                          أدوات التحقق المعتمدة:
+                        </div>
+                        <div style="display: flex; flex-direction: column; gap: 0.35rem;">
+                          ${(ind.verificationTools || []).length > 0 
+                            ? (ind.verificationTools || []).map(t => `
+                              <div class="tool-item-row" style="font-size: 0.8rem;">
+                                <div style="display: flex; justify-content: space-between;">
+                                  <strong>${t.name} (${t.toolType})</strong>
+                                  <span class="badge ${t.required ? 'badge-red' : 'badge-gray'}" style="font-size: 0.65rem;">${t.required ? 'إلزامية *' : 'اختيارية'}</span>
+                                </div>
+                                ${t.usageGuidance ? `<div class="tool-item-guidance">💡 ${t.usageGuidance}</div>` : ''}
+                              </div>
+                            `).join('')
+                            : '<span style="font-size: 0.75rem; color: var(--text-muted);">لا توجد أدوات تحقق مقررة.</span>'}
+                        </div>
+                      </div>
+
+                      <!-- متطلبات الشواهد -->
+                      <div>
+                        <div style="font-size: 0.8rem; font-weight: 700; color: #334155; margin-bottom: 0.35rem;">
+                          متطلبات الشواهد والأدلة الرسمية:
+                        </div>
+                        <div style="display: flex; flex-direction: column; gap: 0.35rem;">
+                          ${(ind.evidenceRequirements || []).length > 0
+                            ? (ind.evidenceRequirements || []).map(r => `
+                              <div class="evidence-req-item" style="font-size: 0.8rem;">
+                                <div>
+                                  <strong>${r.title}</strong>
+                                  ${r.description ? `<div style="font-size: 0.7rem; color: var(--text-muted);">${r.description}</div>` : ''}
+                                </div>
+                                <span class="badge ${r.required ? 'badge-yellow' : 'badge-gray'}" style="font-size: 0.65rem;">${r.required ? 'إلزامي' : 'اختياري'}</span>
+                              </div>
+                            `).join('')
+                            : '<span style="font-size: 0.75rem; color: var(--text-muted);">لا توجد متطلبات شواهد مسجلة.</span>'}
+                        </div>
+                      </div>
+                    </div>
+
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    `).join('');
+  },
+
+  filterStandardsReview(query) {
+    const q = (query || '').trim().toLowerCase();
+    const indCards = document.querySelectorAll('.review-indicator-card');
+    let visibleCount = 0;
+
+    indCards.forEach(card => {
+      const code = (card.getAttribute('data-code') || '').toLowerCase();
+      const name = (card.getAttribute('data-name') || '').toLowerCase();
+      const desc = (card.getAttribute('data-desc') || '').toLowerCase();
+
+      if (!q || code.includes(q) || name.includes(q) || desc.includes(q)) {
+        card.style.display = 'block';
+        visibleCount++;
+        // فتح المجال والمعيار الأب تلقائياً
+        const subBody = card.closest('.review-substandard-body');
+        if (subBody) subBody.classList.remove('hidden');
+        const stdBody = card.closest('.review-standard-body');
+        if (stdBody) stdBody.classList.remove('hidden');
+      } else {
+        card.style.display = 'none';
+      }
+    });
+
+    const meta = document.getElementById('standards-review-search-meta');
+    if (meta) {
+      meta.textContent = q 
+        ? `نتائج البحث: تم العثور على ${visibleCount} مؤشراً مطابقاً لكلمة البحث «${q}».`
+        : 'عرض كافة المؤشرات الـ 109 ضمن 14 مجالاً فرعياً و 7 معايير رئيسية.';
+    }
+  },
+
+  toggleAllReviewStandards(expand) {
+    const stdBodies = document.querySelectorAll('.review-standard-body');
+    stdBodies.forEach(b => {
+      if (expand) b.classList.remove('hidden');
+      else b.classList.add('hidden');
+    });
+
+    const subBodies = document.querySelectorAll('.review-substandard-body');
+    subBodies.forEach(b => {
+      if (expand) b.classList.remove('hidden');
+      else b.classList.add('hidden');
+    });
+  },
+
+};

@@ -186,6 +186,7 @@ class EvaluationAndEvidenceFeatureTest extends TestCase
                                             'notesCount',
                                             'notes',
                                             'scoreDescriptors',
+                                            'evidenceRequirements',
                                         ],
                                     ],
                                 ],
