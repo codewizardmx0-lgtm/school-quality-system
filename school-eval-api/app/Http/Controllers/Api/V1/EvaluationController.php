@@ -104,7 +104,7 @@ class EvaluationController extends Controller
             return ApiResponse::forbidden('غير مصرح لك باستعراض شجرة التقييم.');
         }
 
-        $evaluation = Evaluation::with(['cycle'])->find($id);
+        $evaluation = Evaluation::with(['cycle', 'school'])->find($id);
 
         if (!$evaluation) {
             return ApiResponse::notFound('ملف التقييم المطلوب غير موجود.');
@@ -143,7 +143,14 @@ class EvaluationController extends Controller
 
         // جلب نتائج التقييم المسجلة لهذه المدرسة ومفهرسة برقم المؤشر
         $existingResults = EvaluationResult::where('evaluation_id', $evaluation->evaluation_id)
-            ->with(['scoreDescriptor', 'evidences', 'verificationTools'])
+            ->with([
+                'scoreDescriptor',
+                'evidences',
+                'verificationTools',
+                'notes' => function ($q) {
+                    $q->orderBy('note_id', 'desc')->with('author');
+                },
+            ])
             ->get()
             ->keyBy('indicator_id');
 
@@ -174,6 +181,16 @@ class EvaluationController extends Controller
                                 $completedResultsCount++;
                             }
 
+                            $notes = $result ? $result->notes->take(5)->map(function ($n) {
+                                return [
+                                    'noteId'       => $n->note_id,
+                                    'text'         => $n->text,
+                                    'authorUserId' => $n->author_user_id,
+                                    'authorName'   => $n->author?->full_name ?? '',
+                                    'createdAt'    => $n->created_at?->toIso8601ZuluString(),
+                                ];
+                            })->values()->all() : [];
+
                             return [
                                 'indicatorId'          => $ind->indicator_id,
                                 'code'                 => $ind->code,
@@ -188,6 +205,8 @@ class EvaluationController extends Controller
                                 'completionStatus'     => $result?->completion_status,
                                 'textualResult'        => $result?->textual_result,
                                 'evidenceCount'        => $result ? $result->evidences->count() : 0,
+                                'notesCount'           => $result ? $result->notes->count() : 0,
+                                'notes'                => $notes,
                                 'verificationToolIds'  => $result ? $result->verificationTools->pluck('tool_id')->all() : [],
                                 'verificationTools'    => $ind->verificationTools->map(function ($tool) {
                                     return [
@@ -222,7 +241,10 @@ class EvaluationController extends Controller
         return ApiResponse::success(
             data: [
                 'evaluationId' => $evaluation->evaluation_id,
+                'schoolId'     => $evaluation->school_id,
+                'schoolName'   => $evaluation->school?->school_name,
                 'cycleId'      => $evaluation->cycle_id,
+                'academicYear' => $evaluation->cycle?->academic_year,
                 'versionId'    => $version->version_id,
                 'versionName'  => $version->version_name,
                 'standards'    => $standardsData,

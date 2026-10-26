@@ -339,11 +339,11 @@ const App = {
     this.state.standardsTree = res.data;
     const data = res.data;
 
-    // تحديث ترويسة الشجرة والإنجاز الإجمالي من بيانات الـ API
-    const schoolName = this.state.currentEvaluation?.school?.schoolName || this.state.user?.school?.schoolName || 'المدرسة';
-    const cycleAcademicYear = this.state.currentEvaluation?.cycle?.academicYear || '';
+    // تحديث ترويسة الشجرة والإنجاز الإجمالي من بيانات الـ API (قراءة schoolName و academicYear مباشرة من الاستجابة)
+    const schoolName = data.schoolName || this.state.currentEvaluation?.school?.schoolName || this.state.user?.school?.schoolName || 'المدرسة';
+    const cycleAcademicYear = data.academicYear || this.state.currentEvaluation?.cycle?.academicYear || '';
     document.getElementById('tree-school-title').textContent = `${schoolName} — استمارة التقييم الذاتي`;
-    document.getElementById('tree-cycle-info').textContent = `الدورة: ${cycleAcademicYear} | الإصدار المعياري: ${data.versionName || '#' + data.versionId}`;
+    document.getElementById('tree-cycle-info').textContent = `العام الدراسي: ${cycleAcademicYear} | الإصدار المعياري: ${data.versionName || '#' + data.versionId}`;
 
     const pct = data.meta?.completionPercentage || 0;
     const completed = data.meta?.completedResults || 0;
@@ -384,6 +384,7 @@ const App = {
 
     const hasResult = ind.resultId !== null && ind.resultId !== undefined;
     const evidenceCount = ind.evidenceCount || 0;
+    const notesCount = ind.notesCount || 0;
 
     const toolsTags = (ind.verificationTools || []).map(t => `
       <span class="tool-tag" title="${t.usageGuidance || ''}">${t.name} (${t.toolType})</span>
@@ -418,9 +419,9 @@ const App = {
           `}
 
           <button class="btn btn-sm btn-secondary" 
-                  ${!hasResult ? 'disabled title="يجب رصد درجة المؤشر أولاً لتفعيل إرفاق الشواهد"' : ''}
+                  ${!hasResult ? 'disabled title="يجب رصد درجة المؤشر أولاً لتفعيل إرفاق الشواهد والملاحظات"' : ''}
                   onclick='App.openEvidencesModal(${JSON.stringify(ind).replace(/'/g, "&apos;")})'>
-            📁 الشواهد (${evidenceCount}) والملاحظات
+            📁 الشواهد (${evidenceCount}) والملاحظات (${notesCount})
           </button>
         </div>
       </div>
@@ -616,14 +617,17 @@ const App = {
     if (!listEl) return;
 
     if (!notes || notes.length === 0) {
-      listEl.innerHTML = '<span style="color: var(--text-muted);">لا توجد ملاحظات مدونة بعد.</span>';
+      listEl.innerHTML = '<span style="color: var(--text-muted); font-size: 0.85rem;">لا توجد ملاحظات مدونة بعد.</span>';
       return;
     }
 
     listEl.innerHTML = notes.map(n => `
-      <div style="background: #fff; border: 1px solid var(--border); border-radius: 4px; padding: 0.4rem 0.6rem; margin-bottom: 0.35rem;">
-        <div>${n.text}</div>
-        <div style="font-size: 0.7rem; color: var(--text-muted);">${n.createdAt ? new Date(n.createdAt).toLocaleString('ar') : ''}</div>
+      <div style="background: #fff; border: 1px solid var(--border); border-radius: 4px; padding: 0.5rem 0.75rem; margin-bottom: 0.4rem;">
+        <div style="font-size: 0.85rem; line-height: 1.4;">${n.text}</div>
+        <div style="font-size: 0.75rem; color: var(--text-muted); display: flex; justify-content: space-between; margin-top: 0.3rem;">
+          <span>${n.authorName ? 'بواسطة: ' + n.authorName : (n.authorUserId ? 'مستخدم #' + n.authorUserId : '')}</span>
+          <span>${n.createdAt ? new Date(n.createdAt).toLocaleString('ar') : ''}</span>
+        </div>
       </div>
     `).join('');
   },
@@ -656,7 +660,21 @@ const App = {
 
     input.value = '';
     this.showAlert('تم تدوين الملاحظة بنجاح.', 'success');
-    // تحديث الشجرة
+
+    // تحديث قائمة الملاحظات محلياً
+    const newNote = {
+      noteId: res.data?.noteId,
+      text: res.data?.text || text,
+      authorUserId: res.data?.authorUserId || this.state.user?.userId,
+      authorName: this.state.user?.fullName || '',
+      createdAt: res.data?.createdAt || new Date().toISOString(),
+    };
+    if (!ind.notes) ind.notes = [];
+    ind.notes.unshift(newNote);
+    ind.notesCount = (ind.notesCount || 0) + 1;
+    this.renderNotesList(ind.notes);
+
+    // تحديث الشجرة لإعادة حساب العدادات
     this.loadStandardsTree(this.state.currentEvaluation.evaluationId);
   },
 
@@ -930,7 +948,7 @@ const App = {
           ${this.hasPermission('plans.manage') ? `
             <button class="btn btn-sm ${s.isAlreadyAdopted ? 'btn-secondary' : 'btn-success'}" 
                     ${s.isAlreadyAdopted ? 'disabled' : ''}
-                    onclick="App.handleAdoptSuggestion(${idx})">
+                    onclick="App.openAdoptModal(${idx})">
               ${s.isAlreadyAdopted ? 'تم التبني' : 'تبني كمجال تحسين'}
             </button>
           ` : `
@@ -943,7 +961,7 @@ const App = {
     `).join('');
   },
 
-  async handleAdoptSuggestion(idx) {
+  openAdoptModal(idx) {
     if (!this.hasPermission('plans.manage')) {
       this.showAlert('غير مصرح لك بتبني مجالات التحسين (تتطلب plans.manage).', 'error');
       return;
@@ -951,23 +969,72 @@ const App = {
     const s = this.state.suggestions[idx];
     if (!s) return;
 
+    this.state.selectedSuggestionIndex = idx;
+    const modal = document.getElementById('modal-adopt-suggestion');
+    if (!modal) return;
+
+    document.getElementById('adopt-modal-title').textContent = `تبني مجال تحسين للمؤشر: ${s.indicatorName || s.indicatorCode}`;
+    document.getElementById('adopt-name').value = s.suggestedName || s.indicatorName || '';
+    document.getElementById('adopt-priority').value = s.suggestedPriority || 'High';
+    const descEl = document.getElementById('adopt-description');
+    if (descEl) descEl.value = ''; // يترك فارغاً ليدخله المستخدم يدوياً (Gap 4)
+    const alertEl = document.getElementById('adopt-modal-alert');
+    if (alertEl) alertEl.classList.add('hidden');
+
+    modal.classList.remove('hidden');
+  },
+
+  closeAdoptModal() {
+    const modal = document.getElementById('modal-adopt-suggestion');
+    if (modal) modal.classList.add('hidden');
+    this.state.selectedSuggestionIndex = null;
+  },
+
+  async handleConfirmAdopt(event) {
+    event.preventDefault();
+    if (!this.hasPermission('plans.manage')) {
+      this.showAlert('غير مصرح لك بتبني مجالات التحسين (تتطلب plans.manage).', 'error');
+      return;
+    }
+    const idx = this.state.selectedSuggestionIndex;
+    const s = this.state.suggestions[idx];
+    if (!s) return;
+
+    const name = document.getElementById('adopt-name').value.trim();
+    const priority = document.getElementById('adopt-priority').value;
+    const descriptionVal = document.getElementById('adopt-description')?.value.trim();
+    const description = descriptionVal ? descriptionVal : null; // يرسل null إن لم يدخل المستخدم وصفاً يدويًا
+
+    const alertEl = document.getElementById('adopt-modal-alert');
+    if (alertEl) alertEl.classList.add('hidden');
+
     const res = await this.request('/improvement-areas', {
       method: 'POST',
       body: {
-        resultId: s.resultId,
-        name: s.suggestedName || s.indicatorName,
-        description: null,
-        priority: s.suggestedPriority,
+        indicatorId: s.indicatorId,
+        name: name,
+        description: description,
+        priority: priority,
       },
     });
 
     if (!res.ok) {
-      this.showAlert(res.message || 'فشلت عملية تبني مجال التحسين.', 'error');
+      if (alertEl) {
+        alertEl.textContent = res.message || 'فشلت عملية تبني مجال التحسين.';
+        alertEl.classList.remove('hidden');
+      } else {
+        this.showAlert(res.message || 'فشلت عملية تبني مجال التحسين.', 'error');
+      }
       return;
     }
 
-    this.showAlert(`تم تبني مجال التحسين بنجاح للأولوية: ${s.priorityLabel || s.suggestedPriority}`, 'success');
+    this.closeAdoptModal();
+    this.showAlert(`تم تبني مجال التحسين بنجاح للأولوية: ${priority}`, 'success');
     this.loadSuggestions();
+  },
+
+  handleAdoptSuggestion(idx) {
+    return this.openAdoptModal(idx);
   },
 
   // ---------------------------------------------------------------------------
@@ -1000,7 +1067,7 @@ const App = {
       <tr>
         <td><strong>#${p.planId}</strong></td>
         <td>${p.title}</td>
-        <td>${p.cycleName || '-'}</td>
+        <td>${p.academicYear || p.cycleName || '-'}</td>
         <td style="font-size: 0.8rem;">${p.startDate} إلى ${p.endDate}</td>
         <td><span class="badge ${p.status === 'Active' ? 'badge-green' : (p.status === 'Draft' ? 'badge-yellow' : 'badge-blue')}">${p.statusLabel || p.status}</span></td>
         <td><span class="badge badge-gray">${p.overallProgressLabel || p.overallProgress}</span></td>
@@ -1111,7 +1178,7 @@ const App = {
     const p = res.data;
 
     document.getElementById('plan-det-title').textContent = `خطة: ${p.title}`;
-    document.getElementById('plan-det-meta').textContent = `الدورة: ${p.cycleName} | المدرسة: ${p.schoolName} | الفترة: من ${p.startDate} إلى ${p.endDate}`;
+    document.getElementById('plan-det-meta').textContent = `العام الدراسي: ${p.academicYear || p.cycleName || '-'} | المدرسة: ${p.schoolName || '-'} | الفترة: من ${p.startDate} إلى ${p.endDate}`;
 
     // المؤشرات السريعة ونظرة التقدم
     document.getElementById('plan-det-status-badge').textContent = p.statusLabel || p.status;

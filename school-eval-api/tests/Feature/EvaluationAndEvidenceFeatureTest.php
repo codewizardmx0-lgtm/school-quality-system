@@ -166,8 +166,12 @@ class EvaluationAndEvidenceFeatureTest extends TestCase
             ->assertJsonStructure([
                 'data' => [
                     'evaluationId',
+                    'schoolId',
+                    'schoolName',
                     'cycleId',
+                    'academicYear',
                     'versionId',
+                    'versionName',
                     'standards' => [
                         '*' => [
                             'subStandards' => [
@@ -179,6 +183,8 @@ class EvaluationAndEvidenceFeatureTest extends TestCase
                                             'score',
                                             'completionStatus',
                                             'evidenceCount',
+                                            'notesCount',
+                                            'notes',
                                             'scoreDescriptors',
                                         ],
                                     ],
@@ -195,6 +201,9 @@ class EvaluationAndEvidenceFeatureTest extends TestCase
             ]);
 
         $this->assertEquals(109, $response->json('meta.totalActiveIndicators'));
+        $this->assertEquals($this->schoolBelqees->school_id, $response->json('data.schoolId'));
+        $this->assertEquals($this->schoolBelqees->school_name, $response->json('data.schoolName'));
+        $this->assertNotEmpty($response->json('data.academicYear'));
     }
 
     /**
@@ -322,6 +331,26 @@ class EvaluationAndEvidenceFeatureTest extends TestCase
             'author_user_id' => $this->evaluatorBelqees->user_id,
             'text'           => 'تم رصد النتيجة استناداً إلى زيارة المعمل المدرسي وسجلات الأنشطة.',
         ]);
+
+        // التحقق من انعكاس الملاحظة وعددها في شجرة المعايير
+        $treeRes = $this->getJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/standards-tree");
+        $treeRes->assertStatus(200);
+        $foundIndicator = null;
+        foreach ($treeRes->json('data.standards') as $std) {
+            foreach ($std['subStandards'] as $sub) {
+                foreach ($sub['indicators'] as $ind) {
+                    if ($ind['indicatorId'] === $this->firstIndicator->indicator_id) {
+                        $foundIndicator = $ind;
+                        break 3;
+                    }
+                }
+            }
+        }
+        $this->assertNotNull($foundIndicator);
+        $this->assertGreaterThanOrEqual(1, $foundIndicator['notesCount']);
+        $this->assertNotEmpty($foundIndicator['notes']);
+        $this->assertEquals('تم رصد النتيجة استناداً إلى زيارة المعمل المدرسي وسجلات الأنشطة.', $foundIndicator['notes'][0]['text']);
+        $this->assertEquals($this->evaluatorBelqees->full_name, $foundIndicator['notes'][0]['authorName']);
     }
 
     /**
