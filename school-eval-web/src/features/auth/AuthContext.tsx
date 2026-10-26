@@ -24,6 +24,7 @@ interface AuthContextValue {
   refetchUser: () => void;
   authError: string | null;
   clearAuthError: () => void;
+  hasPermission: (permission: string) => boolean;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -124,6 +125,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     refetchUser,
     authError,
     clearAuthError: () => setAuthError(null),
+    hasPermission: (permission: string) => user?.permissions?.includes(permission) ?? false,
   }), [user, token, isUserLoading, logoutMutation.isPending, loginMutation.mutateAsync, logoutMutation.mutateAsync, refetchUser, authError]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

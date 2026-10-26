@@ -201,12 +201,19 @@ const App = {
     document.getElementById('user-role').textContent = roleTitle;
   },
 
+  hasPermission(permission) {
+    if (!this.state.user || !Array.isArray(this.state.user.permissions)) {
+      return false;
+    }
+    return this.state.user.permissions.includes(permission);
+  },
+
   isPrincipal() {
-    return this.state.user?.roles?.some(r => r.roleName === 'school_principal') || false;
+    return this.hasPermission('reviews.write');
   },
 
   isEvaluator() {
-    return this.state.user?.roles?.some(r => r.roleName === 'school_evaluator') || false;
+    return this.hasPermission('plans.manage') || this.hasPermission('evaluations.edit');
   },
 
   // ---------------------------------------------------------------------------
@@ -382,6 +389,8 @@ const App = {
       <span class="tool-tag" title="${t.usageGuidance || ''}">${t.name} (${t.toolType})</span>
     `).join('');
 
+    const canEditScore = this.hasPermission('evaluations.edit');
+
     return `
       <div class="indicator-row" id="ind-row-${ind.indicatorId}">
         <div class="indicator-info">
@@ -398,9 +407,15 @@ const App = {
         </div>
 
         <div style="display: flex; gap: 0.4rem; align-items: center; flex-wrap: wrap;">
-          <button class="btn btn-sm btn-primary" onclick='App.openScoringModal(${JSON.stringify(ind).replace(/'/g, "&apos;")})'>
-            ${isScored ? 'تعديل التقدير' : 'رصد التقدير'}
-          </button>
+          ${canEditScore ? `
+            <button class="btn btn-sm btn-primary" onclick='App.openScoringModal(${JSON.stringify(ind).replace(/'/g, "&apos;")})'>
+              ${isScored ? 'تعديل التقدير' : 'رصد التقدير'}
+            </button>
+          ` : `
+            <button class="btn btn-sm btn-secondary" onclick='App.openScoringModal(${JSON.stringify(ind).replace(/'/g, "&apos;")}, true)'>
+              استعراض التقدير
+            </button>
+          `}
 
           <button class="btn btn-sm btn-secondary" 
                   ${!hasResult ? 'disabled title="يجب رصد درجة المؤشر أولاً لتفعيل إرفاق الشواهد"' : ''}
@@ -420,12 +435,16 @@ const App = {
   // ---------------------------------------------------------------------------
   // 7. الشاشة 4: رصد التقدير والملاحظات (Screen 4: Score Indicator & Notes)
   // ---------------------------------------------------------------------------
-  openScoringModal(indicator) {
+  openScoringModal(indicator, isReadOnly = false) {
     this.state.currentIndicator = indicator;
     const modal = document.getElementById('modal-scoring');
     if (!modal) return;
 
-    document.getElementById('score-modal-title').textContent = `رصد درجة المؤشر: ${indicator.name}`;
+    const canEdit = this.hasPermission('evaluations.edit') && !isReadOnly;
+
+    document.getElementById('score-modal-title').textContent = canEdit
+      ? `${indicator.score !== null && indicator.score !== undefined ? 'تعديل' : 'رصد'} درجة المؤشر: ${indicator.name}`
+      : `استعراض درجة المؤشر: ${indicator.name} (قراءة فقط)`;
     document.getElementById('score-indicator-code').textContent = indicator.code;
     document.getElementById('score-indicator-desc').textContent = indicator.description || 'لا يوجد وصف تفصيلي لهذا المؤشر في قاعدة البيانات.';
 
@@ -444,9 +463,10 @@ const App = {
       scoreContainer.innerHTML = sortedDesc.map(desc => {
         const isChecked = (indicator.score !== null && indicator.score !== undefined && indicator.score === desc.scoreValue);
         return `
-          <label class="card" style="padding: 0.5rem; text-align: center; cursor: pointer; margin-bottom: 0;">
+          <label class="card" style="padding: 0.5rem; text-align: center; cursor: ${canEdit ? 'pointer' : 'default'}; margin-bottom: 0; ${!canEdit && !isChecked ? 'opacity: 0.5;' : ''}">
             <input type="radio" name="indicator-score-opt" value="${desc.scoreValue}" required 
                    ${isChecked ? 'checked' : ''} 
+                   ${!canEdit ? 'disabled' : ''}
                    onchange="App.onScoreOptionChange(${desc.scoreValue})">
             <div style="font-weight: 700; margin-top: 0.2rem;">${desc.scoreValue} - ${desc.label}</div>
           </label>
@@ -469,21 +489,33 @@ const App = {
       toolsContainer.innerHTML = '<span style="font-size: 0.8rem; color: var(--text-muted);">لا توجد أدوات تحقق معتمدة لهذا المؤشر في قاعدة البيانات.</span>';
     } else {
       toolsContainer.innerHTML = applicableTools.map(tool => `
-        <label style="display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; cursor: pointer;">
+        <label style="display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; cursor: ${canEdit ? 'pointer' : 'default'};">
           <input type="checkbox" name="verificationToolIds" value="${tool.toolId}" 
-                 ${usedToolIds.includes(tool.toolId) ? 'checked' : ''}>
+                 ${usedToolIds.includes(tool.toolId) ? 'checked' : ''}
+                 ${!canEdit ? 'disabled' : ''}>
           <span>${tool.name} (${tool.toolType})${tool.required ? ' <strong style="color:red">*</strong>' : ''}</span>
         </label>
       `).join('');
     }
 
-    document.getElementById('score-textual-result').value = indicator.textualResult || '';
+    const textualInput = document.getElementById('score-textual-result');
+    textualInput.value = indicator.textualResult || '';
+    textualInput.disabled = !canEdit;
+
+    const btnSaveScore = document.getElementById('btn-save-score');
+    if (btnSaveScore) {
+      btnSaveScore.style.display = canEdit ? 'inline-flex' : 'none';
+    }
 
     // تفعيل قسم الملاحظات إذا كان هناك نتيجة سابقة
     const notesSec = document.getElementById('score-notes-section');
+    const formAddNote = document.getElementById('form-add-note');
     if (indicator.resultId) {
       notesSec.classList.remove('hidden');
       this.renderNotesList(indicator.notes || []);
+      if (formAddNote) {
+        formAddNote.style.display = canEdit ? 'block' : 'none';
+      }
     } else {
       notesSec.classList.add('hidden');
     }
@@ -511,6 +543,10 @@ const App = {
 
   async handleSaveScore(event) {
     event.preventDefault();
+    if (!this.hasPermission('evaluations.edit')) {
+      this.showAlert('غير مصرح لك برصد نتائج التقييم (تتطلب evaluations.edit).', 'error');
+      return;
+    }
     const ind = this.state.currentIndicator;
     const evalId = this.state.currentEvaluation?.evaluationId;
     if (!ind || !evalId) return;
@@ -594,6 +630,10 @@ const App = {
 
   async handleAddNote(event) {
     event.preventDefault();
+    if (!this.hasPermission('evaluations.edit')) {
+      this.showAlert('غير مصرح لك بتدوين ملاحظات تقييم (تتطلب evaluations.edit).', 'error');
+      return;
+    }
     const ind = this.state.currentIndicator;
     if (!ind || !ind.resultId) {
       this.showAlert('لا يمكن إضافة ملاحظة قبل رصد نتيجة للمؤشر.', 'error');
@@ -628,9 +668,18 @@ const App = {
     const modal = document.getElementById('modal-evidences');
     if (!modal) return;
 
-    document.getElementById('ev-modal-title').textContent = `الشواهد الداعمة: ${indicator.name}`;
+    const canManage = this.hasPermission('evidence.manage');
+
+    document.getElementById('ev-modal-title').textContent = canManage
+      ? `الشواهد الداعمة: ${indicator.name}`
+      : `استعراض الشواهد الداعمة: ${indicator.name} (قراءة فقط)`;
     document.getElementById('ev-indicator-code').textContent = indicator.code;
     document.getElementById('ev-modal-alert').classList.add('hidden');
+
+    const uploadCard = document.getElementById('card-upload-evidence');
+    if (uploadCard) {
+      uploadCard.style.display = canManage ? 'block' : 'none';
+    }
 
     this.loadEvidences(indicator.resultId);
     modal.classList.remove('hidden');
@@ -659,6 +708,8 @@ const App = {
       return;
     }
 
+    const canManageEvidence = this.hasPermission('evidence.manage');
+
     container.innerHTML = this.state.currentEvidences.map(ev => {
       const versions = ev.versions || [];
       const currentVer = versions.find(v => v.current) || versions[0];
@@ -685,9 +736,11 @@ const App = {
                 </button>
               ` : ''}
 
-              <button class="btn btn-sm btn-primary" onclick="App.triggerNewVersionUpload(${ev.evidenceId})">
-                + رفع نسخة جديدة
-              </button>
+              ${canManageEvidence ? `
+                <button class="btn btn-sm btn-primary" onclick="App.triggerNewVersionUpload(${ev.evidenceId})">
+                  + رفع نسخة جديدة
+                </button>
+              ` : ''}
             </div>
           </div>
 
@@ -705,6 +758,10 @@ const App = {
 
   async handleUploadEvidence(event) {
     event.preventDefault();
+    if (!this.hasPermission('evidence.manage')) {
+      this.showAlert('غير مصرح لك برفع شواهد (تتطلب evidence.manage).', 'error');
+      return;
+    }
     const ind = this.state.currentIndicator;
     if (!ind || !ind.resultId) return;
 
@@ -759,6 +816,10 @@ const App = {
   },
 
   async triggerNewVersionUpload(evidenceId) {
+    if (!this.hasPermission('evidence.manage')) {
+      this.showAlert('غير مصرح لك برفع نسخ شواهد جديدة (تتطلب evidence.manage).', 'error');
+      return;
+    }
     // فتح نافذة اختيار ملف لرفع نسخة جديدة
     const input = document.createElement('input');
     input.type = 'file';
@@ -866,17 +927,27 @@ const App = {
             : '<span class="badge badge-gray">غير متبنى</span>'}
         </td>
         <td>
-          <button class="btn btn-sm ${s.isAlreadyAdopted ? 'btn-secondary' : 'btn-success'}" 
-                  ${s.isAlreadyAdopted ? 'disabled' : ''}
-                  onclick="App.handleAdoptSuggestion(${idx})">
-            ${s.isAlreadyAdopted ? 'تم التبني' : 'تبني كمجال تحسين'}
-          </button>
+          ${this.hasPermission('plans.manage') ? `
+            <button class="btn btn-sm ${s.isAlreadyAdopted ? 'btn-secondary' : 'btn-success'}" 
+                    ${s.isAlreadyAdopted ? 'disabled' : ''}
+                    onclick="App.handleAdoptSuggestion(${idx})">
+              ${s.isAlreadyAdopted ? 'تم التبني' : 'تبني كمجال تحسين'}
+            </button>
+          ` : `
+            <span style="font-size: 0.75rem; color: var(--text-muted);">
+              ${s.isAlreadyAdopted ? 'متبنى مسبقاً' : 'عرض فقط'}
+            </span>
+          `}
         </td>
       </tr>
     `).join('');
   },
 
   async handleAdoptSuggestion(idx) {
+    if (!this.hasPermission('plans.manage')) {
+      this.showAlert('غير مصرح لك بتبني مجالات التحسين (تتطلب plans.manage).', 'error');
+      return;
+    }
     const s = this.state.suggestions[idx];
     if (!s) return;
 
@@ -907,10 +978,10 @@ const App = {
     if (!tbody) return;
     tbody.innerHTML = '<tr><td colspan="10" style="text-align: center;">جارِ جلب الخطط...</td></tr>';
 
-    // ضبط ظهور زر إنشاء الخطة للمقيم فقط
+    // ضبط ظهور زر إنشاء الخطة لمن يملك صلاحية plans.manage فقط
     const btnCreatePlan = document.getElementById('btn-show-create-plan');
     if (btnCreatePlan) {
-      btnCreatePlan.style.display = this.isEvaluator() ? 'inline-flex' : 'none';
+      btnCreatePlan.style.display = this.hasPermission('plans.manage') ? 'inline-flex' : 'none';
     }
 
     const res = await this.request('/improvement-plans');
@@ -1050,11 +1121,11 @@ const App = {
     document.getElementById('plan-det-done-count').textContent = p.overview?.doneActions || 0;
     document.getElementById('plan-det-delayed-count').textContent = p.overview?.delayedActions || 0;
 
-    // أزرار دورة الحياة (Active / Completed) للمقيم فقط
+    // أزرار دورة الحياة (Active / Completed) لمن يملك plans.manage فقط
     const actionsBox = document.getElementById('plan-lifecycle-actions');
     actionsBox.innerHTML = '';
 
-    if (this.isEvaluator()) {
+    if (this.hasPermission('plans.manage')) {
       if (p.status === 'Draft') {
         actionsBox.innerHTML += `
           <button class="btn btn-sm btn-success" onclick="App.handleUpdatePlanStatus(${p.planId}, 'Active')">
@@ -1081,19 +1152,19 @@ const App = {
     // الإجراءات
     this.renderPlanActions(p.actions || []);
 
-    // زر إضافة إجراء تنفيذي للمقيم فقط
+    // زر إضافة إجراء تنفيذي لمن يملك plans.manage فقط
     const btnAddAct = document.getElementById('btn-open-add-action');
     if (btnAddAct) {
-      btnAddAct.style.display = this.isEvaluator() ? 'inline-flex' : 'none';
+      btnAddAct.style.display = this.hasPermission('plans.manage') ? 'inline-flex' : 'none';
     }
 
     // ملاحظات المراجعة
     this.renderReviewNotes(p.reviewNotes || []);
 
-    // إخفاء أو إظهار نموذج مراجعة المدير
+    // إخفاء أو إظهار نموذج مراجعة المدير لمن يملك reviews.write فقط
     const formReview = document.getElementById('principal-review-form-container');
     if (formReview) {
-      formReview.style.display = this.isPrincipal() ? 'block' : 'none';
+      formReview.style.display = this.hasPermission('reviews.write') ? 'block' : 'none';
     }
 
     // التمرير للتفاصيل
@@ -1101,6 +1172,10 @@ const App = {
   },
 
   async handleUpdatePlanStatus(planId, newStatus) {
+    if (!this.hasPermission('plans.manage')) {
+      this.showAlert('غير مصرح لك بتحديث حالة الخطة (تتطلب plans.manage).', 'error');
+      return;
+    }
     const res = await this.request(`/improvement-plans/${planId}`, {
       method: 'PATCH',
       body: { status: newStatus },
@@ -1150,7 +1225,7 @@ const App = {
               : '<span class="badge badge-green">في الموعد</span>'}
           </td>
           <td>
-            ${this.isEvaluator() ? `
+            ${this.hasPermission('plans.manage') ? `
               <button class="btn btn-sm btn-secondary" onclick="App.quickUpdateAction(${act.actionId})">
                 تحديث الحالة
               </button>
@@ -1163,7 +1238,7 @@ const App = {
 
   openAddActionModal() {
     const p = this.state.currentPlan;
-    if (!p) return;
+    if (!p || !this.hasPermission('plans.manage')) return;
 
     const modal = document.getElementById('modal-action');
     const selectArea = document.getElementById('action-area-id');
@@ -1186,6 +1261,10 @@ const App = {
 
   async handleSaveAction(event) {
     event.preventDefault();
+    if (!this.hasPermission('plans.manage')) {
+      this.showAlert('غير مصرح لك بإضافة إجراءات (تتطلب plans.manage).', 'error');
+      return;
+    }
     const p = this.state.currentPlan;
     if (!p) return;
 
@@ -1234,13 +1313,17 @@ const App = {
   },
 
   async quickUpdateAction(actionId) {
+    if (!this.hasPermission('plans.manage')) {
+      this.showAlert('غير مصرح لك بتعديل الإجراء (تتطلب plans.manage).', 'error');
+      return;
+    }
     const p = this.state.currentPlan;
     if (!p) return;
 
+    // نافذة اختيار سريعة للحالة والتقدم
     const act = (p.actions || []).find(a => a.actionId === actionId);
     if (!act) return;
 
-    // نافذة اختيار سريعة للحالة والتقدم
     const newStatus = prompt('اختر حالة الإجراء (Pending, InProgress, Done, Cancelled):', act.status);
     if (!newStatus) return;
 
@@ -1290,6 +1373,10 @@ const App = {
 
   async handleSaveReviewNote(event) {
     event.preventDefault();
+    if (!this.hasPermission('reviews.write')) {
+      this.showAlert('غير مصرح لك بتدوين ملاحظة مراجعة (تتطلب reviews.write).', 'error');
+      return;
+    }
     const p = this.state.currentPlan;
     if (!p) return;
 

@@ -10,7 +10,6 @@ import {
   Target,
   FileText,
   UserCheck,
-  FileQuestion,
   Sparkles,
   Bell,
   LogOut,
@@ -33,58 +32,55 @@ export const Sidebar: React.FC<{ activeTab: string; onSelectTab: (tab: string) =
 
   const primaryRole = user?.roles?.[0]?.roleName || 'guest';
 
-  // تحديد عناصر القائمة الجانبية بحسب الدور الوظيفي (FR-GEN-03 والفصل الرابع 4.9.2)
+  // تحديد عناصر القائمة الجانبية بالاعتماد على الصلاحيات الفعلية للمستخدم (user.permissions)
   const getNavItems = (): SidebarItem[] => {
-    switch (primaryRole) {
-      case 'admin':
-        return [
-          { id: 'dashboard', label: 'لوحة التحكم', icon: <LayoutDashboard size={18} /> },
-          { id: 'schools', label: 'إدارة المدارس', icon: <School size={18} /> },
-          { id: 'users', label: 'إدارة المستخدمين', icon: <Users size={18} /> },
-          { id: 'notifications', label: 'مركز الإشعارات', icon: <Bell size={18} /> },
-        ];
+    const items: SidebarItem[] = [
+      { id: 'dashboard', label: 'لوحة التحكم', icon: <LayoutDashboard size={18} /> },
+    ];
 
-      case 'ministry_standards_manager':
-        return [
-          { id: 'dashboard', label: 'لوحة تحكم المعايير', icon: <LayoutDashboard size={18} /> },
-          { id: 'standards-versions', label: 'إصدارات المعايير', icon: <BookOpen size={18} /> },
-          { id: 'standards-tree', label: 'شجرة المعايير والمؤشرات', icon: <ClipboardList size={18} /> },
-          { id: 'notifications', label: 'مركز الإشعارات', icon: <Bell size={18} /> },
-        ];
+    const perms = user?.permissions || [];
 
-      case 'school_evaluator':
-        return [
-          { id: 'dashboard', label: 'لوحة تحكم التقييم', icon: <LayoutDashboard size={18} /> },
-          { id: 'evaluation-form', label: 'استمارة التقييم الذاتي', icon: <ClipboardList size={18} /> },
-          { id: 'evidences', label: 'إدارة الشواهد والأدلة', icon: <FileText size={18} /> },
-          { id: 'improvement-plan', label: 'خطة التحسين المدرسي', icon: <Target size={18} /> },
-          { id: 'reports', label: 'تقرير التقييم والإرسال', icon: <FileText size={18} /> },
-          { id: 'ai-assistant', label: 'المساعد الذكي للاستشارة', icon: <Sparkles size={18} /> },
-          { id: 'notifications', label: 'مركز الإشعارات', icon: <Bell size={18} /> },
-        ];
-
-      case 'school_principal':
-        return [
-          { id: 'dashboard', label: 'لوحة تحكم المدير', icon: <LayoutDashboard size={18} /> },
-          { id: 'review-reports', label: 'مراجعة تقرير التقييم', icon: <FileText size={18} /> },
-          { id: 'review-plans', label: 'مراجعة واعتماد خطة التحسين', icon: <Target size={18} /> },
-          { id: 'notifications', label: 'مركز الإشعارات', icon: <Bell size={18} /> },
-        ];
-
-      case 'ministry_supervisor':
-        return [
-          { id: 'dashboard', label: 'لوحة التحكم الإشرافية', icon: <LayoutDashboard size={18} /> },
-          { id: 'cycles', label: 'إدارة دورات التقييم', icon: <BookOpen size={18} /> },
-          { id: 'submissions', label: 'فحص مخرجات المدارس', icon: <UserCheck size={18} /> },
-          { id: 'completion-requests', label: 'طلبات الاستكمال', icon: <FileQuestion size={18} /> },
-          { id: 'notifications', label: 'مركز الإشعارات', icon: <Bell size={18} /> },
-        ];
-
-      default:
-        return [
-          { id: 'dashboard', label: 'الرئيسية', icon: <LayoutDashboard size={18} /> },
-        ];
+    if (perms.includes('schools.manage')) {
+      items.push({ id: 'schools', label: 'إدارة المدارس', icon: <School size={18} /> });
     }
+    if (perms.includes('users.manage')) {
+      items.push({ id: 'users', label: 'إدارة المستخدمين', icon: <Users size={18} /> });
+    }
+    if (perms.includes('standards.manage')) {
+      items.push(
+        { id: 'standards-versions', label: 'إصدارات المعايير', icon: <BookOpen size={18} /> },
+        { id: 'standards-tree', label: 'شجرة المعايير والمؤشرات', icon: <ClipboardList size={18} /> }
+      );
+    }
+    if (perms.includes('evaluations.view') || perms.includes('evaluations.edit')) {
+      items.push({ id: 'evaluation-form', label: 'استمارة التقييم الذاتي', icon: <ClipboardList size={18} /> });
+    }
+    if (perms.includes('evidence.manage')) {
+      items.push({ id: 'evidences', label: 'إدارة الشواهد والأدلة', icon: <FileText size={18} /> });
+    }
+    if (perms.includes('plans.manage')) {
+      items.push({ id: 'improvement-plan', label: 'خطة التحسين المدرسي', icon: <Target size={18} /> });
+    }
+    if (perms.includes('reviews.write')) {
+      items.push(
+        { id: 'review-reports', label: 'مراجعة تقرير التقييم', icon: <FileText size={18} /> },
+        { id: 'review-plans', label: 'مراجعة واعتماد خطة التحسين', icon: <Target size={18} /> }
+      );
+    }
+    if (perms.includes('cycles.manage')) {
+      items.push({ id: 'cycles', label: 'إدارة دورات التقييم', icon: <BookOpen size={18} /> });
+    }
+    if (perms.includes('submissions.review')) {
+      items.push({ id: 'submissions', label: 'فحص مخرجات المدارس', icon: <UserCheck size={18} /> });
+    }
+    if (perms.includes('ai.use')) {
+      items.push({ id: 'ai-assistant', label: 'المساعد الذكي للاستشارة', icon: <Sparkles size={18} /> });
+    }
+    if (perms.includes('notifications.view')) {
+      items.push({ id: 'notifications', label: 'مركز الإشعارات', icon: <Bell size={18} /> });
+    }
+
+    return items;
   };
 
   const navItems = getNavItems();
