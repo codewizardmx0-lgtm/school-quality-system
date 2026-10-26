@@ -1,7 +1,7 @@
 # توثيق واجهة برمجة التطبيقات: التقييم الذاتي والشواهد (Evaluation & Evidence API)
 
 **منصة التقييم الذاتي والتحسين المدرسي**  
-**الشريحة:** الشريحة الثانية (Backend) — أكتوبر 2026  
+**الشريحة:** الشريحة الثانية (Backend) — أكتوبر 2026 (محدث ومغلق الفجوات)  
 **المرجعية:** الفصل الرابع (4.4.4 و4.7)، اتفاقيات `conventions.md`، وقاموس البيانات.  
 **المستهدف:** مطور الواجهة الأمامية (Frontend Engineer).
 
@@ -9,25 +9,32 @@
 
 ## 1. جدول الانحرافات والتحديثات مقارنة بكتالوج الفصل الرابع (4.4.4)
 
-لتحديث الفصل الرابع لاحقاً، يوضح الجدول التالي الفروق بين المسارات المقترحة في كتالوج 4.4.4 والمسارات المعتمدة فعلياً في الشريحة:
+لتحديث الفصل الرابع لاحقاً، يوضح الجدول التالي الفروق بين المسارات المقترحة في كتالوج 4.4.4 والمسارات المعتمدة فعلياً في الشريحة بعد إغلاق الفجوات:
 
 | المسار المعتمد في الشريحة | المسار المقابل في كتالوج 4.4.4 | نوع التغيير | سبب الانحراف والقرار المعتمد |
 |---|---|---|---|
-| `GET /api/v1/evaluations/{id}/standards-tree` | غير موجود (كان فقط `GET /api/v1/standard-versions/{id}`) | **إضافة جديدة** | تمكين واجهة التقييم من جلب شجرة المعايير والمؤشرات والواصفات للدورة مدمجاً بها نتائج رصد مدرسة المستخدم وعدد الشواهد ونسبة الإنجاز دفعة واحدة مع فرض العزل المؤسسي. |
-| `PUT /api/v1/evaluations/{evaluationId}/indicators/{indicatorId}/score` | `PUT /api/v1/evaluation-results/{id}` | **تعديل هيكلية** | المؤشرات غير المرصودة لا تملك `result_id` مسبقاً في قاعدة البيانات؛ لذا اعتمد مسار بأسلوب (Upsert) يربط التقييم بالمؤشر مباشرة، وينشئ النتيجة بحالة `Completed` تلقائياً فور أول رصد. |
-| `POST /api/v1/evaluations/{evaluationId}/indicators/{indicatorId}/notes` | `POST /api/v1/evaluation-results/{id}/notes` | **تعديل هيكلية** | تدوين الملاحظات التوثيقية من سياق شجرة المؤشرات مع التحقق من وجود نتيجة مرصودة مسبقاً للمؤشر لربطها بها. |
+| `GET /api/v1/evaluations/{id}/standards-tree` | غير موجود (كان فقط `GET /api/v1/standard-versions/{id}`) | **إضافة معتمدة** | تمكين واجهة التقييم من جلب شجرة المعايير والمؤشرات والواصفات للدورة مدمجاً بها نتائج رصد مدرسة المستخدم وأدوات التحقق وعدد الشواهد ونسبة الإنجاز دفعة واحدة مع فرض العزل المؤسسي. |
+| `PUT /api/v1/evaluations/{evaluationId}/indicators/{indicatorId}/score` | `PUT /api/v1/evaluation-results/{id}` | **تعديل هيكلية** | المؤشرات غير المرصودة لا تملك `result_id` مسبقاً في قاعدة البيانات؛ لذا اعتمد مسار بأسلوب (Upsert) يربط التقييم بالمؤشر مباشرة، وينشئ النتيجة بحالة `Completed` تلقائياً، مع قبول ومزامنة `verificationToolIds`. |
+| `POST /api/v1/evaluation-results/{id}/notes` | `POST /api/v1/evaluation-results/{id}/notes` | **مطابق تماماً** | تدوين الملاحظات التوثيقية على نتيجة المؤشر المرصودة مسبقاً وفق الكتالوج الرسمي. |
+| `GET /api/v1/evaluation-results/{id}/evidences` | `GET /api/v1/evaluation-results/{id}/evidences` | **مطابق تماماً** | استعراض قائمة الشواهد لنتيجة المؤشر مع نسخها ومرفقاتها الرقمية دون كشف مسار التخزين. |
 | `POST /api/v1/evaluation-results/{id}/evidences` | `POST /api/v1/evaluation-results/{id}/evidences` | **مطابق تماماً** | إنشاء شاهد جديد لنتيجة مؤشر محدد مع رفع النسخة الأولى ومرفقها. |
 | `POST /api/v1/evidences/{id}/versions` | `POST /api/v1/evidences/{id}/versions` | **مطابق تماماً** | رفع نسخة جديدة لشاهد قائم مع الاحتفاظ بالنسخ السابقة وضمان نسخة حالية واحدة. |
+| `GET /api/v1/evidences/{id}/versions/{versionId}/download` | — | **إضافة أمنية** | تنزيل المرفق الرقمي لنسخة شاهد محددة بالاسم الأصلي دون كشف مسار التخزين. |
 
 ---
 
 ## 2. إرشادات وتوجيهات هامة لمطور الواجهة الأمامية
 
 > [!IMPORTANT]
-> **علاقة المؤشر بالشاهد وزر "إرفاق شاهد":**
+> **علاقة المؤشر بالشاهد والملاحظات وزر "إرفاق شاهد":**
 > * في شجرة التقييم (`standards-tree`)، إذا كان المؤشر غير مرصود ستجد `resultId: null`.
-> * **توجيه الواجهة:** يجب **إخفاء أو تعطيل** زر "إرفاق شاهد" لأي مؤشر قيمته `resultId === null`. لا يمكن رفع شاهد إلا بعد رصد درجة المؤشر والحصول على `resultId`.
-> * محاولة فتح مسار رفع الشاهد بمعرف غير موجود ترجع `404 Not Found`.
+> * **توجيه الواجهة:** يجب **إخفاء أو تعطيل** زر "إرفاق شاهد" أو "تدوين ملاحظة" لأي مؤشر قيمته `resultId === null`. لا يمكن رفع شاهد أو تدوين ملاحظة إلا بعد رصد درجة المؤشر والحصول على `resultId`.
+> * محاولة استدعاء مسار رفع الشاهد أو تدوين الملاحظة بمعرف نتيجة غير موجود ترجع `404 Not Found`.
+
+> [!NOTE]
+> **أدوات التحقق (FR-SCH-13) وقيد الملاحظات:**
+> * يُقبل حقل `verificationToolIds` (مصفوفة أرقام) عند الرصد في `PUT .../score`، ويتم التحقق من أن كل أداة معتمدة للمؤشر في `indicator_verification_methods` ومزامنتها في جدول `evaluation_result_verification_methods`.
+> * **قيد معماري:** ربط الملاحظة بأداة التحقق غير ممكن تقنياً لأن جدول `notes` لا يحتوي على عمود للأداة وفق قاموس البيانات المعتمد، والتزاماً بعدم تعديل بنية الجداول.
 
 > [!NOTE]
 > **حالة الاكتمال (`completionStatus`):**
@@ -36,7 +43,7 @@
 
 > [!WARNING]
 > **قفل التعديل (قاعدة العمل BR-SCH-03):**
-> * يُقفل التقييم بالكامل وتُمنع عمليات الرصد وتعديل الملاحظات ورفع الشواهد فور إرسال التقرير النهائي (إذا كان آخر تسليم بحالة `Submitted` أو `UnderReview` أو `Completed`، أو كانت حالة التقييم `Completed`).
+> * يُقفل التقييم بالكامل وتُمنع عمليات الرصد وتدوين الملاحظات ورفع الشواهد فور إرسال التقرير النهائي (إذا كان آخر تسليم بحالة `Submitted` أو `UnderReview` أو `Completed`، أو كانت حالة التقييم `Completed`).
 > * في حالة طلب الاستكمال (`NeedsCompletion`)، يُسمح بالرصد ورفع نسخ الشواهد **فقط وحصراً** للمؤشرات والشواهد المفتوحة المحددة في بنود طلب الاستكمال (`completion_request_items`).
 > * عند محاولة التعديل والتقييم مقفل، يُرجع الـ API رمز الخطأ `422 Unprocessable Entity` مع تفصيل سبب القفل بالعربية داخل `errors.evaluation`.
 
@@ -102,33 +109,9 @@ Authorization: Bearer <plainTextToken>
                     "descriptorId": 1,
                     "scoreLevelId": 1,
                     "scoreValue": 0,
-                    "label": "غير متوفر",
-                    "description": "لا توجد خطة تشغيلية للمدرسة إطلاقاً",
+                    "label": "غير متحقق",
+                    "description": "لا توجد خطة تشغيلية معتمدة بالمدرسة",
                     "displayOrder": 1
-                  },
-                  {
-                    "descriptorId": 2,
-                    "scoreLevelId": 2,
-                    "scoreValue": 1,
-                    "label": "متحقق بدرجة ضعيفة",
-                    "description": "توجد خطة عامة غير مكتملة وغير معتمدة",
-                    "displayOrder": 2
-                  },
-                  {
-                    "descriptorId": 3,
-                    "scoreLevelId": 3,
-                    "scoreValue": 2,
-                    "label": "متحقق بدرجة متوسطة",
-                    "description": "توجد خطة موثقة ولكن لا تتضمن مؤشرات أداء دقيقة",
-                    "displayOrder": 3
-                  },
-                  {
-                    "descriptorId": 4,
-                    "scoreLevelId": 4,
-                    "scoreValue": 3,
-                    "label": "متحقق",
-                    "description": "توجد خطة تشغيلية سنوية متكاملة ومعتمدة ومشارَكة مع المجتمع المدرسي",
-                    "displayOrder": 4
                   }
                 ]
               }
@@ -146,7 +129,7 @@ Authorization: Bearer <plainTextToken>
 
 ---
 
-### 4.2 استعراض شجرة التقييم مع حالة الرصد ونسبة الإنجاز
+### 4.2 استعراض شجرة التقييم مع نتائج الرصد وأدوات التحقق ونسبة الإنجاز
 * **المسار:** `GET /api/v1/evaluations/{id}/standards-tree`
 * **الصلاحية المطلوبة:** `standards.view` أو `evaluations.view`
 * **قاعدة العزل:** إذا كان المستخدم يتبع مدرسة أخرى يرجع `404 Not Found`.
@@ -184,6 +167,23 @@ Authorization: Bearer <plainTextToken>
                 "completionStatus": "Completed",
                 "textualResult": "تمت مراجعة الخطة السنوية لعام 2026 بحضور لجنة الجودة.",
                 "evidenceCount": 1,
+                "verificationToolIds": [2, 4],
+                "verificationTools": [
+                  {
+                    "toolId": 2,
+                    "name": "فحص الوثائق والسجلات",
+                    "toolType": "وثائق",
+                    "required": true,
+                    "usageGuidance": "مراجعة ملف الخطة التشغيلية ومحاضر الاجتماعات"
+                  },
+                  {
+                    "toolId": 4,
+                    "name": "مقابلة منسق الجودة",
+                    "toolType": "مقابلة",
+                    "required": false,
+                    "usageGuidance": "التحقق من فهم الخطة ومؤشرات المتابعة"
+                  }
+                ],
                 "scoreDescriptors": [ ... ]
               },
               {
@@ -199,6 +199,8 @@ Authorization: Bearer <plainTextToken>
                 "completionStatus": null,
                 "textualResult": null,
                 "evidenceCount": 0,
+                "verificationToolIds": [],
+                "verificationTools": [ ... ],
                 "scoreDescriptors": [ ... ]
               }
             ]
@@ -219,20 +221,21 @@ Authorization: Bearer <plainTextToken>
 
 ---
 
-### 4.3 رصد نتيجة مؤشر (Upsert Score)
+### 4.3 رصد نتيجة مؤشر (Upsert Score) مع أدوات التحقق
 * **المسار:** `PUT /api/v1/evaluations/{evaluationId}/indicators/{indicatorId}/score`
 * **الصلاحية المطلوبة:** `evaluations.edit`
-* **الوصف:** رصد أو تحديث درجة المؤشر (0 إلى 3). إذا لم يُرسل `scoreDescriptorId`، يشتق الـ API الواصفة المطابقة للتقدير تلقائياً.
+* **الوصف:** رصد أو تحديث درجة المؤشر (0 إلى 3)، وتحديد أدوات التحقق المستخدمة ومزامنتها. إذا لم يُرسل `scoreDescriptorId`، يشتق الـ API الواصفة المطابقة للتقدير تلقائياً.
 
 #### جسم الطلب (Request Body):
 ```json
 {
   "score": 3,
   "scoreDescriptorId": 4,
+  "verificationToolIds": [2, 4],
   "textualResult": "المدرسة تلتزم بتطبيق المعيار وتوفر كافة النماذج المعتمدة."
 }
 ```
-*(ملاحظة: حقل `scoreDescriptorId` اختياري وحقل `textualResult` اختياري).*
+*(ملاحظة: حقول `scoreDescriptorId` و `verificationToolIds` و `textualResult` اختيارية).*
 
 #### استجابة النجاح (200 OK):
 ```json
@@ -246,6 +249,7 @@ Authorization: Bearer <plainTextToken>
     "scoreDescriptorLabel": "متحقق",
     "textualResult": "المدرسة تلتزم بتطبيق المعيار وتوفر كافة النماذج المعتمدة.",
     "completionStatus": "Completed",
+    "verificationToolIds": [2, 4],
     "evaluatorUserId": 3,
     "updatedAt": "2026-10-25T19:20:00Z"
   },
@@ -261,10 +265,10 @@ Authorization: Bearer <plainTextToken>
 
 ---
 
-### 4.4 تدوين ملاحظة نصية على مؤشر مرصود
-* **المسار:** `POST /api/v1/evaluations/{evaluationId}/indicators/{indicatorId}/notes`
+### 4.4 تدوين ملاحظة نصية على نتيجة مؤشر مرصود
+* **المسار:** `POST /api/v1/evaluation-results/{id}/notes`
 * **الصلاحية المطلوبة:** `evaluations.edit`
-* **الوصف:** إضافة ملاحظة توثيقية ترتبط بنتيجة المؤشر المرصودة مسبقاً.
+* **الوصف:** إضافة ملاحظة توثيقية ترتبط بنتيجة المؤشر المرصودة مسبقاً وفق كتالوج 4.4.4.
 
 #### جسم الطلب (Request Body):
 ```json
@@ -291,11 +295,68 @@ Authorization: Bearer <plainTextToken>
 
 ---
 
-### 4.5 إنشاء شاهد جديد لنتيجة مؤشر ورفع ملفه
+### 4.5 استعراض قائمة شواهد نتيجة المؤشر
+* **المسار:** `GET /api/v1/evaluation-results/{id}/evidences`
+* **الصلاحية المطلوبة:** `evaluations.view` أو `evidence.manage`
+* **الوصف:** جلب كافة الشواهد المرتبطة بنتيجة مؤشر محدد مع نسخها التاريخية ومرفقاتها الرقمية دون كشف مسار التخزين الداخلي.
+
+#### استجابة النجاح (200 OK):
+```json
+{
+  "data": [
+    {
+      "evidenceId": 7,
+      "resultId": 14,
+      "indicatorId": 1,
+      "title": "وثيقة اللائحة الداخلية المعتمدة",
+      "description": "نسخة ممسوحة ضوئياً من اللائحة التنظيمية المطبقة للعام الحالي",
+      "justification": "تثبت اكتمال وتوثيق خطة إدارة الجودة بالمدرسة",
+      "createdAt": "2026-10-25T19:22:00Z",
+      "versions": [
+        {
+          "evidenceVersionId": 13,
+          "versionNo": 2,
+          "current": true,
+          "createdAt": "2026-10-25T19:23:00Z",
+          "attachments": [
+            {
+              "attachmentId": 9,
+              "fileName": "school_regulations_2026_revised.pdf",
+              "fileType": "application/pdf",
+              "fileSize": 1258291
+            }
+          ]
+        },
+        {
+          "evidenceVersionId": 12,
+          "versionNo": 1,
+          "current": false,
+          "createdAt": "2026-10-25T19:22:00Z",
+          "attachments": [
+            {
+              "attachmentId": 8,
+              "fileName": "school_regulations_2026.pdf",
+              "fileType": "application/pdf",
+              "fileSize": 1048576
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "message": null,
+  "errors": null,
+  "meta": null
+}
+```
+
+---
+
+### 4.6 إنشاء شاهد جديد لنتيجة مؤشر ورفع ملفه
 * **المسار:** `POST /api/v1/evaluation-results/{id}/evidences`
 * **الصلاحية المطلوبة:** `evidence.manage`
 * **نوع المحتوى:** `multipart/form-data`
-* **الوصف:** إنشاء الشاهد ورفع النسخة الأولى v1 وتخزين المرفق بجدول `attachments` باسم UUID سري مع الاحتفاظ بالاسم الأصلي ونوعه.
+* **الوصف:** إنشاء الشاهد ورفع النسخة الأولى v1 وتخزين المرفق بجدول `attachments` باسم UUID سري دون كشف مسار التخزين في الاستجابة.
 
 #### حقول الطلب (Form-Data):
 | الحقل | النوع | إلزامي | الشروط والقيود |
@@ -325,8 +386,7 @@ Authorization: Bearer <plainTextToken>
         "attachmentId": 8,
         "fileName": "school_regulations_2026.pdf",
         "fileType": "application/pdf",
-        "fileSize": 1048576,
-        "storageUri": "attachments/evidence/a83f1248-75c1-4b1f-bc91-ec596a77d120.pdf"
+        "fileSize": 1048576
       }
     }
   },
@@ -338,11 +398,11 @@ Authorization: Bearer <plainTextToken>
 
 ---
 
-### 4.6 رفع نسخة جديدة لشاهد قائم (استبدال/تحديث)
+### 4.7 رفع نسخة جديدة لشاهد قائم (استبدال/تحديث)
 * **المسار:** `POST /api/v1/evidences/{id}/versions`
 * **الصلاحية المطلوبة:** `evidence.manage`
 * **نوع المحتوى:** `multipart/form-data`
-* **الوصف:** رفع نسخة جديدة للشاهد (`version_no` تلقائي تصاعدي)، وتحويل كافة النسخ السابقة إلى `current: false`، وتعيين النسخة الجديدة كـ `current: true` حصراً داخل معاملة قاعدة بيانات (Transaction).
+* **الوصف:** رفع نسخة جديدة للشاهد (`version_no` تصاعدي)، وتحويل كافة النسخ السابقة إلى `current: false`، وتعيين النسخة الجديدة كـ `current: true` داخل Transaction.
 
 #### حقول الطلب (Form-Data):
 | الحقل | النوع | إلزامي | الشروط والقيود |
@@ -362,8 +422,7 @@ Authorization: Bearer <plainTextToken>
       "attachmentId": 9,
       "fileName": "school_regulations_2026_revised.pdf",
       "fileType": "application/pdf",
-      "fileSize": 1258291,
-      "storageUri": "attachments/evidence/f3c95190-8b43-4dc9-98fe-c2a0d8e87611.pdf"
+      "fileSize": 1258291
     }
   },
   "message": "تم رفع النسخة الجديدة للشاهد بنجاح.",
@@ -371,6 +430,19 @@ Authorization: Bearer <plainTextToken>
   "meta": null
 }
 ```
+
+---
+
+### 4.8 تنزيل المرفق الرقمي لنسخة شاهد
+* **المسار:** `GET /api/v1/evidences/{id}/versions/{versionId}/download`
+* **الصلاحية المطلوبة:** `evaluations.view` أو `evidence.manage`
+* **الوصف:** تنزيل الملف المرفق لنسخة شاهد محددة باسمه الأصلي المحفوظ وبنوع MIME الصحيح، مع إخفاء مسار التخزين على القرص وفرض العزل المؤسسي (404).
+
+#### استجابة النجاح (200 OK - Streamed Download):
+* **الترويسات (Headers):**
+  * `Content-Type: application/pdf` (أو النوع الأصلي للملف)
+  * `Content-Disposition: attachment; filename="school_regulations_2026_revised.pdf"`
+* **جسم الاستجابة:** تدفق البيانات الثنائية (Binary File Stream) للملف مباشرة.
 
 ---
 
@@ -421,14 +493,14 @@ Authorization: Bearer <plainTextToken>
 }
 ```
 
-### 5.5 رمز 422 Unprocessable Entity: قفل التقييم في مرحلة الاستكمال (NeedsCompletion)
+### 5.5 رمز 422 Unprocessable Entity: أداة تحقق غير معتمدة للمؤشر (FR-SCH-13)
 ```json
 {
   "data": null,
-  "message": "ملف التقييم في مرحلة استكمال الملاحظات، ولا يُسمح بتعديل هذا المؤشر لأنه ليس ضمن بنود طلب الاستكمال المفتوحة (BR-SCH-03).",
+  "message": "البيانات المُدخلة غير صحيحة",
   "errors": {
-    "evaluation": [
-      "ملف التقييم في مرحلة استكمال الملاحظات، ولا يُسمح بتعديل هذا المؤشر لأنه ليس ضمن بنود طلب الاستكمال المفتوحة (BR-SCH-03)."
+    "verificationToolIds": [
+      "إحدى أدوات التحقق المحددة غير معتمدة لهذا المؤشر (FR-SCH-13)."
     ]
   },
   "meta": null

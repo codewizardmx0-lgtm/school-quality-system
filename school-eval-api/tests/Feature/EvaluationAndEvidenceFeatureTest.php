@@ -19,6 +19,7 @@ use App\Models\StandardVersion;
 use App\Models\User;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
@@ -34,6 +35,7 @@ class EvaluationAndEvidenceFeatureTest extends TestCase
     protected User $evaluatorBelqees;
     protected User $evaluatorFarouq;
     protected User $supervisorMinistry;
+    protected User $adminUser;
     protected School $schoolBelqees;
     protected School $schoolFarouq;
     protected Evaluation $evaluationBelqees;
@@ -54,6 +56,7 @@ class EvaluationAndEvidenceFeatureTest extends TestCase
         $this->evaluatorBelqees   = User::where('username', 'quality_belqees')->firstOrFail();
         $this->evaluatorFarouq    = User::where('username', 'quality_farouq')->firstOrFail();
         $this->supervisorMinistry = User::where('username', 'supervisor_ministry')->firstOrFail();
+        $this->adminUser          = User::where('username', 'admin')->firstOrFail();
 
         $this->standardVersion = StandardVersion::where('status', 'Active')->firstOrFail();
 
@@ -289,56 +292,92 @@ class EvaluationAndEvidenceFeatureTest extends TestCase
     }
 
     /**
-     * 6. تدوين ملاحظة نصية على مؤشر مرصود مسبقاً.
+     * 6. تدوين ملاحظة نصية على نتيجة مؤشر مرصود (POST /api/v1/evaluation-results/{id}/notes).
      */
-    public function test_evaluator_can_add_note_to_scored_indicator(): void
+    public function test_evaluator_can_add_note_to_evaluation_result(): void
     {
         Sanctum::actingAs($this->evaluatorBelqees);
 
         // أولاً: رصد المؤشر
-        $this->putJson(
+        $scoreRes = $this->putJson(
             "/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$this->firstIndicator->indicator_id}/score",
             ['score' => 2]
         )->assertStatus(200);
 
-        // ثانياً: تدوين الملاحظة
+        $resultId = $scoreRes->json('data.resultId');
+
+        // ثانياً: تدوين الملاحظة عبر مسار النتيجة المعتمد (كتالوج 4.4.4)
         $noteRes = $this->postJson(
-            "/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$this->firstIndicator->indicator_id}/notes",
+            "/api/v1/evaluation-results/{$resultId}/notes",
             ['text' => 'تم رصد النتيجة استناداً إلى زيارة المعمل المدرسي وسجلات الأنشطة.']
         );
 
         $noteRes->assertStatus(201)
+            ->assertJsonPath('data.resultId', $resultId)
             ->assertJsonPath('data.text', 'تم رصد النتيجة استناداً إلى زيارة المعمل المدرسي وسجلات الأنشطة.')
             ->assertJsonPath('data.authorUserId', $this->evaluatorBelqees->user_id);
 
         $this->assertDatabaseHas('notes', [
+            'result_id'      => $resultId,
             'author_user_id' => $this->evaluatorBelqees->user_id,
             'text'           => 'تم رصد النتيجة استناداً إلى زيارة المعمل المدرسي وسجلات الأنشطة.',
         ]);
     }
 
     /**
-     * 7. فشل تدوين ملاحظة لمؤشر لم يُرصد بعد (422).
+     * 7. فشل تدوين ملاحظة لنتيجة غير موجودة (404).
      */
-    public function test_adding_note_to_unscored_indicator_fails(): void
+    public function test_adding_note_to_non_existent_result_fails_404(): void
     {
         Sanctum::actingAs($this->evaluatorBelqees);
 
         $res = $this->postJson(
-            "/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$this->secondIndicator->indicator_id}/notes",
-            ['text' => 'ملاحظة لمؤشر غير مرصود']
+            "/api/v1/evaluation-results/999999/notes",
+            ['text' => 'ملاحظة لنتيجة غير موجودة']
         );
 
-        $res->assertStatus(422)
-            ->assertJsonValidationErrors(['result']);
+        $res->assertStatus(404);
     }
 
     /**
-     * 8. قفل التقييم (BR-SCH-03): رفض التعديل عند قفل التقييم بعد إرساله النهائي (422).
+     * 7.ب. العزل المؤسسي للملاحظات: منع مقيم مدرسة أخرى من تدوين ملاحظة (404) والمنع لمن لا يملك الصلاحية (403).
+     */
+    public function test_note_authorization_and_cross_school_isolation(): void
+    {
+        // 1. مدرسة بلقيس ترصد مؤشراً
+        Sanctum::actingAs($this->evaluatorBelqees);
+        $scoreRes = $this->putJson(
+            "/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$this->firstIndicator->indicator_id}/score",
+            ['score' => 2]
+        );
+        $resultId = $scoreRes->json('data.resultId');
+
+        // 2. مقيم الفاروق يحاول كتابة ملاحظة على نتيجة بلقيس -> 404 (القرار 9)
+        Sanctum::actingAs($this->evaluatorFarouq);
+        $this->postJson("/api/v1/evaluation-results/{$resultId}/notes", [
+            'text' => 'محاولة اختراق ملاحظة',
+        ])->assertStatus(404);
+
+        // 3. مستخدم بلا صلاحية evaluations.edit (مسؤول النظام) -> 403
+        Sanctum::actingAs($this->adminUser);
+        $this->postJson("/api/v1/evaluation-results/{$resultId}/notes", [
+            'text' => 'مسؤول نظام لا يملك صلاحية تقييم',
+        ])->assertStatus(403);
+    }
+
+    /**
+     * 8. قفل التقييم (BR-SCH-03): رفض التعديل وتدوين الملاحظات عند قفل التقييم بعد إرساله النهائي (422).
      */
     public function test_scoring_rejected_when_evaluation_is_locked_br_sch_03(): void
     {
         Sanctum::actingAs($this->evaluatorBelqees);
+
+        // رصد نتيجة أولاً قبل القفل
+        $scoreRes = $this->putJson(
+            "/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$this->firstIndicator->indicator_id}/score",
+            ['score' => 1]
+        )->assertStatus(200);
+        $resultId = $scoreRes->json('data.resultId');
 
         // إنشاء تقرير وتسليم بحالة Submitted لمحاكاة إرسال نهائي
         $report = Report::create([
@@ -355,12 +394,20 @@ class EvaluationAndEvidenceFeatureTest extends TestCase
             'status'               => 'Submitted',
         ]);
 
+        // محاولة تعديل الدرجة -> 422
         $response = $this->putJson(
             "/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$this->firstIndicator->indicator_id}/score",
-            ['score' => 1]
+            ['score' => 2]
         );
-
         $response->assertStatus(422)
+            ->assertJsonValidationErrors(['evaluation']);
+
+        // محاولة تدوين ملاحظة على تقييم مقفل -> 422
+        $noteRes = $this->postJson(
+            "/api/v1/evaluation-results/{$resultId}/notes",
+            ['text' => 'ملاحظة على تقييم مقفل']
+        );
+        $noteRes->assertStatus(422)
             ->assertJsonValidationErrors(['evaluation']);
     }
 
@@ -584,5 +631,207 @@ class EvaluationAndEvidenceFeatureTest extends TestCase
         ]);
         $oversizedRes->assertStatus(422)
             ->assertJsonValidationErrors(['file']);
+    }
+
+    /**
+     * 14. استعراض قائمة شواهد نتيجة المؤشر مع نسخها ومرفقاتها (evaluations.view أو evidence.manage).
+     */
+    public function test_evaluator_can_list_evidences_for_evaluation_result(): void
+    {
+        Sanctum::actingAs($this->evaluatorBelqees);
+
+        $scoreRes = $this->putJson(
+            "/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$this->firstIndicator->indicator_id}/score",
+            ['score' => 2]
+        );
+        $resultId = $scoreRes->json('data.resultId');
+
+        $file = UploadedFile::fake()->create('evidence_doc.pdf', 500, 'application/pdf');
+        $this->postJson("/api/v1/evaluation-results/{$resultId}/evidences", [
+            'title'       => 'تقرير المعمل المدرسي',
+            'description' => 'شاهد ميداني على جاهزية المعمل',
+            'file'        => $file,
+        ])->assertStatus(201);
+
+        // استعراض الشواهد
+        $listRes = $this->getJson("/api/v1/evaluation-results/{$resultId}/evidences");
+        $listRes->assertStatus(200)
+            ->assertJsonPath('data.0.title', 'تقرير المعمل المدرسي')
+            ->assertJsonPath('data.0.resultId', $resultId)
+            ->assertJsonPath('data.0.versions.0.versionNo', 1)
+            ->assertJsonPath('data.0.versions.0.current', true)
+            ->assertJsonPath('data.0.versions.0.attachments.0.fileName', 'evidence_doc.pdf')
+            ->assertJsonMissing(['storageUri']); // التأكد من عدم تسريب مسار التخزين
+    }
+
+    /**
+     * 15. العزل المؤسسي والصلاحيات عند استعراض الشواهد (404 لمدرسة أخرى، 403 لمستخدم بلا صلاحية).
+     */
+    public function test_listing_evidences_cross_school_and_authorization(): void
+    {
+        Sanctum::actingAs($this->evaluatorBelqees);
+        $scoreRes = $this->putJson(
+            "/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$this->firstIndicator->indicator_id}/score",
+            ['score' => 2]
+        );
+        $resultId = $scoreRes->json('data.resultId');
+
+        // مقيم مدرسة الفاروق -> 404 (القرار 9)
+        Sanctum::actingAs($this->evaluatorFarouq);
+        $this->getJson("/api/v1/evaluation-results/{$resultId}/evidences")->assertStatus(404);
+
+        // مستخدم بلا صلاحية evaluations.view / evidence.manage -> 403
+        Sanctum::actingAs($this->adminUser);
+        $this->getJson("/api/v1/evaluation-results/{$resultId}/evidences")->assertStatus(403);
+    }
+
+    /**
+     * 16. تنزيل المرفق الرقمي لنسخة شاهد محددة بالاسم الأصلي دون كشف مسار التخزين.
+     */
+    public function test_evaluator_can_download_evidence_version_attachment(): void
+    {
+        Sanctum::actingAs($this->evaluatorBelqees);
+
+        $scoreRes = $this->putJson(
+            "/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$this->firstIndicator->indicator_id}/score",
+            ['score' => 2]
+        );
+        $resultId = $scoreRes->json('data.resultId');
+
+        $file = UploadedFile::fake()->create('accreditation_guide.pdf', 400, 'application/pdf');
+        $evRes = $this->postJson("/api/v1/evaluation-results/{$resultId}/evidences", [
+            'title' => 'دليل الاعتماد',
+            'file'  => $file,
+        ]);
+        $evidenceId = $evRes->json('data.evidenceId');
+        $versionId  = $evRes->json('data.currentVersion.evidenceVersionId');
+
+        // تنزيل المرفق
+        $downloadRes = $this->get("/api/v1/evidences/{$evidenceId}/versions/{$versionId}/download");
+        $downloadRes->assertStatus(200);
+        $downloadRes->assertHeader('content-disposition');
+        $this->assertStringContainsString('accreditation_guide.pdf', (string) $downloadRes->headers->get('content-disposition'));
+    }
+
+    /**
+     * 17. العزل والصلاحيات والتحقق عند تنزيل مرفق الشاهد (404 لمدرسة أخرى أو نسخة وهمية، 403 لمستخدم بلا صلاحية).
+     */
+    public function test_download_attachment_cross_school_and_authorization(): void
+    {
+        Sanctum::actingAs($this->evaluatorBelqees);
+
+        $scoreRes = $this->putJson(
+            "/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$this->firstIndicator->indicator_id}/score",
+            ['score' => 2]
+        );
+        $resultId = $scoreRes->json('data.resultId');
+
+        $file = UploadedFile::fake()->create('private_school_plan.pdf', 300, 'application/pdf');
+        $evRes = $this->postJson("/api/v1/evaluation-results/{$resultId}/evidences", [
+            'title' => 'خطة المدرسة',
+            'file'  => $file,
+        ]);
+        $evidenceId = $evRes->json('data.evidenceId');
+        $versionId  = $evRes->json('data.currentVersion.evidenceVersionId');
+
+        // مقيم مدرسة الفاروق يحاول التنزيل -> 404
+        Sanctum::actingAs($this->evaluatorFarouq);
+        $this->get("/api/v1/evidences/{$evidenceId}/versions/{$versionId}/download")->assertStatus(404);
+
+        // طلب نسخة غير موجودة -> 404
+        Sanctum::actingAs($this->evaluatorBelqees);
+        $this->get("/api/v1/evidences/{$evidenceId}/versions/999999/download")->assertStatus(404);
+
+        // مستخدم بلا صلاحية -> 403
+        Sanctum::actingAs($this->adminUser);
+        $this->get("/api/v1/evidences/{$evidenceId}/versions/{$versionId}/download")->assertStatus(403);
+    }
+
+    /**
+     * 18. أدوات التحقق (FR-SCH-13): رصد النتيجة مع أدوات تحقق معتمدة ومزامنتها وانعكاسها في الشجرة.
+     */
+    public function test_scoring_with_valid_verification_tool_ids_syncs_and_reflects_in_tree(): void
+    {
+        Sanctum::actingAs($this->evaluatorBelqees);
+
+        // جلب أدوات التحقق المعتمدة لهذا المؤشر
+        $validToolIds = DB::table('indicator_verification_methods')
+            ->where('indicator_id', $this->firstIndicator->indicator_id)
+            ->pluck('tool_id')
+            ->map(fn($id) => (int) $id)
+            ->values()
+            ->all();
+
+        if (empty($validToolIds)) {
+            $tool = DB::table('verification_tools')->first();
+            DB::table('indicator_verification_methods')->insert([
+                'indicator_id' => $this->firstIndicator->indicator_id,
+                'tool_id'      => $tool->tool_id,
+            ]);
+            $validToolIds = [(int) $tool->tool_id];
+        }
+
+        $scoreRes = $this->putJson(
+            "/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$this->firstIndicator->indicator_id}/score",
+            [
+                'score'               => 3,
+                'verificationToolIds' => $validToolIds,
+            ]
+        );
+
+        $scoreRes->assertStatus(200)
+            ->assertJsonPath('data.score', 3)
+            ->assertJsonPath('data.verificationToolIds', $validToolIds);
+
+        $resultId = $scoreRes->json('data.resultId');
+
+        // التحقق من الحفظ في جدول الربط evaluation_result_verification_methods
+        foreach ($validToolIds as $tId) {
+            $this->assertDatabaseHas('evaluation_result_verification_methods', [
+                'evaluation_result_id' => $resultId,
+                'tool_id'              => $tId,
+            ]);
+        }
+
+        // التحقق من استرجاعها في شجرة المعايير
+        $treeRes = $this->getJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/standards-tree");
+        $treeRes->assertStatus(200);
+
+        // فحص وجود verificationToolIds و verificationTools في أول مؤشر
+        $indicatorData = null;
+        foreach ($treeRes->json('data.standards') as $std) {
+            foreach ($std['subStandards'] as $sub) {
+                foreach ($sub['indicators'] as $ind) {
+                    if ($ind['indicatorId'] === $this->firstIndicator->indicator_id) {
+                        $indicatorData = $ind;
+                        break 3;
+                    }
+                }
+            }
+        }
+
+        $this->assertNotNull($indicatorData);
+        $this->assertEquals($validToolIds, $indicatorData['verificationToolIds']);
+        $this->assertNotEmpty($indicatorData['verificationTools']);
+    }
+
+    /**
+     * 19. أدوات التحقق (FR-SCH-13): رفض رصد النتيجة عند إرسال أداة تحقق غير معتمدة للمؤشر (422).
+     */
+    public function test_scoring_with_invalid_verification_tool_id_fails_422(): void
+    {
+        Sanctum::actingAs($this->evaluatorBelqees);
+
+        // المؤشر الأول لا يعتمد الأداة 9999
+        $scoreRes = $this->putJson(
+            "/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$this->firstIndicator->indicator_id}/score",
+            [
+                'score'               => 2,
+                'verificationToolIds' => [9999],
+            ]
+        );
+
+        $scoreRes->assertStatus(422)
+            ->assertJsonValidationErrors(['verificationToolIds']);
     }
 }

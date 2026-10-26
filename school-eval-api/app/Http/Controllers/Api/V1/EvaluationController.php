@@ -14,6 +14,7 @@ use App\Models\StandardVersion;
 use App\Services\EvaluationLockChecker;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 
 /**
@@ -133,6 +134,7 @@ class EvaluationController extends Controller
                 $q->orderBy('display_order', 'asc');
             },
             'standards.subStandards.indicators.scoreDescriptors.scoreLevel',
+            'standards.subStandards.indicators.verificationTools',
         ])->find($versionId);
 
         if (!$version) {
@@ -141,7 +143,7 @@ class EvaluationController extends Controller
 
         // جلب نتائج التقييم المسجلة لهذه المدرسة ومفهرسة برقم المؤشر
         $existingResults = EvaluationResult::where('evaluation_id', $evaluation->evaluation_id)
-            ->with(['scoreDescriptor', 'evidences'])
+            ->with(['scoreDescriptor', 'evidences', 'verificationTools'])
             ->get()
             ->keyBy('indicator_id');
 
@@ -186,6 +188,16 @@ class EvaluationController extends Controller
                                 'completionStatus'     => $result?->completion_status,
                                 'textualResult'        => $result?->textual_result,
                                 'evidenceCount'        => $result ? $result->evidences->count() : 0,
+                                'verificationToolIds'  => $result ? $result->verificationTools->pluck('tool_id')->all() : [],
+                                'verificationTools'    => $ind->verificationTools->map(function ($tool) {
+                                    return [
+                                        'toolId'        => $tool->tool_id,
+                                        'name'          => $tool->name,
+                                        'toolType'      => $tool->tool_type,
+                                        'required'      => (bool) $tool->pivot?->required,
+                                        'usageGuidance' => $tool->pivot?->usage_guidance,
+                                    ];
+                                })->values(),
                                 'scoreDescriptors'     => $ind->scoreDescriptors->map(function ($desc) {
                                     return [
                                         'descriptorId' => $desc->descriptor_id,
@@ -289,6 +301,39 @@ class EvaluationController extends Controller
         $descriptorId = $request->input('scoreDescriptorId') ?? $request->input('score_descriptor_id');
         $textualResult = $request->input('textualResult') ?? $request->input('textual_result');
 
+        // التحقق من أدوات التحقق المقررة للمؤشر (FR-SCH-13)
+        $toolIds = $request->input('verificationToolIds') ?? $request->input('verification_tool_ids');
+        if ($toolIds !== null) {
+            if (!is_array($toolIds)) {
+                return ApiResponse::validationError([
+                    'verificationToolIds' => ['يجب أن تكون أدوات التحقق مصفوفة من المعرفات.'],
+                ]);
+            }
+
+            foreach ($toolIds as $tId) {
+                if (!is_numeric($tId)) {
+                    return ApiResponse::validationError([
+                        'verificationToolIds' => ['يجب أن تكون معرّفات أدوات التحقق أرقاماً صحيحة.'],
+                    ]);
+                }
+            }
+
+            // أدوات التحقق المعتمدة لهذا المؤشر
+            $allowedToolIds = DB::table('indicator_verification_methods')
+                ->where('indicator_id', $indicatorId)
+                ->pluck('tool_id')
+                ->map(fn($id) => (int) $id)
+                ->all();
+
+            foreach ($toolIds as $tId) {
+                if (!in_array((int) $tId, $allowedToolIds, true)) {
+                    return ApiResponse::validationError([
+                        'verificationToolIds' => ['إحدى أدوات التحقق المحددة غير معتمدة لهذا المؤشر (FR-SCH-13).'],
+                    ]);
+                }
+            }
+        }
+
         // التحقق من وجود المؤشر وصلاحيته
         $indicator = Indicator::with('subStandard.standard')->find($indicatorId);
         if (!$indicator) {
@@ -355,6 +400,11 @@ class EvaluationController extends Controller
             ]
         );
 
+        // مزامنة أدوات التحقق المستخدمة فعلياً في النتيجة (FR-SCH-13)
+        if ($toolIds !== null) {
+            $result->verificationTools()->sync($toolIds);
+        }
+
         // حساب نسبة الإنجاز المحدثة
         $totalActive = Indicator::where('status', 'Active')
             ->whereHas('subStandard.standard', fn($q) => $q->where('version_id', $versionId))
@@ -376,6 +426,7 @@ class EvaluationController extends Controller
                 'scoreDescriptorLabel' => $descriptor->label,
                 'textualResult'        => $result->textual_result,
                 'completionStatus'     => $result->completion_status,
+                'verificationToolIds'  => $result->verificationTools()->pluck('verification_tools.tool_id')->all(),
                 'evaluatorUserId'      => $result->evaluator_user_id,
                 'updatedAt'            => $result->updated_at?->toIso8601ZuluString(),
             ],
@@ -389,12 +440,12 @@ class EvaluationController extends Controller
     }
 
     /**
-     * تدوين ملاحظة نصية على مؤشر التقييم.
+     * تدوين ملاحظة نصية على نتيجة مؤشر مرصود في التقييم.
      *
-     * POST /api/v1/evaluations/{evaluationId}/indicators/{indicatorId}/notes
+     * POST /api/v1/evaluation-results/{id}/notes
      * الصلاحية: evaluations.edit
      */
-    public function addNote(Request $request, int $evaluationId, int $indicatorId): JsonResponse
+    public function addNote(Request $request, int $id): JsonResponse
     {
         $user = $request->user();
 
@@ -402,33 +453,35 @@ class EvaluationController extends Controller
             return ApiResponse::forbidden('غير مصرح لك بإضافة ملاحظات.');
         }
 
-        $evaluation = Evaluation::find($evaluationId);
-        if (!$evaluation) {
-            return ApiResponse::notFound('ملف التقييم المطلوب غير موجود.');
+        $result = EvaluationResult::with('evaluation')->find($id);
+        if (!$result || !$result->evaluation) {
+            return ApiResponse::notFound('نتيجة المؤشر المطلوبة غير موجودة.');
         }
 
-        // عزل المدارس
+        $evaluation = $result->evaluation;
+
+        // عزل المدارس (القرار المعماري 9)
         if ($user->user_type === 'school' && (int) $user->school_id !== (int) $evaluation->school_id) {
-            return ApiResponse::notFound('ملف التقييم المطلوب غير موجود.');
+            return ApiResponse::notFound('نتيجة المؤشر المطلوبة غير موجودة.');
         }
 
-        // فحص القفل
-        $lockCheck = EvaluationLockChecker::canModifyIndicator($evaluation, $indicatorId);
+        if ($user->cannot('update', $evaluation)) {
+            $lockCheck = EvaluationLockChecker::canModifyIndicator($evaluation, $result->indicator_id);
+            if (!$lockCheck['allowed']) {
+                return ApiResponse::validationError([
+                    'evaluation' => [$lockCheck['message']],
+                ], $lockCheck['message']);
+            }
+
+            return ApiResponse::forbidden('غير مصرح لك بتعديل هذا التقييم.');
+        }
+
+        // فحص قفل التقييم
+        $lockCheck = EvaluationLockChecker::canModifyIndicator($evaluation, $result->indicator_id);
         if (!$lockCheck['allowed']) {
             return ApiResponse::validationError([
                 'evaluation' => [$lockCheck['message']],
             ], $lockCheck['message']);
-        }
-
-        // نتيجة المؤشر يجب أن تكون مرصودة مسبقاً لربط الملاحظة بها
-        $result = EvaluationResult::where('evaluation_id', $evaluationId)
-            ->where('indicator_id', $indicatorId)
-            ->first();
-
-        if (!$result) {
-            return ApiResponse::validationError([
-                'result' => ['يجب رصد نتيجة المؤشر أولاً قبل تدوين الملاحظة.'],
-            ]);
         }
 
         $validator = Validator::make($request->all(), [
