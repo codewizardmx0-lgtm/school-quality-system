@@ -195,13 +195,10 @@ const App = {
     document.getElementById('user-name').textContent = this.state.user.fullName || this.state.user.username;
     document.getElementById('user-school').textContent = this.state.user.school?.schoolName || 'مدرسة غير محددة';
     
-    const roleName = this.state.user.roles?.[0]?.roleName || this.state.user.userType;
-    const roleMap = {
-      school_evaluator: 'مقيّم جودة',
-      school_principal: 'مدير مدرسة',
-      system_admin: 'مسؤول نظام',
-    };
-    document.getElementById('user-role').textContent = roleMap[roleName] || roleName;
+    // استخراج المسمى من كائن الدور القادم مباشرة من الـ API (حقل description أو roleName)
+    const primaryRole = this.state.user.roles?.[0];
+    const roleTitle = primaryRole?.description || primaryRole?.roleName || this.state.user.userType;
+    document.getElementById('user-role').textContent = roleTitle;
   },
 
   isPrincipal() {
@@ -291,18 +288,16 @@ const App = {
     }
 
     const statusBadge = (s) => {
-      if (s === 'Completed') return '<span class="badge badge-green">مكتمل</span>';
-      if (s === 'InProgress') return '<span class="badge badge-yellow">قيد التنفيذ</span>';
-      if (s === 'Closed') return '<span class="badge badge-red">مغلق</span>';
-      return `<span class="badge badge-gray">${s}</span>`;
+      const cls = s === 'Completed' ? 'badge-green' : (s === 'InProgress' ? 'badge-yellow' : (s === 'Closed' ? 'badge-red' : 'badge-gray'));
+      return `<span class="badge ${cls}">${s || '-'}</span>`;
     };
 
     tbody.innerHTML = this.state.evaluations.map((ev) => `
       <tr>
         <td><strong>#${ev.evaluationId}</strong></td>
-        <td>${ev.cycle?.name || 'دورة التقييم'}</td>
-        <td>${ev.cycle?.academicYear || '2025/2026'}</td>
-        <td>${statusBadge(ev.cycle?.status || 'Active')}</td>
+        <td>${ev.school?.schoolName || 'المدرسة'}</td>
+        <td>${ev.cycle?.academicYear || '-'}</td>
+        <td>${statusBadge(ev.cycle?.status)}</td>
         <td>${statusBadge(ev.status)}</td>
         <td>
           <button class="btn btn-sm btn-primary" onclick="App.selectEvaluation(${ev.evaluationId})">
@@ -337,12 +332,16 @@ const App = {
     this.state.standardsTree = res.data;
     const data = res.data;
 
-    // تحديث ترويسة الشجرة والإنجاز الإجمالي
-    document.getElementById('tree-school-title').textContent = `${data.schoolName || 'المدرسة'} — استمارة التقييم الذاتي`;
-    document.getElementById('tree-cycle-info').textContent = `الدورة: ${data.cycleName || ''} | الإصدار المعياري: #${data.versionId}`;
+    // تحديث ترويسة الشجرة والإنجاز الإجمالي من بيانات الـ API
+    const schoolName = this.state.currentEvaluation?.school?.schoolName || this.state.user?.school?.schoolName || 'المدرسة';
+    const cycleAcademicYear = this.state.currentEvaluation?.cycle?.academicYear || '';
+    document.getElementById('tree-school-title').textContent = `${schoolName} — استمارة التقييم الذاتي`;
+    document.getElementById('tree-cycle-info').textContent = `الدورة: ${cycleAcademicYear} | الإصدار المعياري: ${data.versionName || '#' + data.versionId}`;
 
     const pct = data.meta?.completionPercentage || 0;
-    document.getElementById('tree-progress-text').textContent = `${pct}% (${data.meta?.completedIndicatorsCount || 0} من ${data.meta?.totalIndicatorsCount || 0} مؤشر)`;
+    const completed = data.meta?.completedResults || 0;
+    const total = data.meta?.totalActiveIndicators || 0;
+    document.getElementById('tree-progress-text').textContent = `${pct}% (${completed} من ${total} مؤشر)`;
     document.getElementById('tree-progress-bar').style.width = `${pct}%`;
 
     // بناء كتل المعايير والمؤشرات
@@ -373,29 +372,28 @@ const App = {
   renderIndicatorRow(ind) {
     const isScored = ind.score !== null && ind.score !== undefined;
     const scoreBadge = isScored
-      ? `<span class="badge ${ind.score >= 2 ? 'badge-green' : 'badge-yellow'}">الدرجة: ${ind.score} (${ind.scoreDescriptor?.title || 'مرصود'})</span>`
+      ? `<span class="badge ${ind.score >= 2 ? 'badge-green' : 'badge-yellow'}">الدرجة: ${ind.score} ${ind.scoreDescriptorLabel ? '(' + ind.scoreDescriptorLabel + ')' : ''}</span>`
       : '<span class="badge badge-gray">غير مرصود</span>';
 
     const hasResult = ind.resultId !== null && ind.resultId !== undefined;
-    const evidencesCount = ind.evidencesCount || 0;
-    const notesCount = ind.notesCount || 0;
+    const evidenceCount = ind.evidenceCount || 0;
 
-    const toolsTags = (ind.applicableVerificationTools || []).map(t => `
-      <span class="tool-tag" title="${t.toolDescription || ''}">${t.toolName} (${t.toolType})</span>
+    const toolsTags = (ind.verificationTools || []).map(t => `
+      <span class="tool-tag" title="${t.usageGuidance || ''}">${t.name} (${t.toolType})</span>
     `).join('');
 
     return `
       <div class="indicator-row" id="ind-row-${ind.indicatorId}">
         <div class="indicator-info">
           <div style="font-weight: 700; font-size: 0.9rem;">
-            ${ind.indicatorCode} — ${ind.name}
+            ${ind.code} — ${ind.name}
           </div>
           <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.2rem;">
             الوزن: ${ind.weight || 1} | ${scoreBadge}
           </div>
           <div class="tools-tags">
             <span style="font-size: 0.75rem; color: var(--text-muted); align-self: center;">الأدوات المعتمدة:</span>
-            ${toolsTags || '<span style="font-size: 0.7rem; color: var(--text-muted);">لا توجد</span>'}
+            ${toolsTags || '<span style="font-size: 0.75rem; color: var(--text-muted);">لا توجد أدوات تحقق معتمدة لهذا المؤشر في قاعدة البيانات.</span>'}
           </div>
         </div>
 
@@ -407,7 +405,7 @@ const App = {
           <button class="btn btn-sm btn-secondary" 
                   ${!hasResult ? 'disabled title="يجب رصد درجة المؤشر أولاً لتفعيل إرفاق الشواهد"' : ''}
                   onclick='App.openEvidencesModal(${JSON.stringify(ind).replace(/'/g, "&apos;")})'>
-            📁 الشواهد (${evidencesCount}) والملاحظات (${notesCount})
+            📁 الشواهد (${evidenceCount}) والملاحظات
           </button>
         </div>
       </div>
@@ -428,18 +426,33 @@ const App = {
     if (!modal) return;
 
     document.getElementById('score-modal-title').textContent = `رصد درجة المؤشر: ${indicator.name}`;
-    document.getElementById('score-indicator-code').textContent = indicator.indicatorCode;
-    document.getElementById('score-indicator-desc').textContent = indicator.description || 'لا يوجد وصف تفصيلي';
+    document.getElementById('score-indicator-code').textContent = indicator.code;
+    document.getElementById('score-indicator-desc').textContent = indicator.description || 'لا يوجد وصف تفصيلي لهذا المؤشر في قاعدة البيانات.';
 
     const alertEl = document.getElementById('score-modal-alert');
     alertEl.classList.add('hidden');
     alertEl.textContent = '';
 
-    // تعيين القيمة الحالية إن وجدت
-    const radios = document.getElementsByName('indicator-score-opt');
-    radios.forEach(r => {
-      r.checked = (indicator.score !== null && parseInt(r.value) === indicator.score);
-    });
+    // توليد خيارات التقدير الرقمي وواصفاتها ديناميكياً من الـ API (scoreDescriptors)
+    const scoreContainer = document.getElementById('score-options-container');
+    const descriptors = indicator.scoreDescriptors || [];
+
+    if (descriptors.length === 0) {
+      scoreContainer.innerHTML = '<div class="alert alert-warning" style="grid-column: 1 / -1; margin-bottom: 0;">لا توجد واصفات أداء معرفة لهذا المؤشر في قاعدة البيانات.</div>';
+    } else {
+      const sortedDesc = [...descriptors].sort((a, b) => (a.scoreValue ?? a.displayOrder) - (b.scoreValue ?? b.displayOrder));
+      scoreContainer.innerHTML = sortedDesc.map(desc => {
+        const isChecked = (indicator.score !== null && indicator.score !== undefined && indicator.score === desc.scoreValue);
+        return `
+          <label class="card" style="padding: 0.5rem; text-align: center; cursor: pointer; margin-bottom: 0;">
+            <input type="radio" name="indicator-score-opt" value="${desc.scoreValue}" required 
+                   ${isChecked ? 'checked' : ''} 
+                   onchange="App.onScoreOptionChange(${desc.scoreValue})">
+            <div style="font-weight: 700; margin-top: 0.2rem;">${desc.scoreValue} - ${desc.label}</div>
+          </label>
+        `;
+      }).join('');
+    }
 
     if (indicator.score !== null && indicator.score !== undefined) {
       this.onScoreOptionChange(indicator.score);
@@ -447,19 +460,19 @@ const App = {
       document.getElementById('score-descriptor-text').textContent = '(اختر تقديراً لعرض الواصفة المعتمدة للمؤشر)';
     }
 
-    // بناء قائمة أدوات التحقق القابلة للاختيار
+    // بناء قائمة أدوات التحقق القابلة للاختيار من verificationTools القادمة من الـ API
     const toolsContainer = document.getElementById('score-verification-tools-container');
-    const applicableTools = indicator.applicableVerificationTools || [];
+    const applicableTools = indicator.verificationTools || [];
     const usedToolIds = indicator.verificationToolIds || [];
 
     if (applicableTools.length === 0) {
-      toolsContainer.innerHTML = '<span style="font-size: 0.8rem; color: var(--text-muted);">لا توجد أدوات تحقق معتمدة لهذا المؤشر.</span>';
+      toolsContainer.innerHTML = '<span style="font-size: 0.8rem; color: var(--text-muted);">لا توجد أدوات تحقق معتمدة لهذا المؤشر في قاعدة البيانات.</span>';
     } else {
       toolsContainer.innerHTML = applicableTools.map(tool => `
         <label style="display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; cursor: pointer;">
           <input type="checkbox" name="verificationToolIds" value="${tool.toolId}" 
                  ${usedToolIds.includes(tool.toolId) ? 'checked' : ''}>
-          <span>${tool.toolName} (${tool.toolType})</span>
+          <span>${tool.name} (${tool.toolType})${tool.required ? ' <strong style="color:red">*</strong>' : ''}</span>
         </label>
       `).join('');
     }
@@ -468,8 +481,6 @@ const App = {
 
     // تفعيل قسم الملاحظات إذا كان هناك نتيجة سابقة
     const notesSec = document.getElementById('score-notes-section');
-    const notesList = document.getElementById('score-notes-list');
-
     if (indicator.resultId) {
       notesSec.classList.remove('hidden');
       this.renderNotesList(indicator.notes || []);
@@ -488,10 +499,13 @@ const App = {
 
   onScoreOptionChange(score) {
     const ind = this.state.currentIndicator;
-    if (!ind || !ind.descriptors) return;
+    if (!ind || !ind.scoreDescriptors) {
+      document.getElementById('score-descriptor-text').textContent = 'لا توجد واصفات أداء معرفة لهذا المؤشر في قاعدة البيانات.';
+      return;
+    }
 
-    const desc = (ind.descriptors || []).find(d => d.scoreLevel === score);
-    const descText = desc?.description || desc?.title || `المستوى المعياري للتقدير (${score})`;
+    const desc = (ind.scoreDescriptors || []).find(d => d.scoreValue === score);
+    const descText = desc?.description || (desc?.label ? `المستوى المعياري: ${desc.label}` : 'لا يوجد توصيف معتمد لهذه الدرجة في قاعدة البيانات.');
     document.getElementById('score-descriptor-text').textContent = descText;
   },
 
@@ -592,7 +606,7 @@ const App = {
 
     const res = await this.request(`/evaluation-results/${ind.resultId}/notes`, {
       method: 'POST',
-      body: { notes: text },
+      body: { text: text },
     });
 
     if (!res.ok) {
@@ -615,7 +629,7 @@ const App = {
     if (!modal) return;
 
     document.getElementById('ev-modal-title').textContent = `الشواهد الداعمة: ${indicator.name}`;
-    document.getElementById('ev-indicator-code').textContent = indicator.indicatorCode;
+    document.getElementById('ev-indicator-code').textContent = indicator.code;
     document.getElementById('ev-modal-alert').classList.add('hidden');
 
     this.loadEvidences(indicator.resultId);
@@ -823,7 +837,7 @@ const App = {
     const data = res.data;
     this.state.suggestions = data.suggestions || [];
 
-    document.getElementById('sugg-target-score').textContent = data.targetScore || 3;
+    document.getElementById('sugg-target-score').textContent = data.targetScore || '-';
     document.getElementById('sugg-total-count').textContent = data.meta?.totalSuggestions || 0;
     document.getElementById('sugg-high-count').textContent = data.meta?.highPriorityCount || 0;
     document.getElementById('sugg-med-count').textContent = data.meta?.mediumPriorityCount || 0;
@@ -843,7 +857,7 @@ const App = {
         <td>-${s.gap}</td>
         <td>
           <span class="badge ${s.suggestedPriority === 'High' ? 'badge-red' : 'badge-yellow'}">
-            ${s.priorityLabel} (${s.suggestedPriority})
+            ${s.priorityLabel || s.suggestedPriority}
           </span>
         </td>
         <td>
@@ -870,8 +884,8 @@ const App = {
       method: 'POST',
       body: {
         resultId: s.resultId,
-        name: s.suggestedName || `تحسين أداء: ${s.indicatorName}`,
-        description: `تم اشتقاق هذا المجال تلقائياً من نتيجة المؤشر ${s.indicatorCode} لسد الفجوة (${s.gap} درجات).`,
+        name: s.suggestedName || s.indicatorName,
+        description: null,
         priority: s.suggestedPriority,
       },
     });
@@ -881,7 +895,7 @@ const App = {
       return;
     }
 
-    this.showAlert(`تم تبني مجال التحسين بنجاح للأولوية: ${s.priorityLabel}`, 'success');
+    this.showAlert(`تم تبني مجال التحسين بنجاح للأولوية: ${s.priorityLabel || s.suggestedPriority}`, 'success');
     this.loadSuggestions();
   },
 
@@ -911,29 +925,14 @@ const App = {
       return;
     }
 
-    const planStatusBadge = (s) => {
-      if (s === 'Active') return '<span class="badge badge-green">نشطة</span>';
-      if (s === 'Draft') return '<span class="badge badge-yellow">مسودة</span>';
-      if (s === 'Completed') return '<span class="badge badge-blue">مكتملة</span>';
-      return `<span class="badge badge-gray">${s}</span>`;
-    };
-
-    const progressBadge = (p, label) => {
-      if (p === 'Complete') return `<span class="badge badge-green">${label || 'مكتمل'}</span>`;
-      if (p === 'Significant') return `<span class="badge badge-blue">${label || 'ملحوظ'}</span>`;
-      if (p === 'Moderate') return `<span class="badge badge-yellow">${label || 'متوسط'}</span>`;
-      if (p === 'Limited') return `<span class="badge badge-yellow">${label || 'محدود'}</span>`;
-      return `<span class="badge badge-gray">${label || 'لم يبدأ'}</span>`;
-    };
-
     tbody.innerHTML = this.state.plans.map(p => `
       <tr>
         <td><strong>#${p.planId}</strong></td>
         <td>${p.title}</td>
-        <td>${p.cycleName || 'الدورة الحالية'}</td>
+        <td>${p.cycleName || '-'}</td>
         <td style="font-size: 0.8rem;">${p.startDate} إلى ${p.endDate}</td>
-        <td>${planStatusBadge(p.status)}</td>
-        <td>${progressBadge(p.overallProgress, p.overallProgressLabel)}</td>
+        <td><span class="badge ${p.status === 'Active' ? 'badge-green' : (p.status === 'Draft' ? 'badge-yellow' : 'badge-blue')}">${p.statusLabel || p.status}</span></td>
+        <td><span class="badge badge-gray">${p.overallProgressLabel || p.overallProgress}</span></td>
         <td><span class="badge badge-gray">${p.areasCount}</span></td>
         <td><span class="badge badge-gray">${p.totalActions}</span></td>
         <td>
@@ -1133,37 +1132,33 @@ const App = {
       return;
     }
 
-    const actionStatusBadge = (s) => {
-      if (s === 'Done') return '<span class="badge badge-green">منجز</span>';
-      if (s === 'InProgress') return '<span class="badge badge-blue">جاري التنفيذ</span>';
-      if (s === 'Cancelled') return '<span class="badge badge-gray">ملغي</span>';
-      return '<span class="badge badge-yellow">قيد الانتظار</span>';
-    };
-
-    tbody.innerHTML = actions.map(act => `
-      <tr>
-        <td><strong>#${act.actionId}</strong></td>
-        <td>${act.areaName}</td>
-        <td><strong>${act.title}</strong></td>
-        <td>${act.responsiblePersonDescription}</td>
-        <td style="font-size: 0.8rem;">${act.startDate}</td>
-        <td style="font-size: 0.8rem;">${act.dueDate}</td>
-        <td>${actionStatusBadge(act.status)}</td>
-        <td><span class="badge badge-gray">${act.progressLabel || act.progress}</span></td>
-        <td>
-          ${act.isDelayed 
-            ? '<span class="badge badge-red">⚠️ متأخر</span>' 
-            : '<span class="badge badge-green">في الموعد</span>'}
-        </td>
-        <td>
-          ${this.isEvaluator() ? `
-            <button class="btn btn-sm btn-secondary" onclick="App.quickUpdateAction(${act.actionId})">
-              تحديث الحالة
-            </button>
-          ` : '<span style="font-size: 0.75rem; color: var(--text-muted);">عرض فقط</span>'}
-        </td>
-      </tr>
-    `).join('');
+    tbody.innerHTML = actions.map(act => {
+      const statusCls = act.status === 'Done' ? 'badge-green' : (act.status === 'InProgress' ? 'badge-blue' : (act.status === 'Cancelled' ? 'badge-gray' : 'badge-yellow'));
+      return `
+        <tr>
+          <td><strong>#${act.actionId}</strong></td>
+          <td>${act.areaName}</td>
+          <td><strong>${act.title}</strong></td>
+          <td>${act.responsiblePersonDescription}</td>
+          <td style="font-size: 0.8rem;">${act.startDate}</td>
+          <td style="font-size: 0.8rem;">${act.dueDate}</td>
+          <td><span class="badge ${statusCls}">${act.statusLabel || act.status}</span></td>
+          <td><span class="badge badge-gray">${act.progressLabel || act.progress}</span></td>
+          <td>
+            ${act.isDelayed 
+              ? '<span class="badge badge-red">⚠️ متأخر</span>' 
+              : '<span class="badge badge-green">في الموعد</span>'}
+          </td>
+          <td>
+            ${this.isEvaluator() ? `
+              <button class="btn btn-sm btn-secondary" onclick="App.quickUpdateAction(${act.actionId})">
+                تحديث الحالة
+              </button>
+            ` : '<span style="font-size: 0.75rem; color: var(--text-muted);">عرض فقط</span>'}
+          </td>
+        </tr>
+      `;
+    }).join('');
   },
 
   openAddActionModal() {

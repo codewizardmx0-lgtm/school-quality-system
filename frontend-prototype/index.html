@@ -183,26 +183,11 @@
         <div id="score-modal-alert" class="alert alert-error hidden"></div>
 
         <form id="form-score-indicator" onsubmit="App.handleSaveScore(event)">
-          <!-- اختيار التقدير الرقمي 0-3 -->
+          <!-- اختيار التقدير الرقمي من مستويات التقدير المعرفة (ديناميكي كلياً من الـ API) -->
           <div class="form-group">
-            <label class="form-label">اختيار التقدير الرقمي (0-3):</label>
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 0.5rem;">
-              <label class="card" style="padding: 0.5rem; text-align: center; cursor: pointer; margin-bottom: 0;">
-                <input type="radio" name="indicator-score-opt" value="0" required onchange="App.onScoreOptionChange(0)">
-                <div style="font-weight: 700; margin-top: 0.2rem;">0 - ضعيف</div>
-              </label>
-              <label class="card" style="padding: 0.5rem; text-align: center; cursor: pointer; margin-bottom: 0;">
-                <input type="radio" name="indicator-score-opt" value="1" required onchange="App.onScoreOptionChange(1)">
-                <div style="font-weight: 700; margin-top: 0.2rem;">1 - متوسط</div>
-              </label>
-              <label class="card" style="padding: 0.5rem; text-align: center; cursor: pointer; margin-bottom: 0;">
-                <input type="radio" name="indicator-score-opt" value="2" required onchange="App.onScoreOptionChange(2)">
-                <div style="font-weight: 700; margin-top: 0.2rem;">2 - جيد</div>
-              </label>
-              <label class="card" style="padding: 0.5rem; text-align: center; cursor: pointer; margin-bottom: 0;">
-                <input type="radio" name="indicator-score-opt" value="3" required onchange="App.onScoreOptionChange(3)">
-                <div style="font-weight: 700; margin-top: 0.2rem;">3 - متميز</div>
-              </label>
+            <label class="form-label">اختيار التقدير الرقمي:</label>
+            <div id="score-options-container" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 0.5rem;">
+              <!-- يتم حقن خيارات الدرجات وواصفاتها ديناميكياً بواسطة JavaScript من مصفوفة scoreDescriptors القادمة من الـ API -->
             </div>
             <div id="err-score" class="field-error"></div>
           </div>
@@ -327,7 +312,7 @@
 
         <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem;">
           يحسب النظام ديناميكياً المؤشرات المرصودة بتقدير أقل من التقدير المستهدف 
-          (<strong id="sugg-target-score">3</strong>) لاقتراح مجالات تطوير يمكن تبنيها بضغطة زر.
+          (<strong id="sugg-target-score">-</strong>) لاقتراح مجالات تطوير يمكن تبنيها بضغطة زر.
         </p>
 
         <!-- شريط الإحصائيات -->
@@ -400,13 +385,13 @@
 
             <div class="form-group">
               <label class="form-label" for="plan-start-date">تاريخ البدء:</label>
-              <input type="date" id="plan-start-date" class="form-control" required value="2026-11-01">
+              <input type="date" id="plan-start-date" class="form-control" required>
               <div id="err-plan-start-date" class="field-error"></div>
             </div>
 
             <div class="form-group">
               <label class="form-label" for="plan-end-date">تاريخ النهاية:</label>
-              <input type="date" id="plan-end-date" class="form-control" required value="2027-01-31">
+              <input type="date" id="plan-end-date" class="form-control" required>
               <div id="err-plan-end-date" class="field-error"></div>
             </div>
           </div>
@@ -594,11 +579,11 @@
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
             <div class="form-group">
               <label class="form-label" for="action-start-date">تاريخ البدء:</label>
-              <input type="date" id="action-start-date" class="form-control" required value="2026-11-05">
+              <input type="date" id="action-start-date" class="form-control" required>
             </div>
             <div class="form-group">
               <label class="form-label" for="action-due-date">تاريخ الاستحقاق:</label>
-              <input type="date" id="action-due-date" class="form-control" required value="2026-11-25">
+              <input type="date" id="action-due-date" class="form-control" required>
               <div id="err-action-due-date" class="field-error"></div>
             </div>
           </div>
