@@ -1,0 +1,105 @@
+### ==============================================================================
+### ملف تجربة واجهة برمجة التطبيقات: التقارير والتحليلات وحساب النتائج (REST Client)
+### الشريحة الرابعة - Backend API (Slice 4 - Reports & Analytics)
+### ==============================================================================
+### ملاحظة أمنية: لا تحتوي هذه الوثيقة على أي كلمات مرور.
+### يجب الحصول على الرمز (Token) وتعيينه في متغير {{token}} أدناه للمتابعة.
+### ==============================================================================
+
+@baseUrl = http://127.0.0.1:8000
+@token = your_bearer_token_here
+
+@schoolId = 1
+@assessmentId = 1
+@standardId = 1
+
+### ------------------------------------------------------------------------------
+### 1. لوحة معلومات المدرسة والتقييم (Dashboard)
+### الصلاحية المطلوبة: reports.view
+### ------------------------------------------------------------------------------
+GET {{baseUrl}}/api/v1/schools/{{schoolId}}/assessments/{{assessmentId}}/dashboard HTTP/1.1
+Authorization: Bearer {{token}}
+Accept: application/json
+
+### ------------------------------------------------------------------------------
+### 1.1 لوحة المعلومات عبر المسار البديل (Alias)
+### ------------------------------------------------------------------------------
+GET {{baseUrl}}/api/schools/{{schoolId}}/assessments/{{assessmentId}}/dashboard HTTP/1.1
+Authorization: Bearer {{token}}
+Accept: application/json
+
+### ------------------------------------------------------------------------------
+### 2. النتائج الكلية والتفصيلية للتقييم (Overall Assessment Results)
+### الصلاحية المطلوبة: reports.view
+### ملاحظة: يشترط أن يكون التقييم مكتملاً (Completed أو Submitted أو Approved)
+### ------------------------------------------------------------------------------
+GET {{baseUrl}}/api/v1/schools/{{schoolId}}/assessments/{{assessmentId}}/results HTTP/1.1
+Authorization: Bearer {{token}}
+Accept: application/json
+
+### ------------------------------------------------------------------------------
+### 2.1 النتائج الكلية عبر المسار البديل (Alias)
+### ------------------------------------------------------------------------------
+GET {{baseUrl}}/api/schools/{{schoolId}}/assessments/{{assessmentId}}/results HTTP/1.1
+Authorization: Bearer {{token}}
+Accept: application/json
+
+### ------------------------------------------------------------------------------
+### 3. نتائج معيار رئيسي ومجالاته ومؤشراته (Standard Breakdown Results)
+### الصلاحية المطلوبة: reports.view
+### ------------------------------------------------------------------------------
+GET {{baseUrl}}/api/v1/schools/{{schoolId}}/assessments/{{assessmentId}}/standards/{{standardId}}/results HTTP/1.1
+Authorization: Bearer {{token}}
+Accept: application/json
+
+### ------------------------------------------------------------------------------
+### 3.1 نتائج معيار رئيسي عبر المسار البديل (Alias)
+### ------------------------------------------------------------------------------
+GET {{baseUrl}}/api/schools/{{schoolId}}/assessments/{{assessmentId}}/standards/{{standardId}}/results HTTP/1.1
+Authorization: Bearer {{token}}
+Accept: application/json
+
+### ------------------------------------------------------------------------------
+### 4. ملخص اكتمال الشواهد والأدلة (Evidence Completion Summary)
+### الصلاحية المطلوبة: reports.view
+### ------------------------------------------------------------------------------
+GET {{baseUrl}}/api/v1/schools/{{schoolId}}/assessments/{{assessmentId}}/evidence-summary HTTP/1.1
+Authorization: Bearer {{token}}
+Accept: application/json
+
+### ------------------------------------------------------------------------------
+### 4.1 ملخص الشواهد عبر المسار البديل (Alias)
+### ------------------------------------------------------------------------------
+GET {{baseUrl}}/api/schools/{{schoolId}}/assessments/{{assessmentId}}/evidence-summary HTTP/1.1
+Authorization: Bearer {{token}}
+Accept: application/json
+
+### ------------------------------------------------------------------------------
+### 5. ملخص وحالة خطط التحسين (Improvement Plans Summary & Delays)
+### الصلاحية المطلوبة: improvement.view
+### ------------------------------------------------------------------------------
+GET {{baseUrl}}/api/v1/schools/{{schoolId}}/assessments/{{assessmentId}}/improvement-plans/summary HTTP/1.1
+Authorization: Bearer {{token}}
+Accept: application/json
+
+### ------------------------------------------------------------------------------
+### 5.1 ملخص خطط التحسين عبر المسار البديل (Alias)
+### ------------------------------------------------------------------------------
+GET {{baseUrl}}/api/schools/{{schoolId}}/assessments/{{assessmentId}}/improvement-plans/summary HTTP/1.1
+Authorization: Bearer {{token}}
+Accept: application/json
+
+### ------------------------------------------------------------------------------
+### 6. تصدير تقرير التقييم الكامل بصيغة JSON (Assessment Report JSON Export)
+### الصلاحية المطلوبة: reports.export
+### ------------------------------------------------------------------------------
+GET {{baseUrl}}/api/v1/schools/{{schoolId}}/assessments/{{assessmentId}}/export HTTP/1.1
+Authorization: Bearer {{token}}
+Accept: application/json
+
+### ------------------------------------------------------------------------------
+### 6.1 تصدير التقرير عبر المسار البديل (Alias)
+### ------------------------------------------------------------------------------
+GET {{baseUrl}}/api/schools/{{schoolId}}/assessments/{{assessmentId}}/export HTTP/1.1
+Authorization: Bearer {{token}}
+Accept: application/json

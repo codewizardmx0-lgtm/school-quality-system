@@ -31,12 +31,17 @@ school-quality-system/
 ## الشريحة الرابعة: التقارير والتحليلات وحساب النتائج
 
 ### نقاط النهاية المتاحة (Endpoints)
+- `GET /api/v1/schools/{school}/assessments/{assessment}/dashboard` (المسار البديل: `/api/schools/{school}/assessments/{assessment}/dashboard`)
 - `GET /api/v1/schools/{school}/assessments/{assessment}/results` (المسار البديل: `/api/schools/{school}/assessments/{assessment}/results`)
 - `GET /api/v1/schools/{school}/assessments/{assessment}/standards/{standard}/results`
 - `GET /api/v1/schools/{school}/assessments/{assessment}/evidence-summary`
-- `GET /api/v1/schools/{school}/improvement-plans/summary`
-- `GET /api/v1/schools/{school}/dashboard`
+- `GET /api/v1/schools/{school}/assessments/{assessment}/improvement-plans/summary`
 - `GET /api/v1/schools/{school}/assessments/{assessment}/export`
+
+* التفاصيل الكاملة لنقاط النهاية: [`docs/api/reports_analytics_endpoints.md`](docs/api/reports_analytics_endpoints.md) | ملف التجربة: [`docs/api/reports.http`](docs/api/reports.http)
+* توثيق النموذج الأولي التفاعلي (15 شاشة): [`frontend-prototype/README.md`](frontend-prototype/README.md)
+* سجل حصر الفجوات والقرارات التقنية: [`gaps.md`](gaps.md)
+* وثيقة تصميم النظام (الفصل الرابع): [`docs/chapter4/chapter4_system_design.md`](docs/chapter4/chapter4_system_design.md)
 
 ### القواعد الحسابية والأوزان المعتمدة:
 1. **أوزان المعايير السبعة:**
