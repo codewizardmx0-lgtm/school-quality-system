@@ -99,5 +99,36 @@ Route::prefix('v1')->group(function () {
             Route::patch('/{id}/actions/{actionId}', [\App\Http\Controllers\Api\V1\ImprovementPlanController::class, 'updateAction'])->name('api.v1.improvement-plans.actions.update');
             Route::post('/{id}/review-notes', [\App\Http\Controllers\Api\V1\ImprovementPlanController::class, 'storeReviewNote'])->name('api.v1.improvement-plans.review-notes.store');
         });
+
+        // --------------------------------------------------------------------------
+        // التقارير والتحليلات وحساب النتائج (الشريحة 4 - Reports & Analytics)
+        // --------------------------------------------------------------------------
+        Route::prefix('schools/{school}')->group(function () {
+            Route::get('/dashboard', [\App\Http\Controllers\Api\V1\ReportsAnalyticsController::class, 'dashboard'])
+                ->name('api.v1.schools.dashboard');
+            Route::get('/improvement-plans/summary', [\App\Http\Controllers\Api\V1\ReportsAnalyticsController::class, 'improvementPlansSummary'])
+                ->name('api.v1.schools.improvement-plans.summary');
+            Route::get('/assessments/{assessment}/results', [\App\Http\Controllers\Api\V1\ReportsAnalyticsController::class, 'assessmentResults'])
+                ->name('api.v1.schools.assessments.results');
+            Route::get('/assessments/{assessment}/standards/{standard}/results', [\App\Http\Controllers\Api\V1\ReportsAnalyticsController::class, 'standardResults'])
+                ->name('api.v1.schools.assessments.standards.results');
+            Route::get('/assessments/{assessment}/evidence-summary', [\App\Http\Controllers\Api\V1\ReportsAnalyticsController::class, 'evidenceSummary'])
+                ->name('api.v1.schools.assessments.evidence-summary');
+            Route::get('/assessments/{assessment}/export', [\App\Http\Controllers\Api\V1\ReportsAnalyticsController::class, 'exportAssessment'])
+                ->name('api.v1.schools.assessments.export');
+        });
     });
 });
+
+// مسارات متوافقة كبدائل بدون بادئة v1 (/api/schools/...)
+Route::middleware(['auth:sanctum', 'session.timeout'])->group(function () {
+    Route::prefix('schools/{school}')->group(function () {
+        Route::get('/dashboard', [\App\Http\Controllers\Api\V1\ReportsAnalyticsController::class, 'dashboard'])->name('api.schools.dashboard');
+        Route::get('/improvement-plans/summary', [\App\Http\Controllers\Api\V1\ReportsAnalyticsController::class, 'improvementPlansSummary'])->name('api.schools.improvement-plans.summary');
+        Route::get('/assessments/{assessment}/results', [\App\Http\Controllers\Api\V1\ReportsAnalyticsController::class, 'assessmentResults'])->name('api.schools.assessments.results');
+        Route::get('/assessments/{assessment}/standards/{standard}/results', [\App\Http\Controllers\Api\V1\ReportsAnalyticsController::class, 'standardResults'])->name('api.schools.assessments.standards.results');
+        Route::get('/assessments/{assessment}/evidence-summary', [\App\Http\Controllers\Api\V1\ReportsAnalyticsController::class, 'evidenceSummary'])->name('api.schools.assessments.evidence-summary');
+        Route::get('/assessments/{assessment}/export', [\App\Http\Controllers\Api\V1\ReportsAnalyticsController::class, 'exportAssessment'])->name('api.schools.assessments.export');
+    });
+});
+
