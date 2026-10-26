@@ -2,22 +2,22 @@
 
 **النظام:** نظام إدارة وتقويم الجودة المدرسية (School Quality System)  
 **الحزمة:** `school-eval-api` (Backend)  
-**الشريحة:** الشريحة الثانية (Vertical Slice 2: Self-Evaluation, Scoring & Evidence Management)  
-**تاريخ التوثيق:** 25 أكتوبر 2026  
+**الشريحة:** الشريحة الثانية (Vertical Slice 2: Self-Evaluation, Scoring & Evidence Management — إغلاق الفجوات)  
+**تاريخ التوثيق:** 26 أكتوبر 2026  
 **طبيعة الوثيقة:** توثيق الواقع الفعلي المنفذ في الكود البرمجي (As-Built) بدون افتراضات غير متحققة.
 
 ---
 
 ## 0. بيانات التوليد والبيئة (Metadata & Test Summary)
 
-* **الفرع الحالي (Git Branch):** `feature/evaluation-evidence-api`
-* **آخر التزام (Last Commit):** `0704b4e55af7435b44114dc4a521e4e9e2897c5e اضافة شرح لاين وصل المشروع (2026-10-25 19:42:27 +0300)`
-* **تاريخ التوليد:** 25 أكتوبر 2026
+* **الفرع الحالي (Git Branch):** `feature/slice2-closure`
+* **آخر التزام (Last Commit):** `58b28b9 اغلاق فجوات الشريحة 2 ومزامنة التوثيق والاختبارات`
+* **تاريخ التوليد:** 26 أكتوبر 2026
 * **نتيجة تشغيل الاختبارات (`php artisan test`):**
-  * إجمالي الاختبارات: **65 اختباراً** (نجاح 100%، 0 إخفاق، 0 أخطاء).
-  * إجمالي التأكيدات: **5,757 تأكيداً (Assertions)**.
-  * زمن التنفيذ: نحو 7.2 ثانية.
-  * اختبارات الشريحة الثانية الحصرية (`EvaluationAndEvidenceFeatureTest`): **13 اختباراً ناجحاً و2,747 تأكيداً**.
+  * إجمالي الاختبارات: **72 اختباراً** (نجاح 100%، 0 إخفاق، 0 أخطاء).
+  * إجمالي التأكيدات: **5,790 تأكيداً (Assertions)**.
+  * زمن التنفيذ: نحو 8.2 ثانية.
+  * اختبارات الشريحة الثانية الحصرية (`EvaluationAndEvidenceFeatureTest`): **20 اختباراً ناجحاً و2,780 تأكيداً**.
 
 ---
 
@@ -25,10 +25,10 @@
 
 ### 1.1 الغرض والنطاق المنفذ
 تمكين مقيم المدرسة (`school_evaluator`) من:
-1. استعراض شجرة المعايير والمؤشرات والواصفات للإصدار المعياري الخام أو مدمجة مع نتائج التقييم الذاتي ونسبة الإنجاز لمدرسته.
-2. رصد وتعديل نتائج المؤشرات بأسلوب الإدراج أو التحديث (Upsert) مع التحقق من النطاق المعياري (0-3) والواصفة أو اشتقاقها آلياً.
-3. تدوين الملاحظات التوثيقية المباشرة على المؤشرات المرصودة.
-4. إنشاء الشواهد والأدلة الداعمة لنتائج التقييم ورفع نسخها التاريخية ومرفقاتها مع ضمان نسخة حالية واحدة (`current=true`) وحفظ المرفقات وفق معايير الأمان وUUID.
+1. استعراض شجرة المعايير والمؤشرات والواصفات للإصدار المعياري الخام أو مدمجة مع نتائج التقييم الذاتي ونسبة الإنجاز وأدوات التحقق لمدرسته.
+2. رصد وتعديل نتائج المؤشرات بأسلوب الإدراج أو التحديث (Upsert) مع التحقق من النطاق المعياري (0-3)، والواصفة أو اشتقاقها آلياً، ومزامنة أدوات التحقق المعتمدة للمؤشر (`verificationToolIds`).
+3. تدوين الملاحظات التوثيقية المباشرة على نتائج المؤشرات المرصودة وفق كتالوج 4.4.4 (`POST /api/v1/evaluation-results/{id}/notes`).
+4. إدارة الشواهد والأدلة الداعمة: استعراض شواهد النتيجة، إنشاء شاهد جديد ورفع النسخة الأولى، رفع النسخ التاريخية المتتابعة مع ضمان نسخة حالية واحدة (`current=true`)، وتنزيل المرفق الرقمي بالاسم الأصلي دون كشف مسار التخزين الداخلي.
 5. فرض العزل المؤسسي الصارم بين المدارس (القرار المعماري 9: إرجاع 404 لمنع استكشاف الموارد).
 6. فرض قفل التقييم ومنع التعديل بعد الإرسال النهائي للتقرير إلا في البنود المفتوحة لطلبات الاستكمال (قاعدة العمل BR-SCH-03).
 
@@ -36,21 +36,19 @@
 
 | المسار | الحالة | الدور الوظيفي الفعلي |
 |---|---|---|
-| `routes/api.php` | معدل | تسجيل مسارات الإصدارات المعيارية، شجرة التقييم، رصد المؤشرات، الملاحظات، والشواهد ونسخها تحت بادئة `/api/v1` وميدلوير Sanctum والخمول. |
+| `routes/api.php` | معدل | تسجيل مسارات الإصدارات المعيارية، شجرة التقييم، رصد المؤشرات، ملاحظات النتائج، استعراض الشواهد ورفعها وتنزيل مرفقاتها تحت بادئة `/api/v1`. |
 | `app/Http/Controllers/Api/V1/StandardVersionController.php` | منشأ | متحكم استعراض شجرة الإصدار المعياري الخام بصلاحية `standards.view`. |
-| `app/Http/Controllers/Api/V1/EvaluationController.php` | منشأ / موسّع | متحكم استعراض التقييمات، شجرة التقييم المدمجة بالنتائج والإنجاز، رصد درجات المؤشرات Upsert، وتدوين الملاحظات. |
-| `app/Http/Controllers/Api/V1/EvidenceController.php` | منشأ | متحكم إنشاء الشواهد لنتائج التقييم ورفع النسخ التاريخية والمرفقات وإدارة قيد النسخة الحالية داخل Transaction. |
+| `app/Http/Controllers/Api/V1/EvaluationController.php` | معدل / موسّع | استعراض التقييمات، شجرة التقييم المدمجة بالنتائج وأدوات التحقق، رصد درجات المؤشرات ومزامنة أدوات التحقق Upsert، وتدوين الملاحظات على النتيجة. |
+| `app/Http/Controllers/Api/V1/EvidenceController.php` | معدل / موسّع | إدارة الشواهد: استعراض شواهد النتيجة، إنشاء الشاهد والنسخة والمرفق، رفع النسخ التاريخية، وتنزيل المرفق بالاسم الأصلي دون تسريب مسار التخزين. |
 | `app/Services/EvaluationLockChecker.php` | منشأ | خدمة مركزية مستقلة لفحص حالات قفل التقييم بعد الإرسال وفحص استثناءات بنود طلب الاستكمال (BR-SCH-03). |
 | `app/Policies/EvaluationPolicy.php` | معدل | إضافة فحص قفل التقييم عبر `EvaluationLockChecker` في دالة `update` بجانب العزل وصلاحية `evaluations.edit`. |
 | `app/Policies/EvidencePolicy.php` | منشأ | سياسة ضبط الوصول للشواهد وفرض العزل المؤسسي وصلاحية `evidence.manage`. |
 | `app/Providers/AppServiceProvider.php` | معدل | تسجيل ربط `EvidencePolicy` بنموذج `Evidence` صراحة عبر `Gate::policy`. |
 | `app/Http/Resources/EvaluationResource.php` | منشأ سابقاً | مورد تحويل التقييم ونتائجه وشواهده إلى JSON بنمط camelCase وتواريخ UTC Z. |
-| `phpunit.xml` | معدل | ضبط `SEED_DEFAULT_PASSWORD` بقيمة اختبارية مخصصة لحل تعطل اختبارات Seeder في بيئة `testing`. |
-| `tests/Feature/AuthenticationAndAuthorizationFeatureTest.php` | معدل | قراءة كلمة المرور الافتراضية من متغير البيئة الاختبارية لضمان انسجام بيئة الاختبار. |
-| `tests/Feature/EvaluationAndEvidenceFeatureTest.php` | منشأ | ملف اختبارات ميزة متكامل يضم 13 اختباراً يغطي الشجرة والرصد والقفل والعزل والشواهد والمرفقات. |
-| `docs/api/evaluation_endpoints.md` | منشأ | دليل تفصيلي لنقاط النهاية ونماذج الطلب والاستجابة والأخطاء موجّه لمطور الواجهة الأمامية. |
-| `docs/slices/slice2_evaluation_evidence.md` | منشأ | هذا الملف؛ توثيق الواقع الفعلي المنفذ (As-Built). |
-| `docs/api/evaluation.http` | منشأ | ملف تجربة واستدعاء مباشر بصيغة REST Client لـ VS Code. |
+| `tests/Feature/EvaluationAndEvidenceFeatureTest.php` | معدل / موسّع | 20 اختبار ميزة يغطي الشجرة والرصد وأدوات التحقق والملاحظات والقفل والعزل واستعراض وتنزيل الشواهد. |
+| `docs/api/evaluation_endpoints.md` | معدل | دليل تفصيلي لكافة نقاط النهاية المنفذة ونماذج الطلب والاستجابة موجّه لمطور الواجهة الأمامية. |
+| `docs/slices/slice2_evaluation_evidence.md` | معدل | هذا الملف؛ توثيق الواقع الفعلي المنفذ (As-Built). |
+| `docs/api/evaluation.http` | معدل | ملف تجربة واستدعاء مباشر بصيغة REST Client متوافق مع المسارات المنفذة فعلياً. |
 
 ---
 
@@ -60,10 +58,12 @@
 |---|---|---|---|---|---|
 | `/api/v1/standard-versions/{id}` | `GET` | `standards.view` | `StandardVersionController@show` | لا يوجد مدخلات (معرف مسار) | فحص مباشر: `$user->hasPermission('standards.view')` |
 | `/api/v1/evaluations/{id}/standards-tree` | `GET` | `standards.view` أو `evaluations.view` | `EvaluationController@standardsTree` | لا يوجد مدخلات (معرف مسار) | `EvaluationPolicy@view` + فحص العزل المؤسسي |
-| `/api/v1/evaluations/{evaluationId}/indicators/{indicatorId}/score` | `PUT` | `evaluations.edit` | `EvaluationController@scoreIndicator` | تحقق مدمج (`Validator::make`): `score` (0-3), `scoreDescriptorId`, `textualResult` | `EvaluationPolicy@update` + `EvaluationLockChecker::canModifyIndicator` |
-| `/api/v1/evaluations/{evaluationId}/indicators/{indicatorId}/notes` | `POST` | `evaluations.edit` | `EvaluationController@addNote` | تحقق مدمج (`Validator::make`): `text` (مطلوب، أقصى 2000 حرف) | فحص `evaluations.edit` + فحص العزل + `EvaluationLockChecker` |
-| `/api/v1/evaluation-results/{id}/evidences` | `POST` | `evidence.manage` | `EvidenceController@store` | تحقق مدمج (`Validator::make`): `title`, `description`, `justification`, `file` (10MB, mimes) | فحص `evidence.manage` + فحص العزل + `EvaluationLockChecker` |
-| `/api/v1/evidences/{id}/versions` | `POST` | `evidence.manage` | `EvidenceController@addVersion` | تحقق مدمج (`Validator::make`): `file` (10MB, mimes) | `EvidencePolicy@manage` + فحص العزل + `EvaluationLockChecker` |
+| `/api/v1/evaluations/{evaluationId}/indicators/{indicatorId}/score` | `PUT` | `evaluations.edit` | `EvaluationController@scoreIndicator` | تحقق مدمج: `score` (0-3), `scoreDescriptorId`, `verificationToolIds` (مطابقة لأدوات المؤشر), `textualResult` | `EvaluationPolicy@update` + `EvaluationLockChecker::canModifyIndicator` |
+| `/api/v1/evaluation-results/{id}/notes` | `POST` | `evaluations.edit` | `EvaluationController@addNote` | تحقق مدمج: `text` (مطلوب، أقصى 2000 حرف) | فحص `evaluations.edit` + فحص العزل (404) + `EvaluationLockChecker` |
+| `/api/v1/evaluation-results/{id}/evidences` | `GET` | `evaluations.view` أو `evidence.manage` | `EvidenceController@indexByResult` | لا يوجد مدخلات (معرف مسار) | فحص الصلاحية + فحص العزل المؤسسي (404) |
+| `/api/v1/evaluation-results/{id}/evidences` | `POST` | `evidence.manage` | `EvidenceController@store` | تحقق مدمج: `title`, `description`, `justification`, `file` (10MB, mimes) | فحص `evidence.manage` + فحص العزل (404) + `EvaluationLockChecker` |
+| `/api/v1/evidences/{id}/versions` | `POST` | `evidence.manage` | `EvidenceController@addVersion` | تحقق مدمج: `file` (10MB, mimes) | `EvidencePolicy@manage` + فحص العزل (404) + `EvaluationLockChecker` |
+| `/api/v1/evidences/{id}/versions/{versionId}/download` | `GET` | `evaluations.view` أو `evidence.manage` | `EvidenceController@downloadVersion` | لا يوجد مدخلات (معرفات مسار) | فحص الصلاحية + فحص العزل المؤسسي (404) |
 
 ---
 
@@ -71,284 +71,127 @@
 
 | رمز / اسم القاعدة | الوصف المنفذ | الملف الحاضن | الدالة / السطور المسؤولة |
 |---|---|---|---|
-| **BR-SCH-03** (قفل التقييم بعد الإرسال) | منع التعديل إن كان آخر تسليم بحالة `Submitted` أو `UnderReview` أو `Completed` أو حالة التقييم `Completed`. السماح فقط في `Draft`، أو في `NeedsCompletion` للبنود المفتوحة في `completion_request_items`. | `app/Services/EvaluationLockChecker.php` | `checkEvaluationGeneralStatus()`, `canModifyIndicator()`, `canModifyEvidence()` |
-| **BR-SCH-05** (تقديرات المؤشرات) | التحقق من أن الدرجة عدد صحيح محصور بين 0 و 3 حصراً. | `app/Http/Controllers/Api/V1/EvaluationController.php` | `scoreIndicator()` (سطر التحقق `'score' => ['required', 'integer', 'between:0,3']`) |
+| **BR-SCH-03** (قفل التقييم بعد الإرسال) | منع التعديل ورصد الدرجات وتدوين الملاحظات ورفع الشواهد إن كان آخر تسليم بحالة `Submitted` أو `UnderReview` أو `Completed` أو حالة التقييم `Completed`. السماح فقط في `Draft`، أو في `NeedsCompletion` للبنود المفتوحة في `completion_request_items`. | `app/Services/EvaluationLockChecker.php` | `checkEvaluationGeneralStatus()`, `canModifyIndicator()`, `canModifyEvidence()` |
+| **BR-SCH-05** (تقديرات المؤشرات) | التحقق من أن الدرجة عدد صحيح محصور بين 0 و 3 حصراً ومطابقتها لواصفة معيارية معتمدة. | `app/Http/Controllers/Api/V1/EvaluationController.php` | `scoreIndicator()` (سطر التحقق `'score' => ['required', 'integer', 'between:0,3']`) |
+| **FR-SCH-13** (أدوات التحقق) | قبول مصفوفة `verificationToolIds` والتحقق من أن كل أداة معتمدة للمؤشر في `indicator_verification_methods` وإلا يُرجع 422، ومزامنتها في جدول `evaluation_result_verification_methods`. | `app/Http/Controllers/Api/V1/EvaluationController.php` | `scoreIndicator()` و `standardsTree()` |
 | **قيد النسخة الحالية الواحدة** (`current=true`) | إلغاء النسخ السابقة لتصبح `current = false` وترقية النسخة الجديدة كـ `current = true` برقم إصدار تزايدي داخل Transaction. | `app/Http/Controllers/Api/V1/EvidenceController.php` | `store()` (النسخة 1) و `addVersion()` (النسخ التالية داخل `DB::transaction`) |
-| **العزل المؤسسي** (القرار المعماري 9) | إرجاع `404 Not Found` بدلاً من 403 عند محاولة مستخدم مدرسة الوصول لأي تقييم أو نتيجة أو شاهد يخص مدرسة أخرى لمنع كشف وجود المورد. | `EvaluationController.php`, `EvidenceController.php`, `EvaluationPolicy.php` | `EvaluationController@show`, `standardsTree`, `scoreIndicator`, `addNote`, `EvidenceController@store`, `addVersion` |
-| **قيود المرفقات والملفات** (`conventions §9`) | الحد الأقصى 10MB (10240 KB)، والامتدادات المسموحة: `pdf, png, jpg, jpeg, docx, xlsx`، وتخزين الملف باسم UUID سري مع الاحتفاظ بالاسم الأصلي في `attachments`. | `app/Http/Controllers/Api/V1/EvidenceController.php` | `store()`, `addVersion()` (التحقق وتخزين الملف بـ `storeAs('attachments/evidence', $uuid.$ext, 'local')`) |
-| **اشتقاق الواصفة تلقائياً** | إذا لم يُرسل `scoreDescriptorId`، يُستعلم تلقائياً عن واصفة المؤشر التي تطابق `score_value = score` لنفس المؤشر وإصدار الدورة. وإن أُرسلت يتم التحقق من انتمائها للمؤشر ومطابقتها للدرجة. | `app/Http/Controllers/Api/V1/EvaluationController.php` | `scoreIndicator()` (الأسطر 300-340) |
-| **معادلة نسبة الإنجاز** | $\text{النسبة} = \text{round}\left(\frac{\text{النتائج المرصودة المكتملة}}{\text{المؤشرات الفعالة في إصدار الدورة}} \times 100, 2\right)$ | `app/Http/Controllers/Api/V1/EvaluationController.php` | `standardsTree()` (السطور 190-205) و `scoreIndicator()` (السطور 360-368) |
+| **العزل المؤسسي** (القرار المعماري 9) | إرجاع `404 Not Found` بدلاً من 403 عند محاولة مستخدم مدرسة الوصول لأي تقييم أو نتيجة أو شاهد أو ملاحظة أو تحميل مرفق يخص مدرسة أخرى لمنع كشف وجود المورد. | `EvaluationController.php`, `EvidenceController.php`, `EvaluationPolicy.php` | كافة دوال العرض والرصد والملاحظات والشواهد والتنزيل |
+| **قيود المرفقات وتنزيلها الآمن** (`conventions §9`) | الحد الأقصى 10MB (10240 KB)، والامتدادات المسموحة: `pdf, png, jpg, jpeg, docx, xlsx`، وتخزين الملف باسم UUID سري دون كشف مسار التخزين للعميل، وتنزيله بالاسم الأصلي المحفوظ. | `app/Http/Controllers/Api/V1/EvidenceController.php` | `store()`, `addVersion()`, `downloadVersion()` |
+| **اشتقاق الواصفة تلقائياً** | إذا لم يُرسل `scoreDescriptorId`، يُستعلم تلقائياً عن واصفة المؤشر التي تطابق `score_value = score` لنفس المؤشر وإصدار الدورة. | `app/Http/Controllers/Api/V1/EvaluationController.php` | `scoreIndicator()` |
+| **معادلة نسبة الإنجاز** | $\text{النسبة} = \text{round}\left(\frac{\text{النتائج المرصودة المكتملة}}{\text{المؤشرات الفعالة في إصدار الدورة}} \times 100, 2\right)$ | `app/Http/Controllers/Api/V1/EvaluationController.php` | `standardsTree()` و `scoreIndicator()` |
 
 ---
 
-## 4. مخططات التسلسل والنشاط للمسارات الأربعة (Sequence & Activity Diagrams)
+## 4. مخططات التسلسل والنشاط للمسارات الأساسية (Sequence Diagrams)
 
-### 4.1 مسار استعراض شجرة التقييم المخصصة (`GET /api/v1/evaluations/{id}/standards-tree`)
-
+### 4.1 مسار رصد المؤشر ومزامنة أدوات التحقق مع فحص القفل
 ```mermaid
 sequenceDiagram
   autonumber
   actor User as مقيم المدرسة (school_evaluator)
-  participant MW_Auth as auth:sanctum
-  participant MW_Time as session.timeout
-  participant Ctrl as EvaluationController@standardsTree
-  participant Pol as EvaluationPolicy@view
-  participant DB as MySQL (evaluations, standard_versions, results)
+  participant Route as PUT .../indicators/{id}/score
+  participant Lock as EvaluationLockChecker
+  participant Val as Input Validator
+  participant DB as MySQL (results, ervm)
 
-  User->>MW_Auth: GET /api/v1/evaluations/{id}/standards-tree (Bearer Token)
-  MW_Auth->>MW_Time: مصادقة المستخدم وتحديد الهوية
-  MW_Time->>Ctrl: تمديد مهلة الخمول (30 دقيقة)
-  Ctrl->>Ctrl: فحص صلاحية standards.view أو evaluations.view
-  Ctrl->>DB: الاستعلام عن Evaluation مع الدورة والإصدار المعياري
-  alt التقييم غير موجود أو يخص مدرسة أخرى
-    Ctrl-->>User: 404 Not Found (ملف التقييم غير موجود)
-  else التقييم يخص نفس المدرسة
-    Ctrl->>Pol: فحص سياسة العرض EvaluationPolicy::view
-    Pol-->>Ctrl: مسموح
-    Ctrl->>DB: استعلام شجرة المعايير والمؤشرات والواصفات
-    Ctrl->>DB: استعلام نتائج التقييم الحالية والشواهد المرتبطة
-    Ctrl->>Ctrl: دمج النتائج مع المؤشرات وحساب نسبة الإنجاز
-    Ctrl-->>User: 200 OK (شجرة المعايير + results + meta.completionPercentage)
-  end
-```
-
-```mermaid
-flowchart TD
-  Start([بدء طلب استعراض الشجرة]) --> AuthCheck{هل المستخدم مصادق؟}
-  AuthCheck -- لا --> Res401[401 Unauthorized]
-  AuthCheck -- نعم --> PermCheck{يملك standards.view أو evaluations.view؟}
-  PermCheck -- لا --> Res403[403 Forbidden]
-  PermCheck -- نعم --> EvalExists{هل التقييم موجود؟}
-  EvalExists -- لا --> Res404[404 Not Found]
-  EvalExists -- نعم --> SchoolIso{هل التقييم يخص مدرسة المستخدم؟}
-  SchoolIso -- لا --> Res404
-  SchoolIso -- نعم --> FetchTree[جلب شجرة المعايير وواصفات إصدار الدورة]
-  FetchTree --> FetchResults[جلب نتائج المؤشرات المرصودة والشواهد للمدرسة]
-  FetchResults --> CalcMeta[حساب عدد المؤشرات الفعالة والمنجزة ونسبة الإنجاز]
-  CalcMeta --> Res200[200 OK: إرجاع كائن الشجرة وبيانات meta]
-```
-
----
-
-### 4.2 مسار رصد نتيجة المؤشر Upsert (`PUT /api/v1/evaluations/{evalId}/indicators/{indId}/score`)
-
-```mermaid
-sequenceDiagram
-  autonumber
-  actor User as مقيم المدرسة (school_evaluator)
-  participant MW as Middleware (Sanctum + Timeout)
-  participant Ctrl as EvaluationController@scoreIndicator
-  participant Policy as EvaluationPolicy@update
-  participant LockService as EvaluationLockChecker::canModifyIndicator
-  participant DB as MySQL (indicators, descriptors, evaluation_results)
-
-  User->>MW: PUT /api/v1/evaluations/{eId}/indicators/{iId}/score {score, scoreDescriptorId?, textualResult?}
-  MW->>Ctrl: تمرير الطلب بعد التحقق من الجلسة
-  Ctrl->>Ctrl: فحص صلاحية evaluations.edit
-  Ctrl->>DB: البحث عن Evaluation
-  alt التقييم غير موجود أو مدرسة أخرى
-    Ctrl-->>User: 404 Not Found
-  end
-  Ctrl->>Policy: EvaluationPolicy::update(user, evaluation)
-  Ctrl->>LockService: فحص قفل التقييم (BR-SCH-03)
-  alt التقييم مقفل (Submitted/UnderReview/Completed)
-    LockService-->>Ctrl: غير مسموح (التقييم مقفل بعد الإرسال)
-    Ctrl-->>User: 422 Unprocessable Entity (errors.evaluation)
-  end
-  Ctrl->>Ctrl: التحقق من صحة المدخلات (score between 0,3)
-  Ctrl->>DB: فحص المؤشر (Active ويتبع إصدار دورة التقييم)
-  alt المؤشر غير فعال أو يتبع إصداراً آخر
-    Ctrl-->>User: 422 Unprocessable Entity (errors.indicator)
-  end
-  alt لم تُرسل الواصفة scoreDescriptorId
-    Ctrl->>DB: استعلام واصفة المؤشر المطابقة للتقدير الرقمي
-  else أُرسلت الواصفة
-    Ctrl->>DB: التحقق من انتمائها للمؤشر ومطابقتها للدرجة
-  end
-  Ctrl->>DB: EvaluationResult::updateOrCreate(evaluation_id, indicator_id)
-  Ctrl->>Ctrl: إعادة حساب نسبة الإنجاز التراكمية
-  Ctrl-->>User: 200 OK (نتيجة المؤشر + completionStatus: Completed + meta)
-```
-
-```mermaid
-flowchart TD
-  Start([بدء طلب رصد الدرجة]) --> Auth{مصادق ويملك evaluations.edit؟}
-  Auth -- لا --> Res403[403 Forbidden / 401 Unauthorized]
-  Auth -- نعم --> SchoolCheck{التقييم موجود ويتبع مدرسة المستخدم؟}
-  SchoolCheck -- لا --> Res404[404 Not Found]
-  SchoolCheck -- نعم --> LockCheck{هل التقييم مفتوح وفق BR-SCH-03؟}
-  LockCheck -- مقفل --> Res422Lock[422 Unprocessable Entity: التقييم مقفل]
-  LockCheck -- مفتوح --> ValidateInput{الدرجة صحيحة بين 0 و 3؟}
-  ValidateInput -- لا --> Res422Input[422: خطأ في قيمة الدرجة]
-  ValidateInput -- نعم --> IndCheck{المؤشر فعال ويتبع دورة التقييم؟}
-  IndCheck -- لا --> Res422Ind[422: المؤشر غير فعال أو لإصدار آخر]
-  IndCheck -- نعم --> DescCheck{الواصفة مطابقة أو أمكن اشتقاقها؟}
-  DescCheck -- لا --> Res422Desc[422: عدم تطابق الواصفة المعيارية]
-  DescCheck -- نعم --> UpsertDB[حفظ/تحديث السجل في evaluation_results بحالة Completed]
-  UpsertDB --> RecalcMeta[تحديث نسبة الإنجاز الكلية]
-  RecalcMeta --> Res200[200 OK: إرجاع بيانات النتيجة والإنجاز]
-```
-
----
-
-### 4.3 مسار تدوين الملاحظة التوثيقية (`POST /api/v1/evaluations/{evalId}/indicators/{indId}/notes`)
-
-```mermaid
-sequenceDiagram
-  autonumber
-  actor User as مقيم المدرسة (school_evaluator)
-  participant MW as Middleware (Sanctum + Timeout)
-  participant Ctrl as EvaluationController@addNote
-  participant LockService as EvaluationLockChecker::canModifyIndicator
-  participant DB as MySQL (evaluations, evaluation_results, notes)
-
-  User->>MW: POST /api/v1/evaluations/{eId}/indicators/{iId}/notes {text}
-  MW->>Ctrl: تمرير الطلب المصادق
-  Ctrl->>Ctrl: فحص صلاحية evaluations.edit
-  Ctrl->>DB: فحص وجود ملف التقييم ومطابقة المدرسة
-  alt ملف التقييم غير موجود أو لمدرسة أخرى
-    Ctrl-->>User: 404 Not Found
-  end
-  Ctrl->>LockService: فحص حالة القفل (BR-SCH-03)
+  User->>Route: إرسال الدرجة وأدوات التحقق (score, verificationToolIds)
+  Route->>Lock: فحص حالة التقييم وقفل التعديل (BR-SCH-03)
   alt التقييم مقفل
-    Ctrl-->>User: 422 Unprocessable Entity (errors.evaluation)
+    Lock-->>User: 422 Unprocessable Entity (رسالة سبب القفل)
+  else التقييم مفتوح للتعديل
+    Route->>Val: التحقق من النطاق (0-3) ومطابقة أدوات التحقق للمؤشر
+    alt أداة غير معتمدة للمؤشر
+      Val-->>User: 422 Unprocessable Entity (FR-SCH-13)
+    else المدخلات سليمة
+      Route->>DB: Upsert النتيجة (Completed) ومزامنة أدوات التحقق في ervm
+      DB-->>Route: تم الحفظ واحتساب نسبة الإنجاز
+      Route-->>User: 200 OK (بيانات النتيجة وأدوات التحقق ونسبة الإنجاز)
+    end
   end
-  Ctrl->>DB: التحقق من وجود نتيجة مرصودة مسبقاً للمؤشر
-  alt لا توجد نتيجة مرصودة بعد
-    Ctrl-->>User: 422 Unprocessable Entity (يجب رصد المؤشر أولاً)
-  end
-  Ctrl->>Ctrl: التحقق من صحة نص الملاحظة (required, max 2000)
-  Ctrl->>DB: Note::create(result_id, author_user_id, text)
-  Ctrl-->>User: 201 Created (بيانات الملاحظة المنشأة)
 ```
 
-```mermaid
-flowchart TD
-  Start([بدء طلب إضافة ملاحظة]) --> Auth{مصادق ويملك evaluations.edit؟}
-  Auth -- لا --> Res403[403 Forbidden]
-  Auth -- نعم --> School{التقييم يخص مدرسة المستخدم؟}
-  School -- لا --> Res404[404 Not Found]
-  School -- نعم --> Lock{التقييم مقفل وفق BR-SCH-03؟}
-  Lock -- نعم --> Res422Lock[422: التقييم مقفل]
-  Lock -- لا --> ResultExists{هل النتيجة مرصودة مسبقاً؟}
-  ResultExists -- لا --> Res422Result[422: يجب رصد المؤشر أولاً لربط الملاحظة]
-  ResultExists -- نعم --> ValidText{النص صحيح وأقل من 2000 حرف؟}
-  ValidText -- لا --> Res422Text[422: نص الملاحظة غير صحيح]
-  ValidText -- نعم --> SaveNote[إنشاء السجل في جدول notes]
-  SaveNote --> Res201[201 Created: تم حفظ الملاحظة بنجاح]
-```
-
----
-
-### 4.4 مسار إنشاء الشاهد ورفع النسخ والمرفقات (`POST .../evidences` و `POST .../versions`)
-
+### 4.2 مسار تنزيل المرفق الرقمي للشاهد مع العزل المؤسسي
 ```mermaid
 sequenceDiagram
   autonumber
-  actor User as مقيم المدرسة (school_evaluator)
-  participant MW as Middleware (Sanctum + Timeout)
-  participant Ctrl as EvidenceController (store / addVersion)
-  participant LockService as EvaluationLockChecker
-  participant Storage as القرص المحلي (storage/app/attachments/evidence)
-  participant DB as MySQL (evidences, evidence_versions, attachments)
+  actor User as المستخدم المصادق
+  participant Route as GET /evidences/{id}/versions/{vId}/download
+  participant DB as MySQL (evidences, results, evaluations, attachments)
+  participant Disk as Local Storage
 
-  User->>MW: POST /api/v1/evaluation-results/{rId}/evidences (multipart: title, file)
-  MW->>Ctrl: تمرير الطلب المصادق
-  Ctrl->>Ctrl: فحص صلاحية evidence.manage
-  Ctrl->>DB: جلب النتيجة وملف التقييم المرتبط
-  alt النتيجة غير موجودة أو لمدرسة أخرى
-    Ctrl-->>User: 404 Not Found
+  User->>Route: طلب تنزيل المرفق برقم الشاهد والنسخة
+  Route->>DB: الاستعلام عن الشاهد والمدرسة التابع لها
+  alt مورد غير موجود أو يخص مدرسة أخرى
+    DB-->>User: 404 Not Found (العزل المؤسسي - القرار 9)
+  else مورد تابع لمدرسة المستخدم
+    Route->>DB: الاستعلام عن سجل المرفق (attachment)
+    Route->>Disk: التحقق من وجود الملف المشفر على القرص
+    Disk-->>Route: الملف موجود
+    Route-->>User: 200 OK (Stream Download بالاسم الأصلي ومسار القرص مخفي)
   end
-  Ctrl->>LockService: فحص قفل التقييم للشاهد (BR-SCH-03)
-  alt مقفل
-    Ctrl-->>User: 422 Unprocessable Entity
-  end
-  Ctrl->>Ctrl: فحص نوع الملف (pdf,png,jpg,jpeg,docx,xlsx) والحجم (<=10MB)
-  Ctrl->>Storage: تخزين الملف باسم UUID سري
-  Ctrl->>DB: بدء معاملة قاعدة بيانات (DB::transaction)
-  Note over DB: 1. إنشاء سجل Evidence<br/>2. إنشاء EvidenceVersion (version_no=1, current=true)<br/>3. إنشاء سجل Attachment ببيانات الملف الأصلي وUUID
-  DB-->>Ctrl: تأكيد المعاملة بنجاح (Commit)
-  Ctrl-->>User: 201 Created (الشاهد + النسخة 1 + المرفق)
-
-  opt رفع نسخة جديدة لشاهد قائم (POST /api/v1/evidences/{id}/versions)
-    User->>Ctrl: POST /api/v1/evidences/{id}/versions (multipart: file)
-    Ctrl->>Storage: تخزين الملف الجديد باسم UUID جديد
-    Ctrl->>DB: بدء معاملة DB::transaction
-    Note over DB: 1. تحديث النسخ السابقة (current = false)<br/>2. احتساب رقم النسخة التالي (max+1)<br/>3. إنشاء EvidenceVersion جديد (current = true)<br/>4. إنشاء Attachment جديد للنسخة
-    DB-->>Ctrl: تأكيد المعاملة (Commit)
-    Ctrl-->>User: 201 Created (النسخة الجديدة current=true برقمها التالي)
-  end
-```
-
-```mermaid
-flowchart TD
-  Start([بدء رفع شاهد / نسخة جديدة]) --> Auth{مصادق ويملك evidence.manage؟}
-  Auth -- لا --> Res403[403 Forbidden]
-  Auth -- نعم --> Exists{المورد موجود ويتبع مدرسة المستخدم؟}
-  Exists -- لا --> Res404[404 Not Found]
-  Exists -- نعم --> Lock{التقييم مقفل وفق BR-SCH-03؟}
-  Lock -- نعم --> Res422Lock[422: التقييم مقفل]
-  Lock -- لا --> FileVal{الملف مدعوم وحجمه <= 10MB؟}
-  FileVal -- لا --> Res422File[422: نوع ملف غير مسموح أو حجم زائد]
-  FileVal -- نعم --> DiskSave[حفظ الملف بقرص التخزين باسم UUID عشوائي]
-  DiskSave --> TxBegin[بدء معاملة قاعدة البيانات DB::transaction]
-  TxBegin --> InactivateOld[إلغاء تفعيل أي نسخ سابقة current = false]
-  InactivateOld --> CreateVersion[إنشاء النسخة الجديدة current = true برقم تصاعدي]
-  CreateVersion --> CreateAttach[إنشاء سجل attachments وحفظ المسار واسم الملف الأصلي]
-  CreateAttach --> TxCommit[تأكيد المعاملة Commit]
-  TxCommit --> Res201[201 Created: إرجاع بيانات الشاهد والنسخة والمرفق]
 ```
 
 ---
 
 ## 5. جدول تتبع المتطلبات والمخططات (Traceability Matrix)
 
-| المتطلب / الخطوة | التوصيف | الحالة في الكود | الملف الحاضن والدالة الفعلية |
+| البند المرجعي | التوصيف المرجعي من الوثيقة | الحالة في الكود | الدليل والملف الحاضن والدالة الفعلية |
 |---|---|---|---|
-| **خطوات SD-01** | مخطط تسلسل رصد التقييم والشواهد ومطابقة الواصفات وقفل التعديل | **منفذ** | `EvaluationController@scoreIndicator`, `EvidenceController@store` |
-| **مخطط AD-01** | مخطط نشاط دورة التقييم والرصد ورفع النسخ المتتالية | **منفذ** | `EvaluationController.php` و `EvidenceController.php` |
-| **FR-SCH-10** | رصد نتيجة المؤشر وتسجيل التقدير (0 إلى 3) | **منفذ** | `EvaluationController@scoreIndicator` (سطر التحقق `between:0,3`) |
-| **FR-SCH-11** | اختيار واصفة الأداء ومطابقتها لمستوى التقدير أو اشتقاقها | **منفذ** | `EvaluationController@scoreIndicator` (اشتقاق آلي أو تحقق من التطابق) |
-| **FR-SCH-12** | تدوين الملاحظات التوثيقية والتعليلات على المؤشرات | **منفذ** | `EvaluationController@addNote` (يحفظ في جدول `notes`) |
-| **FR-SCH-13** | إرفاق وتوثيق الشواهد والأدلة الداعمة لنتيجة المؤشر | **منفذ** | `EvidenceController@store` (يحفظ في جدول `evidences`) |
-| **FR-SCH-14** | رفع وثيقة الشاهد الرقمية وتخزينها في المرفقات | **منفذ** | `EvidenceController@store` (يحفظ في `attachments` باسم UUID) |
-| **FR-SCH-14b** | إدارة النسخ التاريخية مع الاحتفاظ بالقديم ونسخة حالية واحدة | **منفذ** | `EvidenceController@addVersion` (تحويل القديم لـ false والجديد لـ true داخل transaction) |
-| **FR-SCH-15** | استعراض الشواهد الداعمة المرتبطة بالنتائج | **منفذ جزئياً** | مدمج في `EvaluationController@standardsTree` و `EvaluationController@show` (كعلاقة `evidences`)، ولا يوجد مسار مستقل `GET /api/v1/evaluation-results/{id}/evidences`. |
-| **BR-SCH-03** | قفل التقييم بعد الإرسال النهائي ومنع التعديل إلا في الاستكمال | **منفذ** | `EvaluationLockChecker.php` بكافة دواله + `EvaluationPolicy@update` |
-| **BR-SCH-05** | حصر قيم التقدير بالقيم الصحيحة (0، 1، 2، 3) | **منفذ** | `EvaluationController@scoreIndicator` (`Validator` + اشتقاق المستوى) |
+| **UC-SCH-01** | استعراض شجرة المعايير والمؤشرات وتفاصيل التقييم المدرسي | **مطابق** | `StandardVersionController@show` (الشجرة الخام)، `EvaluationController@standardsTree` (الشجرة المدمجة)، `EvaluationController@show` (ملف التقييم). |
+| **UC-SCH-02** | تقييم المؤشرات ورصد الدرجات والملاحظات وتحديد أدوات التحقق | **مطابق** | `EvaluationController@scoreIndicator` (الرصد، الواصفة، أدوات التحقق)، `EvaluationController@addNote` (تدوين الملاحظات). |
+| **UC-SCH-03** | إدارة وتوثيق الشواهد والأدلة الداعمة ورفع نسخها وتنزيل مرفقاتها | **مطابق** | `EvidenceController@store` (إنشاء الشاهد والنسخة 1)، `EvidenceController@addVersion` (النسخ المتتالية)، `EvidenceController@indexByResult` (قائمة الشواهد)، `EvidenceController@downloadVersion` (تنزيل المرفق). |
+| **FR-SCH-10** | *نص الوثيقة:* لم يُقرأ (التوصيف: رصد نتيجة المؤشر وتسجيل التقدير الرقمي من 0 إلى 3 وفق معيار BR-SCH-05) | **مطابق** | `EvaluationController@scoreIndicator` (تحقق `between:0,3` وحفظ الدرجة في `evaluation_results.score`). |
+| **FR-SCH-11** | *نص الوثيقة:* لم يُقرأ (التوصيف: اختيار واصفة الأداء ومطابقتها لمستوى التقدير أو اشتقاقها آلياً) | **مطابق** | `EvaluationController@scoreIndicator` (مطابقة الواصفة مع `scoreLevel` أو اشتقاقها آلياً وحفظها في `score_descriptor_id`). |
+| **FR-SCH-12** | *نص الوثيقة:* لم يُقرأ (التوصيف: تدوين الملاحظات التوثيقية والتعليلات على النتيجة المرصودة) | **مطابق** | `EvaluationController@addNote` (يحفظ في جدول `notes` بحد أقصى 2000 حرف مع ربطه بـ `result_id`). *قيد:* لا يوجد عمود للأداة بجدول `notes`. |
+| **FR-SCH-13** | *نص الوثيقة:* لم يُقرأ (التوصيف: تحديد أساليب وأدوات التحقق المستخدمة فعلياً لتقييم المؤشر وإرفاق وتوثيق الشواهد) | **مطابق** | `EvaluationController@scoreIndicator` (مزامنة `verificationToolIds` مع `evaluation_result_verification_methods`) و `EvidenceController@store`. |
+| **FR-SCH-14** | *نص الوثيقة:* لم يُقرأ (التوصيف: رفع وثيقة الشاهد الرقمية وتخزينها في المرفقات وفق معايير الأمان) | **مطابق** | `EvidenceController@store` (حفظ المرفق في `attachments` باسم مشفر UUID وربطه كـ `evidence_version`). |
+| **FR-SCH-14b** | *نص الوثيقة:* لم يُقرأ (التوصيف: إدارة النسخ التاريخية للشاهد مع الاحتفاظ بالقديم وضمان نسخة حالية واحدة) | **مطابق** | `EvidenceController@addVersion` (تحويل النسخ السابقة لـ `false` وإنشاء نسخة تزايدية كـ `current=true` داخل transaction). |
+| **FR-SCH-15** | *نص الوثيقة:* لم يُقرأ (التوصيف: استعراض الشواهد الداعمة المرتبطة بالنتائج وتنزيل مرفقاتها الرقمية) | **مطابق** | `EvidenceController@indexByResult` (`GET .../evidences`) و `EvidenceController@downloadVersion` (`GET .../download`). |
+| **خطوات SD-01: خطوة 1** | استعلام المقوم عن شجرة التقييم ونسبة الإنجاز الأولية | **مطابق** | `EvaluationController@standardsTree` |
+| **خطوات SD-01: خطوة 2** | التحقق من قفل التقييم قبل إجراء أي تعديل (BR-SCH-03) | **مطابق** | `EvaluationLockChecker::canModifyIndicator` |
+| **خطوات SD-01: خطوة 3** | إرسال التقدير الرقمي (0-3) والملاحظة النصية عبر Upsert | **مطابق** | `EvaluationController@scoreIndicator` |
+| **خطوات SD-01: خطوة 4** | مطابقة الواصفة المحددة مع التقدير أو اشتقاقها تلقائياً | **مطابق** | `EvaluationController@scoreIndicator` |
+| **خطوات SD-01: خطوة 5** | التحقق من أدوات التحقق المرسلة ومطابقتها للمؤشر ومزامنتها | **مطابق** | `EvaluationController@scoreIndicator` (جدول `evaluation_result_verification_methods`) |
+| **خطوات SD-01: خطوة 6** | تدوين الملاحظة التوثيقية على النتيجة المرصودة عبر مسار النتيجة | **مطابق** | `EvaluationController@addNote` (`POST /api/v1/evaluation-results/{id}/notes`) |
+| **خطوات SD-01: خطوة 7** | إرسال بيانات الشاهد وملفه المرفق المرتبط بنتيجة مرصودة | **مطابق** | `EvidenceController@store` (`POST /api/v1/evaluation-results/{id}/evidences`) |
+| **خطوات SD-01: خطوة 8** | تخزين المرفق بالاسم المشفر بـ UUID وحفظ بياناته الأصلية في `attachments` | **مطابق** | `EvidenceController@store` |
+| **خطوات SD-01: خطوة 9** | إنشاء أول نسخة تاريخية للشاهد كنسخة حالية (`version_no=1`, `current=true`) | **مطابق** | `EvidenceController@store` |
+| **خطوات SD-01: خطوة 10** | رفع نسخة جديدة للشاهد وتحويل النسخ السابقة لـ `false` داخل `DB::transaction` | **مطابق** | `EvidenceController@addVersion` |
+| **خطوات SD-01: خطوة 11** | استعراض قائمة الشواهد لنتيجة المؤشر مع نسخها ومرفقاتها | **مطابق** | `EvidenceController@indexByResult` |
+| **خطوات SD-01: خطوة 12** | تنزيل المرفق الرقمي بالاسم الأصلي ودون كشف مسار التخزين الداخلي | **مطابق** | `EvidenceController@downloadVersion` |
+| **جدول ERD-03: `evaluations`** | المعرف، الدورة، المدرسة، المنشئ، الحالة. (القيد: عزل 404) | **مطابق** | `app/Models/Evaluation.php` |
+| **جدول ERD-03: `evaluation_results`** | النتيجة، المؤشر، الدورة، التقدير (0-3 NOT NULL)، الواصفة (NOT NULL). (القيد: فريد مركب `evaluation_id, indicator_id`) | **مطابق** | `app/Models/EvaluationResult.php` |
+| **جدول ERD-03: `evidences`** | الشاهد، معرف النتيجة (NOT NULL)، معرف المؤشر (NOT NULL)، العنوان والمبرر | **مطابق** | `app/Models/Evidence.php` |
+| **جدول ERD-03: `evidence_versions`** | النسخة، معرف الشاهد، رقم الإصدار، الحالة الحالية. (القيد: نسخة حالية واحدة فقط `current=true` تدار برمجياً) | **مطابق** | `app/Models/EvidenceVersion.php` |
+| **جدول ERD-03: `attachments`** | المرفق متعدد الأشكال (`target_type`, `target_id`). (القيد: الحجم $\le 10$ ميغابايت، التخزين المحلي بـ UUID) | **مطابق** | `app/Models/Attachment.php` |
+| **جدول ERD-03: `notes`** | الملاحظات التوثيقية. (القيد: الربط بـ `result_id` والحد الأقصى 2000 حرف) | **مطابق** | `app/Models/Note.php` |
+| **جدول ERD-03: `evaluation_result_verification_methods`** | أساليب التحقق المستخدمة فعلياً. (القيد: الربط بنتيجة التقييم وأداة معتمدة للمؤشر) | **مطابق** | `app/Models/EvaluationResultVerificationMethod.php` |
 
 ---
 
-## 6. الفجوات والانحرافات عن التصميم والكتالوج (Gaps & Deviations)
+## 6. الفجوات والقيود والانحرافات عن التصميم والكتالوج (Gaps & Deviations)
 
-### 6.1 ما لم يُنفّذ في الكود الفعلي (Gaps)
+### 6.1 حالة الفجوات السابقة بعد إغلاق الشريحة الثانية
 1. **ربط أدوات التحقق المستخدمة بالنتيجة (`evaluation_result_verification_methods`):**
-   * *الواقع:* جدول `evaluation_result_verification_methods` معرّف في قاعدة البيانات ولديه نموذج Eloquent، ولكن لم تُبنَ في هذه الشريحة أي نقطة نهاية برمجية لربط أدوات وأساليب التحقق بالنتيجة أثناء الرصد.
-2. **الاشتقاق الذكي للتحليل النصي (`textual_result`):**
-   * *الواقع:* الحقل مدعوم في الطلب ويُخزن كما هو كنص حر مرسل من المستخدم، لكن لا توجد معالجة آلية أو توليد تلقائي له في هذه الشريحة.
-3. **مسار مستقل لاستعراض قائمة شواهد النتيجة:**
-   * *الواقع:* لا يوجد مسار منفصل `GET /api/v1/evaluation-results/{id}/evidences`؛ الشواهد تُستعرض فقط مدمجة داخل تفاصيل النتيجة في شجرة التقييم (`standards-tree`) أو تفاصيل التقييم (`EvaluationController@show`).
+   * **أُغلقت بالكامل:** أصبحت نقطة النهاية `PUT .../score` تقبل `verificationToolIds` وتتحقق من مطابقتها لأدوات المؤشر وتزامنها مع جدول الربط، وتنعكس في استجابة الرصد وفي شجرة التقييم.
+2. **مسار مستقل لاستعراض قائمة شواهد النتيجة:**
+   * **أُغلقت بالكامل:** تم توفير مسار `GET /api/v1/evaluation-results/{id}/evidences` لجلب قائمة الشواهد ونسخها ومرفقاتها دون كشف مسار التخزين.
+3. **تنزيل المرفق الرقمي للشاهد:**
+   * **أُغلقت بالكامل:** تم توفير مسار `GET /api/v1/evidences/{id}/versions/{versionId}/download` لتنزيل المرفق بالاسم الأصلي مع حماية المسار المحلي وفرض العزل المؤسسي.
 
-### 6.2 الانحرافات عن كتالوج 4.4.4 المعتمد (Deviations)
-1. **مسار الملاحظات:**
-   * في الكتالوج: `POST /api/v1/evaluation-results/{id}/notes`
-   * في الكود الفعلي: `POST /api/v1/evaluations/{evaluationId}/indicators/{indicatorId}/notes`
-   * *السبب:* تمكين المقيم من تدوين الملاحظة مباشرة من سياق شجرة المؤشرات والتقييم قبل الحاجة لمعرفة `result_id`.
-2. **مسار رصد النتيجة (Upsert):**
+### 6.2 القيود المعمارية الموثقة (Constraints)
+* **قيد ربط الملاحظات بأدوات التحقق:** متطلب FR-SCH-13 يوحي بإمكانية ربط تعليق الملاحظة بأداة التحقق، ولكن جدول `notes` في قاعدة البيانات وقاموس البيانات المعتمد لا يحتوي على عمود لأداة التحقق (`tool_id`)؛ والتزاماً بالقاعدة الصارمة «عدم تعديل بنية الجداول»، تم توثيق ذلك كقيد معماري بحيث ترتبط الملاحظة بنتيجة المؤشر العامة حصراً.
+
+### 6.3 الانحرافات المعتمدة عن كتالوج 4.4.4
+1. **مسار رصد النتيجة (Upsert):**
    * في الكتالوج: `PUT /api/v1/evaluation-results/{id}`
    * في الكود الفعلي: `PUT /api/v1/evaluations/{evaluationId}/indicators/{indicatorId}/score`
-   * *السبب:* المؤشرات غير المرصودة لا تملك سجلاً في `evaluation_results` مسبقاً، لذا تم اعتماد مسار مركب ينشئ النتيجة أو يعدلها مباشرة.
-3. **إضافة مسار شجرة التقييم المدمجة:**
-   * في الكتالوج: كان موجوداً فقط `GET /api/v1/standard-versions` وتفاصيلها.
-   * في الكود الفعلي: أُضيف مسار `GET /api/v1/evaluations/{id}/standards-tree` لجلب الشجرة مدمجة بنتائج ورصد المدرسة.
-
-### 6.3 الافتراضات البرمجية المعتمدة في التنفيذ
-1. **اعتماد حالة `Draft` فقط كحالة فتح للتقييم:**
-   * اعتمد الكود أن أي تسليم بحالة `Submitted` أو `UnderReview` أو `Completed` يعتبر قفلاً تاماً للتقييم ويمنع التعديل.
-2. **تخطي حالة `Pending` في `evaluation_results`:**
-   * قاموس البيانات يعرف حالة `Pending`، لكن الكود الفعلي يكتب دائماً `completion_status = 'Completed'` نظراً لأن حقلي `score` و `score_descriptor_id` هما `NOT NULL` في قاعدة البيانات.
-3. **قفل التقييم في `NeedsCompletion` مبني على بنود المؤشر أو الشاهد:**
-   * افترض الكود فحص وجود بند غير مغلق في `completion_request_items` يستهدف المؤشر أو الشاهد للسماح بالتعديل أثناء الاستكمال.
+   * *السبب:* المؤشرات غير المرصودة لا تملك سجلاً مسبقاً في `evaluation_results`، مما يتطلب مساراً مركباً يربط التقييم بالمؤشر مباشرة.
+2. **مسار شجرة التقييم المدمجة:**
+   * في الكتالوج: كان موجوداً فقط `GET /api/v1/standard-versions/{id}`.
+   * في الكود الفعلي: أُضيف مسار `GET /api/v1/evaluations/{id}/standards-tree` لجلب شجرة الإصدار مدمجة برصد المدرسة وأدوات التحقق ونسبة الإنجاز.
+3. **مسار تنزيل المرفق الرقمي:**
+   * إضافة أمنية ضرورية: `GET /api/v1/evidences/{id}/versions/{versionId}/download`.
 
 ---
 
@@ -359,57 +202,27 @@ flowchart TD
 * **مقيم مدرسة بلقيس:** `quality_belqees` (`school_id: 1`)
 * **مقيم مدرسة الفاروق:** `quality_farouq` (`school_id: 2`)
 * **مدير مدرسة بلقيس:** `principal_belqees` (`school_id: 1`)
-* **مشرف وزاري:** `supervisor_ministry` (`ministry_id: 1`)
+* **مسؤول النظام العام:** `admin` (`system_admin`)
 
-### 7.2 خطوات سيناريو التحقق العملي والمتوقع
-1. **الخطوة 1: تسجيل دخول مقيم بلقيس والحصول على التوكن:**
-   * استدعاء `POST /api/v1/auth/login` بالحساب `quality_belqees`.
-   * المتوقع: استجابة `200 OK` واستخراج `data.token`.
-2. **الخطوة 2: استعراض شجرة التقييم لمدرسة بلقيس:**
-   * استدعاء `GET /api/v1/evaluations/1/standards-tree`.
-   * المتوقع: استجابة `200 OK`، إرجاع 7 معايير رئيسية تضم 109 مؤشرات فعالة، ونسبة الإنجاز الأولية في `meta.completionPercentage`.
-3. **الخطوة 3: فحص العزل المؤسسي (القرار 9):**
-   * تسجيل دخول مقيم الفاروق `quality_farouq` واستدعاء `GET /api/v1/evaluations/1/standards-tree` (طلب تقييم بلقيس).
-   * المتوقع: استجابة `404 Not Found` برسالة "ملف التقييم المطلوب غير موجود".
-4. **الخطوة 4: رصد درجة مؤشر (Upsert) بحساب مقيم بلقيس:**
-   * استدعاء `PUT /api/v1/evaluations/1/indicators/1/score` مع جسم الطلب:
-     `{"score": 3, "textualResult": "متحقق بكفاءة عالية"}`
-   * المتوقع: استجابة `200 OK`، واشتقاق الواصفة المعيارية رقم 4 آلياً، و`completionStatus: Completed`، وارتفاع نسبة الإنجاز في `meta`.
-5. **الخطوة 5: إضافة ملاحظة للمؤشر المرصود:**
-   * استدعاء `POST /api/v1/evaluations/1/indicators/1/notes` مع نص ملاحظة.
-   * المتوقع: استجابة `201 Created` وربط الملاحظة بالنتيجة ورقم المقيم.
-6. **الخطوة 6: رفع شاهد جديد لنتيجة المؤشر (v1 ومرفق):**
-   * استدعاء `POST /api/v1/evaluation-results/{resultId}/evidences` بنمط `multipart/form-data` مع ملف PDF.
-   * المتوقع: استجابة `201 Created`، إنشاء النسخة الأولى `versionNo: 1` و `current: true`، وتخزين المرفق باسم UUID.
-7. **الخطوة 7: رفع نسخة ثانية لنفس الشاهد (v2):**
-   * استدعاء `POST /api/v1/evidences/{evidenceId}/versions` مع ملف PDF جديد.
-   * المتوقع: استجابة `201 Created`، إنشاء `versionNo: 2` و `current: true`، وتحول النسخة الأولى آلياً إلى `current: false`.
-8. **الخطوة 8: فحص قفل التقييم (BR-SCH-03):**
-   * محاكاة قفل التقييم أو تعديل حالة آخر تسليم إلى `Submitted`.
-   * محاولة تعديل درجة المؤشر مجدداً عبر `PUT /api/v1/evaluations/1/indicators/1/score`.
-   * المتوقع: استجابة `422 Unprocessable Entity` مع رسالة قفل صريحة في `errors.evaluation`.
+### 7.2 خطوات سيناريو التحقق العملي
+1. **تسجيل دخول مقيم بلقيس:** `POST /api/v1/auth/login` بالحساب `quality_belqees` للحصول على الرمز.
+2. **استعراض شجرة التقييم المدمجة:** `GET /api/v1/evaluations/1/standards-tree` والتأكد من ظهور المعايير والمؤشرات وأدوات التحقق ونسبة الإنجاز.
+3. **فحص العزل المؤسسي (القرار 9):** تسجيل دخول مقيم الفاروق `quality_farouq` وطلب شجرة تقييم بلقيس -> النتيجة المتوقعة: `404 Not Found`.
+4. **رصد درجة مؤشر مع أدوات التحقق:** `PUT /api/v1/evaluations/1/indicators/1/score` مع `score: 3` و `verificationToolIds: [2, 4]` -> النتيجة المتوقعة: `200 OK`، ومزامنة أدوات التحقق واشتقاق الواصفة وارتفاع نسبة الإنجاز.
+5. **تدوين ملاحظة توثيقية:** `POST /api/v1/evaluation-results/{resultId}/notes` مع نص الملاحظة -> النتيجة المتوقعة: `201 Created`.
+6. **رفع شاهد جديد (v1 ومرفق):** `POST /api/v1/evaluation-results/{resultId}/evidences` بنمط `multipart/form-data` مع ملف PDF -> النتيجة المتوقعة: `201 Created`، وظهور المرفق باسمه الأصلي ودون كشف مسار التخزين.
+7. **استعراض شواهد النتيجة:** `GET /api/v1/evaluation-results/{resultId}/evidences` -> النتيجة المتوقعة: `200 OK` واسترجاع الشاهد ونسخه ومرفقاته.
+8. **تنزيل المرفق الرقمي:** `GET /api/v1/evidences/{evidenceId}/versions/{versionId}/download` -> النتيجة المتوقعة: `200 OK` مع ترويسة تنزيل المرفق باسمه الأصلي وتدفق الملف الثنائي.
+9. **رفع نسخة جديدة للشاهد (v2):** `POST /api/v1/evidences/{evidenceId}/versions` -> النتيجة المتوقعة: `201 Created`، النسخة 2 تصبح `current=true` والنسخة 1 تتحول إلى `current=false`.
+10. **فحص قفل التقييم (BR-SCH-03):** محاكاة تسليم التقرير بحالة `Submitted` ومحاولة الرصد أو تدوين الملاحظات -> النتيجة المتوقعة: `422 Unprocessable Entity` مع رسالة القفل الصريحة.
 
-### 7.3 أوامر فحص قاعدة البيانات للتحقق اليدوي (SQL Queries)
+---
 
-```sql
--- 1. فحص النتيجة المرصودة للمؤشر والواصفة وحالة الاكتمال
-SELECT result_id, evaluation_id, indicator_id, score, score_descriptor_id, completion_status, evaluator_user_id, updated_at
-FROM evaluation_results
-WHERE evaluation_id = 1 AND indicator_id = 1;
+## 8. الدَّين التقني (Technical Debt)
 
--- 2. التحقق من النسخ التاريخية وضمان نسخة واحدة فقط current = 1
-SELECT evidence_version_id, evidence_id, version_no, current, created_at
-FROM evidence_versions
-WHERE evidence_id = (SELECT evidence_id FROM evidences WHERE result_id = 1 LIMIT 1)
-ORDER BY version_no ASC;
-
--- 3. التحقق من ربط المرفق متعدد الأشكال بالنسخة وباسم UUID
-SELECT attachment_id, target_type, target_id, file_name, file_type, file_size, storage_uri
-FROM attachments
-WHERE target_type = 'evidence_version';
-
--- 4. التحقق من الملاحظات التوثيقية المرتبطة بالنتيجة
-SELECT note_id, result_id, author_user_id, text, created_at
-FROM notes
-WHERE result_id = 1;
-```
+1. **التحقق من صحة المدخلات داخل المتحكمات (Inline Validator in Controllers):**
+   * تم استخدام `Validator::make` مباشرة داخل دوال `EvaluationController` و `EvidenceController` بدلاً من استخراجها إلى Form Request Classes مخصصة (مثل `ScoreIndicatorRequest`, `StoreEvidenceRequest`, `StoreNoteRequest`).
+   * *الإجراء المستقبلي المقترح:* إعادة صياغة التحقق عبر Form Requests منفصلة لتحسين قابلية القراءة وإعادة الاستخدام.
+2. **منطق المعاملات وإدارة التخزين في EvidenceController (Transaction & Storage Logic in Controller):**
+   * إدارة المعاملة `DB::transaction` لحفظ الشاهد والنسخة والمرفق وتحديث رايات `current` وتخزين الملفات على القرص تقع بالكامل داخل `EvidenceController` بدلاً من نقلها إلى خدمة تطبيقية مخصصة (مثل `EvidenceService`).
+   * *الإجراء المستقبلي المقترح:* نقل منطق المعاملة والتخزين إلى Service Layer عند الانتقال للشرائح المتقدمة.

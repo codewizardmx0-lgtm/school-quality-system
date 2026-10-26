@@ -60,23 +60,25 @@ Route::prefix('v1')->group(function () {
             Route::get('/{id}', [\App\Http\Controllers\Api\V1\StandardVersionController::class, 'show'])->name('api.v1.standard-versions.show');
         });
 
-        // عمليات التقييم المدرسي مع العزل المؤسسي ورصد الدرجات والملاحظات (Evaluations)
+        // عمليات التقييم المدرسي مع العزل المؤسسي ورصد الدرجات (Evaluations)
         Route::prefix('evaluations')->group(function () {
             Route::get('/', [\App\Http\Controllers\Api\V1\EvaluationController::class, 'index'])->name('api.v1.evaluations.index');
             Route::get('/{id}', [\App\Http\Controllers\Api\V1\EvaluationController::class, 'show'])->name('api.v1.evaluations.show');
             Route::get('/{id}/standards-tree', [\App\Http\Controllers\Api\V1\EvaluationController::class, 'standardsTree'])->name('api.v1.evaluations.standards-tree');
             Route::put('/{evaluationId}/indicators/{indicatorId}/score', [\App\Http\Controllers\Api\V1\EvaluationController::class, 'scoreIndicator'])->name('api.v1.evaluations.indicators.score');
-            Route::post('/{evaluationId}/indicators/{indicatorId}/notes', [\App\Http\Controllers\Api\V1\EvaluationController::class, 'addNote'])->name('api.v1.evaluations.indicators.notes');
         });
 
-        // الشواهد والأدلة الداعمة لنتائج التقييم (Evidences & Results)
+        // نتائج التقييم: الملاحظات وإدارة الشواهد (Evaluation Results)
         Route::prefix('evaluation-results')->group(function () {
+            Route::post('/{id}/notes', [\App\Http\Controllers\Api\V1\EvaluationController::class, 'addNote'])->name('api.v1.evaluation-results.notes.store');
+            Route::get('/{id}/evidences', [\App\Http\Controllers\Api\V1\EvidenceController::class, 'indexByResult'])->name('api.v1.evaluation-results.evidences.index');
             Route::post('/{id}/evidences', [\App\Http\Controllers\Api\V1\EvidenceController::class, 'store'])->name('api.v1.evaluation-results.evidences.store');
         });
 
-        // النسخ التاريخية للشواهد ومرفقاتها (Evidence Versions)
+        // النسخ التاريخية للشواهد وتنزيل المرفقات الرقمية (Evidence Versions & Download)
         Route::prefix('evidences')->group(function () {
             Route::post('/{id}/versions', [\App\Http\Controllers\Api\V1\EvidenceController::class, 'addVersion'])->name('api.v1.evidences.versions.store');
+            Route::get('/{id}/versions/{versionId}/download', [\App\Http\Controllers\Api\V1\EvidenceController::class, 'downloadVersion'])->name('api.v1.evidences.versions.download');
         });
     });
 });

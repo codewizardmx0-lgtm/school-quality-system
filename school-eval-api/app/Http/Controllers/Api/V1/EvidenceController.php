@@ -12,6 +12,7 @@ use App\Services\EvaluationLockChecker;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 
@@ -26,6 +27,80 @@ use Illuminate\Support\Str;
  */
 class EvidenceController extends Controller
 {
+    /**
+     * استعراض قائمة شواهد نتيجة مؤشر محدد مع نسخها ومرفقاتها دون كشف مسار التخزين.
+     *
+     * GET /api/v1/evaluation-results/{id}/evidences
+     * الصلاحية: evaluations.view أو evidence.manage
+     */
+    public function indexByResult(Request $request, int $id): JsonResponse
+    {
+        $user = $request->user();
+
+        if (!$user->hasPermission('evaluations.view') && !$user->hasPermission('evidence.manage')) {
+            return ApiResponse::forbidden('غير مصرح لك باستعراض الشواهد.');
+        }
+
+        $result = EvaluationResult::with('evaluation')->find($id);
+        if (!$result || !$result->evaluation) {
+            return ApiResponse::notFound('نتيجة المؤشر المطلوبة غير موجودة.');
+        }
+
+        $evaluation = $result->evaluation;
+
+        // عزل المدارس (القرار المعماري 9)
+        if ($user->user_type === 'school' && (int) $user->school_id !== (int) $evaluation->school_id) {
+            return ApiResponse::notFound('نتيجة المؤشر المطلوبة غير موجودة.');
+        }
+
+        if ($user->cannot('view', $evaluation)) {
+            return ApiResponse::forbidden('غير مصرح لك باستعراض شواهد هذا التقييم.');
+        }
+
+        $evidences = Evidence::where('result_id', $result->result_id)
+            ->with([
+                'versions' => function ($q) {
+                    $q->orderBy('version_no', 'desc');
+                },
+                'versions.attachments',
+            ])
+            ->orderBy('evidence_id', 'desc')
+            ->get();
+
+        $data = $evidences->map(function ($evidence) {
+            return [
+                'evidenceId'    => $evidence->evidence_id,
+                'resultId'      => $evidence->result_id,
+                'indicatorId'   => $evidence->indicator_id,
+                'title'         => $evidence->title,
+                'description'   => $evidence->description,
+                'justification' => $evidence->justification,
+                'createdAt'     => $evidence->created_at?->toIso8601ZuluString(),
+                'versions'      => $evidence->versions->map(function ($version) {
+                    return [
+                        'evidenceVersionId' => $version->evidence_version_id,
+                        'versionNo'         => $version->version_no,
+                        'current'           => (bool) $version->current,
+                        'createdAt'         => $version->created_at?->toIso8601ZuluString(),
+                        'attachments'       => $version->attachments->map(function ($att) {
+                            return [
+                                'attachmentId' => $att->attachment_id,
+                                'fileName'     => $att->file_name,
+                                'fileType'     => $att->file_type,
+                                'fileSize'     => (int) $att->file_size,
+                            ];
+                        })->values(),
+                    ];
+                })->values(),
+            ];
+        });
+
+        return ApiResponse::success(
+            data: $data,
+            message: null
+        );
+    }
+
     /**
      * إنشاء شاهد جديد لنتيجة مؤشر محدد مع أول نسخة ومرفق له.
      *
@@ -143,7 +218,6 @@ class EvidenceController extends Controller
                         'fileName'     => $evidenceRecord['attachment']->file_name,
                         'fileType'     => $evidenceRecord['attachment']->file_type,
                         'fileSize'     => (int) $evidenceRecord['attachment']->file_size,
-                        'storageUri'   => $evidenceRecord['attachment']->storage_uri,
                     ],
                 ],
             ],
@@ -255,11 +329,66 @@ class EvidenceController extends Controller
                     'fileName'     => $resultRecord['attachment']->file_name,
                     'fileType'     => $resultRecord['attachment']->file_type,
                     'fileSize'     => (int) $resultRecord['attachment']->file_size,
-                    'storageUri'   => $resultRecord['attachment']->storage_uri,
                 ],
             ],
             message: 'تم رفع النسخة الجديدة للشاهد بنجاح.',
             status: 201
+        );
+    }
+
+    /**
+     * تنزيل المرفق الرقمي لنسخة شاهد محددة بالاسم الأصلي دون كشف مسار التخزين.
+     *
+     * GET /api/v1/evidences/{id}/versions/{versionId}/download
+     * الصلاحية: evaluations.view أو evidence.manage
+     */
+    public function downloadVersion(Request $request, int $id, int $versionId): mixed
+    {
+        $user = $request->user();
+
+        if (!$user->hasPermission('evaluations.view') && !$user->hasPermission('evidence.manage')) {
+            return ApiResponse::forbidden('غير مصرح لك بتحميل المرفق.');
+        }
+
+        $evidence = Evidence::with('result.evaluation')->find($id);
+        if (!$evidence || !$evidence->result || !$evidence->result->evaluation) {
+            return ApiResponse::notFound('الشاهد المطلوب غير موجود.');
+        }
+
+        $evaluation = $evidence->result->evaluation;
+
+        // عزل المدارس (القرار المعماري 9)
+        if ($user->user_type === 'school' && (int) $user->school_id !== (int) $evaluation->school_id) {
+            return ApiResponse::notFound('الشاهد المطلوب غير موجود.');
+        }
+
+        if ($user->cannot('view', $evaluation)) {
+            return ApiResponse::forbidden('غير مصرح لك باستعراض شواهد هذا التقييم.');
+        }
+
+        $version = EvidenceVersion::where('evidence_id', $evidence->evidence_id)
+            ->where('evidence_version_id', $versionId)
+            ->first();
+
+        if (!$version) {
+            return ApiResponse::notFound('نسخة الشاهد المطلوبة غير موجودة.');
+        }
+
+        $attachment = Attachment::where('target_type', 'evidence_version')
+            ->where('target_id', $version->evidence_version_id)
+            ->first();
+
+        if (!$attachment) {
+            return ApiResponse::notFound('المرفق المطلوب غير موجود.');
+        }
+
+        if (!Storage::disk('local')->exists($attachment->storage_uri)) {
+            return ApiResponse::notFound('ملف المرفق غير موجود على الخادم.');
+        }
+
+        return Storage::disk('local')->download(
+            $attachment->storage_uri,
+            $attachment->file_name
         );
     }
 }

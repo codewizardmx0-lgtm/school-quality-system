@@ -1,6 +1,6 @@
 ### ==============================================================================
 ### ملف تجربة واجهة برمجة التطبيقات: التقييم الذاتي والشواهد (REST Client)
-### الشريحة الثانية - Backend API
+### الشريحة الثانية - Backend API (محدث ومغلق الفجوات)
 ### ==============================================================================
 ### ملاحظة أمنية: لا تحتوي هذه الوثيقة على أي كلمات مرور.
 ### يجب الحصول على الرمز (Token) وتعيينه في متغير {{token}} أدناه للمتابعة.
@@ -14,6 +14,7 @@
 @indicatorId = 1
 @resultId = 1
 @evidenceId = 1
+@versionId = 1
 
 ### ------------------------------------------------------------------------------
 ### 1. استعراض شجرة الإصدار المعياري الخام (standards.view)
@@ -23,14 +24,14 @@ Authorization: Bearer {{token}}
 Accept: application/json
 
 ### ------------------------------------------------------------------------------
-### 2. استعراض شجرة التقييم المخصصة للمدرسة مع نتائج الرصد ونسبة الإنجاز (standards.view / evaluations.view)
+### 2. استعراض شجرة التقييم مع نتائج الرصد وأدوات التحقق ونسبة الإنجاز (standards.view / evaluations.view)
 ### ------------------------------------------------------------------------------
 GET {{baseUrl}}/api/v1/evaluations/{{evaluationId}}/standards-tree HTTP/1.1
 Authorization: Bearer {{token}}
 Accept: application/json
 
 ### ------------------------------------------------------------------------------
-### 3. رصد نتيجة مؤشر (Upsert) مع تحديد الواصفة يدوياً (evaluations.edit)
+### 3. رصد نتيجة مؤشر (Upsert) مع تحديد الواصفة وأدوات التحقق (evaluations.edit)
 ### ------------------------------------------------------------------------------
 PUT {{baseUrl}}/api/v1/evaluations/{{evaluationId}}/indicators/{{indicatorId}}/score HTTP/1.1
 Authorization: Bearer {{token}}
@@ -40,6 +41,7 @@ Content-Type: application/json
 {
   "score": 3,
   "scoreDescriptorId": 4,
+  "verificationToolIds": [2, 4],
   "textualResult": "المدرسة تطبق وتوثق هذا المؤشر بشكل كامل وفق المتطلبات."
 }
 
@@ -53,13 +55,14 @@ Content-Type: application/json
 
 {
   "score": 2,
+  "verificationToolIds": [2],
   "textualResult": "الأداء متحقق بدرجة متوسطة ويحتاج إلى خطة متابعة إجرائية."
 }
 
 ### ------------------------------------------------------------------------------
-### 5. تدوين ملاحظة توثيقية على مؤشر مرصود مسبقاً (evaluations.edit)
+### 5. تدوين ملاحظة توثيقية على نتيجة المؤشر المرصودة مسبقاً (evaluations.edit)
 ### ------------------------------------------------------------------------------
-POST {{baseUrl}}/api/v1/evaluations/{{evaluationId}}/indicators/{{indicatorId}}/notes HTTP/1.1
+POST {{baseUrl}}/api/v1/evaluation-results/{{resultId}}/notes HTTP/1.1
 Authorization: Bearer {{token}}
 Accept: application/json
 Content-Type: application/json
@@ -69,7 +72,14 @@ Content-Type: application/json
 }
 
 ### ------------------------------------------------------------------------------
-### 6. إنشاء شاهد جديد لنتيجة مؤشر ورفع النسخة الأولى v1 والمرفق (evidence.manage)
+### 6. استعراض قائمة شواهد نتيجة المؤشر مع نسخها ومرفقاتها (evaluations.view / evidence.manage)
+### ------------------------------------------------------------------------------
+GET {{baseUrl}}/api/v1/evaluation-results/{{resultId}}/evidences HTTP/1.1
+Authorization: Bearer {{token}}
+Accept: application/json
+
+### ------------------------------------------------------------------------------
+### 7. إنشاء شاهد جديد لنتيجة مؤشر ورفع النسخة الأولى v1 والمرفق (evidence.manage)
 ### ملاحظة: غيّر مسار الملف @file_path إلى مسار ملف تجريبي صالح على جهازك
 ### ------------------------------------------------------------------------------
 POST {{baseUrl}}/api/v1/evaluation-results/{{resultId}}/evidences HTTP/1.1
@@ -97,7 +107,7 @@ Content-Type: application/pdf
 ------WebKitFormBoundary7MA4YWxkTrZu0gW--
 
 ### ------------------------------------------------------------------------------
-### 7. رفع نسخة جديدة v2 لشاهد قائم مع ضمان نسخة current=true واحدة فقط (evidence.manage)
+### 8. رفع نسخة جديدة v2 لشاهد قائم مع ضمان نسخة current=true واحدة فقط (evidence.manage)
 ### ------------------------------------------------------------------------------
 POST {{baseUrl}}/api/v1/evidences/{{evidenceId}}/versions HTTP/1.1
 Authorization: Bearer {{token}}
@@ -112,20 +122,7 @@ Content-Type: application/pdf
 ------WebKitFormBoundary7MA4YWxkTrZu0gW--
 
 ### ------------------------------------------------------------------------------
-### 8. اختبار فحص العزل المؤسسي: طلب شجرة تقييم مدرسة أخرى (المتوقع: 404 Not Found)
+### 9. تنزيل المرفق الرقمي لنسخة شاهد محددة (evaluations.view / evidence.manage)
 ### ------------------------------------------------------------------------------
-GET {{baseUrl}}/api/v1/evaluations/99999/standards-tree HTTP/1.1
+GET {{baseUrl}}/api/v1/evidences/{{evidenceId}}/versions/{{versionId}}/download HTTP/1.1
 Authorization: Bearer {{token}}
-Accept: application/json
-
-### ------------------------------------------------------------------------------
-### 9. اختبار فحص التحقق: محاولة رصد درجة خارج النطاق 0-3 (المتوقع: 422 Unprocessable Entity)
-### ------------------------------------------------------------------------------
-PUT {{baseUrl}}/api/v1/evaluations/{{evaluationId}}/indicators/{{indicatorId}}/score HTTP/1.1
-Authorization: Bearer {{token}}
-Accept: application/json
-Content-Type: application/json
-
-{
-  "score": 5
-}
