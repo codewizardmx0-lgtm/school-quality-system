@@ -636,3 +636,196 @@ tr:hover {
   margin: 0.75rem 1rem;
   background: #ffffff;
 }
+
+
+/* ========================================================================= */
+/* الشريحة 4: أنماط التقارير والتحليلات وحساب النتائج (Slice 4 Styles)       */
+/* ========================================================================= */
+
+/* KPI Grid & Cards */
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.kpi-card {
+  background: #ffffff;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1.15rem;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.02);
+}
+
+.kpi-card.kpi-primary {
+  border-right: 4px solid var(--primary);
+}
+
+.kpi-card.kpi-success {
+  border-right: 4px solid #16a34a;
+}
+
+.kpi-card.kpi-warning {
+  border-right: 4px solid #ca8a04;
+}
+
+.kpi-card.kpi-danger {
+  border-right: 4px solid #dc2626;
+}
+
+.kpi-label {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  font-weight: 600;
+  margin-bottom: 0.35rem;
+}
+
+.kpi-value {
+  font-size: 1.65rem;
+  font-weight: 800;
+  color: var(--text-main);
+  line-height: 1.2;
+}
+
+.kpi-sub {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  margin-top: 0.4rem;
+}
+
+/* Standards Cards Grid */
+.standards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.standard-card-item {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+
+.standard-card-item:hover {
+  box-shadow: 0 4px 6px -1px rgba(0,0,0,0.06);
+}
+
+.std-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 0.6rem;
+}
+
+.std-code-badge {
+  font-weight: 700;
+  font-size: 0.75rem;
+  background: #e2e8f0;
+  color: #334155;
+  padding: 0.15rem 0.45rem;
+  border-radius: 4px;
+}
+
+.std-weight-tag {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.progress-container {
+  background: #e2e8f0;
+  height: 8px;
+  border-radius: 9999px;
+  overflow: hidden;
+  margin: 0.5rem 0;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  border-radius: 9999px;
+  transition: width 0.4s ease-in-out;
+}
+
+.bg-green { background-color: #16a34a; }
+.bg-blue { background-color: #0284c7; }
+.bg-yellow { background-color: #ca8a04; }
+.bg-red { background-color: #dc2626; }
+
+/* JSON Code Viewer */
+.json-viewer-container {
+  background: #0f172a;
+  color: #f8fafc;
+  border-radius: 8px;
+  padding: 1rem;
+  font-family: Consolas, Monaco, "Courier New", monospace;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  direction: ltr;
+  text-align: left;
+  max-height: 480px;
+  overflow: auto;
+  border: 1px solid #334155;
+}
+
+/* Quick Navigation Bar */
+.quick-nav-bar {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.25rem;
+}
+
+.nav-pill-btn {
+  background: #fff;
+  border: 1px solid var(--border);
+  padding: 0.4rem 0.8rem;
+  border-radius: 6px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #334155;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  transition: all 0.15s;
+}
+
+.nav-pill-btn:hover {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+}
+
+.nav-pill-btn.active {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
+}
+
+/* Strengths and Opportunities Cards */
+.strength-card {
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 6px;
+  padding: 0.65rem 0.85rem;
+  font-size: 0.85rem;
+  color: #166534;
+}
+
+.opportunity-card {
+  background: #fffbeb;
+  border: 1px solid #fef08a;
+  border-radius: 6px;
+  padding: 0.65rem 0.85rem;
+  font-size: 0.85rem;
+  color: #854d0e;
+}

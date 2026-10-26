@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>نموذج الواجهات التفاعلي — نظام الجودة المدرسية (الشرائح 1-3)</title>
+  <title>نموذج الواجهات التفاعلي — نظام الجودة المدرسية (الشرائح 1-4)</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -13,7 +13,7 @@
     <div class="header-container">
       <div class="brand">
         <h1>منصة الجودة المدرسية</h1>
-        <span>نموذج الشرائح 1-3 التفاعلي</span>
+        <span>نموذج الشرائح 1-4 التفاعلي</span>
       </div>
 
       <div class="api-config">
@@ -39,15 +39,21 @@
 
     <!-- شريط المسار (Breadcrumbs) للتنقل السريع بين الشاشات -->
     <div id="breadcrumbs" class="breadcrumbs hidden">
-      <a onclick="App.navTo('cycles')">لوحة التقييمات</a>
+      <a id="bc-dashboard" onclick="App.navTo('dashboard')">📊 لوحة المعلومات</a>
+      <span id="bc-sep0">/</span>
+      <a id="bc-cycles" onclick="App.navTo('cycles')">لوحة التقييمات</a>
       <span id="bc-sep1">/</span>
-      <a id="bc-tree" onclick="App.navTo('tree')">شجرة المعايير</a>
+      <a id="bc-tree" onclick="App.navTo('standards-tree')">شجرة المعايير</a>
       <span id="bc-sep2">/</span>
-      <a id="bc-standards-review" onclick="App.navTo('standards-review')">مراجعة المعايير 📖</a>
+      <a id="bc-results" onclick="App.navTo('assessment-results')">🎯 نتائج التقييم</a>
       <span id="bc-sep3">/</span>
-      <a id="bc-suggestions" onclick="App.navTo('suggestions')">اقتراحات التحسين</a>
+      <a id="bc-evidence-summary" onclick="App.navTo('evidence-summary')">📁 ملخص الشواهد</a>
       <span id="bc-sep4">/</span>
-      <a id="bc-plans" onclick="App.navTo('plans')">خطط التحسين</a>
+      <a id="bc-plans-summary" onclick="App.navTo('plans-summary')">📈 ملخص الخطط</a>
+      <span id="bc-sep5">/</span>
+      <a id="bc-export" onclick="App.navTo('export-report')">📥 تصدير التقرير</a>
+      <span id="bc-sep6">/</span>
+      <a id="bc-standards-review" onclick="App.navTo('standards-review')">مراجعة المعايير 📖</a>
     </div>
 
     <!-- ========================================================================= -->
@@ -691,6 +697,345 @@
 
       <div id="standards-review-content">
         <!-- يتم الحقن بواسطة JavaScript -->
+      </div>
+    </section>
+
+
+    <!-- ========================================================================= -->
+    <!-- الشاشة 10 (الشريحة 4): لوحة معلومات المدرسة الموحدة (Dashboard)           -->
+    <!-- ========================================================================= -->
+    <section id="screen-dashboard" class="hidden">
+      <!-- بطاقة معلومات المدرسة ومفتاح التحديث -->
+      <div class="card">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem;">
+          <div>
+            <h2 id="dash-school-name" style="font-size: 1.3rem; color: var(--primary);">مدرسة ...</h2>
+            <div id="dash-school-meta" style="font-size: 0.85rem; color: var(--text-muted); margin-top: 0.25rem;">
+              المرحلة التعليمية: - | المديرية: - | المحافظة: -
+            </div>
+          </div>
+          <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+            <button class="btn btn-sm btn-secondary" onclick="App.loadDashboard()">🔄 تحديث اللوحة</button>
+            <button class="btn btn-sm btn-primary" onclick="App.navTo('assessment-results')">🎯 تفاصيل النتائج</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- شبكة المؤشرات التنفيذية (KPIs Grid) -->
+      <div class="kpi-grid">
+        <div class="kpi-card kpi-primary">
+          <div class="kpi-label">نتيجة أحدث تقييم ذاتي</div>
+          <div id="dash-kpi-score" class="kpi-value">-</div>
+          <div id="dash-kpi-score-sub" class="kpi-sub">جاري جلب البيانات...</div>
+        </div>
+
+        <div class="kpi-card kpi-success">
+          <div class="kpi-label">مستوى الأداء العام</div>
+          <div id="dash-kpi-level" class="kpi-value">-</div>
+          <div id="dash-kpi-level-sub" class="kpi-sub">تصنيف الأداء المعتمد</div>
+        </div>
+
+        <div class="kpi-card kpi-warning">
+          <div class="kpi-label">نسبة اكتمال الشواهد</div>
+          <div id="dash-kpi-evidence" class="kpi-value">-</div>
+          <div id="dash-kpi-evidence-sub" class="kpi-sub">من أصل 278 متطلباً معتمداً</div>
+        </div>
+
+        <div class="kpi-card kpi-danger">
+          <div class="kpi-label">خطط التحسين المدرسية</div>
+          <div id="dash-kpi-plans" class="kpi-value">-</div>
+          <div id="dash-kpi-plans-sub" class="kpi-sub">إجمالي الخطط والأنشطة</div>
+        </div>
+      </div>
+
+      <!-- بطاقة المعايير السبعة -->
+      <div class="card">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem;">
+          <h3 class="card-title" style="margin-bottom: 0;">الأداء وفق المعايير الوطنية السبعة (الأوزان المعتمدة 100%)</h3>
+          <span style="font-size: 0.8rem; color: var(--text-muted);">انقر على أي معيار لاستعراض مؤشراته ودرجاته</span>
+        </div>
+        <div id="dash-standards-grid" class="standards-grid">
+          <!-- يتم الحقن بواسطة JavaScript -->
+        </div>
+      </div>
+
+      <!-- أزرار الإجراءات السريعة في اللوحة -->
+      <div class="quick-nav-bar">
+        <button class="nav-pill-btn" onclick="App.navTo('assessment-results')">🎯 نتائج التقييم التفصيلية</button>
+        <button class="nav-pill-btn" onclick="App.navTo('evidence-summary')">📁 ملخص الشواهد والمتطلبات</button>
+        <button class="nav-pill-btn" onclick="App.navTo('plans-summary')">📈 ملخص خطط وإجراءات التحسين</button>
+        <button class="nav-pill-btn" onclick="App.navTo('export-report')">📥 تصدير تقرير التقييم (JSON)</button>
+        <button class="nav-pill-btn" onclick="App.navTo('standards-tree')">📝 استمارة رصد المؤشرات</button>
+      </div>
+    </section>
+
+    <!-- ========================================================================= -->
+    <!-- الشاشة 11 (الشريحة 4): نتائج التقييم الشاملة (Assessment Results)          -->
+    <!-- ========================================================================= -->
+    <section id="screen-assessment-results" class="hidden">
+      <div class="card">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem;">
+          <div>
+            <h2 id="res-school-title" style="font-size: 1.25rem; color: var(--primary);">نتائج التقييم الذاتي المدرسي</h2>
+            <div id="res-eval-meta" style="font-size: 0.85rem; color: var(--text-muted);"></div>
+          </div>
+          <div style="display: flex; gap: 0.5rem;">
+            <button class="btn btn-sm btn-secondary" onclick="App.loadAssessmentResults()">🔄 إعادة الحساب والتحديث</button>
+            <button class="btn btn-sm btn-primary" onclick="App.navTo('export-report')">📥 تصدير التقرير كـ JSON</button>
+          </div>
+        </div>
+
+        <!-- بطاقة النتيجة الإجمالية -->
+        <div id="res-summary-banner" style="margin-top: 1rem; padding: 1rem; background: #f8fafc; border: 1px solid var(--border); border-radius: 8px;">
+          <!-- يتم تعبئتها بواسطة JS -->
+        </div>
+      </div>
+
+      <!-- تنبيه إذا كان التقييم غير مكتمل أو به نقص -->
+      <div id="res-incomplete-alert" class="alert alert-warning hidden"></div>
+
+      <!-- قائمة المعايير ونتائجها -->
+      <div class="card">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+          <h3 class="card-title" style="margin-bottom: 0;">تفاصيل نتائج المعايير والمؤشرات</h3>
+          <div style="display: flex; gap: 0.5rem;">
+            <button class="btn btn-sm btn-secondary" onclick="App.toggleAllResultsStandards(true)">توسيع الكل</button>
+            <button class="btn btn-sm btn-secondary" onclick="App.toggleAllResultsStandards(false)">طي الكل</button>
+          </div>
+        </div>
+        <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem;">
+          يتم احتساب درجات المعايير كمتوسط مرجح لدرجات المؤشرات الفعلية من قاعدة البيانات، وتُحسب النتيجة النهائية بحاصل جمع المساهمات الموزونة للمعايير السبعة.
+        </p>
+
+        <div id="res-standards-container">
+          <!-- يتم حقن بطاقات المعايير وجداول المؤشرات بواسطة JS -->
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================================================================= -->
+    <!-- الشاشة 12 (الشريحة 4): نتيجة معيار محدد (Standard Result Inspector)      -->
+    <!-- ========================================================================= -->
+    <section id="screen-standard-result" class="hidden">
+      <div class="card">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem;">
+          <div>
+            <button class="btn btn-sm btn-secondary" onclick="App.navTo('assessment-results')" style="margin-bottom: 0.5rem;">
+              ⬅️ العودة لنتائج كافة المعايير
+            </button>
+            <h2 id="stdres-title" style="font-size: 1.25rem; color: var(--primary);">نتيجة المعيار: ...</h2>
+            <div id="stdres-meta" style="font-size: 0.85rem; color: var(--text-muted);"></div>
+          </div>
+          <div id="stdres-score-badge" style="text-align: center;">
+            <!-- شارة الدرجة والنسبة والمستوى -->
+          </div>
+        </div>
+
+        <!-- شريط التقدم للمعيار -->
+        <div style="margin-top: 1rem;">
+          <div style="display: flex; justify-content: space-between; font-size: 0.8rem; margin-bottom: 0.25rem;">
+            <span>النسبة المئوية المحققة:</span>
+            <span id="stdres-pct-text" style="font-weight: 700;">0%</span>
+          </div>
+          <div class="progress-container">
+            <div id="stdres-progress-bar" class="progress-bar-fill bg-green" style="width: 0%;"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- تنبيه إن كان المعيار غير مكتمل -->
+      <div id="stdres-alert" class="alert alert-warning hidden"></div>
+
+      <!-- المجالات الفرعية والمؤشرات -->
+      <div id="stdres-content">
+        <!-- يتم الحقن بواسطة JS -->
+      </div>
+    </section>
+
+    <!-- ========================================================================= -->
+    <!-- الشاشة 13 (الشريحة 4): ملخص ونسب اكتمال الشواهد (Evidence Summary)        -->
+    <!-- ========================================================================= -->
+    <section id="screen-evidence-summary" class="hidden">
+      <div class="card">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem;">
+          <div>
+            <h2 style="font-size: 1.25rem; color: var(--primary);">ملخص ونسب اكتمال الشواهد والوثائق</h2>
+            <p style="font-size: 0.85rem; color: var(--text-muted);">
+              مقارنة الشواهد المرفوعة بمتطلبات الشواهد الإلزامية المعتمدة لكل مؤشر ومعيار.
+            </p>
+          </div>
+          <div>
+            <button class="btn btn-sm btn-secondary" onclick="App.loadEvidenceSummary()">🔄 تحديث ملخص الشواهد</button>
+          </div>
+        </div>
+
+        <!-- مؤشرات الإنجاز للشواهد -->
+        <div class="kpi-grid" style="margin-top: 1rem; margin-bottom: 0.5rem;">
+          <div class="kpi-card kpi-primary">
+            <div class="kpi-label">نسبة اكتمال الشواهد الإجمالية</div>
+            <div id="evsum-kpi-rate" class="kpi-value">0%</div>
+            <div id="evsum-kpi-rate-sub" class="kpi-sub">-</div>
+          </div>
+          <div class="kpi-card kpi-success">
+            <div class="kpi-label">إجمالي الشواهد المرفوعة</div>
+            <div id="evsum-kpi-uploaded" class="kpi-value">0</div>
+            <div id="evsum-kpi-uploaded-sub" class="kpi-sub">وثيقة مرفقة بالتقييم</div>
+          </div>
+          <div class="kpi-card kpi-warning">
+            <div class="kpi-label">إجمالي المتطلبات الإلزامية</div>
+            <div id="evsum-kpi-required" class="kpi-value">0</div>
+            <div id="evsum-kpi-required-sub" class="kpi-sub">متطلب رسمي معتمد</div>
+          </div>
+          <div class="kpi-card kpi-danger">
+            <div class="kpi-label">مؤشرات بحاجة لاستكمال الشواهد</div>
+            <div id="evsum-kpi-missing" class="kpi-value">0</div>
+            <div id="evsum-kpi-missing-sub" class="kpi-sub">مؤشر ينقصه شواهد</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- تبويبات التصفية -->
+      <div style="display: flex; gap: 0.5rem; margin-bottom: 1rem;">
+        <button id="btn-evfilter-all" class="btn btn-sm btn-primary" onclick="App.filterEvidenceSummary('all')">
+          كافة المعايير والمؤشرات (109)
+        </button>
+        <button id="btn-evfilter-missing" class="btn btn-sm btn-secondary" onclick="App.filterEvidenceSummary('missing')">
+          المؤشرات الناقصة الشواهد فقط ⚠️
+        </button>
+      </div>
+
+      <div id="evsum-standards-container">
+        <!-- يتم الحقن بواسطة JS -->
+      </div>
+    </section>
+
+    <!-- ========================================================================= -->
+    <!-- الشاشة 14 (الشريحة 4): ملخص وإحصاءات خطط التحسين (Plans Summary)         -->
+    <!-- ========================================================================= -->
+    <section id="screen-plans-summary" class="hidden">
+      <div class="card">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem;">
+          <div>
+            <h2 style="font-size: 1.25rem; color: var(--primary);">ملخص وحالات خطط وإجراءات التحسين المدرسي</h2>
+            <p style="font-size: 0.85rem; color: var(--text-muted);">
+              متابعة الخطط المعتمدة ونسب إنجاز إجراءاتها وتحديد الخطط والإجراءات المتأخرة ديناميكياً.
+            </p>
+          </div>
+          <div style="display: flex; gap: 0.5rem;">
+            <button class="btn btn-sm btn-secondary" onclick="App.loadPlansSummary()">🔄 تحديث الملخص</button>
+            <button class="btn btn-sm btn-primary" onclick="App.navTo('plans')">📋 إدارة خطط التحسين</button>
+          </div>
+        </div>
+
+        <div class="kpi-grid" style="margin-top: 1rem; margin-bottom: 0.5rem;">
+          <div class="kpi-card kpi-primary">
+            <div class="kpi-label">إجمالي الخطط</div>
+            <div id="plansum-kpi-total" class="kpi-value">0</div>
+            <div id="plansum-kpi-total-sub" class="kpi-sub">خطة مسجلة بالمدرسة</div>
+          </div>
+          <div class="kpi-card kpi-warning">
+            <div class="kpi-label">خطط قيد التنفيذ</div>
+            <div id="plansum-kpi-active" class="kpi-value">0</div>
+            <div id="plansum-kpi-active-sub" class="kpi-sub">نشطة وتخضع للمتابعة</div>
+          </div>
+          <div class="kpi-card kpi-success">
+            <div class="kpi-label">خطط مكتملة</div>
+            <div id="plansum-kpi-completed" class="kpi-value">0</div>
+            <div id="plansum-kpi-completed-sub" class="kpi-sub">تم إنجازها بنجاح</div>
+          </div>
+          <div class="kpi-card kpi-danger">
+            <div class="kpi-label">خطط أو إجراءات متأخرة ⚠️</div>
+            <div id="plansum-kpi-delayed" class="kpi-value">0</div>
+            <div id="plansum-kpi-delayed-sub" class="kpi-sub">تجاوزت الموعد النهائي</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ملخص الإجراءات التنفيذية والخطط -->
+      <div class="card">
+        <h3 class="card-title">قائمة الخطط والتقدم الإجمالي</h3>
+        <div class="table-responsive">
+          <table>
+            <thead>
+              <tr>
+                <th>معرف الخطة</th>
+                <th>عنوان الخطة</th>
+                <th>الفترة الزمنية</th>
+                <th>الحالة</th>
+                <th>التأخر</th>
+                <th>إجمالي الإجراءات</th>
+                <th>المنجزة</th>
+                <th>المتأخرة</th>
+                <th>نسبة الإنجاز</th>
+                <th>الإجراء</th>
+              </tr>
+            </thead>
+            <tbody id="plansum-table-body">
+              <tr><td colspan="10" style="text-align: center;">جارِ جلب ملخص الخطط...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================================================================= -->
+    <!-- الشاشة 15 (الشريحة 4): تصدير تقرير التقييم الكامل (Export Assessment Report)-->
+    <!-- ========================================================================= -->
+    <section id="screen-export-report" class="hidden">
+      <div class="card">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem;">
+          <div>
+            <h2 style="font-size: 1.25rem; color: var(--primary);">تصدير تقرير التقييم الذاتي المدرسي الشامل</h2>
+            <p style="font-size: 0.85rem; color: var(--text-muted);">
+              تصدير نتائج التقييم والشواهد وخلاصة خطط التحسين بصيغة JSON مهيكلة للفرونت إند والمستوى الوزاري.
+            </p>
+          </div>
+          <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+            <button id="btn-download-json" class="btn btn-sm btn-success" onclick="App.downloadExportJson()">
+              📥 تنزيل ملف التقرير (JSON)
+            </button>
+            <button id="btn-copy-json" class="btn btn-sm btn-secondary" onclick="App.copyExportJson()">
+              📋 نسخ محتوى JSON
+            </button>
+            <button class="btn btn-sm btn-secondary" onclick="App.loadExportReport()">🔄 تحديث</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- تنبيه الرفض إن كان التقييم غير مكتمل (422) -->
+      <div id="export-error-alert" class="alert alert-error hidden"></div>
+
+      <!-- حاوية المعاينة عند اكتمال التقرير -->
+      <div id="export-content-container" class="hidden">
+        <!-- الملخص التنفيذي وأبرز نقاط القوة وفرص التحسين -->
+        <div class="card">
+          <h3 class="card-title">الملخص التنفيذي للتقرير</h3>
+          <div id="export-executive-summary" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1.25rem;">
+            <!-- كروت الملخص -->
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 1rem;">
+            <div>
+              <h4 style="font-size: 0.95rem; color: #166534; margin-bottom: 0.5rem;">🌟 أبرز نقاط القوة (الدرجة الكاملة 3):</h4>
+              <div id="export-strengths-list" style="display: flex; flex-direction: column; gap: 0.4rem; max-height: 220px; overflow-y: auto;"></div>
+            </div>
+            <div>
+              <h4 style="font-size: 0.95rem; color: #854d0e; margin-bottom: 0.5rem;">⚠️ أولويات ومجالات التحسين (الدرجة 0 أو 1):</h4>
+              <div id="export-opportunities-list" style="display: flex; flex-direction: column; gap: 0.4rem; max-height: 220px; overflow-y: auto;"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- عارض JSON الخام -->
+        <div class="card">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+            <h3 class="card-title" style="margin-bottom: 0;">معاينة وثيقة JSON الناتجة</h3>
+            <span style="font-size: 0.8rem; color: var(--text-muted);">JSON Data Structure</span>
+          </div>
+          <div class="json-viewer-container">
+            <pre id="export-json-code">جارِ تجهيز الوثيقة...</pre>
+          </div>
+        </div>
       </div>
     </section>
 

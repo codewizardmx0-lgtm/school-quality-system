@@ -20,6 +20,10 @@ const App = {
     currentPlan: null,
     improvementAreas: [],
     currentScreen: 'login',
+    currentStandardId: 1,
+    evidenceSummaryData: null,
+    evidenceFilterMode: 'all',
+    exportReportData: null,
   },
 
   // ---------------------------------------------------------------------------
@@ -135,11 +139,17 @@ const App = {
   navTo(screenName) {
     const screens = [
       'login',
+      'dashboard',
       'cycles',
       'standards-tree',
       'standards-review',
       'suggestions',
       'plans',
+      'assessment-results',
+      'standard-result',
+      'evidence-summary',
+      'plans-summary',
+      'export-report',
     ];
 
     screens.forEach((s) => {
@@ -154,7 +164,9 @@ const App = {
     this.updateBreadcrumbs(screenName);
 
     // تحميل البيانات التلقائي حسب الشاشة
-    if (screenName === 'cycles') {
+    if (screenName === 'dashboard') {
+      this.loadDashboard();
+    } else if (screenName === 'cycles') {
       this.loadEvaluations();
     } else if (screenName === 'standards-tree' && this.state.currentEvaluation) {
       this.loadStandardsTree(this.state.currentEvaluation.evaluationId);
@@ -164,6 +176,16 @@ const App = {
       this.loadSuggestions();
     } else if (screenName === 'plans') {
       this.loadPlans();
+    } else if (screenName === 'assessment-results') {
+      this.loadAssessmentResults();
+    } else if (screenName === 'standard-result') {
+      this.loadStandardResult(this.state.currentStandardId || 1);
+    } else if (screenName === 'evidence-summary') {
+      this.loadEvidenceSummary();
+    } else if (screenName === 'plans-summary') {
+      this.loadPlansSummary();
+    } else if (screenName === 'export-report') {
+      this.loadExportReport();
     }
   },
 
@@ -177,14 +199,23 @@ const App = {
     }
 
     bc.classList.remove('hidden');
+    const bcDash = document.getElementById('bc-dashboard');
+    const bcCycles = document.getElementById('bc-cycles');
     const bcTree = document.getElementById('bc-tree');
+    const bcResults = document.getElementById('bc-results');
+    const bcEvidence = document.getElementById('bc-evidence-summary');
+    const bcPlansSummary = document.getElementById('bc-plans-summary');
+    const bcExport = document.getElementById('bc-export');
     const bcReview = document.getElementById('bc-standards-review');
-    const bcSugg = document.getElementById('bc-suggestions');
-    const bcPlans = document.getElementById('bc-plans');
 
+    if (bcDash) bcDash.style.display = 'inline';
+    if (bcCycles) bcCycles.style.display = 'inline';
     if (bcTree) bcTree.style.display = this.state.currentEvaluation ? 'inline' : 'none';
+    if (bcResults) bcResults.style.display = 'inline';
+    if (bcEvidence) bcEvidence.style.display = 'inline';
+    if (bcPlansSummary) bcPlansSummary.style.display = 'inline';
+    if (bcExport) bcExport.style.display = 'inline';
     if (bcReview) bcReview.style.display = 'inline';
-    if (bcSugg) bcSugg.style.display = this.state.currentEvaluation ? 'inline' : 'none';
   },
 
   updateUserNav() {
@@ -312,9 +343,20 @@ const App = {
         <td>${statusBadge(ev.cycle?.status)}</td>
         <td>${statusBadge(ev.status)}</td>
         <td>
-          <button class="btn btn-sm btn-primary" onclick="App.selectEvaluation(${ev.evaluationId})">
-            فتح استمارة التقييم الذاتي
-          </button>
+          <div style="display: flex; gap: 0.35rem; flex-wrap: wrap;">
+            <button class="btn btn-sm btn-primary" onclick="App.selectEvaluation(${ev.evaluationId})">
+              📝 استمارة التقييم
+            </button>
+            <button class="btn btn-sm btn-secondary" onclick="App.openResultsForEvaluation(${ev.evaluationId}, ${ev.school?.schoolId || ev.schoolId})">
+              🎯 النتائج
+            </button>
+            <button class="btn btn-sm btn-secondary" onclick="App.openEvidenceForEvaluation(${ev.evaluationId}, ${ev.school?.schoolId || ev.schoolId})">
+              📁 الشواهد
+            </button>
+            <button class="btn btn-sm btn-secondary" onclick="App.openExportForEvaluation(${ev.evaluationId}, ${ev.school?.schoolId || ev.schoolId})">
+              📥 تصدير
+            </button>
+          </div>
         </td>
       </tr>
     `).join('');
@@ -1757,6 +1799,732 @@ const App = {
     subBodies.forEach(b => {
       if (expand) b.classList.remove('hidden');
       else b.classList.add('hidden');
+    });
+  },
+
+
+  // ===========================================================================
+  // دوال الشريحة 4: التقارير والتحليلات وحساب النتائج (Slice 4 Logic)
+  // ===========================================================================
+
+  getSchoolId() {
+    return this.state.currentEvaluation?.school?.schoolId
+      || this.state.currentEvaluation?.school_id
+      || this.state.user?.school?.schoolId
+      || this.state.user?.school_id
+      || 1;
+  },
+
+  getEvaluationId() {
+    return this.state.currentEvaluation?.evaluationId
+      || this.state.currentEvaluation?.evaluation_id
+      || (this.state.evaluations?.[0]?.evaluationId)
+      || 1;
+  },
+
+  openResultsForEvaluation(evalId, schoolId) {
+    const ev = this.state.evaluations.find(e => e.evaluationId === evalId);
+    if (ev) this.state.currentEvaluation = ev;
+    this.navTo('assessment-results');
+  },
+
+  openEvidenceForEvaluation(evalId, schoolId) {
+    const ev = this.state.evaluations.find(e => e.evaluationId === evalId);
+    if (ev) this.state.currentEvaluation = ev;
+    this.navTo('evidence-summary');
+  },
+
+  openExportForEvaluation(evalId, schoolId) {
+    const ev = this.state.evaluations.find(e => e.evaluationId === evalId);
+    if (ev) this.state.currentEvaluation = ev;
+    this.navTo('export-report');
+  },
+
+  openStandardResult(standardId) {
+    this.state.currentStandardId = standardId;
+    this.navTo('standard-result');
+  },
+
+  // ---------------------------------------------------------------------------
+  // الشاشة 10: لوحة معلومات المدرسة الموحدة (Dashboard)
+  // ---------------------------------------------------------------------------
+  async loadDashboard() {
+    const schoolId = this.getSchoolId();
+    const res = await this.request(`/schools/${schoolId}/dashboard`);
+
+    if (!res.ok) {
+      this.showAlert(res.message || 'تعذر تحميل لوحة معلومات المدرسة.', 'error');
+      return;
+    }
+
+    const data = res.data;
+    const school = data.school || {};
+    const assessment = data.assessment;
+    const evidence = data.evidence_overview;
+    const plans = data.improvement_plans_overview;
+
+    // تعبئة بطاقة المدرسة
+    document.getElementById('dash-school-name').textContent = school.school_name || 'المدرسة';
+    document.getElementById('dash-school-meta').textContent = 
+      `المرحلة: ${school.educational_stage || '-'} | المديرية: ${school.educational_district || '-'} | المحافظة: ${school.governorate || '-'} | الحالة: ${school.status || 'Active'}`;
+
+    // KPI 1: التقييم
+    const kpiScore = document.getElementById('dash-kpi-score');
+    const kpiScoreSub = document.getElementById('dash-kpi-score-sub');
+    const kpiLevel = document.getElementById('dash-kpi-level');
+    const kpiLevelSub = document.getElementById('dash-kpi-level-sub');
+
+    if (assessment) {
+      if (assessment.is_complete) {
+        kpiScore.textContent = `${assessment.final_score}%`;
+        kpiScoreSub.textContent = `مكتمل ومقفل | العام الدراسي: ${assessment.academic_year || '-'}`;
+        kpiLevel.textContent = assessment.performance_level?.label || 'متميز';
+        kpiLevelSub.textContent = 'المستوى العام المعتمد';
+      } else {
+        kpiScore.textContent = `${assessment.completion_percentage}%`;
+        kpiScoreSub.textContent = `قيد الإجراء (${assessment.evaluated_indicators} من ${assessment.total_indicators} مؤشر)`;
+        kpiLevel.textContent = 'قيد الرصد ⏳';
+        kpiLevelSub.textContent = `متبقي ${assessment.missing_indicators} مؤشر`;
+      }
+    } else {
+      kpiScore.textContent = 'لا يوجد';
+      kpiScoreSub.textContent = 'لم تبدأ الدورة بعد';
+      kpiLevel.textContent = '-';
+      kpiLevelSub.textContent = '-';
+    }
+
+    // KPI 2: الشواهد
+    const kpiEvidence = document.getElementById('dash-kpi-evidence');
+    const kpiEvidenceSub = document.getElementById('dash-kpi-evidence-sub');
+    if (evidence) {
+      kpiEvidence.textContent = `${evidence.completion_rate}%`;
+      kpiEvidenceSub.textContent = `مرفوع ${evidence.total_uploaded_evidences} من ${evidence.total_required_evidences} متطلباً`;
+    } else {
+      kpiEvidence.textContent = '0%';
+      kpiEvidenceSub.textContent = 'لا توجد شواهد مرفوعة';
+    }
+
+    // KPI 3: خطط التحسين
+    const kpiPlans = document.getElementById('dash-kpi-plans');
+    const kpiPlansSub = document.getElementById('dash-kpi-plans-sub');
+    if (plans) {
+      kpiPlans.textContent = `${plans.total_plans} خطط`;
+      kpiPlansSub.textContent = `نشطة: ${plans.in_progress_plans} | مكتملة: ${plans.completed_plans} | متأخرة: ${plans.delayed_plans} ⚠️`;
+    } else {
+      kpiPlans.textContent = '0';
+      kpiPlansSub.textContent = 'لا توجد خطط مسجلة';
+    }
+
+    // بناء شبكة المعايير السبعة
+    const stdGrid = document.getElementById('dash-standards-grid');
+    if (!stdGrid) return;
+
+    if (assessment && assessment.standards_summary && assessment.standards_summary.length > 0) {
+      stdGrid.innerHTML = assessment.standards_summary.map(std => {
+        const pct = std.percentage || 0;
+        const colorCls = pct >= 90 ? 'bg-green' : (pct >= 75 ? 'bg-blue' : (pct >= 50 ? 'bg-yellow' : 'bg-red'));
+        const levelBadge = pct >= 90 ? 'badge-green' : (pct >= 75 ? 'badge-blue' : (pct >= 50 ? 'badge-yellow' : 'badge-red'));
+        
+        return `
+          <div class="standard-card-item" onclick="App.openStandardResult('${std.code}')" style="cursor: pointer;">
+            <div>
+              <div class="std-header">
+                <div>
+                  <span class="std-code-badge">${std.code}</span>
+                  <strong style="font-size: 0.95rem; margin-right: 0.35rem; color: #1e293b;">${std.name}</strong>
+                </div>
+                <span class="std-weight-tag">الوزن: ${std.weight}%</span>
+              </div>
+              <div style="display: flex; justify-content: space-between; font-size: 0.8rem; margin-top: 0.5rem;">
+                <span>الدرجة الخام: <strong>${std.raw_score} / 3.00</strong></span>
+                <span>المساهمة: <strong>${std.weighted_score}%</strong></span>
+              </div>
+              <div class="progress-container">
+                <div class="progress-bar-fill ${colorCls}" style="width: ${pct}%;"></div>
+              </div>
+            </div>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 0.5rem; font-size: 0.8rem;">
+              <span class="badge ${levelBadge}">${std.performance_level?.label || 'مستوفٍ'} (${pct}%)</span>
+              <span style="color: var(--primary); font-weight: 600;">عرض المؤشرات ⬅️</span>
+            </div>
+          </div>
+        `;
+      }).join('');
+    } else {
+      stdGrid.innerHTML = `
+        <div style="grid-column: 1 / -1; padding: 1.5rem; text-align: center; color: var(--text-muted); background: #f8fafc; border-radius: 6px;">
+          التقييم الحالي قيد الرصد والإجراء. ستظهر مؤشرات المعايير السبعة فور استكمال تقييم مؤشرات كل معيار.
+          <br><br>
+          <button class="btn btn-sm btn-primary" onclick="App.navTo('standards-tree')">الانتقال لاستمارة التقييم لرصد المؤشرات</button>
+        </div>
+      `;
+    }
+  },
+
+  // ---------------------------------------------------------------------------
+  // الشاشة 11: نتائج التقييم الشاملة (Assessment Results)
+  // ---------------------------------------------------------------------------
+  async loadAssessmentResults() {
+    const schoolId = this.getSchoolId();
+    const evalId = this.getEvaluationId();
+    const alertBox = document.getElementById('res-incomplete-alert');
+    const bannerBox = document.getElementById('res-summary-banner');
+    const stdContainer = document.getElementById('res-standards-container');
+
+    bannerBox.innerHTML = 'جارِ حساب وتحليل نتائج التقييم...';
+    stdContainer.innerHTML = '';
+    alertBox.classList.add('hidden');
+
+    const res = await this.request(`/schools/${schoolId}/assessments/${evalId}/results`);
+
+    if (!res.ok) {
+      bannerBox.innerHTML = '';
+      if (res.status === 422) {
+        alertBox.classList.remove('hidden');
+        alertBox.innerHTML = `
+          <strong>تنبيه اكتمال التقييم (القاعدة 8):</strong> ${res.message}<br>
+          ${res.errors?.evaluation?.[0] || 'التقييم قيد الإجراء ولم يتم تقييم جميع المؤشرات الـ 109 بعد.'}
+          <div style="margin-top: 0.75rem;">
+            <button class="btn btn-sm btn-primary" onclick="App.navTo('standards-tree')">
+              الانتقال إلى شجرة المعايير لاستكمال رصد المؤشرات
+            </button>
+          </div>
+        `;
+      } else {
+        alertBox.classList.remove('hidden');
+        alertBox.textContent = res.message || 'تعذر حساب نتائج التقييم.';
+      }
+      return;
+    }
+
+    const data = res.data;
+    document.getElementById('res-school-title').textContent = `نتائج التقييم الذاتي — ${data.school_name || 'المدرسة'}`;
+    document.getElementById('res-eval-meta').textContent = 
+      `ملف تقييم رقم: #${data.evaluation_id} | العام الدراسي: ${data.academic_year || '-'} | إجمالي المؤشرات: ${data.total_indicators}`;
+
+    // تعبئة بطاقة النتيجة الإجمالية
+    const finalScore = data.final_score || 0;
+    const perfLabel = data.performance_level?.label || 'متميز';
+    const perfBadge = finalScore >= 90 ? 'badge-green' : (finalScore >= 75 ? 'badge-blue' : (finalScore >= 50 ? 'badge-yellow' : 'badge-red'));
+
+    bannerBox.innerHTML = `
+      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+        <div>
+          <span style="font-size: 0.85rem; color: var(--text-muted); font-weight: 600;">النتيجة الإجمالية النهائية للمدرسة:</span>
+          <div style="font-size: 2.2rem; font-weight: 800; color: var(--primary);">
+            ${finalScore}% 
+            <span style="font-size: 1rem; font-weight: 600; color: var(--text-muted);">من 100%</span>
+          </div>
+        </div>
+        <div style="text-align: center;">
+          <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.25rem;">مستوى الأداء العام:</div>
+          <span class="badge ${perfBadge}" style="font-size: 1.1rem; padding: 0.4rem 1rem;">${perfLabel}</span>
+        </div>
+        <div style="text-align: left;">
+          <div style="font-size: 0.8rem; color: var(--text-muted);">حالة التقييم:</div>
+          <span class="badge badge-green">${data.status || 'Completed'} (مكتمل 100%)</span>
+          <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;">
+            ${data.is_locked ? '🔒 مقفل نهائياً' : 'مفتوح'}
+          </div>
+        </div>
+      </div>
+    `;
+
+    // تعبئة بطاقات المعايير السبعة وقوائم مؤشراتها
+    stdContainer.innerHTML = (data.standards || []).map((std, idx) => {
+      const pct = std.percentage || 0;
+      const colorCls = pct >= 90 ? 'bg-green' : (pct >= 75 ? 'bg-blue' : (pct >= 50 ? 'bg-yellow' : 'bg-red'));
+      const badgeCls = pct >= 90 ? 'badge-green' : (pct >= 75 ? 'badge-blue' : (pct >= 50 ? 'badge-yellow' : 'badge-red'));
+
+      return `
+        <div class="review-standard-card" style="margin-bottom: 1.25rem;">
+          <div class="review-standard-header" onclick="App.toggleResultsStandardAccordion(${idx})">
+            <div>
+              <span class="badge badge-gray" style="margin-left: 0.5rem;">${std.code}</span>
+              <strong>${std.name}</strong>
+              <span style="font-size: 0.8rem; color: var(--text-muted); margin-right: 0.5rem;">(الوزن الرسمي: ${std.weight}%)</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 0.75rem;">
+              <span class="badge ${badgeCls}">${std.performance_level?.label || 'متوسط'} (${pct}%)</span>
+              <span style="font-size: 0.85rem; font-weight: 700; color: var(--primary);">مساهمة: ${std.weighted_score}%</span>
+              <span id="res-std-arrow-${idx}">▼</span>
+            </div>
+          </div>
+
+          <div id="res-std-body-${idx}" class="review-standard-body" style="padding: 1rem;">
+            <div style="margin-bottom: 1rem;">
+              <div style="display: flex; justify-content: space-between; font-size: 0.8rem; margin-bottom: 0.25rem;">
+                <span>الدرجة الخام المرجحة: <strong>${std.raw_score} من 3.00</strong></span>
+                <span>المساهمة الموزونة في نتيجة المدرسة: <strong>${std.weighted_score} من ${std.weight}%</strong></span>
+              </div>
+              <div class="progress-container">
+                <div class="progress-bar-fill ${colorCls}" style="width: ${pct}%;"></div>
+              </div>
+            </div>
+
+            <!-- المعايير الفرعية والمؤشرات -->
+            ${(std.sub_standards || []).map(sub => `
+              <div style="background: #f8fafc; border: 1px solid var(--border); border-radius: 6px; padding: 0.75rem; margin-bottom: 0.75rem;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                  <strong style="color: #334155; font-size: 0.9rem;">${sub.code} — ${sub.name}</strong>
+                  <span style="font-size: 0.8rem; color: var(--text-muted);">متوسط الدرجة: ${sub.raw_score} / 3 (${sub.percentage}%)</span>
+                </div>
+                
+                <div class="table-responsive">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th style="width: 80px;">الكود</th>
+                        <th>المؤشر المعياري</th>
+                        <th style="width: 70px;">الوزن</th>
+                        <th style="width: 80px;">الدرجة</th>
+                        <th style="width: 80px;">النسبة</th>
+                        <th>المستوى الوصفي</th>
+                        <th style="width: 80px;">الشواهد</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      ${(sub.indicators || []).map(ind => `
+                        <tr>
+                          <td><strong>${ind.code}</strong></td>
+                          <td>
+                            ${ind.name}
+                            ${ind.descriptor ? `<div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.2rem;">${ind.descriptor}</div>` : ''}
+                          </td>
+                          <td>${ind.weight}</td>
+                          <td><span class="badge badge-gray" style="font-weight: 700;">${ind.score !== null ? ind.score + ' / 3' : '-'}</span></td>
+                          <td><strong>${ind.percentage !== null ? ind.percentage + '%' : '-'}</strong></td>
+                          <td>${ind.level_label || '-'}</td>
+                          <td>${ind.evidences_count > 0 ? `<span class="badge badge-green">${ind.evidences_count} شواهد</span>` : '<span class="badge badge-gray">0</span>'}</td>
+                        </tr>
+                      `).join('')}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            `).join('')}
+
+            <div style="text-align: left; margin-top: 0.75rem;">
+              <button class="btn btn-sm btn-secondary" onclick="App.openStandardResult('${std.code}')">
+                عرض تقرير المعيار بشكل منفصل 📄
+              </button>
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+  },
+
+  toggleResultsStandardAccordion(idx) {
+    const body = document.getElementById(`res-std-body-${idx}`);
+    const arrow = document.getElementById(`res-std-arrow-${idx}`);
+    if (!body) return;
+    const isHidden = body.classList.contains('hidden');
+    if (isHidden) {
+      body.classList.remove('hidden');
+      if (arrow) arrow.textContent = '▼';
+    } else {
+      body.classList.add('hidden');
+      if (arrow) arrow.textContent = '◀';
+    }
+  },
+
+  toggleAllResultsStandards(expand) {
+    const bodies = document.querySelectorAll('#res-standards-container .review-standard-body');
+    bodies.forEach((b, idx) => {
+      const arrow = document.getElementById(`res-std-arrow-${idx}`);
+      if (expand) {
+        b.classList.remove('hidden');
+        if (arrow) arrow.textContent = '▼';
+      } else {
+        b.classList.add('hidden');
+        if (arrow) arrow.textContent = '◀';
+      }
+    });
+  },
+
+  // ---------------------------------------------------------------------------
+  // الشاشة 12: نتيجة معيار محدد (Standard Result Inspector)
+  // ---------------------------------------------------------------------------
+  async loadStandardResult(standardId) {
+    const schoolId = this.getSchoolId();
+    const evalId = this.getEvaluationId();
+    const stdId = standardId || this.state.currentStandardId || 1;
+    const content = document.getElementById('stdres-content');
+    const alertBox = document.getElementById('stdres-alert');
+
+    content.innerHTML = '<div class="card" style="text-align: center;">جارِ جلب نتائج المعيار...</div>';
+    alertBox.classList.add('hidden');
+
+    const res = await this.request(`/schools/${schoolId}/assessments/${evalId}/standards/${stdId}/results`);
+
+    if (!res.ok) {
+      content.innerHTML = '';
+      alertBox.classList.remove('hidden');
+      alertBox.innerHTML = `<strong>تنبيه المعيار (القاعدة 8):</strong> ${res.message}<br>${res.errors?.standard?.[0] || ''}`;
+      return;
+    }
+
+    const std = res.data;
+    document.getElementById('stdres-title').textContent = `نتيجة المعيار: ${std.code} — ${std.name}`;
+    document.getElementById('stdres-meta').textContent = 
+      `الوزن المعتمد: ${std.weight}% | الدرجة الخام: ${std.raw_score} من 3.00 | المساهمة الموزونة: ${std.weighted_score}% | عدد المؤشرات: ${std.total_indicators}`;
+
+    const pct = std.percentage || 0;
+    document.getElementById('stdres-pct-text').textContent = `${pct}%`;
+    const bar = document.getElementById('stdres-progress-bar');
+    bar.style.width = `${pct}%`;
+    bar.className = `progress-bar-fill ${pct >= 90 ? 'bg-green' : (pct >= 75 ? 'bg-blue' : (pct >= 50 ? 'bg-yellow' : 'bg-red'))}`;
+
+    const badgeCls = pct >= 90 ? 'badge-green' : (pct >= 75 ? 'badge-blue' : (pct >= 50 ? 'badge-yellow' : 'badge-red'));
+    document.getElementById('stdres-score-badge').innerHTML = `
+      <div style="font-size: 1.6rem; font-weight: 800; color: var(--primary);">${std.raw_score} <span style="font-size: 0.9rem; color: var(--text-muted);">/ 3</span></div>
+      <span class="badge ${badgeCls}">${std.performance_level?.label || 'متوسط'} (${pct}%)</span>
+    `;
+
+    // تفاصيل المجالات الفرعية
+    content.innerHTML = (std.sub_standards || []).map(sub => `
+      <div class="card" style="margin-bottom: 1rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+          <div>
+            <span class="badge badge-gray">${sub.code}</span>
+            <strong style="margin-right: 0.35rem; font-size: 1rem;">${sub.name}</strong>
+          </div>
+          <span class="badge badge-blue">النسبة: ${sub.percentage}% (متوسط: ${sub.raw_score}/3)</span>
+        </div>
+
+        <div class="table-responsive">
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 80px;">الكود</th>
+                <th>المؤشر المعياري</th>
+                <th style="width: 70px;">الوزن</th>
+                <th style="width: 80px;">الدرجة</th>
+                <th style="width: 80px;">النسبة</th>
+                <th>المستوى الوصفي</th>
+                <th style="width: 90px;">الشواهد المرفوعة</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${(sub.indicators || []).map(ind => `
+                <tr>
+                  <td><strong>${ind.code}</strong></td>
+                  <td>
+                    ${ind.name}
+                    ${ind.descriptor ? `<div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;">${ind.descriptor}</div>` : ''}
+                  </td>
+                  <td>${ind.weight}</td>
+                  <td><span class="badge badge-gray" style="font-weight: 700;">${ind.score !== null ? ind.score + ' / 3' : '-'}</span></td>
+                  <td><strong>${ind.percentage !== null ? ind.percentage + '%' : '-'}</strong></td>
+                  <td>${ind.level_label || '-'}</td>
+                  <td>${ind.evidences_count > 0 ? `<span class="badge badge-green">${ind.evidences_count} شواهد</span>` : '<span class="badge badge-gray">0</span>'}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `).join('');
+  },
+
+  // ---------------------------------------------------------------------------
+  // الشاشة 13: ملخص ونسب اكتمال الشواهد (Evidence Summary)
+  // ---------------------------------------------------------------------------
+  async loadEvidenceSummary() {
+    const schoolId = this.getSchoolId();
+    const evalId = this.getEvaluationId();
+    const container = document.getElementById('evsum-standards-container');
+
+    container.innerHTML = '<div class="card" style="text-align: center;">جارِ جلب ملخص الشواهد...</div>';
+
+    const res = await this.request(`/schools/${schoolId}/assessments/${evalId}/evidence-summary`);
+
+    if (!res.ok) {
+      container.innerHTML = `<div class="alert alert-error">${res.message || 'تعذر تحميل ملخص الشواهد.'}</div>`;
+      return;
+    }
+
+    this.state.evidenceSummaryData = res.data;
+    const data = res.data;
+
+    // تعبئة الـ KPIs
+    document.getElementById('evsum-kpi-rate').textContent = `${data.overall_evidence_completion_rate}%`;
+    document.getElementById('evsum-kpi-rate-sub').textContent = `من إجمالي متطلبات الشواهد المعتمدة`;
+    document.getElementById('evsum-kpi-uploaded').textContent = data.total_uploaded_evidences;
+    document.getElementById('evsum-kpi-required').textContent = data.total_required_evidences;
+    document.getElementById('evsum-kpi-missing').textContent = data.indicators_missing_evidence;
+
+    this.renderEvidenceSummaryList(this.state.evidenceFilterMode || 'all');
+  },
+
+  filterEvidenceSummary(mode) {
+    this.state.evidenceFilterMode = mode;
+    const btnAll = document.getElementById('btn-evfilter-all');
+    const btnMissing = document.getElementById('btn-evfilter-missing');
+
+    if (mode === 'missing') {
+      btnAll.className = 'btn btn-sm btn-secondary';
+      btnMissing.className = 'btn btn-sm btn-primary';
+    } else {
+      btnAll.className = 'btn btn-sm btn-primary';
+      btnMissing.className = 'btn btn-sm btn-secondary';
+    }
+
+    this.renderEvidenceSummaryList(mode);
+  },
+
+  renderEvidenceSummaryList(mode) {
+    const container = document.getElementById('evsum-standards-container');
+    const data = this.state.evidenceSummaryData;
+    if (!container || !data) return;
+
+    const standards = data.standards || [];
+
+    container.innerHTML = standards.map((std, sIdx) => {
+      let indicators = std.indicators || [];
+      if (mode === 'missing') {
+        indicators = indicators.filter(ind => !ind.is_satisfied || ind.uploaded_count === 0);
+      }
+
+      if (indicators.length === 0 && mode === 'missing') {
+        return ''; // إخفاء المعيار إذا لم تكن هناك مؤشرات ناقصة
+      }
+
+      const rate = std.completion_rate || 0;
+      const rateCls = rate >= 100 ? 'badge-green' : (rate >= 50 ? 'badge-yellow' : 'badge-red');
+
+      return `
+        <div class="card" style="margin-bottom: 1.25rem;">
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.75rem;">
+            <div>
+              <span class="badge badge-gray">${std.code}</span>
+              <strong style="margin-right: 0.35rem; font-size: 1rem; color: #1e293b;">${std.name}</strong>
+              <span style="font-size: 0.8rem; color: var(--text-muted); margin-right: 0.5rem;">
+                (مرفوع ${std.total_uploaded_evidences} من ${std.total_required_evidences} متطلباً)
+              </span>
+            </div>
+            <span class="badge ${rateCls}">نسبة استيفاء المعيار: ${rate}%</span>
+          </div>
+
+          <div class="table-responsive">
+            <table>
+              <thead>
+                <tr>
+                  <th style="width: 80px;">الكود</th>
+                  <th>المؤشر المعياري</th>
+                  <th style="width: 100px;">المطلوب رسمياً</th>
+                  <th style="width: 100px;">المرفوع فعلياً</th>
+                  <th style="width: 90px;">الناقص</th>
+                  <th style="width: 90px;">نسبة الإنجاز</th>
+                  <th style="width: 100px;">الحالة</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${indicators.map(ind => {
+                  const indRate = ind.completion_rate || 0;
+                  const isSatisfied = ind.is_satisfied;
+                  return `
+                    <tr style="${!isSatisfied ? 'background: #fffdf5;' : ''}">
+                      <td><strong>${ind.code}</strong></td>
+                      <td>${ind.name}</td>
+                      <td><strong>${ind.required_count}</strong> متطلبات</td>
+                      <td><span class="badge ${ind.uploaded_count > 0 ? 'badge-blue' : 'badge-gray'}">${ind.uploaded_count} شواهد</span></td>
+                      <td>${ind.missing_count > 0 ? `<span class="badge badge-red">ناقص ${ind.missing_count}</span>` : '<span class="badge badge-green">0</span>'}</td>
+                      <td><strong>${indRate}%</strong></td>
+                      <td>${isSatisfied ? '<span class="badge badge-green">مستوفٍ ✅</span>' : '<span class="badge badge-yellow">بحاجة لاستكمال ⚠️</span>'}</td>
+                    </tr>
+                  `;
+                }).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    if (mode === 'missing' && container.innerHTML.trim() === '') {
+      container.innerHTML = `
+        <div class="card" style="text-align: center; color: #166534; background: #f0fdf4;">
+          🎉 رائع! تم استيفاء الشواهد المطلوبة لكافة المؤشرات في هذا التقييم.
+        </div>
+      `;
+    }
+  },
+
+  // ---------------------------------------------------------------------------
+  // الشاشة 14: ملخص خطط وإجراءات التحسين (Plans Summary)
+  // ---------------------------------------------------------------------------
+  async loadPlansSummary() {
+    const schoolId = this.getSchoolId();
+    const tbody = document.getElementById('plansum-table-body');
+    tbody.innerHTML = '<tr><td colspan="10" style="text-align: center;">جارِ جلب ملخص الخطط...</td></tr>';
+
+    const res = await this.request(`/schools/${schoolId}/improvement-plans/summary`);
+
+    if (!res.ok) {
+      tbody.innerHTML = `<tr><td colspan="10" style="color: red; text-align: center;">${res.message || 'تعذر جلب الملخص.'}</td></tr>`;
+      return;
+    }
+
+    const data = res.data;
+    const plansSummary = data.plans_summary || {};
+    const actionsSummary = data.actions_summary || {};
+    const plansList = data.plans || [];
+
+    // تعبئة بطاقات الـ KPI
+    document.getElementById('plansum-kpi-total').textContent = plansSummary.total_plans || 0;
+    document.getElementById('plansum-kpi-active').textContent = plansSummary.in_progress_plans || 0;
+    document.getElementById('plansum-kpi-completed').textContent = plansSummary.completed_plans || 0;
+    document.getElementById('plansum-kpi-delayed').textContent = plansSummary.delayed_plans || 0;
+
+    if (plansList.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="10" style="text-align: center;">لا توجد خطط تحسين مسجلة حالياً لهذه المدرسة.</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = plansList.map(p => {
+      const isDelayed = p.is_delayed;
+      const statusBadge = p.status === 'Completed' ? 'badge-green' : (p.status === 'Active' ? 'badge-blue' : (p.status === 'Draft' ? 'badge-yellow' : 'badge-gray'));
+      const rate = p.completion_rate || 0;
+
+      return `
+        <tr>
+          <td><strong>#${p.plan_id}</strong></td>
+          <td><strong>${p.title}</strong></td>
+          <td>${p.start_date || '-'} إلى ${p.end_date || '-'}</td>
+          <td><span class="badge ${statusBadge}">${p.status}</span></td>
+          <td>${isDelayed ? '<span class="badge badge-red">متأخرة ⚠️</span>' : '<span class="badge badge-green">منتظمة</span>'}</td>
+          <td>${p.total_actions} إجراءات</td>
+          <td><span class="badge badge-green">${p.completed_actions}</span></td>
+          <td>${p.delayed_actions > 0 ? `<span class="badge badge-red">${p.delayed_actions}</span>` : '0'}</td>
+          <td>
+            <div style="font-weight: 700;">${rate}%</div>
+            <div class="progress-container" style="height: 5px; margin: 0.2rem 0;">
+              <div class="progress-bar-fill bg-green" style="width: ${rate}%;"></div>
+            </div>
+          </td>
+          <td>
+            <button class="btn btn-sm btn-secondary" onclick="App.navTo('plans')">
+              عرض بالخطط 📋
+            </button>
+          </td>
+        </tr>
+      `;
+    }).join('');
+  },
+
+  // ---------------------------------------------------------------------------
+  // الشاشة 15: تصدير تقرير التقييم الكامل (Export Assessment Report)
+  // ---------------------------------------------------------------------------
+  async loadExportReport() {
+    const schoolId = this.getSchoolId();
+    const evalId = this.getEvaluationId();
+    const alertBox = document.getElementById('export-error-alert');
+    const container = document.getElementById('export-content-container');
+    const jsonPre = document.getElementById('export-json-code');
+
+    jsonPre.textContent = 'جارِ توليد وتجهيز وثيقة التصدير...';
+    alertBox.classList.add('hidden');
+    container.classList.add('hidden');
+
+    const res = await this.request(`/schools/${schoolId}/assessments/${evalId}/export`);
+
+    if (!res.ok) {
+      alertBox.classList.remove('hidden');
+      alertBox.innerHTML = `<strong>تنبيه التصدير (القاعدة 8):</strong> ${res.message}<br>${res.errors?.evaluation?.[0] || ''}`;
+      return;
+    }
+
+    this.state.exportReportData = res.data;
+    const report = res.data;
+    container.classList.remove('hidden');
+
+    // الملخص التنفيذي
+    const exec = report.executive_summary || {};
+    const school = report.school_information || {};
+    const evalCtx = report.evaluation_context || {};
+
+    const execContainer = document.getElementById('export-executive-summary');
+    execContainer.innerHTML = `
+      <div class="kpi-card kpi-primary">
+        <div class="kpi-label">النتيجة النهائية للمدرسة</div>
+        <div class="kpi-value">${exec.final_score}%</div>
+        <div class="kpi-sub">${exec.performance_level?.label || 'متميز'}</div>
+      </div>
+      <div class="kpi-card kpi-success">
+        <div class="kpi-label">المعايير المعتمدة</div>
+        <div class="kpi-value">${exec.total_standards} معايير</div>
+        <div class="kpi-sub">أوزان رسمية 100%</div>
+      </div>
+      <div class="kpi-card kpi-warning">
+        <div class="kpi-label">المؤشرات المفحوصة</div>
+        <div class="kpi-value">${exec.total_indicators} مؤشر</div>
+        <div class="kpi-sub">مكتملة ومقيمة بنسبة 100%</div>
+      </div>
+      <div class="kpi-card kpi-danger">
+        <div class="kpi-label">شواهد وخطط التحسين</div>
+        <div class="kpi-value">${exec.strengths_count} قوة | ${exec.improvement_opportunities_count} تحسين</div>
+        <div class="kpi-sub">جاهز للاعتماد والرفع الوزاري</div>
+      </div>
+    `;
+
+    // نقاط القوة
+    const strengthsList = document.getElementById('export-strengths-list');
+    strengthsList.innerHTML = (exec.top_strengths || []).map(s => `
+      <div class="strength-card">
+        <strong>[${s.code}]</strong> ${s.name}
+        <div style="font-size: 0.75rem; color: #166534;">${s.standard_name} — الدرجة: 3 (مستوفٍ كلياً)</div>
+      </div>
+    `).join('') || '<div style="color: var(--text-muted);">لا توجد مؤشرات بالدرجة الكاملة.</div>';
+
+    // فرص التحسين
+    const oppList = document.getElementById('export-opportunities-list');
+    oppList.innerHTML = (exec.priority_improvement_areas || []).map(o => `
+      <div class="opportunity-card">
+        <strong>[${o.code}]</strong> ${o.name}
+        <div style="font-size: 0.75rem; color: #854d0e;">${o.standard_name} — الدرجة: ${o.score} (${o.level_label || 'بحاجة لتحسين'})</div>
+      </div>
+    `).join('') || '<div style="color: var(--text-muted);">لا توجد مؤشرات بدرجات متدنية.</div>';
+
+    // معاينة JSON المنسق
+    jsonPre.textContent = JSON.stringify(report, null, 2);
+  },
+
+  downloadExportJson() {
+    if (!this.state.exportReportData) {
+      this.showAlert('لا توجد بيانات تقرير جاهزة للتنزيل.', 'warning');
+      return;
+    }
+
+    const jsonStr = JSON.stringify(this.state.exportReportData, null, 2);
+    const blob = new Blob([jsonStr], { type: 'application/json;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    const schoolId = this.getSchoolId();
+    const evalId = this.getEvaluationId();
+    link.href = url;
+    link.download = `school_evaluation_report_${schoolId}_${evalId}.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    this.showAlert('تم بدء تنزيل ملف التقرير بصيغة JSON بنجاح.', 'success');
+  },
+
+  copyExportJson() {
+    if (!this.state.exportReportData) {
+      this.showAlert('لا توجد بيانات تقرير لنسخها.', 'warning');
+      return;
+    }
+
+    const jsonStr = JSON.stringify(this.state.exportReportData, null, 2);
+    navigator.clipboard.writeText(jsonStr).then(() => {
+      this.showAlert('تم نسخ محتوى التقرير (JSON) إلى الحافظة بنجاح.', 'success');
+    }).catch(err => {
+      console.error(err);
+      this.showAlert('تعذر النسخ تلقائياً، يرجى النسخ اليدوي.', 'error');
     });
   },
 
