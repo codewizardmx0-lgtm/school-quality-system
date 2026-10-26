@@ -262,22 +262,24 @@ class EvaluationController extends Controller
         }
 
         if ($user->cannot('update', $evaluation)) {
-            // التحقق مما إذا كان المنع بسبب قفل التقييم
+            // التحقق مما إذا كان المنع بسبب قفل التقييم أو إغلاق الدورة
             $lockCheck = EvaluationLockChecker::canModifyIndicator($evaluation, $indicatorId);
             if (!$lockCheck['allowed']) {
+                $key = $lockCheck['errorKey'] ?? 'evaluation';
                 return ApiResponse::validationError([
-                    'evaluation' => [$lockCheck['message']],
+                    $key => [$lockCheck['message']],
                 ], $lockCheck['message']);
             }
 
             return ApiResponse::forbidden('غير مصرح لك بتعديل هذا التقييم.');
         }
 
-        // فحص قفل التعديل الدقيق (BR-SCH-03)
+        // فحص قفل التعديل الدقيق (BR-SCH-03 / FR-SCH-01)
         $lockCheck = EvaluationLockChecker::canModifyIndicator($evaluation, $indicatorId);
         if (!$lockCheck['allowed']) {
+            $key = $lockCheck['errorKey'] ?? 'evaluation';
             return ApiResponse::validationError([
-                'evaluation' => [$lockCheck['message']],
+                $key => [$lockCheck['message']],
             ], $lockCheck['message']);
         }
 
@@ -468,19 +470,21 @@ class EvaluationController extends Controller
         if ($user->cannot('update', $evaluation)) {
             $lockCheck = EvaluationLockChecker::canModifyIndicator($evaluation, $result->indicator_id);
             if (!$lockCheck['allowed']) {
+                $key = $lockCheck['errorKey'] ?? 'evaluation';
                 return ApiResponse::validationError([
-                    'evaluation' => [$lockCheck['message']],
+                    $key => [$lockCheck['message']],
                 ], $lockCheck['message']);
             }
 
             return ApiResponse::forbidden('غير مصرح لك بتعديل هذا التقييم.');
         }
 
-        // فحص قفل التقييم
+        // فحص قفل التقييم أو إغلاق الدورة
         $lockCheck = EvaluationLockChecker::canModifyIndicator($evaluation, $result->indicator_id);
         if (!$lockCheck['allowed']) {
+            $key = $lockCheck['errorKey'] ?? 'evaluation';
             return ApiResponse::validationError([
-                'evaluation' => [$lockCheck['message']],
+                $key => [$lockCheck['message']],
             ], $lockCheck['message']);
         }
 

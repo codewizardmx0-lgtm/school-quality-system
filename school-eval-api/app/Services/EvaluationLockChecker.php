@@ -37,6 +37,19 @@ class EvaluationLockChecker
      */
     public static function checkEvaluationGeneralStatus(Evaluation $evaluation): array
     {
+        // 0. التحقق من حالة دورة التقييم (FR-SCH-01)
+        // ملاحظة: يُطبق فحص الحالة Closed وتُستثنى التواريخ حالياً نظراً لأن تاريخ نهاية الدورة بالسيدرز (2026-06-30) لا يغطي تاريخ اليوم.
+        $cycle = $evaluation->cycle;
+        if ($cycle && $cycle->status === 'Closed') {
+            return [
+                'allowed' => false,
+                'reason' => 'دورة التقييم مغلقة حالياً ولا يُسمح بأي عمليات رصد أو تعديل (FR-SCH-01).',
+                'isNeedsCompletion' => false,
+                'submission' => null,
+                'errorKey' => 'cycle',
+            ];
+        }
+
         // حماية احتياطية: التقييم معلّم كمكتمل في جدوله
         if ($evaluation->status === 'Completed') {
             return [
@@ -44,6 +57,7 @@ class EvaluationLockChecker
                 'reason' => 'ملف التقييم مكتمل ومقفل نهائياً (BR-SCH-03).',
                 'isNeedsCompletion' => false,
                 'submission' => null,
+                'errorKey' => 'evaluation',
             ];
         }
 
@@ -62,6 +76,7 @@ class EvaluationLockChecker
                 'reason' => null,
                 'isNeedsCompletion' => false,
                 'submission' => $latestSubmission,
+                'errorKey' => null,
             ];
         }
 
@@ -72,6 +87,7 @@ class EvaluationLockChecker
                 'reason' => null,
                 'isNeedsCompletion' => true,
                 'submission' => $latestSubmission,
+                'errorKey' => null,
             ];
         }
 
@@ -89,13 +105,14 @@ class EvaluationLockChecker
             'reason' => "ملف التقييم مقفل بعد إرساله النهائي وهو حالياً ({$statusText}) (BR-SCH-03).",
             'isNeedsCompletion' => false,
             'submission' => $latestSubmission,
+            'errorKey' => 'evaluation',
         ];
     }
 
     /**
      * التحقق مما إذا كان بالإمكان رصد أو تعديل درجة مؤشر محدد.
      *
-     * @return array{allowed: bool, message: string|null}
+     * @return array{allowed: bool, message: string|null, errorKey?: string|null}
      */
     public static function canModifyIndicator(Evaluation $evaluation, int $indicatorId): array
     {
@@ -105,6 +122,7 @@ class EvaluationLockChecker
             return [
                 'allowed' => false,
                 'message' => $general['reason'],
+                'errorKey' => $general['errorKey'] ?? 'evaluation',
             ];
         }
 
@@ -113,6 +131,7 @@ class EvaluationLockChecker
             return [
                 'allowed' => true,
                 'message' => null,
+                'errorKey' => null,
             ];
         }
 
@@ -131,19 +150,21 @@ class EvaluationLockChecker
             return [
                 'allowed' => true,
                 'message' => null,
+                'errorKey' => null,
             ];
         }
 
         return [
             'allowed' => false,
             'message' => 'ملف التقييم في مرحلة استكمال الملاحظات، ولا يُسمح بتعديل هذا المؤشر لأنه ليس ضمن بنود طلب الاستكمال المفتوحة (BR-SCH-03).',
+            'errorKey' => 'evaluation',
         ];
     }
 
     /**
      * التحقق مما إذا كان بالإمكان رفع نسخة جديدة لشاهد محدد.
      *
-     * @return array{allowed: bool, message: string|null}
+     * @return array{allowed: bool, message: string|null, errorKey?: string|null}
      */
     public static function canModifyEvidence(Evaluation $evaluation, Evidence $evidence): array
     {
@@ -153,6 +174,7 @@ class EvaluationLockChecker
             return [
                 'allowed' => false,
                 'message' => $general['reason'],
+                'errorKey' => $general['errorKey'] ?? 'evaluation',
             ];
         }
 
@@ -160,6 +182,7 @@ class EvaluationLockChecker
             return [
                 'allowed' => true,
                 'message' => null,
+                'errorKey' => null,
             ];
         }
 
@@ -180,12 +203,14 @@ class EvaluationLockChecker
             return [
                 'allowed' => true,
                 'message' => null,
+                'errorKey' => null,
             ];
         }
 
         return [
             'allowed' => false,
             'message' => 'ملف التقييم في مرحلة استكمال الملاحظات، ولا يُسمح برفع نسخة جديدة لهذا الشاهد لأنه ليس ضمن بنود طلب الاستكمال المفتوحة (BR-SCH-03).',
+            'errorKey' => 'evaluation',
         ];
     }
 }

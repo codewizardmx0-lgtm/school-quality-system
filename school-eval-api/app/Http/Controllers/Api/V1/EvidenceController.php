@@ -127,11 +127,12 @@ class EvidenceController extends Controller
             return ApiResponse::notFound('نتيجة المؤشر المطلوبة غير موجودة.');
         }
 
-        // فحص قفل التقييم
+        // فحص قفل التقييم وإغلاق الدورة (BR-SCH-03 / FR-SCH-01)
         $lockCheck = EvaluationLockChecker::canModifyIndicator($evaluation, $result->indicator_id);
         if (!$lockCheck['allowed']) {
+            $key = $lockCheck['errorKey'] ?? 'evaluation';
             return ApiResponse::validationError([
-                'evaluation' => [$lockCheck['message']],
+                $key => [$lockCheck['message']],
             ], $lockCheck['message']);
         }
 
@@ -255,8 +256,9 @@ class EvidenceController extends Controller
         // فحص قفل التقييم للشاهد (BR-SCH-03)
         $lockCheck = EvaluationLockChecker::canModifyEvidence($evaluation, $evidence);
         if (!$lockCheck['allowed']) {
+            $key = $lockCheck['errorKey'] ?? 'evaluation';
             return ApiResponse::validationError([
-                'evaluation' => [$lockCheck['message']],
+                $key => [$lockCheck['message']],
             ], $lockCheck['message']);
         }
 

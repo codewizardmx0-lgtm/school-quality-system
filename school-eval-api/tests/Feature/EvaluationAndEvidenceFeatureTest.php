@@ -834,4 +834,109 @@ class EvaluationAndEvidenceFeatureTest extends TestCase
         $scoreRes->assertStatus(422)
             ->assertJsonValidationErrors(['verificationToolIds']);
     }
+
+    /**
+     * 20. إغلاق الدورة (FR-SCH-01): منع رصد الدرجات إذا كانت دورة التقييم Closed بـ 422 وحقل errors.cycle.
+     */
+    public function test_closed_cycle_prevents_scoring_with_422_cycle_error(): void
+    {
+        Sanctum::actingAs($this->evaluatorBelqees);
+
+        // تعديل حالة الدورة إلى Closed
+        $cycle = $this->evaluationBelqees->cycle;
+        $cycle->status = 'Closed';
+        $cycle->save();
+
+        $response = $this->putJson(
+            "/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$this->firstIndicator->indicator_id}/score",
+            ['score' => 3]
+        );
+
+        $response->assertStatus(422)
+            ->assertJsonValidationErrors(['cycle']);
+    }
+
+    /**
+     * 21. إغلاق الدورة (FR-SCH-01): منع إضافة الملاحظات إذا كانت الدورة Closed بـ 422 وحقل errors.cycle.
+     */
+    public function test_closed_cycle_prevents_adding_notes_with_422_cycle_error(): void
+    {
+        Sanctum::actingAs($this->evaluatorBelqees);
+
+        // أولاً: رصد نتيجة أولية قبل الإغلاق
+        $this->putJson(
+            "/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$this->firstIndicator->indicator_id}/score",
+            ['score' => 2]
+        )->assertStatus(200);
+
+        $result = EvaluationResult::where('evaluation_id', $this->evaluationBelqees->evaluation_id)
+            ->where('indicator_id', $this->firstIndicator->indicator_id)
+            ->firstOrFail();
+
+        // إغلاق الدورة
+        $cycle = $this->evaluationBelqees->cycle;
+        $cycle->status = 'Closed';
+        $cycle->save();
+
+        $response = $this->postJson(
+            "/api/v1/evaluation-results/{$result->result_id}/notes",
+            ['notes' => 'ملاحظة أثناء إغلاق الدورة']
+        );
+
+        $response->assertStatus(422)
+            ->assertJsonValidationErrors(['cycle']);
+    }
+
+    /**
+     * 22. إغلاق الدورة (FR-SCH-01): منع رفع الشواهد ونسخها إذا كانت الدورة Closed بـ 422 وحقل errors.cycle.
+     */
+    public function test_closed_cycle_prevents_adding_evidence_and_version_with_422_cycle_error(): void
+    {
+        Sanctum::actingAs($this->evaluatorBelqees);
+
+        // رصد نتيجة أولية
+        $this->putJson(
+            "/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$this->firstIndicator->indicator_id}/score",
+            ['score' => 2]
+        )->assertStatus(200);
+
+        $result = EvaluationResult::where('evaluation_id', $this->evaluationBelqees->evaluation_id)
+            ->where('indicator_id', $this->firstIndicator->indicator_id)
+            ->firstOrFail();
+
+        // إغلاق الدورة
+        $cycle = $this->evaluationBelqees->cycle;
+        $cycle->status = 'Closed';
+        $cycle->save();
+
+        // محاولة رفع شاهد جديد
+        $file = UploadedFile::fake()->create('closed_test.pdf', 100, 'application/pdf');
+        $evidenceRes = $this->postJson(
+            "/api/v1/evaluation-results/{$result->result_id}/evidences",
+            [
+                'title' => 'شاهد دورة مغلقة',
+                'file'  => $file,
+            ]
+        );
+
+        $evidenceRes->assertStatus(422)
+            ->assertJsonValidationErrors(['cycle']);
+    }
+
+    /**
+     * 23. إغلاق الدورة (FR-SCH-01): استعراض الشجرة ونتائج التقييم يظل متاحاً (قراءة فقط 200) حتى عند إغلاق الدورة.
+     */
+    public function test_closed_cycle_allows_reading_standards_tree(): void
+    {
+        Sanctum::actingAs($this->evaluatorBelqees);
+
+        // إغلاق الدورة
+        $cycle = $this->evaluationBelqees->cycle;
+        $cycle->status = 'Closed';
+        $cycle->save();
+
+        $response = $this->getJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/standards-tree");
+        $response->assertStatus(200)
+            ->assertJsonPath('data.evaluationId', $this->evaluationBelqees->evaluation_id);
+    }
 }
