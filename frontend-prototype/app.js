@@ -471,7 +471,6 @@ const App = {
           `}
 
           <button class="btn btn-sm btn-secondary" 
-                  ${!hasResult ? 'disabled title="يجب رصد درجة المؤشر أولاً لتفعيل إرفاق الشواهد والملاحظات"' : ''}
                   onclick='App.openEvidencesModal(${JSON.stringify(ind).replace(/'/g, "&apos;")})'>
             📁 الشواهد (${evidenceCount}) والملاحظات (${notesCount})
           </button>
@@ -814,7 +813,7 @@ const App = {
       uploadCard.style.display = canManage ? 'block' : 'none';
     }
 
-    this.loadEvidences(indicator.resultId);
+    this.loadEvidences(indicator);
     modal.classList.remove('hidden');
   },
 
@@ -824,12 +823,27 @@ const App = {
     this.state.currentIndicator = null;
   },
 
-  async loadEvidences(resultId) {
+  async loadEvidences(indicatorOrResultId) {
     const container = document.getElementById('evidences-list-container');
     if (!container) return;
-    container.innerHTML = '<span style="font-size: 0.85rem; color: var(--text-muted);">جارِ تحميل الشواهد...</span>';
+    container.innerHTML = '<span style="font-size: 0.85rem; color: var(--text-muted);">جارِ تحميل قائمة الشواهد...</span>';
 
-    const res = await this.request(`/evaluation-results/${resultId}/evidences`);
+    const evalId = this.getEvaluationId();
+    const ind = typeof indicatorOrResultId === 'object' && indicatorOrResultId !== null
+      ? indicatorOrResultId
+      : (this.state.currentIndicator || { indicatorId: indicatorOrResultId, resultId: indicatorOrResultId });
+
+    let url = '';
+    if (evalId && ind.indicatorId) {
+      url = `/evaluations/${evalId}/indicators/${ind.indicatorId}/evidences`;
+    } else if (ind.resultId) {
+      url = `/evaluation-results/${ind.resultId}/evidences`;
+    } else {
+      container.innerHTML = '<span style="font-size: 0.85rem; color: var(--text-muted);">لا يمكن تحديد مسار الشواهد.</span>';
+      return;
+    }
+
+    const res = await this.request(url);
     if (!res.ok) {
       container.innerHTML = `<span style="color: red; font-size: 0.85rem;">${res.message}</span>`;
       return;
@@ -837,7 +851,7 @@ const App = {
 
     this.state.currentEvidences = res.data || [];
     if (this.state.currentEvidences.length === 0) {
-      container.innerHTML = '<span style="font-size: 0.85rem; color: var(--text-muted);">لا توجد شواهد مرفوعة لهذا المؤشر بعد.</span>';
+      container.innerHTML = '<div class="alert alert-info" style="font-size: 0.85rem; margin: 0;">لا توجد شواهد مرفوعة لهذا المؤشر حتى الآن. يمكنك إضافة شاهد أو أكثر باستخدام النموذج أدناه.</div>';
       return;
     }
 
@@ -857,23 +871,27 @@ const App = {
       Audited: '<span class="badge badge-green">مدقق ومقبول ✅</span>',
     };
 
-    container.innerHTML = this.state.currentEvidences.map(ev => {
+    container.innerHTML = this.state.currentEvidences.map((ev, index) => {
       const versions = ev.versions || [];
-      const currentVer = versions.find(v => v.current) || versions[0];
+      const currentVer = versions.find(v => v.current) || versions[0] || {};
       const attachment = currentVer?.attachments?.[0];
+      const versionId = currentVer.evidenceVersionId || currentVer.versionId || 1;
 
       return `
-        <div class="card" style="margin-bottom: 0.75rem; padding: 0.75rem; background: #fff; border: 1px solid var(--border);">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem; flex-wrap: wrap; gap: 0.35rem;">
-            <strong>📄 ${ev.title}</strong>
+        <div class="card" style="margin-bottom: 0.75rem; padding: 0.85rem; background: #fff; border: 1px solid var(--border); box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem; flex-wrap: wrap; gap: 0.4rem;">
+            <div>
+              <span class="badge badge-gray" style="font-weight: 700; margin-left: 0.35rem;">#${index + 1}</span>
+              <strong style="color: #0f172a; font-size: 0.95rem;">📄 ${ev.title}</strong>
+            </div>
             <div style="display: flex; gap: 0.35rem; align-items: center; flex-wrap: wrap;">
               <span class="badge badge-gray" style="border: 1px solid #cbd5e1;">🏷️ ${typeLabels[ev.evidenceType] || ev.evidenceType || 'أخرى'}</span>
               ${statusBadges[ev.status] || `<span class="badge badge-gray">${ev.status || 'Draft'}</span>`}
-              <span class="badge badge-blue">إصدار v${currentVer?.versionNo || 1}</span>
+              <span class="badge badge-blue">النسخة النشطة v${currentVer?.versionNo || 1}</span>
             </div>
           </div>
-          ${ev.description ? `<p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.35rem;">${ev.description}</p>` : ''}
-          ${ev.justification ? `<p style="font-size: 0.8rem; color: var(--primary); margin-bottom: 0.35rem;">المبرر: ${ev.justification}</p>` : ''}
+          ${ev.description ? `<p style="font-size: 0.82rem; color: var(--text-muted); margin-bottom: 0.35rem;">${ev.description}</p>` : ''}
+          ${ev.justification ? `<p style="font-size: 0.82rem; color: var(--primary); margin-bottom: 0.35rem;"><strong>المبرر:</strong> ${ev.justification}</p>` : ''}
 
           ${ev.reviewerNotes ? `
             <div style="background: #f1f5f9; padding: 0.5rem 0.75rem; border-radius: 4px; border-right: 3px solid #0284c7; margin-top: 0.5rem; margin-bottom: 0.5rem; font-size: 0.8rem;">
@@ -884,20 +902,20 @@ const App = {
           ` : ''}
           
           <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 0.5rem; flex-wrap: wrap; gap: 0.5rem;">
-            <div style="font-size: 0.8rem;">
-              الملف: <strong>${attachment?.fileName || 'وثيقة الشاهد'}</strong> 
-              (${attachment?.fileSize ? Math.round(attachment.fileSize / 1024) + ' KB' : ''})
+            <div style="font-size: 0.82rem; color: #334155;">
+              📎 الملف المعتمد: <strong>${attachment?.fileName || 'وثيقة الشاهد'}</strong> 
+              ${attachment?.fileSize ? `<span style="color: var(--text-muted); font-size: 0.75rem;">(${Math.round(attachment.fileSize / 1024)} KB)</span>` : ''}
             </div>
             <div style="display: flex; gap: 0.35rem; flex-wrap: wrap;">
               ${attachment ? `
-                <button class="btn btn-sm btn-secondary" onclick="App.downloadEvidenceVersion(${ev.evidenceId}, ${currentVer.versionId}, '${attachment.fileName}')">
+                <button class="btn btn-sm btn-secondary" onclick="App.downloadEvidenceVersion(${ev.evidenceId}, ${versionId}, '${attachment.fileName}')">
                   ⬇️ تنزيل الملف
                 </button>
               ` : ''}
 
               ${canManageEvidence ? `
                 <button class="btn btn-sm btn-primary" onclick="App.triggerNewVersionUpload(${ev.evidenceId})">
-                  + رفع نسخة جديدة
+                  + رفع نسخة جديدة (Revision)
                 </button>
               ` : ''}
             </div>
@@ -923,8 +941,8 @@ const App = {
           <!-- تفاصيل النسخ التاريخية السابقة إن وجدت -->
           ${versions.length > 1 ? `
             <div style="margin-top: 0.5rem; font-size: 0.75rem; color: var(--text-muted); border-top: 1px solid var(--border); padding-top: 0.35rem;">
-              النسخ التاريخية السابقة: 
-              ${versions.filter(v => !v.current).map(v => `v${v.versionNo}`).join(', ')}
+              ⏳ النسخ التاريخية السابقة لهذا الشاهد: 
+              ${versions.filter(v => !v.current).map(v => `<span class="badge badge-gray" style="margin-left: 0.25rem;">v${v.versionNo}</span>`).join('')}
             </div>
           ` : ''}
         </div>
@@ -939,7 +957,7 @@ const App = {
       return;
     }
     const ind = this.state.currentIndicator;
-    if (!ind || !ind.resultId) return;
+    if (!ind) return;
 
     this.clearErrors(['ev-title', 'ev-file']);
     const alertEl = document.getElementById('ev-modal-alert');
@@ -963,7 +981,19 @@ const App = {
     formData.append('evidence_type', evidenceType);
     formData.append('file', fileInput.files[0]);
 
-    const res = await this.request(`/evaluation-results/${ind.resultId}/evidences`, {
+    const evalId = this.getEvaluationId();
+    let url = '';
+    if (evalId && ind.indicatorId) {
+      url = `/evaluations/${evalId}/indicators/${ind.indicatorId}/evidences`;
+    } else if (ind.resultId) {
+      url = `/evaluation-results/${ind.resultId}/evidences`;
+    } else {
+      alertEl.textContent = 'تعذر تحديد المؤشر أو ملف التقييم.';
+      alertEl.classList.remove('hidden');
+      return;
+    }
+
+    const res = await this.request(url, {
       method: 'POST',
       body: formData,
       isFormData: true,
@@ -981,16 +1011,18 @@ const App = {
         if (res.errors.title) document.getElementById('err-ev-title').textContent = res.errors.title[0];
         if (res.errors.file) document.getElementById('err-ev-file').textContent = res.errors.file[0];
       } else {
-        alertEl.textContent = res.message || 'فشل رفع الشاهد.';
+        alertEl.textContent = res.message || 'فشل إضافة الشاهد.';
         alertEl.classList.remove('hidden');
       }
       return;
     }
 
     document.getElementById('form-upload-evidence').reset();
-    this.showAlert('تم رفع الشاهد ونسخته الأولى بنجاح.', 'success');
-    this.loadEvidences(ind.resultId);
-    this.loadStandardsTree(this.state.currentEvaluation.evaluationId);
+    this.showAlert('تم إضافة الشاهد ورفع نسخته الأولى بنجاح.', 'success');
+    this.loadEvidences(ind);
+    if (this.state.currentEvaluation?.evaluationId) {
+      this.loadStandardsTree(this.state.currentEvaluation.evaluationId);
+    }
   },
 
   async triggerNewVersionUpload(evidenceId) {
@@ -1021,7 +1053,7 @@ const App = {
       }
 
       this.showAlert('تم رفع النسخة الجديدة بنجاح (v' + (res.data?.versionNo || '') + ').', 'success');
-      this.loadEvidences(this.state.currentIndicator.resultId);
+      this.loadEvidences(this.state.currentIndicator);
     };
 
     input.click();
@@ -1083,8 +1115,8 @@ const App = {
     });
     if (res.ok) {
       this.showAlert(`تم تصنيف الشاهد كـ [${selected.label}] بنجاح.`, 'success');
-      if (this.state.currentIndicator?.resultId) {
-        this.loadEvidences(this.state.currentIndicator.resultId);
+      if (this.state.currentIndicator) {
+        this.loadEvidences(this.state.currentIndicator);
       }
       if (this.state.currentScreen === 'evidence-inventory') {
         this.loadEvidenceInventory();
@@ -1114,8 +1146,8 @@ const App = {
     });
     if (res.ok) {
       this.showAlert(`تم تحديث حالة الشاهد إلى [${selected.label}] بنجاح.`, 'success');
-      if (this.state.currentIndicator?.resultId) {
-        this.loadEvidences(this.state.currentIndicator.resultId);
+      if (this.state.currentIndicator) {
+        this.loadEvidences(this.state.currentIndicator);
       }
       if (this.state.currentScreen === 'evidence-inventory') {
         this.loadEvidenceInventory();
@@ -1134,8 +1166,8 @@ const App = {
     });
     if (res.ok) {
       this.showAlert(res.message || 'تم ربط الشاهد بالمؤشر بنجاح.', 'success');
-      if (this.state.currentIndicator?.resultId) {
-        this.loadEvidences(this.state.currentIndicator.resultId);
+      if (this.state.currentIndicator) {
+        this.loadEvidences(this.state.currentIndicator);
       }
       if (this.state.currentScreen === 'evidence-inventory') {
         this.loadEvidenceInventory();
@@ -1154,8 +1186,8 @@ const App = {
     });
     if (res.ok) {
       this.showAlert('تمت إضافة ملاحظات المراجع بنجاح.', 'success');
-      if (this.state.currentIndicator?.resultId) {
-        this.loadEvidences(this.state.currentIndicator.resultId);
+      if (this.state.currentIndicator) {
+        this.loadEvidences(this.state.currentIndicator);
       }
       if (this.state.currentScreen === 'evidence-inventory') {
         this.loadEvidenceInventory();

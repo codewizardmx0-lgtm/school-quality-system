@@ -279,7 +279,10 @@
 
         <!-- قائمة الشواهد الحالية للمؤشر -->
         <div style="margin-bottom: 1.5rem;">
-          <h4 style="font-size: 0.95rem; margin-bottom: 0.5rem;">الشواهد والوثائق المرفقة:</h4>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+            <h4 style="font-size: 0.95rem; margin: 0; color: #1e293b;">الشواهد والوثائق المعتمدة لهذا المؤشر:</h4>
+            <span style="font-size: 0.8rem; color: var(--text-muted);">(يمكن إضافة أكثر من شاهد نشط لكل مؤشر)</span>
+          </div>
           <div id="evidences-list-container">
             <!-- قائمة الشواهد ونسخها -->
           </div>
@@ -287,7 +290,10 @@
 
         <!-- نموذج رفع شاهد جديد (خاص بمن يملك صلاحية evidence.manage) -->
         <div id="card-upload-evidence" class="card" style="background: #f8fafc; border-style: dashed;">
-          <h4 style="font-size: 0.9rem; margin-bottom: 0.75rem; color: var(--primary);">+ رفع شاهد جديد للمؤشر (v1)</h4>
+          <h4 style="font-size: 0.9rem; margin-bottom: 0.35rem; color: var(--primary);">+ إضافة شاهد جديد لهذا المؤشر</h4>
+          <p style="font-size: 0.78rem; color: var(--text-muted); margin-top: 0; margin-bottom: 0.75rem;">
+            يمكنك رفع شواهد إضافية متعددة لنفس المؤشر دون استبدال أو حذف الشواهد السابقة. كل شاهد مستقل بنسخته النشطة.
+          </p>
           <form id="form-upload-evidence" onsubmit="App.handleUploadEvidence(event)">
             <div class="form-group">
               <label class="form-label" for="ev-title">عنوان الشاهد:</label>

@@ -450,4 +450,209 @@ class EvidenceOrganizationFeatureTest extends TestCase
         $this->getJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/evidence-inventory")
             ->assertStatus(403);
     }
+
+    /**
+     * اختبار 12: إمكانية إنشاء أكثر من شاهد نشط لنفس المؤشر بنجاح.
+     */
+    public function test_can_create_multiple_evidences_for_same_indicator(): void
+    {
+        Sanctum::actingAs($this->evaluatorBelqees);
+
+        $file2 = UploadedFile::fake()->create('second_evidence.pdf', 300, 'application/pdf');
+
+        $response = $this->postJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$this->firstIndicator->indicator_id}/evidences", [
+            'title'         => 'الشاهد الثاني لنفس المؤشر - سجل إضافي',
+            'description'   => 'وثيقة داعمة إضافية لا تحل محل الشاهد الأول',
+            'evidence_type' => 'record',
+            'file'          => $file2,
+        ]);
+
+        $response->assertStatus(201)
+            ->assertJsonPath('data.title', 'الشاهد الثاني لنفس المؤشر - سجل إضافي')
+            ->assertJsonPath('data.evidenceType', 'record');
+
+        $newEvidenceId = $response->json('data.evidenceId');
+        $this->assertNotNull($newEvidenceId);
+        $this->assertNotEquals($this->evidenceBelqees->evidence_id, $newEvidenceId);
+
+        // التأكد من وجود شاهدين للمؤشر في قاعدة البيانات
+        $count = Evidence::where('indicator_id', $this->firstIndicator->indicator_id)
+            ->where('result_id', $this->resultBelqees->result_id)
+            ->count();
+        $this->assertEquals(2, $count);
+
+        // التأكد من أن كل شاهد له نسخته النشطة (current = true)
+        $this->assertDatabaseHas('evidence_versions', [
+            'evidence_id' => $this->evidenceBelqees->evidence_id,
+            'version_no'  => 1,
+            'current'     => true,
+        ]);
+
+        $this->assertDatabaseHas('evidence_versions', [
+            'evidence_id' => $newEvidenceId,
+            'version_no'  => 1,
+            'current'     => true,
+        ]);
+    }
+
+    /**
+     * اختبار 13: استعراض قائمة الشواهد المتعددة للمؤشر الواحد.
+     */
+    public function test_can_list_all_evidences_for_indicator(): void
+    {
+        Sanctum::actingAs($this->evaluatorBelqees);
+
+        // إنشاء شاهد ثانٍ
+        $file2 = UploadedFile::fake()->create('plan_doc.pdf', 250, 'application/pdf');
+        $this->postJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$this->firstIndicator->indicator_id}/evidences", [
+            'title'         => 'خطة العمل الداعمة',
+            'description'   => 'خطة داعمة للمؤشر',
+            'evidence_type' => 'plan',
+            'file'          => $file2,
+        ])->assertStatus(201);
+
+        // استدعاء endpoint قائمة شواهد المؤشر
+        $response = $this->getJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$this->firstIndicator->indicator_id}/evidences");
+
+        $response->assertStatus(200)
+            ->assertJsonStructure([
+                'data' => [
+                    '*' => [
+                        'evidenceId',
+                        'resultId',
+                        'indicatorId',
+                        'title',
+                        'evidenceType',
+                        'status',
+                        'versions',
+                    ],
+                ],
+                'message',
+            ]);
+
+        $evidences = $response->json('data');
+        $this->assertCount(2, $evidences);
+    }
+
+    /**
+     * اختبار 14: بقاء النسخة النشطة لكل شاهد مستقلة عند رفع نسخة جديدة لأحد الشاهدين.
+     */
+    public function test_active_versions_remain_independent_between_multiple_evidences(): void
+    {
+        Sanctum::actingAs($this->evaluatorBelqees);
+
+        // إنشاء شاهد ثانٍ
+        $file2 = UploadedFile::fake()->create('minutes.pdf', 150, 'application/pdf');
+        $createRes = $this->postJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$this->firstIndicator->indicator_id}/evidences", [
+            'title'         => 'محضر الاجتماع الداعم',
+            'description'   => 'محضر اجتماع رقم 2',
+            'evidence_type' => 'minutes',
+            'file'          => $file2,
+        ]);
+        $secondEvidenceId = $createRes->json('data.evidenceId');
+        $this->assertNotNull($secondEvidenceId);
+
+        // رفع نسخة ثانية للشاهد الأول فقط
+        $revisionFile = UploadedFile::fake()->create('first_evidence_v2.pdf', 400, 'application/pdf');
+        $versionRes = $this->postJson("/api/v1/evidences/{$this->evidenceBelqees->evidence_id}/versions", [
+            'change_summary' => 'تحديث بيانات الشاهد الأول بالإحصائيات الأحدث',
+            'file'           => $revisionFile,
+        ]);
+        $versionRes->assertStatus(201);
+
+        // فحص الشاهد الأول: نسخته الأولى أصبحت غير نشطة ونسخته الثانية نشطة
+        $this->assertDatabaseHas('evidence_versions', [
+            'evidence_id' => $this->evidenceBelqees->evidence_id,
+            'version_no'  => 1,
+            'current'     => false,
+        ]);
+        $this->assertDatabaseHas('evidence_versions', [
+            'evidence_id' => $this->evidenceBelqees->evidence_id,
+            'version_no'  => 2,
+            'current'     => true,
+        ]);
+
+        // فحص الشاهد الثاني: نسخته الأولى ما زالت نشطة بالكامل ولم تتأثر إطلاقاً
+        $this->assertDatabaseHas('evidence_versions', [
+            'evidence_id' => $secondEvidenceId,
+            'version_no'  => 1,
+            'current'     => true,
+        ]);
+    }
+
+    /**
+     * اختبار 15: عدم كسر قيد "نسخة واحدة نشطة لكل شاهد" مهما تعددت النسخ والشواهد.
+     */
+    public function test_single_active_version_per_evidence_preserved(): void
+    {
+        Sanctum::actingAs($this->evaluatorBelqees);
+
+        // إنشاء شاهد ثانٍ
+        $file2 = UploadedFile::fake()->create('board.png', 100, 'image/png');
+        $createRes = $this->postJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$this->firstIndicator->indicator_id}/evidences", [
+            'title'         => 'لوحة الشرف',
+            'description'   => 'صورة لوحة الشرف',
+            'evidence_type' => 'board',
+            'file'          => $file2,
+        ]);
+        $secondEvidenceId = $createRes->json('data.evidenceId');
+        $this->assertNotNull($secondEvidenceId);
+
+        // رفع نسخة v2 ثم v3 للشاهد الأول
+        $v2 = UploadedFile::fake()->create('v2.pdf', 200, 'application/pdf');
+        $this->postJson("/api/v1/evidences/{$this->evidenceBelqees->evidence_id}/versions", [
+            'change_summary' => 'نسخة ثانية',
+            'file'           => $v2,
+        ])->assertStatus(201);
+
+        $v3 = UploadedFile::fake()->create('v3.pdf', 250, 'application/pdf');
+        $this->postJson("/api/v1/evidences/{$this->evidenceBelqees->evidence_id}/versions", [
+            'change_summary' => 'نسخة ثالثة',
+            'file'           => $v3,
+        ])->assertStatus(201);
+
+        // فحص: الشاهد الأول يملك نسخة نشطة واحدة فقط
+        $activeVersionsCount1 = EvidenceVersion::where('evidence_id', $this->evidenceBelqees->evidence_id)
+            ->where('current', true)
+            ->count();
+        $this->assertEquals(1, $activeVersionsCount1);
+
+        // فحص: الشاهد الثاني يملك أيضاً نسخة نشطة واحدة فقط
+        $activeVersionsCount2 = EvidenceVersion::where('evidence_id', $secondEvidenceId)
+            ->where('current', true)
+            ->count();
+        $this->assertEquals(1, $activeVersionsCount2);
+
+        // إجمالي النسخ للشاهد الأول هو 3
+        $this->assertEquals(3, EvidenceVersion::where('evidence_id', $this->evidenceBelqees->evidence_id)->count());
+    }
+
+    /**
+     * اختبار 16: التحقق من العزل المؤسسي وقفل التقييم لمسار شواهد المؤشر.
+     */
+    public function test_indicator_evidences_tenant_isolation_and_lock_rules(): void
+    {
+        // 1. عزل المؤسسات: مقيم مدرسة الفاروق يحاول الوصول لشواهد مؤشر مدرسة بلقيس -> 404
+        Sanctum::actingAs($this->evaluatorFarouq);
+        $this->getJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$this->firstIndicator->indicator_id}/evidences")
+            ->assertStatus(404);
+
+        $file = UploadedFile::fake()->create('intruder.pdf', 100, 'application/pdf');
+        $this->postJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$this->firstIndicator->indicator_id}/evidences", [
+            'title'         => 'شاهد غير مصرح به',
+            'evidence_type' => 'report',
+            'file'          => $file,
+        ])->assertStatus(404);
+
+        // 2. قفل التقييم: مقيم بلقيس يحاول إضافة شاهد بعد إغلاق التقييم -> 422
+        Sanctum::actingAs($this->evaluatorBelqees);
+        $this->evaluationBelqees->update(['status' => 'Completed']);
+
+        $fileValid = UploadedFile::fake()->create('valid.pdf', 100, 'application/pdf');
+        $this->postJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$this->firstIndicator->indicator_id}/evidences", [
+            'title'         => 'شاهد بعد القفل',
+            'evidence_type' => 'report',
+            'file'          => $fileValid,
+        ])->assertStatus(422);
+    }
 }

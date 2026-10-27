@@ -86,6 +86,152 @@ class EvidenceController extends Controller
     }
 
     /**
+     * استعراض قائمة جميع الشواهد النشطة المرتبطة بمؤشر محدد داخل ملف التقييم مع نسخها النشطة ومرفقاتها وملاحظات التدقيق.
+     *
+     * GET /api/v1/evaluations/{id}/indicators/{indicatorId}/evidences
+     * أو GET /api/v1/schools/{school}/assessments/{assessment}/indicators/{indicatorId}/evidences
+     * الصلاحية: evaluations.view أو evidence.manage
+     */
+    public function indexByIndicator(Request $request, int $id, int $indicatorId, ?int $thirdParam = null): JsonResponse
+    {
+        $evalId = $thirdParam !== null ? $indicatorId : $id;
+        $actualIndicatorId = $thirdParam !== null ? $thirdParam : $indicatorId;
+        $schoolId = $thirdParam !== null ? $id : null;
+
+        $user = $request->user();
+
+        if (!$user->hasPermission('evaluations.view') && !$user->hasPermission('evidence.manage')) {
+            return ApiResponse::forbidden('غير مصرح لك باستعراض الشواهد.');
+        }
+
+        $evaluation = Evaluation::with(['cycle', 'school'])->find($evalId);
+        if (!$evaluation || ($schoolId !== null && (int) $evaluation->school_id !== (int) $schoolId)) {
+            return ApiResponse::notFound('ملف التقييم المطلوب غير موجود.');
+        }
+
+        // عزل المدارس (القرار المعماري 9)
+        if ($user->user_type === 'school' && (int) $user->school_id !== (int) $evaluation->school_id) {
+            return ApiResponse::notFound('ملف التقييم المطلوب غير موجود.');
+        }
+
+        if ($user->cannot('view', $evaluation)) {
+            return ApiResponse::forbidden('غير مصرح لك باستعراض شواهد هذا التقييم.');
+        }
+
+        $indicator = Indicator::where('indicator_id', $actualIndicatorId)
+            ->where('status', 'Active')
+            ->first();
+
+        if (!$indicator) {
+            return ApiResponse::notFound('المؤشر المطلوب غير موجود أو غير فعّال.');
+        }
+
+        // جلب سجل النتيجة للمؤشر في هذا التقييم
+        $result = EvaluationResult::where('evaluation_id', $evaluation->evaluation_id)
+            ->where('indicator_id', $actualIndicatorId)
+            ->first();
+
+        if (!$result) {
+            return ApiResponse::success(
+                data: [],
+                message: 'لا توجد شواهد مرفوعة لهذا المؤشر بعد.'
+            );
+        }
+
+        $evidences = Evidence::where('result_id', $result->result_id)
+            ->with([
+                'versions' => function ($q) {
+                    $q->orderBy('version_no', 'desc');
+                },
+                'versions.attachments',
+                'reviewer',
+            ])
+            ->orderBy('evidence_id', 'desc')
+            ->get();
+
+        $data = $evidences->map(function ($evidence) {
+            return $this->formatEvidence($evidence);
+        });
+
+        return ApiResponse::success(
+            data: $data,
+            message: 'تم استرجاع قائمة الشواهد بنجاح.'
+        );
+    }
+
+    /**
+     * إنشاء شاهد جديد (أول أو إضافي) لمؤشر محدد داخل ملف التقييم دون استبدال الشواهد السابقة.
+     *
+     * POST /api/v1/evaluations/{id}/indicators/{indicatorId}/evidences
+     * أو POST /api/v1/schools/{school}/assessments/{assessment}/indicators/{indicatorId}/evidences
+     * الصلاحية: evidence.manage
+     */
+    public function storeByIndicator(Request $request, int $id, int $indicatorId, ?int $thirdParam = null): JsonResponse
+    {
+        $evalId = $thirdParam !== null ? $indicatorId : $id;
+        $actualIndicatorId = $thirdParam !== null ? $thirdParam : $indicatorId;
+        $schoolId = $thirdParam !== null ? $id : null;
+
+        $user = $request->user();
+
+        if (!$user->hasPermission('evidence.manage')) {
+            return ApiResponse::forbidden('غير مصرح لك بإدارة الشواهد.');
+        }
+
+        $evaluation = Evaluation::with(['cycle', 'school'])->find($evalId);
+        if (!$evaluation || ($schoolId !== null && (int) $evaluation->school_id !== (int) $schoolId)) {
+            return ApiResponse::notFound('ملف التقييم المطلوب غير موجود.');
+        }
+
+        // عزل المدارس (القرار المعماري 9)
+        if ($user->user_type === 'school' && (int) $user->school_id !== (int) $evaluation->school_id) {
+            return ApiResponse::notFound('ملف التقييم المطلوب غير موجود.');
+        }
+
+        // فحص قفل التقييم للمؤشر (BR-SCH-03)
+        $lockCheck = EvaluationLockChecker::canModifyIndicator($evaluation, $actualIndicatorId);
+        if (!$lockCheck['allowed']) {
+            $key = $lockCheck['errorKey'] ?? 'evaluation';
+            return ApiResponse::validationError([
+                $key => [$lockCheck['message']],
+            ], $lockCheck['message']);
+        }
+
+        $indicator = Indicator::where('indicator_id', $actualIndicatorId)
+            ->where('status', 'Active')
+            ->first();
+
+        if (!$indicator) {
+            return ApiResponse::notFound('المؤشر المطلوب غير موجود أو غير فعّال.');
+        }
+
+        // جلب سجل النتيجة أو إنشاؤه تلقائياً
+        $result = EvaluationResult::where('evaluation_id', $evaluation->evaluation_id)
+            ->where('indicator_id', $actualIndicatorId)
+            ->first();
+
+        if (!$result) {
+            $versionId = $evaluation->cycle?->standard_version_id ?? $evaluation->cycle?->version_id ?? 1;
+            $descriptor = IndicatorScoreDescriptor::where('indicator_id', $actualIndicatorId)
+                ->where('standard_version_id', $versionId)
+                ->first();
+
+            $result = EvaluationResult::create([
+                'evaluation_id'       => $evaluation->evaluation_id,
+                'indicator_id'        => $actualIndicatorId,
+                'score_descriptor_id' => $descriptor?->descriptor_id ?? 1,
+                'standard_version_id' => $versionId,
+                'evaluator_user_id'   => $user->user_id,
+                'score'               => $descriptor?->scoreLevel?->score_value ?? 0,
+                'textual_result'      => null,
+                'completion_status'   => 'Draft',
+            ]);
+        }
+
+        return $this->createEvidenceForRecord($request, $result);
+    }
+
+    /**
      * إنشاء شاهد جديد لنتيجة مؤشر محدد مع أول نسخة ومرفق له وتصنيفه اليدوي.
      *
      * POST /api/v1/evaluation-results/{id}/evidences
@@ -120,6 +266,14 @@ class EvidenceController extends Controller
             ], $lockCheck['message']);
         }
 
+        return $this->createEvidenceForRecord($request, $result);
+    }
+
+    /**
+     * منطق التحقق وإنشاء الشاهد ونسخته الأولى ومرفقه لسجل نتيجة محدد.
+     */
+    protected function createEvidenceForRecord(Request $request, EvaluationResult $result): JsonResponse
+    {
         // التحقق من المدخلات والمرفق والتصنيف
         $validator = Validator::make($request->all(), [
             'title'         => ['required', 'string', 'max:200'],
@@ -157,7 +311,7 @@ class EvidenceController extends Controller
         $storedPath = $file->storeAs('attachments/evidence', $storageFileName, 'local');
 
         $evidenceRecord = DB::transaction(function () use ($request, $result, $evidenceType, $file, $originalName, $storedPath) {
-            // 1. إنشاء سجل الشاهد
+            // 1. إنشاء سجل الشاهد (كل شاهد ينشأ ككيان مستقل)
             $evidence = Evidence::create([
                 'result_id'     => $result->result_id,
                 'indicator_id'  => $result->indicator_id,
@@ -168,7 +322,7 @@ class EvidenceController extends Controller
                 'status'        => 'Draft',
             ]);
 
-            // 2. إنشاء أول نسخة تاريخية (current = true)
+            // 2. إنشاء أول نسخة تاريخية للشاهد الجديد (current = true لهذا الشاهد)
             $version = EvidenceVersion::create([
                 'evidence_id' => $evidence->evidence_id,
                 'version_no'  => 1,
@@ -499,18 +653,22 @@ class EvidenceController extends Controller
      * حصر الشواهد لكل مؤشر وإظهار النواقص والمكتمل للتقييم.
      *
      * GET /api/v1/evaluations/{id}/evidence-inventory
+     * أو GET /api/v1/schools/{school}/assessments/{assessment}/evidence-inventory
      * الصلاحية: evaluations.view أو evidence.manage
      */
-    public function inventory(Request $request, int $id): JsonResponse
+    public function inventory(Request $request, int $id, ?int $assessment = null): JsonResponse
     {
+        $evalId = $assessment ?? $id;
+        $schoolId = $assessment !== null ? $id : null;
+
         $user = $request->user();
 
         if (!$user->hasPermission('evaluations.view') && !$user->hasPermission('evidence.manage')) {
             return ApiResponse::forbidden('غير مصرح لك باستعراض جرد الشواهد.');
         }
 
-        $evaluation = Evaluation::with(['cycle', 'school'])->find($id);
-        if (!$evaluation) {
+        $evaluation = Evaluation::with(['cycle', 'school'])->find($evalId);
+        if (!$evaluation || ($schoolId !== null && (int) $evaluation->school_id !== (int) $schoolId)) {
             return ApiResponse::notFound('ملف التقييم المطلوب غير موجود.');
         }
 
