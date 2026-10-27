@@ -207,9 +207,9 @@ class EvaluationController extends Controller
                                 'weight'                 => (float) $ind->weight,
                                 'status'                 => $ind->status,
                                 'resultId'               => $result?->result_id,
-                                'score'                  => $result?->score,
-                                'scoreDescriptorId'      => $result?->score_descriptor_id,
-                                'scoreDescriptorLabel'   => $result?->scoreDescriptor?->label,
+                                'score'                  => ($result && $result->completion_status === 'Completed') ? $result->score : null,
+                                'scoreDescriptorId'      => ($result && $result->completion_status === 'Completed') ? $result->score_descriptor_id : null,
+                                'scoreDescriptorLabel'   => ($result && $result->completion_status === 'Completed') ? $result->scoreDescriptor?->label : null,
                                 'completionStatus'       => $result?->completion_status,
                                 'textualResult'          => $result?->textual_result,
                                 'evidenceCount'          => $result ? $result->evidences->count() : 0,
@@ -627,6 +627,7 @@ class EvaluationController extends Controller
 
         $scoredIndicatorIds = EvaluationResult::query()
             ->where('evaluation_id', $evaluation->evaluation_id)
+            ->where('completion_status', 'Completed')
             ->whereNotNull('score')
             ->pluck('indicator_id')
             ->all();
@@ -654,7 +655,7 @@ class EvaluationController extends Controller
         }
 
         // 4. التحقق من استيفاء الحد الأدنى من الشواهد الإلزامية المطلوبة
-        // الحد الأدنى: كل مؤشر له متطلب شاهد إلزامي (required=true) يجب أن يتوفر له شاهد مرفوع واحد على الأقل
+        // الحد الأدنى: كل مؤشر له متطلب شاهد إلزامي (required=true) يجب أن يتوفر له شاهد مستوفٍ (Completed أو Audited)
         $requiredEvidenceMap = DB::table('indicator_evidence_requirements')
             ->where('required', true)
             ->get(['requirement_id', 'indicator_id', 'title'])
@@ -662,7 +663,9 @@ class EvaluationController extends Controller
 
         $resultsWithEvidence = EvaluationResult::query()
             ->where('evaluation_id', $evaluation->evaluation_id)
-            ->withCount('evidences')
+            ->with(['evidences' => function ($q) {
+                $q->whereIn('status', ['Completed', 'Audited']);
+            }])
             ->get()
             ->keyBy('indicator_id');
 
@@ -672,7 +675,7 @@ class EvaluationController extends Controller
             $reqList = $requiredEvidenceMap->get($ind->indicator_id);
             if ($reqList && $reqList->isNotEmpty()) {
                 $result = $resultsWithEvidence->get($ind->indicator_id);
-                $evidenceCount = $result ? (int) $result->evidences_count : 0;
+                $evidenceCount = $result ? $result->evidences->count() : 0;
                 if ($evidenceCount < 1) {
                     $missingEvidenceIndicators[] = [
                         'indicator_id' => $ind->indicator_id,

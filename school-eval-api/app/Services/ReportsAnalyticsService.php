@@ -61,9 +61,10 @@ class ReportsAnalyticsService
         $allActiveIndicators = $indicatorsQuery->pluck('indicator_id')->toArray();
         $totalCount = count($allActiveIndicators);
 
-        // جلب المؤشرات التي تم رصد درجاتها فعلياً (score != null) في هذا التقييم
+        // جلب المؤشرات التي تم رصد درجاتها فعلياً (score != null و completion_status = Completed) في هذا التقييم
         $scoredIndicatorIds = EvaluationResult::query()
             ->where('evaluation_id', $evaluation->evaluation_id)
+            ->where('completion_status', 'Completed')
             ->whereNotNull('score')
             ->pluck('indicator_id')
             ->toArray();
@@ -105,6 +106,7 @@ class ReportsAnalyticsService
         $scoredIndicatorIds = EvaluationResult::query()
             ->where('evaluation_id', $evaluation->evaluation_id)
             ->whereIn('indicator_id', $standardIndicatorIds)
+            ->where('completion_status', 'Completed')
             ->whereNotNull('score')
             ->pluck('indicator_id')
             ->toArray();
@@ -164,7 +166,7 @@ class ReportsAnalyticsService
 
                 /** @var EvaluationResult|null $result */
                 $result = $resultsMap->get($ind->indicator_id);
-                $hasScore = ($result !== null && $result->score !== null);
+                $hasScore = ($result !== null && $result->completion_status === 'Completed' && $result->score !== null);
                 $rawScore = $hasScore ? (int) $result->score : null;
                 $scorePercentage = $hasScore ? round(($rawScore / 3.0) * 100, 2) : null;
 
@@ -351,17 +353,19 @@ class ReportsAnalyticsService
 
                     /** @var EvaluationResult|null $result */
                     $result = $resultsMap->get($ind->indicator_id);
-                    $uploadedCount = $result ? $result->evidences->count() : 0;
+                    $evidences = $result ? $result->evidences : collect();
+                    $uploadedCount = $evidences->count();
+                    $validCount = $evidences->whereIn('status', ['Completed', 'Audited'])->count();
 
                     $stdRequiredEvidences += $reqCount;
                     $stdUploadedEvidences += $uploadedCount;
                     $overallTotalRequiredEvidences += $reqCount;
                     $overallTotalUploadedEvidences += $uploadedCount;
 
-                    $isComplete = ($reqCount > 0) ? ($uploadedCount >= $reqCount) : ($uploadedCount > 0);
-                    $rate = ($reqCount > 0) ? min(100.0, round(($uploadedCount / $reqCount) * 100, 2)) : ($uploadedCount > 0 ? 100.0 : 0.0);
+                    $isComplete = ($reqCount > 0) ? ($validCount >= $reqCount) : ($validCount > 0);
+                    $rate = ($reqCount > 0) ? min(100.0, round(($validCount / $reqCount) * 100, 2)) : ($validCount > 0 ? 100.0 : 0.0);
 
-                    if ($uploadedCount > 0) {
+                    if ($validCount > 0) {
                         $stdWithEvidence++;
                         $overallIndicatorsWithEvidence++;
                     } else {

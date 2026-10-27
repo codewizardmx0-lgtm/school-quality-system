@@ -25,14 +25,14 @@ use Tests\TestCase;
  *
  * التحقق من:
  * 1. اشتراط اكتمال رصد كافة المؤشرات الـ 109.
- * 2. اشتراط استيفاء الحد الأدنى من الشواهد الإلزامية للمؤشرات.
+ * 2. اشتراط استيفاء الحد الأدنى من الشواهد الإلزامية للمؤشرات (بحالة Completed أو Audited).
  * 3. حظر الإغلاق المتكرر للتقييم المكتمل مسبقاً.
  * 4. تطبيق العزل المؤسسي الصارم (القرار المعماري 9: 404).
  * 5. قفل العمليات التعديلية (الرصد ورفع الشواهد) بعد الإغلاق برمز 422 (BR-SCH-03).
  * 6. عمل خدمات حساب النتائج والتصدير (الشريحة 4) بعد الإغلاق من البداية إلى النهاية.
  * 7. إطلاق حدث الإغلاق EvaluationSubmitted وتوثيق الطوابع الزمنية.
  */
-class EvaluationSubmissionFeatureTest extends TestCase
+class EvaluationSubmitFeatureTest extends TestCase
 {
     use DatabaseTransactions;
 
@@ -125,7 +125,7 @@ class EvaluationSubmissionFeatureTest extends TestCase
     }
 
     /**
-     * دالة مساعدة لإرفاق شواهد للمؤشرات التي تتطلب شواهد إلزامية.
+     * دالة مساعدة لإرفاق شواهد مكتملة للمؤشرات التي تتطلب شواهد إلزامية.
      */
     protected function attachEvidenceToRequiredIndicators(?int $exceptIndicatorId = null): void
     {
@@ -143,15 +143,19 @@ class EvaluationSubmissionFeatureTest extends TestCase
                 ->first();
 
             if ($result) {
-                $evidence = Evidence::firstOrCreate(
-                    ['result_id' => $result->result_id],
-                    [
-                        'indicator_id' => $indicatorId,
-                        'title' => 'شاهد معتمد للمؤشر رقم ' . $indicatorId,
-                        'description' => 'وصف الشاهد المعتمد للتحقق',
+                $evidence = Evidence::where('result_id', $result->result_id)->first();
+                if (!$evidence) {
+                    $evidence = Evidence::create([
+                        'result_id'     => $result->result_id,
+                        'indicator_id'  => $indicatorId,
+                        'title'         => 'شاهد معتمد للمؤشر رقم ' . $indicatorId,
+                        'description'   => 'وصف الشاهد المعتمد للتحقق',
                         'justification' => 'مبررات ودلالات الشاهد',
-                    ]
-                );
+                        'status'        => 'Completed',
+                    ]);
+                } else {
+                    $evidence->update(['status' => 'Completed']);
+                }
 
                 EvidenceVersion::firstOrCreate(
                     [
@@ -270,7 +274,7 @@ class EvaluationSubmissionFeatureTest extends TestCase
         // رصد كافة المؤشرات الـ 109
         $this->scoreAllIndicators(3);
 
-        // إرفاق الحد الأدنى من الشواهد لجميع المؤشرات الإلزامية
+        // إرفاق الحد الأدنى من الشواهد لجميع المؤشرات الإلزامية بحالة Completed
         $this->attachEvidenceToRequiredIndicators();
 
         $response = $this->postJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/submit");

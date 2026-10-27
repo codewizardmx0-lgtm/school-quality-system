@@ -33,11 +33,13 @@ school-quality-system/
 ## الشريحة الخامسة: تنظيم الشواهد وتصنيفها وربطها بالمؤشرات (No AI)
 
 ### نقاط النهاية المتاحة (Endpoints)
+- `GET /api/v1/evaluations/{id}/indicators/{indicatorId}/evidences` — استعراض قائمة الشواهد النشطة للمؤشر مع نسخها ومرفقاتها وملاحظات التدقيق.
+- `POST /api/v1/evaluations/{id}/indicators/{indicatorId}/evidences` — إضافة شاهد جديد للمؤشر (إمكانية تعدد الشواهد النشطة) مع إنشاء نتيجة تلقائية بحالة Pending.
 - `PATCH /api/v1/evidences/{id}/classify` — تصنيف الشاهد يدوياً (محضر، خطة، سجل، تقرير، لوحة، صورة، أخرى).
 - `POST|PATCH /api/v1/evidences/{id}/link-indicator` — ربط الشاهد بمؤشر آخر مع إنشاء نتيجة التقييم تلقائياً.
 - `PATCH /api/v1/evidences/{id}/status` — تحديث حالة تدقيق الشاهد (Draft, Completed, Audited).
 - `POST|PATCH /api/v1/evidences/{id}/review-notes` — إضافة ملاحظات المراجع وهوية وتاريخ المراجعة.
-- `GET /api/v1/evaluations/{id}/evidence-inventory` (المسار البديل: `/api/v1/schools/{school}/assessments/{assessment}/evidence-inventory`) — جرد وحصر الشواهد التفصيلي للتقييم وبيان النواقص والمكتمل.
+- `GET /api/v1/evaluations/{id}/evidence-inventory` (المسار البديل: `/api/v1/schools/{school}/assessments/{assessment}/evidence-inventory`) — جرد وحصر الشواهد التفصيلي للتقييم وبيان النواقص والمكتمل وفق حالة الشاهد (Completed / Audited).
 
 * التفاصيل الكاملة للشريحة: [`docs/slices/slice5_evidence_organization.md`](docs/slices/slice5_evidence_organization.md)
 * خارطة الطريق للشرائح المستقبلية (12 شريحة): [`docs/slices_roadmap.md`](docs/slices_roadmap.md)

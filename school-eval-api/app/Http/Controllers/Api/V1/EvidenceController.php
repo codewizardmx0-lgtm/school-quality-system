@@ -222,9 +222,9 @@ class EvidenceController extends Controller
                 'score_descriptor_id' => $descriptor?->descriptor_id ?? 1,
                 'standard_version_id' => $versionId,
                 'evaluator_user_id'   => $user->user_id,
-                'score'               => $descriptor?->scoreLevel?->score_value ?? 0,
+                'score'               => 0,
                 'textual_result'      => null,
-                'completion_status'   => 'Draft',
+                'completion_status'   => 'Pending',
             ]);
         }
 
@@ -508,9 +508,9 @@ class EvidenceController extends Controller
                 'score_descriptor_id' => $descriptor?->descriptor_id ?? 1,
                 'standard_version_id' => $versionId,
                 'evaluator_user_id'   => $user->user_id,
-                'score'               => $descriptor?->scoreLevel?->score_value ?? 0,
+                'score'               => 0,
                 'textual_result'      => null,
-                'completion_status'   => 'Draft',
+                'completion_status'   => 'Pending',
             ]);
         }
 
@@ -768,9 +768,14 @@ class EvidenceController extends Controller
                         }
                     }
 
-                    // التحقق من كفاية الشواهد
+                    // التحقق من كفاية الشواهد: الشاهد كافٍ فقط إذا كانت حالته Completed أو Audited (Draft لا يُحتسب مستوفياً)
+                    $validEvidences = $evidences->filter(function ($ev) {
+                        return in_array($ev->status, ['Completed', 'Audited'], true);
+                    });
+                    $validCount = $validEvidences->count();
+
                     $isSufficient = ($mandatoryReqCount > 0)
-                        ? ($uploadedCount >= $mandatoryReqCount)
+                        ? ($validCount >= $mandatoryReqCount)
                         : true;
 
                     if ($isSufficient) {
@@ -781,8 +786,8 @@ class EvidenceController extends Controller
 
                     $indicatorStatus = 'NotRequired';
                     if ($mandatoryReqCount > 0) {
-                        $indicatorStatus = ($uploadedCount >= $mandatoryReqCount) ? 'Completed' : 'Missing';
-                    } elseif ($uploadedCount > 0) {
+                        $indicatorStatus = ($validCount >= $mandatoryReqCount) ? 'Completed' : 'Missing';
+                    } elseif ($validCount > 0) {
                         $indicatorStatus = 'Completed';
                     }
 
@@ -793,6 +798,10 @@ class EvidenceController extends Controller
                         'domainName'             => $sub->name,
                         'mandatoryRequiredCount' => $mandatoryReqCount,
                         'totalRequiredCount'     => $totalReqCount,
+                        'uploadedEvidenceCount'  => $uploadedCount,
+                        'validEvidenceCount'     => $validCount,
+                        'isSufficient'           => $isSufficient,
+                        'status'                 => $indicatorStatus,
                         'uploadedEvidenceCount'  => $uploadedCount,
                         'isSufficient'           => $isSufficient,
                         'status'                 => $indicatorStatus,
