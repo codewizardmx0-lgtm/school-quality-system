@@ -12,6 +12,7 @@ use App\Models\IndicatorScoreDescriptor;
 use App\Models\Note;
 use App\Models\StandardVersion;
 use App\Services\EvaluationLockChecker;
+use App\Events\EvaluationSubmitted;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -554,5 +555,184 @@ class EvaluationController extends Controller
             message: 'تم حفظ الملاحظة بنجاح.',
             status: 201
         );
+    }
+
+    /**
+     * إغلاق وتقديم التقييم الذاتي المدرسي واعتماده كمكتمل (G-01 / BR-SCH-03).
+     *
+     * الشروط الحاكمة:
+     * 1. اكتمال رصد كافة المؤشرات الفعالة ووجود درجات لها (0-3).
+     * 2. تحقق الحد الأدنى من الشواهد الإلزامية المطلوبة (شاهد واحد على الأقل لكل مؤشر له متطلب إلزامي).
+     * 3. ألا يكون التقييم مكتملاً أو مقفلاً مسبقاً، وألا تكون دورة التقييم مغلقة.
+     * 4. امتلاك صلاحية evaluations.submit والعزل المؤسسي (المدرسة المطابقة حصراً 404/403).
+     *
+     * POST /api/v1/evaluations/{id}/submit
+     */
+    public function submit(Request $request, int $id): JsonResponse
+    {
+        $user = $request->user();
+
+        $evaluation = Evaluation::with(['cycle', 'school'])->find($id);
+
+        if (!$evaluation) {
+            return ApiResponse::notFound('ملف التقييم المطلوب غير موجود.');
+        }
+
+        // عزل المدارس الصارم (القرار المعماري 9): إرجاع 404 إذا طلب مستخدم مدرسة تقييم مدرسة أخرى
+        if ($user->user_type === 'school' && (int) $user->school_id !== (int) $evaluation->school_id) {
+            return ApiResponse::notFound('ملف التقييم المطلوب غير موجود.');
+        }
+
+        // فحص الصلاحية عبر مصفوفة الصلاحيات أو السياسة
+        if (!$user->hasPermission('evaluations.submit')) {
+            return ApiResponse::forbidden('غير مصرح لك بتقديم هذا التقييم.');
+        }
+
+        if ($user->cannot('submit', $evaluation)) {
+            return ApiResponse::forbidden('غير مصرح لك بتقديم هذا التقييم.');
+        }
+
+        // 1. التحقق من حالة الدورة التقييمية (FR-SCH-01)
+        if ($evaluation->cycle && $evaluation->cycle->status === 'Closed') {
+            return ApiResponse::validationError([
+                'cycle' => ['دورة التقييم مغلقة حالياً ولا يُسمح بتقديم أو تعديل التقييم.'],
+            ], 'دورة التقييم مغلقة حالياً ولا يُسمح بتقديم التقييم.');
+        }
+
+        // 2. التحقق من أن التقييم غير مكتمل أو مقفل مسبقاً (BR-SCH-03)
+        if ($evaluation->status === 'Completed') {
+            return ApiResponse::validationError([
+                'evaluation' => ['ملف التقييم مكتمل ومقفل مسبقاً ولا يمكن إعادة تقديمه.'],
+            ], 'ملف التقييم مكتمل ومقفل مسبقاً ولا يمكن إعادة تقديمه.');
+        }
+
+        if (EvaluationLockChecker::isEvaluationLocked($evaluation)) {
+            $lockStatus = EvaluationLockChecker::checkEvaluationGeneralStatus($evaluation);
+            $reason = $lockStatus['reason'] ?? 'ملف التقييم مقفل حالياً.';
+            return ApiResponse::validationError([
+                'evaluation' => [$reason],
+            ], $reason);
+        }
+
+        // 3. التحقق من اكتمال رصد درجات جميع المؤشرات الفعالة
+        $versionId = $evaluation->cycle?->version_id;
+        $indicatorsQuery = Indicator::query()->where('status', 'Active');
+        if ($versionId) {
+            $indicatorsQuery->whereHas('subStandard.standard', function ($q) use ($versionId) {
+                $q->where('version_id', $versionId);
+            });
+        }
+        $allActiveIndicators = $indicatorsQuery->get(['indicator_id', 'code', 'name']);
+        $totalIndicatorsCount = $allActiveIndicators->count();
+
+        $scoredIndicatorIds = EvaluationResult::query()
+            ->where('evaluation_id', $evaluation->evaluation_id)
+            ->whereNotNull('score')
+            ->pluck('indicator_id')
+            ->all();
+
+        $unscoredIndicators = $allActiveIndicators->filter(function ($ind) use ($scoredIndicatorIds) {
+            return !in_array($ind->indicator_id, $scoredIndicatorIds);
+        })->values();
+
+        if ($unscoredIndicators->isNotEmpty()) {
+            $missingCount = $unscoredIndicators->count();
+            $unscoredList = $unscoredIndicators->map(function ($ind) {
+                return [
+                    'indicator_id' => $ind->indicator_id,
+                    'code' => $ind->code,
+                    'name' => $ind->name,
+                ];
+            })->all();
+
+            return ApiResponse::validationError([
+                'indicators' => [
+                    "التقييم غير مكتمل. يتبقى عدد {$missingCount} مؤشر بدون رصد درجات من أصل {$totalIndicatorsCount} مؤشر.",
+                ],
+                'unscored_indicators' => $unscoredList,
+            ], 'لا يمكن تقديم تقييم غير مكتمل الرصد.');
+        }
+
+        // 4. التحقق من استيفاء الحد الأدنى من الشواهد الإلزامية المطلوبة
+        // الحد الأدنى: كل مؤشر له متطلب شاهد إلزامي (required=true) يجب أن يتوفر له شاهد مرفوع واحد على الأقل
+        $requiredEvidenceMap = DB::table('indicator_evidence_requirements')
+            ->where('required', true)
+            ->get(['requirement_id', 'indicator_id', 'title'])
+            ->groupBy('indicator_id');
+
+        $resultsWithEvidence = EvaluationResult::query()
+            ->where('evaluation_id', $evaluation->evaluation_id)
+            ->withCount('evidences')
+            ->get()
+            ->keyBy('indicator_id');
+
+        $missingEvidenceIndicators = [];
+
+        foreach ($allActiveIndicators as $ind) {
+            $reqList = $requiredEvidenceMap->get($ind->indicator_id);
+            if ($reqList && $reqList->isNotEmpty()) {
+                $result = $resultsWithEvidence->get($ind->indicator_id);
+                $evidenceCount = $result ? (int) $result->evidences_count : 0;
+                if ($evidenceCount < 1) {
+                    $missingEvidenceIndicators[] = [
+                        'indicator_id' => $ind->indicator_id,
+                        'code' => $ind->code,
+                        'name' => $ind->name,
+                        'required_requirements_count' => $reqList->count(),
+                        'uploaded_evidence_count' => $evidenceCount,
+                    ];
+                }
+            }
+        }
+
+        if (!empty($missingEvidenceIndicators)) {
+            $missingCount = count($missingEvidenceIndicators);
+            return ApiResponse::validationError([
+                'evidences' => [
+                    "يوجد عدد {$missingCount} مؤشر لم يستوفِ الحد الأدنى من الشواهد الإلزامية المطلوبة.",
+                ],
+                'missing_evidence_indicators' => $missingEvidenceIndicators,
+            ], 'لا يمكن تقديم التقييم لعدم استيفاء الحد الأدنى من الشواهد المطلوبة.');
+        }
+
+        // 5. التحديث داخل Transaction وإطلاق حدث القفل
+        DB::transaction(function () use ($evaluation, $user) {
+            $evaluation->status = 'Completed';
+            $evaluation->updated_at = now();
+            $evaluation->save();
+
+            event(new EvaluationSubmitted($evaluation, $user));
+        });
+
+        return ApiResponse::success(
+            data: [
+                'evaluationId' => $evaluation->evaluation_id,
+                'schoolId' => $evaluation->school_id,
+                'status' => $evaluation->status,
+                'completedAt' => $evaluation->updated_at?->toIso8601ZuluString(),
+                'submittedByUser' => [
+                    'userId' => $user->user_id,
+                    'name' => $user->full_name,
+                    'role' => $user->roles->first()?->role_name,
+                ],
+                'isLocked' => true,
+            ],
+            message: 'تم إغلاق التقييم الذاتي واعتماده بنجاح وقفل العمليات التعديلية (BR-SCH-03).'
+        );
+    }
+
+    /**
+     * إغلاق وتقديم التقييم الذاتي عبر مسار المدرسة المباشر.
+     *
+     * POST /api/v1/schools/{school}/assessments/{assessment}/submit
+     */
+    public function submitBySchool(Request $request, int $schoolId, int $assessmentId): JsonResponse
+    {
+        $evaluation = Evaluation::find($assessmentId);
+        if (!$evaluation || (int) $evaluation->school_id !== (int) $schoolId) {
+            return ApiResponse::notFound('ملف التقييم المطلوب غير موجود.');
+        }
+
+        return $this->submit($request, $assessmentId);
     }
 }

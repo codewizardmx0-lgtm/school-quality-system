@@ -2528,4 +2528,45 @@ const App = {
     });
   },
 
+  async handleEvaluationSubmit() {
+    if (!this.hasPermission('evaluations.submit')) {
+      this.showAlert('غير مصرح لك بتقديم هذا التقييم (تتطلب evaluations.submit).', 'error');
+      return;
+    }
+
+    const evalId = this.state.currentEvaluation?.evaluationId;
+    if (!evalId) return;
+
+    if (!confirm('هل أنت متأكد من رغبتك في إغلاق واعتماد التقييم الذاتي؟\n\nتنبيه: بعد الإغلاق سيتم قفل التقييم نهائياً ولن يُسمح بأي تعديلات على الدرجات أو الشواهد (BR-SCH-03).')) {
+      return;
+    }
+
+    const res = await this.request(`/evaluations/${evalId}/submit`, {
+      method: 'POST'
+    });
+
+    if (!res.ok) {
+      let errorMsg = res.message || 'فشل إغلاق التقييم.';
+      if (res.errors) {
+        if (res.errors.indicators) {
+          errorMsg += '\n\n• ' + res.errors.indicators.join('\n• ');
+        }
+        if (res.errors.evidences) {
+          errorMsg += '\n\n• ' + res.errors.evidences.join('\n• ');
+        }
+        if (res.errors.evaluation) {
+          errorMsg += '\n\n• ' + res.errors.evaluation.join('\n• ');
+        }
+      }
+      alert(errorMsg);
+      return;
+    }
+
+    this.showAlert(res.message || 'تم إغلاق التقييم الذاتي واعتماده بنجاح.', 'success');
+    if (this.state.currentEvaluation) {
+      this.state.currentEvaluation.status = 'Completed';
+    }
+    await this.loadStandardsTree(evalId);
+  },
+
 };

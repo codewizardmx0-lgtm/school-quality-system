@@ -37,6 +37,7 @@ school-quality-system/
 - `GET /api/v1/schools/{school}/assessments/{assessment}/evidence-summary`
 - `GET /api/v1/schools/{school}/assessments/{assessment}/improvement-plans/summary`
 - `GET /api/v1/schools/{school}/assessments/{assessment}/export`
+- `POST /api/v1/evaluations/{id}/submit` (المسار البديل: `/api/v1/schools/{school}/assessments/{assessment}/submit`) — إغلاق واعتماد التقييم وقفل التعديل (G-01 / BR-SCH-03)
 
 * التفاصيل الكاملة لنقاط النهاية: [`docs/api/reports_analytics_endpoints.md`](docs/api/reports_analytics_endpoints.md) | ملف التجربة: [`docs/api/reports.http`](docs/api/reports.http)
 * توثيق النموذج الأولي التفاعلي (15 شاشة): [`frontend-prototype/README.md`](frontend-prototype/README.md)
@@ -71,6 +72,6 @@ php artisan test
 ```
 
 **نتيجة الاختبارات الإجمالية:**
-- **103 اختبارات ناجحة بنسبة 100%**
-- **7,369 تأكيداً (Assertions)**
+- **112 اختباراً ناجحاً بنسبة 100%**
+- **7,426 تأكيداً (Assertions)**
 - **0 إخفاقات / 0 أخطاء**

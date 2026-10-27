@@ -67,6 +67,7 @@ Route::prefix('v1')->group(function () {
             Route::get('/{id}/standards-tree', [\App\Http\Controllers\Api\V1\EvaluationController::class, 'standardsTree'])->name('api.v1.evaluations.standards-tree');
             Route::get('/{id}/improvement-suggestions', [\App\Http\Controllers\Api\V1\ImprovementSuggestionController::class, 'index'])->name('api.v1.evaluations.improvement-suggestions');
             Route::put('/{evaluationId}/indicators/{indicatorId}/score', [\App\Http\Controllers\Api\V1\EvaluationController::class, 'scoreIndicator'])->name('api.v1.evaluations.indicators.score');
+            Route::post('/{id}/submit', [\App\Http\Controllers\Api\V1\EvaluationController::class, 'submit'])->name('api.v1.evaluations.submit');
         });
 
         // نتائج التقييم: الملاحظات وإدارة الشواهد (Evaluation Results)
@@ -116,6 +117,8 @@ Route::prefix('v1')->group(function () {
                 ->name('api.v1.schools.assessments.evidence-summary');
             Route::get('/assessments/{assessment}/export', [\App\Http\Controllers\Api\V1\ReportsAnalyticsController::class, 'exportAssessment'])
                 ->name('api.v1.schools.assessments.export');
+            Route::post('/assessments/{assessment}/submit', [\App\Http\Controllers\Api\V1\EvaluationController::class, 'submitBySchool'])
+                ->name('api.v1.schools.assessments.submit');
         });
     });
 });
@@ -129,6 +132,7 @@ Route::middleware(['auth:sanctum', 'session.timeout'])->group(function () {
         Route::get('/assessments/{assessment}/standards/{standard}/results', [\App\Http\Controllers\Api\V1\ReportsAnalyticsController::class, 'standardResults'])->name('api.schools.assessments.standards.results');
         Route::get('/assessments/{assessment}/evidence-summary', [\App\Http\Controllers\Api\V1\ReportsAnalyticsController::class, 'evidenceSummary'])->name('api.schools.assessments.evidence-summary');
         Route::get('/assessments/{assessment}/export', [\App\Http\Controllers\Api\V1\ReportsAnalyticsController::class, 'exportAssessment'])->name('api.schools.assessments.export');
+        Route::post('/assessments/{assessment}/submit', [\App\Http\Controllers\Api\V1\EvaluationController::class, 'submitBySchool'])->name('api.schools.assessments.submit');
     });
 });
 
