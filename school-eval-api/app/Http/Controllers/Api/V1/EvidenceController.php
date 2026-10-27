@@ -5,9 +5,15 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Http\Responses\ApiResponse;
 use App\Models\Attachment;
+use App\Models\Evaluation;
 use App\Models\EvaluationResult;
 use App\Models\Evidence;
 use App\Models\EvidenceVersion;
+use App\Models\Indicator;
+use App\Models\IndicatorEvidenceRequirement;
+use App\Models\IndicatorScoreDescriptor;
+use App\Models\School;
+use App\Models\Standard;
 use App\Services\EvaluationLockChecker;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -17,18 +23,19 @@ use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 
 /**
- * متحكم إدارة الشواهد والأدلة الداعمة ونسخها التاريخية ومرفقاتها (EvidenceController).
+ * متحكم إدارة الشواهد والأدلة الداعمة ونسخها وتنظيمها وتصنيفها (EvidenceController).
  *
  * القواعد المعمارية:
- * 1. العزل المؤسسي: أي شاهد أو نتيجة تخص مدرسة أخرى يرجع 404 Not Found (القرار 9).
- * 2. قفل التقييم (BR-SCH-03): التحقق عبر EvaluationLockChecker.
+ * 1. العزل المؤسسي: أي شاهد أو نتيجة تخص مدرسة أخرى يرجع 404 Not Found (القرار المعماري 9).
+ * 2. قفل التقييم (BR-SCH-03): التحقق عبر EvaluationLockChecker وإرجاع 422 عند محاولة التعديل في تقييم مقفل.
  * 3. المرفقات عبر attachments: UUID للملف المخزن مع الاحتفاظ بالاسم الأصلي وMIME والحجم (conventions §9).
  * 4. النسخة الحالية الواحدة: فرض current=true واحدة فقط داخل DB::transaction.
+ * 5. تنظيم وتصنيف وتدقيق الشواهد (الشريحة 5): التصنيف اليدوي، الربط اليدوي بالمؤشر، ضبط الحالة، وملاحظات المراجع.
  */
 class EvidenceController extends Controller
 {
     /**
-     * استعراض قائمة شواهد نتيجة مؤشر محدد مع نسخها ومرفقاتها دون كشف مسار التخزين.
+     * استعراض قائمة شواهد نتيجة مؤشر محدد مع نسخها ومرفقاتها وملاحظات التدقيق.
      *
      * GET /api/v1/evaluation-results/{id}/evidences
      * الصلاحية: evaluations.view أو evidence.manage
@@ -63,36 +70,13 @@ class EvidenceController extends Controller
                     $q->orderBy('version_no', 'desc');
                 },
                 'versions.attachments',
+                'reviewer',
             ])
             ->orderBy('evidence_id', 'desc')
             ->get();
 
         $data = $evidences->map(function ($evidence) {
-            return [
-                'evidenceId'    => $evidence->evidence_id,
-                'resultId'      => $evidence->result_id,
-                'indicatorId'   => $evidence->indicator_id,
-                'title'         => $evidence->title,
-                'description'   => $evidence->description,
-                'justification' => $evidence->justification,
-                'createdAt'     => $evidence->created_at?->toIso8601ZuluString(),
-                'versions'      => $evidence->versions->map(function ($version) {
-                    return [
-                        'evidenceVersionId' => $version->evidence_version_id,
-                        'versionNo'         => $version->version_no,
-                        'current'           => (bool) $version->current,
-                        'createdAt'         => $version->created_at?->toIso8601ZuluString(),
-                        'attachments'       => $version->attachments->map(function ($att) {
-                            return [
-                                'attachmentId' => $att->attachment_id,
-                                'fileName'     => $att->file_name,
-                                'fileType'     => $att->file_type,
-                                'fileSize'     => (int) $att->file_size,
-                            ];
-                        })->values(),
-                    ];
-                })->values(),
-            ];
+            return $this->formatEvidence($evidence);
         });
 
         return ApiResponse::success(
@@ -102,7 +86,7 @@ class EvidenceController extends Controller
     }
 
     /**
-     * إنشاء شاهد جديد لنتيجة مؤشر محدد مع أول نسخة ومرفق له.
+     * إنشاء شاهد جديد لنتيجة مؤشر محدد مع أول نسخة ومرفق له وتصنيفه اليدوي.
      *
      * POST /api/v1/evaluation-results/{id}/evidences
      * الصلاحية: evidence.manage
@@ -136,11 +120,13 @@ class EvidenceController extends Controller
             ], $lockCheck['message']);
         }
 
-        // التحقق من المدخلات والمرفق
+        // التحقق من المدخلات والمرفق والتصنيف
         $validator = Validator::make($request->all(), [
             'title'         => ['required', 'string', 'max:200'],
             'description'   => ['nullable', 'string'],
             'justification' => ['nullable', 'string'],
+            'evidence_type' => ['nullable', 'string', 'in:minutes,plan,record,report,board,image,other'],
+            'evidenceType'  => ['nullable', 'string', 'in:minutes,plan,record,report,board,image,other'],
             'file'          => [
                 'required',
                 'file',
@@ -148,16 +134,20 @@ class EvidenceController extends Controller
                 'mimes:pdf,png,jpg,jpeg,docx,xlsx',
             ],
         ], [
-            'title.required' => 'عنوان الشاهد إلزامي.',
-            'title.max'      => 'لا يمكن أن يتجاوز عنوان الشاهد 200 حرف.',
-            'file.required'  => 'الملف المرفق للشاهد إلزامي.',
-            'file.max'       => 'الحد الأقصى لحجم الملف هو 10 ميغابايت (conventions §9).',
-            'file.mimes'     => 'صيغة الملف غير مدعومة. الصيغ المسموحة: pdf, png, jpg, jpeg, docx, xlsx.',
+            'title.required'     => 'عنوان الشاهد إلزامي.',
+            'title.max'          => 'لا يمكن أن يتجاوز عنوان الشاهد 200 حرف.',
+            'file.required'      => 'الملف المرفق للشاهد إلزامي.',
+            'file.max'           => 'الحد الأقصى لحجم الملف هو 10 ميغابايت (conventions §9).',
+            'file.mimes'         => 'صيغة الملف غير مدعومة. الصيغ المسموحة: pdf, png, jpg, jpeg, docx, xlsx.',
+            'evidence_type.in'   => 'نوع الشاهد غير صالح. الأنواع المقبولة: minutes, plan, record, report, board, image, other.',
+            'evidenceType.in'    => 'نوع الشاهد غير صالح. الأنواع المقبولة: minutes, plan, record, report, board, image, other.',
         ]);
 
         if ($validator->fails()) {
             return ApiResponse::validationError($validator->errors()->toArray());
         }
+
+        $evidenceType = $request->input('evidence_type', $request->input('evidenceType', 'other')) ?: 'other';
 
         $file = $request->file('file');
         $uuid = (string) Str::uuid();
@@ -166,7 +156,7 @@ class EvidenceController extends Controller
         $storageFileName = "{$uuid}." . ($ext ?: 'bin');
         $storedPath = $file->storeAs('attachments/evidence', $storageFileName, 'local');
 
-        $evidenceRecord = DB::transaction(function () use ($request, $result, $file, $originalName, $storedPath) {
+        $evidenceRecord = DB::transaction(function () use ($request, $result, $evidenceType, $file, $originalName, $storedPath) {
             // 1. إنشاء سجل الشاهد
             $evidence = Evidence::create([
                 'result_id'     => $result->result_id,
@@ -174,6 +164,8 @@ class EvidenceController extends Controller
                 'title'         => $request->input('title'),
                 'description'   => $request->input('description'),
                 'justification' => $request->input('justification'),
+                'evidence_type' => $evidenceType,
+                'status'        => 'Draft',
             ]);
 
             // 2. إنشاء أول نسخة تاريخية (current = true)
@@ -200,30 +192,496 @@ class EvidenceController extends Controller
             ];
         });
 
+        $formatted = $this->formatEvidence($evidenceRecord['evidence']);
+
         return ApiResponse::success(
-            data: [
-                'evidenceId'     => $evidenceRecord['evidence']->evidence_id,
-                'resultId'       => $evidenceRecord['evidence']->result_id,
-                'indicatorId'    => $evidenceRecord['evidence']->indicator_id,
-                'title'          => $evidenceRecord['evidence']->title,
-                'description'    => $evidenceRecord['evidence']->description,
-                'justification'  => $evidenceRecord['evidence']->justification,
-                'createdAt'      => $evidenceRecord['evidence']->created_at?->toIso8601ZuluString(),
-                'currentVersion' => [
-                    'evidenceVersionId' => $evidenceRecord['version']->evidence_version_id,
-                    'versionNo'         => $evidenceRecord['version']->version_no,
-                    'current'           => (bool) $evidenceRecord['version']->current,
-                    'createdAt'         => $evidenceRecord['version']->created_at?->toIso8601ZuluString(),
-                    'attachment'        => [
-                        'attachmentId' => $evidenceRecord['attachment']->attachment_id,
-                        'fileName'     => $evidenceRecord['attachment']->file_name,
-                        'fileType'     => $evidenceRecord['attachment']->file_type,
-                        'fileSize'     => (int) $evidenceRecord['attachment']->file_size,
-                    ],
-                ],
-            ],
+            data: $formatted,
             message: 'تم إضافة الشاهد ورفع ملفه بنجاح.',
             status: 201
+        );
+    }
+
+    /**
+     * تصنيف الشاهد يدوياً من قبل المستخدم (نوع الشاهد: محضر، خطة، سجل، تقرير، لوحة، صورة، أخرى).
+     *
+     * PATCH /api/v1/evidences/{id}/classify
+     * الصلاحية: evidence.manage
+     */
+    public function classify(Request $request, int $id): JsonResponse
+    {
+        $user = $request->user();
+
+        if (!$user->hasPermission('evidence.manage')) {
+            return ApiResponse::forbidden('غير مصرح لك بإدارة الشواهد.');
+        }
+
+        $evidence = Evidence::with('result.evaluation')->find($id);
+        if (!$evidence || !$evidence->result || !$evidence->result->evaluation) {
+            return ApiResponse::notFound('الشاهد المطلوب غير موجود.');
+        }
+
+        $evaluation = $evidence->result->evaluation;
+
+        // عزل المدارس (القرار المعماري 9)
+        if ($user->user_type === 'school' && (int) $user->school_id !== (int) $evaluation->school_id) {
+            return ApiResponse::notFound('الشاهد المطلوب غير موجود.');
+        }
+
+        // فحص قفل التقييم للشاهد (BR-SCH-03)
+        $lockCheck = EvaluationLockChecker::canModifyEvidence($evaluation, $evidence);
+        if (!$lockCheck['allowed']) {
+            $key = $lockCheck['errorKey'] ?? 'evaluation';
+            return ApiResponse::validationError([
+                $key => [$lockCheck['message']],
+            ], $lockCheck['message']);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'evidence_type' => ['required_without:evidenceType', 'string', 'in:minutes,plan,record,report,board,image,other'],
+            'evidenceType'  => ['required_without:evidence_type', 'string', 'in:minutes,plan,record,report,board,image,other'],
+        ], [
+            'evidence_type.required_without' => 'نوع الشاهد إلزامي.',
+            'evidenceType.required_without'  => 'نوع الشاهد إلزامي.',
+            'evidence_type.in'               => 'نوع الشاهد غير صالح. الأنواع المقبولة: minutes, plan, record, report, board, image, other.',
+            'evidenceType.in'                => 'نوع الشاهد غير صالح. الأنواع المقبولة: minutes, plan, record, report, board, image, other.',
+        ]);
+
+        if ($validator->fails()) {
+            return ApiResponse::validationError($validator->errors()->toArray());
+        }
+
+        $type = $request->input('evidence_type', $request->input('evidenceType'));
+        $evidence->update(['evidence_type' => $type]);
+
+        return ApiResponse::success(
+            data: $this->formatEvidence($evidence),
+            message: 'تم تصنيف الشاهد بنجاح.'
+        );
+    }
+
+    /**
+     * ربط الشاهد بالمؤشر الصحيح يدوياً مع تأكيد المستخدم.
+     *
+     * POST/PATCH /api/v1/evidences/{id}/link-indicator
+     * الصلاحية: evidence.manage
+     */
+    public function linkIndicator(Request $request, int $id): JsonResponse
+    {
+        $user = $request->user();
+
+        if (!$user->hasPermission('evidence.manage')) {
+            return ApiResponse::forbidden('غير مصرح لك بإدارة الشواهد.');
+        }
+
+        $evidence = Evidence::with('result.evaluation.cycle')->find($id);
+        if (!$evidence || !$evidence->result || !$evidence->result->evaluation) {
+            return ApiResponse::notFound('الشاهد المطلوب غير موجود.');
+        }
+
+        $evaluation = $evidence->result->evaluation;
+
+        // عزل المدارس (القرار المعماري 9)
+        if ($user->user_type === 'school' && (int) $user->school_id !== (int) $evaluation->school_id) {
+            return ApiResponse::notFound('الشاهد المطلوب غير موجود.');
+        }
+
+        // فحص قفل التقييم للشاهد (BR-SCH-03)
+        $lockCheck = EvaluationLockChecker::canModifyEvidence($evaluation, $evidence);
+        if (!$lockCheck['allowed']) {
+            $key = $lockCheck['errorKey'] ?? 'evaluation';
+            return ApiResponse::validationError([
+                $key => [$lockCheck['message']],
+            ], $lockCheck['message']);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'indicator_id' => ['required_without:indicatorId', 'integer'],
+            'indicatorId'  => ['required_without:indicator_id', 'integer'],
+        ], [
+            'indicator_id.required_without' => 'معرّف المؤشر المستهدف إلزامي.',
+            'indicatorId.required_without'  => 'معرّف المؤشر المستهدف إلزامي.',
+            'indicator_id.integer'          => 'معرّف المؤشر يجب أن يكون رقماً صحيحاً.',
+            'indicatorId.integer'           => 'معرّف المؤشر يجب أن يكون رقماً صحيحاً.',
+        ]);
+
+        if ($validator->fails()) {
+            return ApiResponse::validationError($validator->errors()->toArray());
+        }
+
+        $targetIndicatorId = (int) $request->input('indicator_id', $request->input('indicatorId'));
+
+        $targetIndicator = Indicator::where('indicator_id', $targetIndicatorId)
+            ->where('status', 'Active')
+            ->first();
+
+        if (!$targetIndicator) {
+            return ApiResponse::validationError([
+                'indicator_id' => ['المؤشر المستهدف غير موجود أو غير فعّال.'],
+            ]);
+        }
+
+        // إذا كان الشاهد مرتبطاً بالفعل بنفس المؤشر
+        if ((int) $evidence->indicator_id === $targetIndicatorId) {
+            return ApiResponse::success(
+                data: $this->formatEvidence($evidence),
+                message: 'الشاهد مرتبط بالفعل بهذا المؤشر.'
+            );
+        }
+
+        // فحص قفل التعديل للمؤشر الجديد المستهدف (BR-SCH-03)
+        $targetLockCheck = EvaluationLockChecker::canModifyIndicator($evaluation, $targetIndicatorId);
+        if (!$targetLockCheck['allowed']) {
+            $key = $targetLockCheck['errorKey'] ?? 'evaluation';
+            return ApiResponse::validationError([
+                $key => [$targetLockCheck['message']],
+            ], $targetLockCheck['message']);
+        }
+
+        // البحث عن نتيجة التقييم للمؤشر المستهدف في نفس ملف التقييم أو إنشاؤها
+        $targetResult = EvaluationResult::where('evaluation_id', $evaluation->evaluation_id)
+            ->where('indicator_id', $targetIndicatorId)
+            ->first();
+
+        if (!$targetResult) {
+            $versionId = $evaluation->cycle?->standard_version_id ?? $evaluation->cycle?->version_id ?? 1;
+            $descriptor = IndicatorScoreDescriptor::where('indicator_id', $targetIndicatorId)
+                ->where('standard_version_id', $versionId)
+                ->first();
+
+            $targetResult = EvaluationResult::create([
+                'evaluation_id'       => $evaluation->evaluation_id,
+                'indicator_id'        => $targetIndicatorId,
+                'score_descriptor_id' => $descriptor?->descriptor_id ?? 1,
+                'standard_version_id' => $versionId,
+                'evaluator_user_id'   => $user->user_id,
+                'score'               => $descriptor?->scoreLevel?->score_value ?? 0,
+                'textual_result'      => null,
+                'completion_status'   => 'Draft',
+            ]);
+        }
+
+        // تحديث ربط الشاهد بالمؤشر والنتيجة الجديدة
+        $evidence->update([
+            'indicator_id' => $targetIndicatorId,
+            'result_id'    => $targetResult->result_id,
+        ]);
+
+        $evidence->refresh();
+
+        return ApiResponse::success(
+            data: $this->formatEvidence($evidence),
+            message: 'تم ربط الشاهد بالمؤشر بنجاح.'
+        );
+    }
+
+    /**
+     * تحديد وتحديث حالة الشاهد (مسودة Draft، مكتمل Completed، مدقق ومقبول Audited).
+     *
+     * PATCH /api/v1/evidences/{id}/status
+     * الصلاحية: evidence.manage
+     */
+    public function updateStatus(Request $request, int $id): JsonResponse
+    {
+        $user = $request->user();
+
+        if (!$user->hasPermission('evidence.manage')) {
+            return ApiResponse::forbidden('غير مصرح لك بإدارة الشواهد.');
+        }
+
+        $evidence = Evidence::with('result.evaluation')->find($id);
+        if (!$evidence || !$evidence->result || !$evidence->result->evaluation) {
+            return ApiResponse::notFound('الشاهد المطلوب غير موجود.');
+        }
+
+        $evaluation = $evidence->result->evaluation;
+
+        // عزل المدارس (القرار المعماري 9)
+        if ($user->user_type === 'school' && (int) $user->school_id !== (int) $evaluation->school_id) {
+            return ApiResponse::notFound('الشاهد المطلوب غير موجود.');
+        }
+
+        // فحص قفل التقييم للشاهد (BR-SCH-03)
+        $lockCheck = EvaluationLockChecker::canModifyEvidence($evaluation, $evidence);
+        if (!$lockCheck['allowed']) {
+            $key = $lockCheck['errorKey'] ?? 'evaluation';
+            return ApiResponse::validationError([
+                $key => [$lockCheck['message']],
+            ], $lockCheck['message']);
+        }
+
+        $rawStatus = (string) $request->input('status');
+        $statusMap = [
+            'draft'     => 'Draft',
+            'completed' => 'Completed',
+            'audited'   => 'Audited',
+        ];
+
+        $normalizedStatus = $statusMap[strtolower(trim($rawStatus))] ?? null;
+
+        if (!$normalizedStatus) {
+            return ApiResponse::validationError([
+                'status' => ['حالة الشاهد غير صالحة. الحالات المقبولة: Draft, Completed, Audited.'],
+            ]);
+        }
+
+        $evidence->update(['status' => $normalizedStatus]);
+
+        return ApiResponse::success(
+            data: $this->formatEvidence($evidence),
+            message: 'تم تحديث حالة الشاهد بنجاح.'
+        );
+    }
+
+    /**
+     * إضافة ملاحظات المراجع أو المقيم على الشاهد يدوياً وتوثيق هوية المراجع ووقته.
+     *
+     * POST/PATCH /api/v1/evidences/{id}/review-notes
+     * الصلاحية: reviews.write أو evidence.manage
+     */
+    public function addReviewNote(Request $request, int $id): JsonResponse
+    {
+        $user = $request->user();
+
+        if (!$user->hasPermission('reviews.write') && !$user->hasPermission('evidence.manage')) {
+            return ApiResponse::forbidden('غير مصرح لك بتسجيل ملاحظات المراجعة.');
+        }
+
+        $evidence = Evidence::with('result.evaluation')->find($id);
+        if (!$evidence || !$evidence->result || !$evidence->result->evaluation) {
+            return ApiResponse::notFound('الشاهد المطلوب غير موجود.');
+        }
+
+        $evaluation = $evidence->result->evaluation;
+
+        // عزل المدارس (القرار المعماري 9)
+        if ($user->user_type === 'school' && (int) $user->school_id !== (int) $evaluation->school_id) {
+            return ApiResponse::notFound('الشاهد المطلوب غير موجود.');
+        }
+
+        // فحص قفل التقييم للشاهد (BR-SCH-03)
+        $lockCheck = EvaluationLockChecker::canModifyEvidence($evaluation, $evidence);
+        if (!$lockCheck['allowed']) {
+            $key = $lockCheck['errorKey'] ?? 'evaluation';
+            return ApiResponse::validationError([
+                $key => [$lockCheck['message']],
+            ], $lockCheck['message']);
+        }
+
+        $note = $request->input('notes', $request->input('reviewer_notes', $request->input('reviewerNotes')));
+
+        if (empty($note) || !is_string($note) || trim($note) === '') {
+            return ApiResponse::validationError([
+                'notes' => ['نص ملاحظات المراجع إلزامي.'],
+            ]);
+        }
+
+        if (mb_strlen($note) > 2000) {
+            return ApiResponse::validationError([
+                'notes' => ['لا يمكن أن تتجاوز ملاحظات المراجع 2000 حرف.'],
+            ]);
+        }
+
+        $evidence->update([
+            'reviewer_notes'      => trim($note),
+            'reviewed_by_user_id' => $user->user_id,
+            'reviewed_at'         => now(),
+        ]);
+
+        $evidence->load('reviewer');
+
+        return ApiResponse::success(
+            data: $this->formatEvidence($evidence),
+            message: 'تمت إضافة ملاحظات المراجع على الشاهد بنجاح.'
+        );
+    }
+
+    /**
+     * حصر الشواهد لكل مؤشر وإظهار النواقص والمكتمل للتقييم.
+     *
+     * GET /api/v1/evaluations/{id}/evidence-inventory
+     * الصلاحية: evaluations.view أو evidence.manage
+     */
+    public function inventory(Request $request, int $id): JsonResponse
+    {
+        $user = $request->user();
+
+        if (!$user->hasPermission('evaluations.view') && !$user->hasPermission('evidence.manage')) {
+            return ApiResponse::forbidden('غير مصرح لك باستعراض جرد الشواهد.');
+        }
+
+        $evaluation = Evaluation::with(['cycle', 'school'])->find($id);
+        if (!$evaluation) {
+            return ApiResponse::notFound('ملف التقييم المطلوب غير موجود.');
+        }
+
+        // عزل المدارس (القرار المعماري 9)
+        if ($user->user_type === 'school' && (int) $user->school_id !== (int) $evaluation->school_id) {
+            return ApiResponse::notFound('ملف التقييم المطلوب غير موجود.');
+        }
+
+        if ($user->cannot('view', $evaluation)) {
+            return ApiResponse::forbidden('غير مصرح لك باستعراض شواهد هذا التقييم.');
+        }
+
+        $versionId = $evaluation->cycle?->version_id ?? $evaluation->cycle?->standard_version_id;
+
+        // جلب المعايير والمؤشرات الفعالة
+        $standardsQuery = Standard::query()->orderBy('standard_id');
+        if ($versionId) {
+            $standardsQuery->where('version_id', $versionId);
+        }
+
+        $standards = $standardsQuery->with([
+            'subStandards' => function ($q) {
+                $q->orderBy('sub_standard_id');
+            },
+            'subStandards.indicators' => function ($q) {
+                $q->where('status', 'Active')->orderBy('code');
+            },
+        ])->get();
+
+        // متطلبات الشواهد الإلزامية للمؤشرات
+        $requirementsMap = IndicatorEvidenceRequirement::query()
+            ->when($versionId, fn($q) => $q->where('standard_version_id', $versionId))
+            ->get()
+            ->groupBy('indicator_id');
+
+        // نتائج التقييم مع شواهدها ومرفقاتها وملاحظاتها
+        $resultsMap = EvaluationResult::query()
+            ->where('evaluation_id', $evaluation->evaluation_id)
+            ->with([
+                'evidences.versions.attachments',
+                'evidences.reviewer',
+            ])
+            ->get()
+            ->keyBy('indicator_id');
+
+        $totalIndicators = 0;
+        $indicatorsWithSufficientEvidence = 0;
+        $indicatorsMissingEvidence = 0;
+        $totalEvidencesUploaded = 0;
+
+        $byType = [
+            'minutes' => 0,
+            'plan'    => 0,
+            'record'  => 0,
+            'report'  => 0,
+            'board'   => 0,
+            'image'   => 0,
+            'other'   => 0,
+        ];
+
+        $byStatus = [
+            'Draft'     => 0,
+            'Completed' => 0,
+            'Audited'   => 0,
+        ];
+
+        $standardsBreakdown = [];
+
+        foreach ($standards as $standard) {
+            $stdIndicatorsList = [];
+
+            foreach ($standard->subStandards as $sub) {
+                foreach ($sub->indicators as $ind) {
+                    $totalIndicators++;
+
+                    $reqs = $requirementsMap->get($ind->indicator_id, collect());
+                    $mandatoryReqCount = $reqs->where('required', true)->count();
+                    $totalReqCount = $reqs->count();
+
+                    $result = $resultsMap->get($ind->indicator_id);
+                    $evidences = $result ? $result->evidences : collect();
+                    $uploadedCount = $evidences->count();
+                    $totalEvidencesUploaded += $uploadedCount;
+
+                    // تجميع التصنيفات والحالات
+                    foreach ($evidences as $ev) {
+                        $t = $ev->evidence_type ?: 'other';
+                        if (isset($byType[$t])) {
+                            $byType[$t]++;
+                        } else {
+                            $byType['other']++;
+                        }
+
+                        $s = $ev->status ?: 'Draft';
+                        if (isset($byStatus[$s])) {
+                            $byStatus[$s]++;
+                        }
+                    }
+
+                    // التحقق من كفاية الشواهد
+                    $isSufficient = ($mandatoryReqCount > 0)
+                        ? ($uploadedCount >= $mandatoryReqCount)
+                        : true;
+
+                    if ($isSufficient) {
+                        $indicatorsWithSufficientEvidence++;
+                    } else {
+                        $indicatorsMissingEvidence++;
+                    }
+
+                    $indicatorStatus = 'NotRequired';
+                    if ($mandatoryReqCount > 0) {
+                        $indicatorStatus = ($uploadedCount >= $mandatoryReqCount) ? 'Completed' : 'Missing';
+                    } elseif ($uploadedCount > 0) {
+                        $indicatorStatus = 'Completed';
+                    }
+
+                    $stdIndicatorsList[] = [
+                        'indicatorId'            => $ind->indicator_id,
+                        'indicatorCode'          => $ind->code,
+                        'indicatorName'          => $ind->name,
+                        'domainName'             => $sub->name,
+                        'mandatoryRequiredCount' => $mandatoryReqCount,
+                        'totalRequiredCount'     => $totalReqCount,
+                        'uploadedEvidenceCount'  => $uploadedCount,
+                        'isSufficient'           => $isSufficient,
+                        'status'                 => $indicatorStatus,
+                        'evidences'              => $evidences->map(function ($ev) {
+                            return [
+                                'evidenceId'    => $ev->evidence_id,
+                                'title'         => $ev->title,
+                                'evidenceType'  => $ev->evidence_type,
+                                'status'        => $ev->status,
+                                'reviewerNotes' => $ev->reviewer_notes,
+                                'reviewedBy'    => $ev->reviewer?->full_name,
+                                'reviewedAt'    => $ev->reviewed_at?->toIso8601ZuluString(),
+                                'createdAt'     => $ev->created_at?->toIso8601ZuluString(),
+                                'versionsCount' => $ev->versions->count(),
+                            ];
+                        })->values(),
+                    ];
+                }
+            }
+
+            $standardsBreakdown[] = [
+                'standardId'   => $standard->standard_id,
+                'standardCode' => $standard->code,
+                'standardName' => $standard->name,
+                'indicators'   => $stdIndicatorsList,
+            ];
+        }
+
+        $inventoryStatus = ($indicatorsMissingEvidence === 0) ? 'Complete' : 'Incomplete';
+
+        return ApiResponse::success(
+            data: [
+                'evaluationId'    => $evaluation->evaluation_id,
+                'schoolId'        => $evaluation->school_id,
+                'schoolName'      => $evaluation->school?->name,
+                'inventoryStatus' => $inventoryStatus,
+                'summary'         => [
+                    'totalIndicators'                  => $totalIndicators,
+                    'indicatorsWithSufficientEvidence' => $indicatorsWithSufficientEvidence,
+                    'indicatorsMissingEvidence'        => $indicatorsMissingEvidence,
+                    'totalEvidencesUploaded'           => $totalEvidencesUploaded,
+                    'byType'                           => $byType,
+                    'byStatus'                         => $byStatus,
+                ],
+                'standards'       => $standardsBreakdown,
+            ],
+            message: 'تم استخراج حصر الشواهد بنجاح.'
         );
     }
 
@@ -392,5 +850,60 @@ class EvidenceController extends Controller
             $attachment->storage_uri,
             $attachment->file_name
         );
+    }
+
+    /**
+     * تنسيق بيانات الشاهد لتطابق معايير واجهات برمجة التطبيقات (API Contract).
+     */
+    protected function formatEvidence(Evidence $evidence): array
+    {
+        $evidence->loadMissing(['versions.attachments', 'reviewer']);
+        $currentVersion = $evidence->versions->firstWhere('current', true) ?? $evidence->versions->first();
+
+        return [
+            'evidenceId'     => $evidence->evidence_id,
+            'resultId'       => $evidence->result_id,
+            'indicatorId'    => $evidence->indicator_id,
+            'title'          => $evidence->title,
+            'description'    => $evidence->description,
+            'justification'  => $evidence->justification,
+            'evidenceType'   => $evidence->evidence_type ?: 'other',
+            'status'         => $evidence->status ?: 'Draft',
+            'reviewerNotes'  => $evidence->reviewer_notes,
+            'reviewedBy'     => $evidence->reviewer ? [
+                'userId'   => $evidence->reviewer->user_id,
+                'fullName' => $evidence->reviewer->full_name,
+            ] : null,
+            'reviewedAt'     => $evidence->reviewed_at?->toIso8601ZuluString(),
+            'createdAt'      => $evidence->created_at?->toIso8601ZuluString(),
+            'versions'       => $evidence->versions->map(function ($version) {
+                return [
+                    'evidenceVersionId' => $version->evidence_version_id,
+                    'versionNo'         => $version->version_no,
+                    'current'           => (bool) $version->current,
+                    'createdAt'         => $version->created_at?->toIso8601ZuluString(),
+                    'attachments'       => $version->attachments->map(function ($att) {
+                        return [
+                            'attachmentId' => $att->attachment_id,
+                            'fileName'     => $att->file_name,
+                            'fileType'     => $att->file_type,
+                            'fileSize'     => (int) $att->file_size,
+                        ];
+                    })->values(),
+                ];
+            })->values(),
+            'currentVersion' => $currentVersion ? [
+                'evidenceVersionId' => $currentVersion->evidence_version_id,
+                'versionNo'         => $currentVersion->version_no,
+                'current'           => (bool) $currentVersion->current,
+                'createdAt'         => $currentVersion->created_at?->toIso8601ZuluString(),
+                'attachment'        => $currentVersion->attachments->first() ? [
+                    'attachmentId' => $currentVersion->attachments->first()->attachment_id,
+                    'fileName'     => $currentVersion->attachments->first()->file_name,
+                    'fileType'     => $currentVersion->attachments->first()->file_type,
+                    'fileSize'     => (int) $currentVersion->attachments->first()->file_size,
+                ] : null,
+            ] : null,
+        ];
     }
 }

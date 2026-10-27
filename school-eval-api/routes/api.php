@@ -68,6 +68,7 @@ Route::prefix('v1')->group(function () {
             Route::get('/{id}/improvement-suggestions', [\App\Http\Controllers\Api\V1\ImprovementSuggestionController::class, 'index'])->name('api.v1.evaluations.improvement-suggestions');
             Route::put('/{evaluationId}/indicators/{indicatorId}/score', [\App\Http\Controllers\Api\V1\EvaluationController::class, 'scoreIndicator'])->name('api.v1.evaluations.indicators.score');
             Route::post('/{id}/submit', [\App\Http\Controllers\Api\V1\EvaluationController::class, 'submit'])->name('api.v1.evaluations.submit');
+            Route::get('/{id}/evidence-inventory', [\App\Http\Controllers\Api\V1\EvidenceController::class, 'inventory'])->name('api.v1.evaluations.evidence-inventory');
         });
 
         // نتائج التقييم: الملاحظات وإدارة الشواهد (Evaluation Results)
@@ -77,8 +78,12 @@ Route::prefix('v1')->group(function () {
             Route::post('/{id}/evidences', [\App\Http\Controllers\Api\V1\EvidenceController::class, 'store'])->name('api.v1.evaluation-results.evidences.store');
         });
 
-        // النسخ التاريخية للشواهد وتنزيل المرفقات الرقمية (Evidence Versions & Download)
+        // الشواهد: التنظيم والتصنيف والربط والنسخ التاريخية والمرفقات (Evidence Organization & Versions)
         Route::prefix('evidences')->group(function () {
+            Route::patch('/{id}/classify', [\App\Http\Controllers\Api\V1\EvidenceController::class, 'classify'])->name('api.v1.evidences.classify');
+            Route::match(['post', 'patch'], '/{id}/link-indicator', [\App\Http\Controllers\Api\V1\EvidenceController::class, 'linkIndicator'])->name('api.v1.evidences.link-indicator');
+            Route::patch('/{id}/status', [\App\Http\Controllers\Api\V1\EvidenceController::class, 'updateStatus'])->name('api.v1.evidences.status.update');
+            Route::match(['post', 'patch'], '/{id}/review-notes', [\App\Http\Controllers\Api\V1\EvidenceController::class, 'addReviewNote'])->name('api.v1.evidences.review-notes.store');
             Route::post('/{id}/versions', [\App\Http\Controllers\Api\V1\EvidenceController::class, 'addVersion'])->name('api.v1.evidences.versions.store');
             Route::get('/{id}/versions/{versionId}/download', [\App\Http\Controllers\Api\V1\EvidenceController::class, 'downloadVersion'])->name('api.v1.evidences.versions.download');
         });
@@ -115,6 +120,8 @@ Route::prefix('v1')->group(function () {
                 ->name('api.v1.schools.assessments.standards.results');
             Route::get('/assessments/{assessment}/evidence-summary', [\App\Http\Controllers\Api\V1\ReportsAnalyticsController::class, 'evidenceSummary'])
                 ->name('api.v1.schools.assessments.evidence-summary');
+            Route::get('/assessments/{assessment}/evidence-inventory', [\App\Http\Controllers\Api\V1\EvidenceController::class, 'inventory'])
+                ->name('api.v1.schools.assessments.evidence-inventory');
             Route::get('/assessments/{assessment}/export', [\App\Http\Controllers\Api\V1\ReportsAnalyticsController::class, 'exportAssessment'])
                 ->name('api.v1.schools.assessments.export');
             Route::post('/assessments/{assessment}/submit', [\App\Http\Controllers\Api\V1\EvaluationController::class, 'submitBySchool'])
@@ -131,6 +138,7 @@ Route::middleware(['auth:sanctum', 'session.timeout'])->group(function () {
         Route::get('/assessments/{assessment}/results', [\App\Http\Controllers\Api\V1\ReportsAnalyticsController::class, 'assessmentResults'])->name('api.schools.assessments.results');
         Route::get('/assessments/{assessment}/standards/{standard}/results', [\App\Http\Controllers\Api\V1\ReportsAnalyticsController::class, 'standardResults'])->name('api.schools.assessments.standards.results');
         Route::get('/assessments/{assessment}/evidence-summary', [\App\Http\Controllers\Api\V1\ReportsAnalyticsController::class, 'evidenceSummary'])->name('api.schools.assessments.evidence-summary');
+        Route::get('/assessments/{assessment}/evidence-inventory', [\App\Http\Controllers\Api\V1\EvidenceController::class, 'inventory'])->name('api.schools.assessments.evidence-inventory');
         Route::get('/assessments/{assessment}/export', [\App\Http\Controllers\Api\V1\ReportsAnalyticsController::class, 'exportAssessment'])->name('api.schools.assessments.export');
         Route::post('/assessments/{assessment}/submit', [\App\Http\Controllers\Api\V1\EvaluationController::class, 'submitBySchool'])->name('api.schools.assessments.submit');
     });

@@ -148,6 +148,7 @@ const App = {
       'assessment-results',
       'standard-result',
       'evidence-summary',
+      'evidence-inventory',
       'plans-summary',
       'export-report',
     ];
@@ -182,6 +183,8 @@ const App = {
       this.loadStandardResult(this.state.currentStandardId || 1);
     } else if (screenName === 'evidence-summary') {
       this.loadEvidenceSummary();
+    } else if (screenName === 'evidence-inventory') {
+      this.loadEvidenceInventory();
     } else if (screenName === 'plans-summary') {
       this.loadPlansSummary();
     } else if (screenName === 'export-report') {
@@ -204,6 +207,7 @@ const App = {
     const bcTree = document.getElementById('bc-tree');
     const bcResults = document.getElementById('bc-results');
     const bcEvidence = document.getElementById('bc-evidence-summary');
+    const bcEvidenceInv = document.getElementById('bc-evidence-inventory');
     const bcPlansSummary = document.getElementById('bc-plans-summary');
     const bcExport = document.getElementById('bc-export');
     const bcReview = document.getElementById('bc-standards-review');
@@ -213,6 +217,7 @@ const App = {
     if (bcTree) bcTree.style.display = this.state.currentEvaluation ? 'inline' : 'none';
     if (bcResults) bcResults.style.display = 'inline';
     if (bcEvidence) bcEvidence.style.display = 'inline';
+    if (bcEvidenceInv) bcEvidenceInv.style.display = 'inline';
     if (bcPlansSummary) bcPlansSummary.style.display = 'inline';
     if (bcExport) bcExport.style.display = 'inline';
     if (bcReview) bcReview.style.display = 'inline';
@@ -837,6 +842,20 @@ const App = {
     }
 
     const canManageEvidence = this.hasPermission('evidence.manage');
+    const typeLabels = {
+      minutes: 'محضر',
+      plan: 'خطة',
+      record: 'سجل',
+      report: 'تقرير',
+      board: 'لوحة',
+      image: 'صورة',
+      other: 'أخرى',
+    };
+    const statusBadges = {
+      Draft: '<span class="badge badge-gray">مسودة</span>',
+      Completed: '<span class="badge badge-blue">مكتمل</span>',
+      Audited: '<span class="badge badge-green">مدقق ومقبول ✅</span>',
+    };
 
     container.innerHTML = this.state.currentEvidences.map(ev => {
       const versions = ev.versions || [];
@@ -844,20 +863,32 @@ const App = {
       const attachment = currentVer?.attachments?.[0];
 
       return `
-        <div class="card" style="margin-bottom: 0.75rem; padding: 0.75rem; background: #fff;">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">
+        <div class="card" style="margin-bottom: 0.75rem; padding: 0.75rem; background: #fff; border: 1px solid var(--border);">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem; flex-wrap: wrap; gap: 0.35rem;">
             <strong>📄 ${ev.title}</strong>
-            <span class="badge badge-blue">إصدار v${currentVer?.versionNo || 1} (نشط)</span>
+            <div style="display: flex; gap: 0.35rem; align-items: center; flex-wrap: wrap;">
+              <span class="badge badge-gray" style="border: 1px solid #cbd5e1;">🏷️ ${typeLabels[ev.evidenceType] || ev.evidenceType || 'أخرى'}</span>
+              ${statusBadges[ev.status] || `<span class="badge badge-gray">${ev.status || 'Draft'}</span>`}
+              <span class="badge badge-blue">إصدار v${currentVer?.versionNo || 1}</span>
+            </div>
           </div>
           ${ev.description ? `<p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.35rem;">${ev.description}</p>` : ''}
           ${ev.justification ? `<p style="font-size: 0.8rem; color: var(--primary); margin-bottom: 0.35rem;">المبرر: ${ev.justification}</p>` : ''}
+
+          ${ev.reviewerNotes ? `
+            <div style="background: #f1f5f9; padding: 0.5rem 0.75rem; border-radius: 4px; border-right: 3px solid #0284c7; margin-top: 0.5rem; margin-bottom: 0.5rem; font-size: 0.8rem;">
+              <strong>📝 ملاحظات المراجع:</strong> ${ev.reviewerNotes}
+              ${ev.reviewedBy ? `<span style="color: var(--text-muted); font-size: 0.75rem;"> (بواسطة: ${ev.reviewedBy.fullName || ev.reviewedBy.userId})</span>` : ''}
+              ${ev.reviewedAt ? `<span style="color: var(--text-muted); font-size: 0.75rem;"> - ${new Date(ev.reviewedAt).toLocaleDateString('ar-EG')}</span>` : ''}
+            </div>
+          ` : ''}
           
           <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 0.5rem; flex-wrap: wrap; gap: 0.5rem;">
             <div style="font-size: 0.8rem;">
               الملف: <strong>${attachment?.fileName || 'وثيقة الشاهد'}</strong> 
               (${attachment?.fileSize ? Math.round(attachment.fileSize / 1024) + ' KB' : ''})
             </div>
-            <div style="display: flex; gap: 0.35rem;">
+            <div style="display: flex; gap: 0.35rem; flex-wrap: wrap;">
               ${attachment ? `
                 <button class="btn btn-sm btn-secondary" onclick="App.downloadEvidenceVersion(${ev.evidenceId}, ${currentVer.versionId}, '${attachment.fileName}')">
                   ⬇️ تنزيل الملف
@@ -871,6 +902,23 @@ const App = {
               ` : ''}
             </div>
           </div>
+
+          ${canManageEvidence ? `
+            <div style="display: flex; gap: 0.35rem; flex-wrap: wrap; margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px dashed var(--border);">
+              <button class="btn btn-sm btn-secondary" onclick="App.promptClassify(${ev.evidenceId}, '${ev.evidenceType || 'other'}')">
+                🏷️ تصنيف
+              </button>
+              <button class="btn btn-sm btn-secondary" onclick="App.promptUpdateStatus(${ev.evidenceId}, '${ev.status || 'Draft'}')">
+                🔄 الحالة
+              </button>
+              <button class="btn btn-sm btn-secondary" onclick="App.promptLinkIndicator(${ev.evidenceId}, ${ev.indicatorId})">
+                🔗 ربط بمؤشر
+              </button>
+              <button class="btn btn-sm btn-secondary" onclick="App.promptReviewNotes(${ev.evidenceId})">
+                📝 ملاحظة مراجع
+              </button>
+            </div>
+          ` : ''}
 
           <!-- تفاصيل النسخ التاريخية السابقة إن وجدت -->
           ${versions.length > 1 ? `
@@ -900,6 +948,7 @@ const App = {
     const title = document.getElementById('ev-title').value.trim();
     const description = document.getElementById('ev-desc').value.trim();
     const justification = document.getElementById('ev-justification').value.trim();
+    const evidenceType = document.getElementById('ev-type')?.value || 'other';
     const fileInput = document.getElementById('ev-file');
 
     if (!fileInput.files || fileInput.files.length === 0) {
@@ -911,6 +960,7 @@ const App = {
     formData.append('title', title);
     if (description) formData.append('description', description);
     if (justification) formData.append('justification', justification);
+    formData.append('evidence_type', evidenceType);
     formData.append('file', fileInput.files[0]);
 
     const res = await this.request(`/evaluation-results/${ind.resultId}/evidences`, {
@@ -1004,6 +1054,294 @@ const App = {
       console.error(err);
       this.showAlert('خطأ أثناء تنزيل الملف.', 'error');
     }
+  },
+
+  // ---------------------------------------------------------------------------
+  // الشريحة 5: إدارة وتنظيم وتصنيف وتدقيق الشواهد (Evidence Organization Actions)
+  // ---------------------------------------------------------------------------
+  async promptClassify(evidenceId, currentType) {
+    const types = [
+      { id: 'minutes', label: 'محضر اجتماع / زيارة (Minutes)' },
+      { id: 'plan', label: 'خطة معتمدة (Plan)' },
+      { id: 'record', label: 'سجل رسمي / كشف (Record)' },
+      { id: 'report', label: 'تقرير دوري / ختامي (Report)' },
+      { id: 'board', label: 'لوحة إعلانية / إرشادية (Board)' },
+      { id: 'image', label: 'صورة ميدانية توثيقية (Image)' },
+      { id: 'other', label: 'أخرى (Other)' },
+    ];
+    const promptMsg = 'اختر رقم التصنيف اليدوي للشاهد:\n' + types.map((t, idx) => `${idx + 1}. ${t.label}`).join('\n');
+    const choice = prompt(promptMsg, '1');
+    if (!choice) return;
+    const selected = types[parseInt(choice) - 1];
+    if (!selected) {
+      alert('اختيار غير صالح.');
+      return;
+    }
+    const res = await this.request(`/evidences/${evidenceId}/classify`, {
+      method: 'PATCH',
+      body: JSON.stringify({ evidence_type: selected.id }),
+    });
+    if (res.ok) {
+      this.showAlert(`تم تصنيف الشاهد كـ [${selected.label}] بنجاح.`, 'success');
+      if (this.state.currentIndicator?.resultId) {
+        this.loadEvidences(this.state.currentIndicator.resultId);
+      }
+      if (this.state.currentScreen === 'evidence-inventory') {
+        this.loadEvidenceInventory();
+      }
+    } else {
+      this.showAlert(res.message || 'فشل تصنيف الشاهد.', 'error');
+    }
+  },
+
+  async promptUpdateStatus(evidenceId, currentStatus) {
+    const statuses = [
+      { id: 'Draft', label: 'مسودة (Draft)' },
+      { id: 'Completed', label: 'مكتمل (Completed)' },
+      { id: 'Audited', label: 'مدقق ومقبول (Audited)' },
+    ];
+    const promptMsg = 'اختر رقم حالة تدقيق الشاهد:\n' + statuses.map((s, idx) => `${idx + 1}. ${s.label}`).join('\n');
+    const choice = prompt(promptMsg, '2');
+    if (!choice) return;
+    const selected = statuses[parseInt(choice) - 1];
+    if (!selected) {
+      alert('اختيار غير صالح.');
+      return;
+    }
+    const res = await this.request(`/evidences/${evidenceId}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status: selected.id }),
+    });
+    if (res.ok) {
+      this.showAlert(`تم تحديث حالة الشاهد إلى [${selected.label}] بنجاح.`, 'success');
+      if (this.state.currentIndicator?.resultId) {
+        this.loadEvidences(this.state.currentIndicator.resultId);
+      }
+      if (this.state.currentScreen === 'evidence-inventory') {
+        this.loadEvidenceInventory();
+      }
+    } else {
+      this.showAlert(res.message || 'فشل تحديث حالة الشاهد.', 'error');
+    }
+  },
+
+  async promptLinkIndicator(evidenceId, currentIndicatorId) {
+    const newIndicatorId = prompt(`أدخل معرّف المؤشر المستهدف (Indicator ID) لربط الشاهد به (الحالي: ${currentIndicatorId}):`);
+    if (!newIndicatorId || isNaN(newIndicatorId)) return;
+    const res = await this.request(`/evidences/${evidenceId}/link-indicator`, {
+      method: 'POST',
+      body: JSON.stringify({ indicator_id: parseInt(newIndicatorId) }),
+    });
+    if (res.ok) {
+      this.showAlert(res.message || 'تم ربط الشاهد بالمؤشر بنجاح.', 'success');
+      if (this.state.currentIndicator?.resultId) {
+        this.loadEvidences(this.state.currentIndicator.resultId);
+      }
+      if (this.state.currentScreen === 'evidence-inventory') {
+        this.loadEvidenceInventory();
+      }
+    } else {
+      this.showAlert(res.message || 'فشل ربط الشاهد بالمؤشر.', 'error');
+    }
+  },
+
+  async promptReviewNotes(evidenceId) {
+    const note = prompt('أدخل ملاحظات المراجع / المقيم على كفاية الشاهد:');
+    if (!note || note.trim() === '') return;
+    const res = await this.request(`/evidences/${evidenceId}/review-notes`, {
+      method: 'POST',
+      body: JSON.stringify({ notes: note.trim() }),
+    });
+    if (res.ok) {
+      this.showAlert('تمت إضافة ملاحظات المراجع بنجاح.', 'success');
+      if (this.state.currentIndicator?.resultId) {
+        this.loadEvidences(this.state.currentIndicator.resultId);
+      }
+      if (this.state.currentScreen === 'evidence-inventory') {
+        this.loadEvidenceInventory();
+      }
+    } else {
+      this.showAlert(res.message || 'فشل تسجيل ملاحظات المراجع.', 'error');
+    }
+  },
+
+  // ---------------------------------------------------------------------------
+  // الشاشة 15: جرد وحصر الشواهد التفصيلي (Evidence Inventory)
+  // ---------------------------------------------------------------------------
+  async loadEvidenceInventory() {
+    const evalId = this.getEvaluationId();
+    const container = document.getElementById('evinv-standards-container');
+    if (!container) return;
+    container.innerHTML = '<div style="text-align: center; padding: 2rem; color: var(--text-muted);">جارِ جرد وحصر الشواهد التفصيلي...</div>';
+
+    const res = await this.request(`/evaluations/${evalId}/evidence-inventory`);
+    if (!res.ok) {
+      container.innerHTML = `<div class="alert alert-error">${res.message || 'تعذر تحميل جرد الشواهد.'}</div>`;
+      return;
+    }
+
+    const data = res.data;
+    this.state.evidenceInventory = data;
+
+    // تعبئة بطاقات الـ KPI
+    const isComplete = data.inventoryStatus === 'Complete';
+    const statusCard = document.getElementById('evinv-card-status');
+    const statusVal = document.getElementById('evinv-kpi-status');
+    const statusSub = document.getElementById('evinv-kpi-status-sub');
+
+    if (statusCard && statusVal && statusSub) {
+      if (isComplete) {
+        statusCard.style.borderRightColor = '#10b981';
+        statusVal.style.color = '#10b981';
+        statusVal.textContent = 'مكتمل ✅';
+        statusSub.textContent = 'كافة المؤشرات مستوفية الشواهد';
+      } else {
+        statusCard.style.borderRightColor = '#f59e0b';
+        statusVal.style.color = '#f59e0b';
+        statusVal.textContent = 'ناقص ⚠️';
+        statusSub.textContent = `${data.summary?.indicatorsMissingEvidence || 0} مؤشر بحاجة لاستكمال`;
+      }
+    }
+
+    const elSufficient = document.getElementById('evinv-kpi-sufficient');
+    if (elSufficient) elSufficient.textContent = data.summary?.indicatorsWithSufficientEvidence || 0;
+
+    const elMissing = document.getElementById('evinv-kpi-missing');
+    if (elMissing) elMissing.textContent = data.summary?.indicatorsMissingEvidence || 0;
+
+    const elDocs = document.getElementById('evinv-kpi-total-docs');
+    if (elDocs) elDocs.textContent = data.summary?.totalEvidencesUploaded || 0;
+
+    // تعبئة توزيع الأنواع
+    const typeLabels = { minutes: 'محاضر', plan: 'خطط', record: 'سجلات', report: 'تقارير', board: 'لوحات', image: 'صور', other: 'أخرى' };
+    const typesDiv = document.getElementById('evinv-types-breakdown');
+    if (typesDiv && data.summary?.byType) {
+      typesDiv.innerHTML = Object.entries(data.summary.byType).map(([k, count]) => `
+        <span class="badge badge-gray" style="padding: 0.35rem 0.6rem; font-size: 0.8rem; border: 1px solid #cbd5e1;">
+          ${typeLabels[k] || k}: <strong>${count}</strong>
+        </span>
+      `).join('');
+    }
+
+    // تعبئة توزيع الحالات
+    const statusLabels = { Draft: 'مسودة', Completed: 'مكتمل', Audited: 'مدقق ومقبول' };
+    const statusesDiv = document.getElementById('evinv-statuses-breakdown');
+    if (statusesDiv && data.summary?.byStatus) {
+      statusesDiv.innerHTML = Object.entries(data.summary.byStatus).map(([k, count]) => `
+        <span class="badge ${k === 'Audited' ? 'badge-green' : (k === 'Completed' ? 'badge-blue' : 'badge-gray')}" style="padding: 0.35rem 0.6rem; font-size: 0.8rem;">
+          ${statusLabels[k] || k}: <strong>${count}</strong>
+        </span>
+      `).join('');
+    }
+
+    this.renderEvidenceInventory(data.standards || []);
+  },
+
+  renderEvidenceInventory(standards, filter = 'all') {
+    const container = document.getElementById('evinv-standards-container');
+    if (!container) return;
+
+    if (!standards || standards.length === 0) {
+      container.innerHTML = '<div style="color: var(--text-muted); text-align: center; padding: 1.5rem;">لا توجد معايير ومؤشرات متاحة.</div>';
+      return;
+    }
+
+    container.innerHTML = standards.map(std => {
+      let filteredIndicators = std.indicators || [];
+      if (filter === 'missing') {
+        filteredIndicators = filteredIndicators.filter(i => !i.isSufficient);
+      } else if (filter === 'sufficient') {
+        filteredIndicators = filteredIndicators.filter(i => i.isSufficient);
+      }
+
+      if (filteredIndicators.length === 0) return '';
+
+      return `
+        <div class="card" style="margin-bottom: 1.25rem; border: 1px solid var(--border);">
+          <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 0.5rem; margin-bottom: 0.75rem; flex-wrap: wrap; gap: 0.5rem;">
+            <h3 style="font-size: 1.05rem; color: var(--primary); margin: 0;">${std.standardName} (${std.standardCode})</h3>
+            <span class="badge badge-blue">${filteredIndicators.length} مؤشر</span>
+          </div>
+
+          <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+            ${filteredIndicators.map(ind => `
+              <div style="background: #f8fafc; border: 1px solid ${ind.isSufficient ? '#e2e8f0' : '#fecaca'}; border-radius: 6px; padding: 0.75rem;">
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.5rem;">
+                  <div>
+                    <strong style="color: var(--primary);">${ind.indicatorCode}</strong>: ${ind.indicatorName}
+                    <span style="font-size: 0.75rem; color: var(--text-muted); margin-right: 0.5rem;">[${ind.domainName}]</span>
+                  </div>
+                  <div style="display: flex; gap: 0.35rem; align-items: center; flex-wrap: wrap;">
+                    ${ind.isSufficient ? '<span class="badge badge-green">مستوفٍ ✅</span>' : '<span class="badge badge-red">ناقص الشواهد ⚠️</span>'}
+                    <span class="badge badge-gray">مرفوع: ${ind.uploadedEvidenceCount} / مطلوب: ${ind.mandatoryRequiredCount}</span>
+                    <button class="btn btn-sm btn-primary" onclick="App.openIndicatorEvidencesModal(${ind.indicatorId}, '${ind.indicatorCode}', '${encodeURIComponent(ind.indicatorName)}')">
+                      📁 إدارة الشواهد
+                    </button>
+                  </div>
+                </div>
+
+                ${ind.evidences && ind.evidences.length > 0 ? `
+                  <div style="display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: 0.35rem;">
+                    ${ind.evidences.map(ev => `
+                      <span class="badge ${ev.status === 'Audited' ? 'badge-green' : (ev.status === 'Completed' ? 'badge-blue' : 'badge-gray')}" style="font-size: 0.75rem;">
+                        📄 ${ev.title} (${ev.evidenceType || 'أخرى'}) [${ev.status}]
+                      </span>
+                    `).join('')}
+                  </div>
+                ` : `
+                  <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;">لا توجد شواهد مرفوعة لهذا المؤشر بعد.</div>
+                `}
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `;
+    }).join('') || '<div style="text-align: center; padding: 1.5rem; color: var(--text-muted);">لا توجد مؤشرات تطابق الفلتر المحدد.</div>';
+  },
+
+  filterEvidenceInventory(filter) {
+    const btnAll = document.getElementById('btn-evinv-filter-all');
+    const btnMissing = document.getElementById('btn-evinv-filter-missing');
+    const btnSufficient = document.getElementById('btn-evinv-filter-sufficient');
+
+    [btnAll, btnMissing, btnSufficient].forEach(b => {
+      if (b) {
+        b.className = 'btn btn-sm btn-secondary';
+      }
+    });
+
+    if (filter === 'missing') {
+      if (btnMissing) btnMissing.className = 'btn btn-sm btn-primary';
+    } else if (filter === 'sufficient') {
+      if (btnSufficient) btnSufficient.className = 'btn btn-sm btn-primary';
+    } else {
+      if (btnAll) btnAll.className = 'btn btn-sm btn-primary';
+    }
+
+    if (this.state.evidenceInventory?.standards) {
+      this.renderEvidenceInventory(this.state.evidenceInventory.standards, filter);
+    }
+  },
+
+  async openIndicatorEvidencesModal(indicatorId, code, encodedName) {
+    const name = decodeURIComponent(encodedName);
+    const evalId = this.getEvaluationId();
+    // جلب النتيجة للمؤشر لفتح المودال
+    const res = await this.request(`/evaluations/${evalId}/standards-tree`);
+    let resultId = null;
+    if (res.ok && res.data?.standards) {
+      for (const std of res.data.standards) {
+        for (const sub of (std.subStandards || [])) {
+          for (const ind of (sub.indicators || [])) {
+            if (ind.indicatorId === indicatorId && ind.resultId) {
+              resultId = ind.resultId;
+              break;
+            }
+          }
+        }
+      }
+    }
+    this.openEvidencesModal({ indicatorId, code, name, resultId: resultId || indicatorId });
   },
 
   // ---------------------------------------------------------------------------
