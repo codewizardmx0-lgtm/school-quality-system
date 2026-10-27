@@ -1033,4 +1033,80 @@ class EvidenceOrganizationFeatureTest extends TestCase
             'current'     => true,
         ]);
     }
+
+    /**
+     * اختبار 22: التحقق من أن الواصفة المرتبطة بالنتيجة التلقائية تخص نفس المؤشر والإصدار ولها score = 0 ورفض الإنشاء إن لم توجد.
+     */
+    public function test_auto_created_result_selects_descriptor_for_same_indicator_and_version_with_score_zero(): void
+    {
+        Sanctum::actingAs($this->evaluatorBelqees);
+
+        // 1. استخدام المؤشر الثاني (indicator_id = 2) لضمان أن معرف الواصفة ليس 1
+        $targetIndicator = $this->secondIndicator;
+        $versionId = (int) $this->standardVersion->version_id;
+
+        // حذف أي نتيجة سابقة للمؤشر الثاني في هذا التقييم
+        EvaluationResult::where('evaluation_id', $this->evaluationBelqees->evaluation_id)
+            ->where('indicator_id', $targetIndicator->indicator_id)
+            ->delete();
+
+        // استخراج الواصفة المتوقعة للمؤشر الثاني ذات الدرجة 0
+        $expectedDescriptor = IndicatorScoreDescriptor::where('indicator_id', $targetIndicator->indicator_id)
+            ->where('standard_version_id', $versionId)
+            ->whereHas('scoreLevel', function ($q) {
+                $q->where('score_value', 0);
+            })
+            ->firstOrFail();
+
+        $this->assertNotEquals(1, $expectedDescriptor->descriptor_id, 'واصفة المؤشر الثاني يجب ألا تكون الواصفة رقم 1');
+
+        // 2. رفع شاهد جديد للمؤشر الثاني لإنشاء النتيجة تلقائياً
+        $file = UploadedFile::fake()->create('descriptor_check.pdf', 150, 'application/pdf');
+        $res = $this->postJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$targetIndicator->indicator_id}/evidences", [
+            'title'         => 'شاهد فحص الواصفة',
+            'description'   => 'التحقق من ربط الواصفة الصحيحة للنتيجة التلقائية',
+            'evidence_type' => 'report',
+            'file'          => $file,
+        ]);
+
+        $res->assertStatus(201);
+
+        // 3. التحقق من النتيجة التلقائية المنشأة في قاعدة البيانات
+        $autoResult = EvaluationResult::with(['scoreDescriptor.scoreLevel'])
+            ->where('evaluation_id', $this->evaluationBelqees->evaluation_id)
+            ->where('indicator_id', $targetIndicator->indicator_id)
+            ->firstOrFail();
+
+        $this->assertEquals('Pending', $autoResult->completion_status);
+        $this->assertEquals(0, $autoResult->score);
+        $this->assertEquals($versionId, $autoResult->standard_version_id);
+        $this->assertEquals($expectedDescriptor->descriptor_id, $autoResult->score_descriptor_id);
+
+        // التحقق الدقيق من مطابقة الواصفة لنفس المؤشر ونفس الإصدار ودرجة 0
+        $this->assertNotNull($autoResult->scoreDescriptor);
+        $this->assertEquals($targetIndicator->indicator_id, $autoResult->scoreDescriptor->indicator_id);
+        $this->assertEquals($versionId, $autoResult->scoreDescriptor->standard_version_id);
+        $this->assertEquals(0, $autoResult->scoreDescriptor->scoreLevel->score_value);
+
+        // 4. اختبار حالة الرفض عند عدم وجود واصفة بدرجة 0 للمؤشر
+        // إنشاء مؤشر تجريبي بدون أي واصفات
+        $dummyIndicator = Indicator::create([
+            'sub_standard_id' => $targetIndicator->sub_standard_id,
+            'code'            => 'TEST-IND-NO-DESC',
+            'name'            => 'مؤشر تجريبي بلا واصفات',
+            'status'          => 'Active',
+        ]);
+
+        $fileDummy = UploadedFile::fake()->create('dummy.pdf', 100, 'application/pdf');
+        $failRes = $this->postJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$dummyIndicator->indicator_id}/evidences", [
+            'title'         => 'شاهد مؤشر بلا واصفات',
+            'description'   => 'اختبار رفض إنشاء النتيجة التلقائية',
+            'evidence_type' => 'other',
+            'file'          => $fileDummy,
+        ]);
+
+        $failRes->assertStatus(422)
+            ->assertJsonPath('message', 'تعذر إنشاء النتيجة التلقائية لعدم وجود واصفة تقييم معتمدة للدرجة (0) لهذا المؤشر في هذا الإصدار المعياري.')
+            ->assertJsonStructure(['errors' => ['descriptor']]);
+    }
 }

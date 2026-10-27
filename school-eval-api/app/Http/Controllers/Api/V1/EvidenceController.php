@@ -211,15 +211,25 @@ class EvidenceController extends Controller
             ->first();
 
         if (!$result) {
-            $versionId = $evaluation->cycle?->standard_version_id ?? $evaluation->cycle?->version_id ?? 1;
+            $evaluation->loadMissing('cycle');
+            $versionId = (int) ($evaluation->cycle?->standard_version_id ?? $evaluation->cycle?->version_id ?? 1);
             $descriptor = IndicatorScoreDescriptor::where('indicator_id', $actualIndicatorId)
                 ->where('standard_version_id', $versionId)
+                ->whereHas('scoreLevel', function ($q) {
+                    $q->where('score_value', 0);
+                })
                 ->first();
+
+            if (!$descriptor) {
+                return ApiResponse::validationError([
+                    'descriptor' => ['تعذر إنشاء النتيجة التلقائية: لا توجد واصفة تقييم معتمدة للدرجة (0) لهذا المؤشر في هذا الإصدار المعياري.'],
+                ], 'تعذر إنشاء النتيجة التلقائية لعدم وجود واصفة تقييم معتمدة للدرجة (0) لهذا المؤشر في هذا الإصدار المعياري.');
+            }
 
             $result = EvaluationResult::create([
                 'evaluation_id'       => $evaluation->evaluation_id,
                 'indicator_id'        => $actualIndicatorId,
-                'score_descriptor_id' => $descriptor?->descriptor_id ?? 1,
+                'score_descriptor_id' => $descriptor->descriptor_id,
                 'standard_version_id' => $versionId,
                 'evaluator_user_id'   => $user->user_id,
                 'score'               => 0,
@@ -497,15 +507,25 @@ class EvidenceController extends Controller
             ->first();
 
         if (!$targetResult) {
-            $versionId = $evaluation->cycle?->standard_version_id ?? $evaluation->cycle?->version_id ?? 1;
+            $evaluation->loadMissing('cycle');
+            $versionId = (int) ($evaluation->cycle?->standard_version_id ?? $evaluation->cycle?->version_id ?? 1);
             $descriptor = IndicatorScoreDescriptor::where('indicator_id', $targetIndicatorId)
                 ->where('standard_version_id', $versionId)
+                ->whereHas('scoreLevel', function ($q) {
+                    $q->where('score_value', 0);
+                })
                 ->first();
+
+            if (!$descriptor) {
+                return ApiResponse::validationError([
+                    'descriptor' => ['تعذر إنشاء النتيجة التلقائية: لا توجد واصفة تقييم معتمدة للدرجة (0) للمؤشر المستهدف في هذا الإصدار المعياري.'],
+                ], 'تعذر إنشاء النتيجة التلقائية لعدم وجود واصفة تقييم معتمدة للدرجة (0) للمؤشر المستهدف في هذا الإصدار المعياري.');
+            }
 
             $targetResult = EvaluationResult::create([
                 'evaluation_id'       => $evaluation->evaluation_id,
                 'indicator_id'        => $targetIndicatorId,
-                'score_descriptor_id' => $descriptor?->descriptor_id ?? 1,
+                'score_descriptor_id' => $descriptor->descriptor_id,
                 'standard_version_id' => $versionId,
                 'evaluator_user_id'   => $user->user_id,
                 'score'               => 0,
