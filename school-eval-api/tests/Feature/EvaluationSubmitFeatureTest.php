@@ -129,12 +129,12 @@ class EvaluationSubmitFeatureTest extends TestCase
      */
     protected function attachEvidenceToRequiredIndicators(?int $exceptIndicatorId = null): void
     {
-        $requiredIndicatorIds = IndicatorEvidenceRequirement::where('required', true)
-            ->pluck('indicator_id')
-            ->unique();
+        $requirements = IndicatorEvidenceRequirement::where('required', true)
+            ->get()
+            ->groupBy('indicator_id');
 
-        foreach ($requiredIndicatorIds as $indicatorId) {
-            if ($exceptIndicatorId && $indicatorId === $exceptIndicatorId) {
+        foreach ($requirements as $indicatorId => $reqList) {
+            if ($exceptIndicatorId && (int) $indicatorId === (int) $exceptIndicatorId) {
                 continue;
             }
 
@@ -143,29 +143,29 @@ class EvaluationSubmitFeatureTest extends TestCase
                 ->first();
 
             if ($result) {
-                $evidence = Evidence::where('result_id', $result->result_id)->first();
-                if (!$evidence) {
+                // حذف الشواهد السابقة للمؤشر لتجنب التكرار
+                $existingEvidences = Evidence::where('result_id', $result->result_id)->get();
+                foreach ($existingEvidences as $oldEv) {
+                    EvidenceVersion::where('evidence_id', $oldEv->evidence_id)->delete();
+                    $oldEv->delete();
+                }
+
+                foreach ($reqList as $req) {
                     $evidence = Evidence::create([
                         'result_id'     => $result->result_id,
                         'indicator_id'  => $indicatorId,
-                        'title'         => 'شاهد معتمد للمؤشر رقم ' . $indicatorId,
+                        'title'         => 'شاهد معتمد للمتطلب ' . $req->requirement_id,
                         'description'   => 'وصف الشاهد المعتمد للتحقق',
                         'justification' => 'مبررات ودلالات الشاهد',
                         'status'        => 'Completed',
                     ]);
-                } else {
-                    $evidence->update(['status' => 'Completed']);
-                }
 
-                EvidenceVersion::firstOrCreate(
-                    [
+                    EvidenceVersion::create([
                         'evidence_id' => $evidence->evidence_id,
                         'version_no'  => 1,
-                    ],
-                    [
-                        'current' => true,
-                    ]
-                );
+                        'current'     => true,
+                    ]);
+                }
             }
         }
     }

@@ -336,6 +336,82 @@
       </div>
     </div>
 
+    <!-- نافذة منسدلة لاختيار المؤشر المستهدف عند نقل/ربط الشاهد -->
+    <div id="modal-link-evidence" class="modal-overlay hidden">
+      <div class="modal-content" style="max-width: 550px;">
+        <div class="modal-header">
+          <div>
+            <h3 style="font-size: 1.1rem; color: var(--primary); margin: 0;">🔗 نقل وربط الشاهد بمؤشر آخر</h3>
+            <span style="font-size: 0.78rem; color: var(--text-muted);">نقل الشاهد لمؤشر في نفس دورة التقييم مع تنظيف النتيجة القديمة إذا كانت معلقة</span>
+          </div>
+          <button class="modal-close" onclick="App.closeLinkEvidenceModal()">&times;</button>
+        </div>
+
+        <div id="link-ev-alert" class="alert alert-error hidden" style="margin-top: 0.75rem;"></div>
+
+        <div style="margin-top: 0.75rem; font-size: 0.85rem; background: #f8fafc; padding: 0.75rem; border-radius: 6px; border: 1px solid var(--border);">
+          <div>الشاهد المختار: <strong id="link-ev-title" style="color: var(--primary);">-</strong></div>
+          <div style="margin-top: 0.25rem;">المؤشر الحالي: <strong id="link-ev-current-indicator" style="color: #475569;">-</strong></div>
+        </div>
+
+        <div class="form-group" style="margin-top: 1rem;">
+          <label class="form-label" for="link-ev-target-select">اختر المؤشر المستهدف للنقل والربط به:</label>
+          <input type="text" id="link-ev-search" class="form-control" placeholder="ابحث برمز أو اسم المؤشر..." oninput="App.filterLinkIndicatorOptions(this.value)" style="margin-bottom: 0.5rem; font-size: 0.85rem;">
+          <select id="link-ev-target-select" class="form-control" size="8" style="height: 180px; font-size: 0.82rem;">
+            <!-- يتم الملء ديناميكياً من شجرة المؤشرات -->
+          </select>
+        </div>
+
+        <div style="display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem;">
+          <button type="button" class="btn btn-sm btn-secondary" onclick="App.closeLinkEvidenceModal()">إلغاء</button>
+          <button type="button" class="btn btn-sm btn-primary" onclick="App.submitLinkEvidence()">تأكيد نقل وربط الشاهد</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- نافذة تفصيل نواقص وموانع إغلاق التقييم (استجابة 422) -->
+    <div id="modal-submit-errors" class="modal-overlay hidden">
+      <div class="modal-content" style="max-width: 650px; max-height: 85vh; display: flex; flex-direction: column;">
+        <div class="modal-header" style="border-bottom: 1px solid #fecaca; background: #fef2f2; border-radius: 8px 8px 0 0;">
+          <div>
+            <h3 style="font-size: 1.15rem; color: #dc2626; margin: 0;">⚠️ متطلبات اعتماد وإغلاق التقييم غير مكتملة</h3>
+            <span style="font-size: 0.8rem; color: #991b1b;">لا يمكن إغلاق التقييم الذاتي واعتماده قبل استيفاء رصد كافة المؤشرات والحد الأدنى من الشواهد</span>
+          </div>
+          <button class="modal-close" onclick="App.closeSubmitErrorsModal()">&times;</button>
+        </div>
+
+        <div style="padding: 1rem; overflow-y: auto; flex: 1;">
+          <div id="submit-error-banner" class="alert alert-error" style="margin-bottom: 1rem;">-</div>
+
+          <!-- قائمة المؤشرات غير المرصودة -->
+          <div id="submit-unscored-section" style="margin-bottom: 1.25rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem;">
+              <h4 style="font-size: 0.95rem; color: #b91c1c; margin: 0;">❌ مؤشرات غير مرصودة بحاجة لرصد الدرجة:</h4>
+              <span id="submit-unscored-count-badge" class="badge badge-red">0 مؤشر</span>
+            </div>
+            <div id="submit-unscored-list" style="display: flex; flex-direction: column; gap: 0.4rem; max-height: 180px; overflow-y: auto; border: 1px solid #fee2e2; border-radius: 6px; padding: 0.5rem; background: #fffaf0;">
+              <!-- تُحقن بواسطة JS -->
+            </div>
+          </div>
+
+          <!-- قائمة المؤشرات الناقصة الشواهد -->
+          <div id="submit-missing-ev-section" style="margin-bottom: 0.5rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem;">
+              <h4 style="font-size: 0.95rem; color: #c2410c; margin: 0;">📂 مؤشرات لم تستوفِ الحد الأدنى من الشواهد الإلزامية:</h4>
+              <span id="submit-missing-ev-count-badge" class="badge badge-orange">0 مؤشر</span>
+            </div>
+            <div id="submit-missing-ev-list" style="display: flex; flex-direction: column; gap: 0.4rem; max-height: 180px; overflow-y: auto; border: 1px solid #ffedd5; border-radius: 6px; padding: 0.5rem; background: #fffaf0;">
+              <!-- تُحقن بواسطة JS -->
+            </div>
+          </div>
+        </div>
+
+        <div style="padding: 0.75rem 1rem; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 0.5rem; background: #f8fafc; border-radius: 0 0 8px 8px;">
+          <button class="btn btn-sm btn-secondary" onclick="App.closeSubmitErrorsModal()">إغلاق</button>
+        </div>
+      </div>
+    </div>
+
     <!-- ========================================================================= -->
     <!-- الشاشة 6: اقتراحات مجالات التحسين (FR-SCH-16) -->
     <!-- ========================================================================= -->
@@ -946,7 +1022,8 @@
               فحص وحصر الشواهد لكل مؤشر، وإبراز النواقص والمكتمل، وتصنيف الوثائق يدوياً وإدارتها وتدقيقها بدون أي ذكاء اصطناعي.
             </p>
           </div>
-          <div style="display: flex; gap: 0.5rem;">
+          <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+            <button id="btn-evinv-submit" class="btn btn-sm btn-success" onclick="App.handleEvaluationSubmit()" style="display: none;">🔒 إغلاق واعتماد التقييم</button>
             <button class="btn btn-sm btn-secondary" onclick="App.loadEvidenceInventory()">🔄 تحديث الجرد</button>
             <button class="btn btn-sm btn-primary" onclick="App.navTo('evidence-summary')">📁 ملخص النسب</button>
           </div>
@@ -976,6 +1053,12 @@
             <div class="kpi-label">إجمالي الشواهد المرفوعة</div>
             <div id="evinv-kpi-total-docs" class="kpi-value" style="color: #3b82f6;">0</div>
             <div id="evinv-kpi-total-docs-sub" class="kpi-sub">وثيقة مسجلة</div>
+          </div>
+
+          <div class="kpi-card" style="border-right-color: #94a3b8;">
+            <div class="kpi-label">شواهد قيد المسودة (Draft)</div>
+            <div id="evinv-kpi-draft-docs" class="kpi-value" style="color: #64748b;">0</div>
+            <div id="evinv-kpi-draft-docs-sub" class="kpi-sub">بحاجة لاعتماد وتدقيق</div>
           </div>
         </div>
 

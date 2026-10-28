@@ -118,12 +118,22 @@ class EvidenceController extends Controller
             return ApiResponse::forbidden('غير مصرح لك باستعراض شواهد هذا التقييم.');
         }
 
-        $indicator = Indicator::where('indicator_id', $actualIndicatorId)
+        $indicator = Indicator::with('subStandard.standard')
+            ->where('indicator_id', $actualIndicatorId)
             ->where('status', 'Active')
             ->first();
 
         if (!$indicator) {
             return ApiResponse::notFound('المؤشر المطلوب غير موجود أو غير فعّال.');
+        }
+
+        // التحقق من أن المؤشر يتبع إصدار الدورة التقييمية
+        $evaluation->loadMissing('cycle');
+        $versionId = (int) ($evaluation->cycle?->standard_version_id ?? $evaluation->cycle?->version_id ?? 1);
+        if ((int) $indicator->subStandard?->standard?->version_id !== $versionId) {
+            return ApiResponse::validationError([
+                'indicator' => ['المؤشر لا ينتمي للإصدار المعياري المعتمد لدورة التقييم.'],
+            ], 'المؤشر لا ينتمي للإصدار المعياري المعتمد لدورة التقييم.');
         }
 
         // جلب سجل النتيجة للمؤشر في هذا التقييم
@@ -197,12 +207,22 @@ class EvidenceController extends Controller
             ], $lockCheck['message']);
         }
 
-        $indicator = Indicator::where('indicator_id', $actualIndicatorId)
+        $indicator = Indicator::with('subStandard.standard')
+            ->where('indicator_id', $actualIndicatorId)
             ->where('status', 'Active')
             ->first();
 
         if (!$indicator) {
             return ApiResponse::notFound('المؤشر المطلوب غير موجود أو غير فعّال.');
+        }
+
+        // التحقق من أن المؤشر يتبع إصدار الدورة التقييمية
+        $evaluation->loadMissing('cycle');
+        $versionId = (int) ($evaluation->cycle?->standard_version_id ?? $evaluation->cycle?->version_id ?? 1);
+        if ((int) $indicator->subStandard?->standard?->version_id !== $versionId) {
+            return ApiResponse::validationError([
+                'indicator' => ['المؤشر لا ينتمي للإصدار المعياري المعتمد لدورة التقييم.'],
+            ], 'المؤشر لا ينتمي للإصدار المعياري المعتمد لدورة التقييم.');
         }
 
         // جلب سجل النتيجة أو إنشاؤه تلقائياً
@@ -474,7 +494,8 @@ class EvidenceController extends Controller
 
         $targetIndicatorId = (int) $request->input('indicator_id', $request->input('indicatorId'));
 
-        $targetIndicator = Indicator::where('indicator_id', $targetIndicatorId)
+        $targetIndicator = Indicator::with('subStandard.standard')
+            ->where('indicator_id', $targetIndicatorId)
             ->where('status', 'Active')
             ->first();
 
@@ -482,6 +503,15 @@ class EvidenceController extends Controller
             return ApiResponse::validationError([
                 'indicator_id' => ['المؤشر المستهدف غير موجود أو غير فعّال.'],
             ]);
+        }
+
+        // التحقق من أن المؤشر المستهدف يتبع إصدار الدورة التقييمية
+        $evaluation->loadMissing('cycle');
+        $versionId = (int) ($evaluation->cycle?->standard_version_id ?? $evaluation->cycle?->version_id ?? 1);
+        if ((int) $targetIndicator->subStandard?->standard?->version_id !== $versionId) {
+            return ApiResponse::validationError([
+                'indicator_id' => ['المؤشر المستهدف لا ينتمي للإصدار المعياري المعتمد لدورة التقييم.'],
+            ], 'المؤشر المستهدف لا ينتمي للإصدار المعياري المعتمد لدورة التقييم.');
         }
 
         // إذا كان الشاهد مرتبطاً بالفعل بنفس المؤشر
@@ -507,8 +537,6 @@ class EvidenceController extends Controller
             ->first();
 
         if (!$targetResult) {
-            $evaluation->loadMissing('cycle');
-            $versionId = (int) ($evaluation->cycle?->standard_version_id ?? $evaluation->cycle?->version_id ?? 1);
             $descriptor = IndicatorScoreDescriptor::where('indicator_id', $targetIndicatorId)
                 ->where('standard_version_id', $versionId)
                 ->whereHas('scoreLevel', function ($q) {
@@ -534,11 +562,30 @@ class EvidenceController extends Controller
             ]);
         }
 
-        // تحديث ربط الشاهد بالمؤشر والنتيجة الجديدة
-        $evidence->update([
-            'indicator_id' => $targetIndicatorId,
-            'result_id'    => $targetResult->result_id,
-        ]);
+        $oldResult = $evidence->result;
+
+        DB::transaction(function () use ($evidence, $targetIndicatorId, $targetResult, $oldResult) {
+            // تحديث ربط الشاهد بالمؤشر والنتيجة الجديدة
+            $evidence->update([
+                'indicator_id' => $targetIndicatorId,
+                'result_id'    => $targetResult->result_id,
+            ]);
+
+            // تنظيف النتيجة السابقة إذا كانت Pending واستوفت كافة شروط الحذف
+            if ($oldResult && (int) $oldResult->result_id !== (int) $targetResult->result_id) {
+                $isPending = ($oldResult->completion_status === 'Pending');
+                $hasNoEvidence = ($oldResult->evidences()->count() === 0);
+                $hasNoNotes = ($oldResult->notes()->count() === 0);
+                $hasNoVerificationTools = (DB::table('evaluation_result_verification_methods')
+                    ->where('evaluation_result_id', $oldResult->result_id)
+                    ->count() === 0);
+                $hasNoTextualResult = empty($oldResult->textual_result);
+
+                if ($isPending && $hasNoEvidence && $hasNoNotes && $hasNoVerificationTools && $hasNoTextualResult) {
+                    $oldResult->delete();
+                }
+            }
+        });
 
         $evidence->refresh();
 
@@ -701,170 +748,65 @@ class EvidenceController extends Controller
             return ApiResponse::forbidden('غير مصرح لك باستعراض شواهد هذا التقييم.');
         }
 
-        $versionId = $evaluation->cycle?->version_id ?? $evaluation->cycle?->standard_version_id;
-
-        // جلب المعايير والمؤشرات الفعالة
-        $standardsQuery = Standard::query()->orderBy('standard_id');
-        if ($versionId) {
-            $standardsQuery->where('version_id', $versionId);
-        }
-
-        $standards = $standardsQuery->with([
-            'subStandards' => function ($q) {
-                $q->orderBy('sub_standard_id');
-            },
-            'subStandards.indicators' => function ($q) {
-                $q->where('status', 'Active')->orderBy('code');
-            },
-        ])->get();
-
-        // متطلبات الشواهد الإلزامية للمؤشرات
-        $requirementsMap = IndicatorEvidenceRequirement::query()
-            ->when($versionId, fn($q) => $q->where('standard_version_id', $versionId))
-            ->get()
-            ->groupBy('indicator_id');
-
-        // نتائج التقييم مع شواهدها ومرفقاتها وملاحظاتها
-        $resultsMap = EvaluationResult::query()
-            ->where('evaluation_id', $evaluation->evaluation_id)
-            ->with([
-                'evidences.versions.attachments',
-                'evidences.reviewer',
-            ])
-            ->get()
-            ->keyBy('indicator_id');
-
-        $totalIndicators = 0;
-        $indicatorsWithSufficientEvidence = 0;
-        $indicatorsMissingEvidence = 0;
-        $totalEvidencesUploaded = 0;
-
-        $byType = [
-            'minutes' => 0,
-            'plan'    => 0,
-            'record'  => 0,
-            'report'  => 0,
-            'board'   => 0,
-            'image'   => 0,
-            'other'   => 0,
-        ];
-
-        $byStatus = [
-            'Draft'     => 0,
-            'Completed' => 0,
-            'Audited'   => 0,
-        ];
+        /** @var \App\Services\EvidenceSufficiencyService $sufficiencyService */
+        $sufficiencyService = app(\App\Services\EvidenceSufficiencyService::class);
+        $sufficiency = $sufficiencyService->evaluateEvaluation($evaluation);
 
         $standardsBreakdown = [];
-
-        foreach ($standards as $standard) {
+        foreach ($sufficiency['standards'] as $std) {
             $stdIndicatorsList = [];
-
-            foreach ($standard->subStandards as $sub) {
-                foreach ($sub->indicators as $ind) {
-                    $totalIndicators++;
-
-                    $reqs = $requirementsMap->get($ind->indicator_id, collect());
-                    $mandatoryReqCount = $reqs->where('required', true)->count();
-                    $totalReqCount = $reqs->count();
-
-                    $result = $resultsMap->get($ind->indicator_id);
-                    $evidences = $result ? $result->evidences : collect();
-                    $uploadedCount = $evidences->count();
-                    $totalEvidencesUploaded += $uploadedCount;
-
-                    // تجميع التصنيفات والحالات
-                    foreach ($evidences as $ev) {
-                        $t = $ev->evidence_type ?: 'other';
-                        if (isset($byType[$t])) {
-                            $byType[$t]++;
-                        } else {
-                            $byType['other']++;
-                        }
-
-                        $s = $ev->status ?: 'Draft';
-                        if (isset($byStatus[$s])) {
-                            $byStatus[$s]++;
-                        }
-                    }
-
-                    // التحقق من كفاية الشواهد: الشاهد كافٍ فقط إذا كانت حالته Completed أو Audited (Draft لا يُحتسب مستوفياً)
-                    $validEvidences = $evidences->filter(function ($ev) {
-                        return in_array($ev->status, ['Completed', 'Audited'], true);
-                    });
-                    $validCount = $validEvidences->count();
-
-                    $isSufficient = ($mandatoryReqCount > 0)
-                        ? ($validCount >= $mandatoryReqCount)
-                        : true;
-
-                    if ($isSufficient) {
-                        $indicatorsWithSufficientEvidence++;
-                    } else {
-                        $indicatorsMissingEvidence++;
-                    }
-
-                    $indicatorStatus = 'NotRequired';
-                    if ($mandatoryReqCount > 0) {
-                        $indicatorStatus = ($validCount >= $mandatoryReqCount) ? 'Completed' : 'Missing';
-                    } elseif ($validCount > 0) {
-                        $indicatorStatus = 'Completed';
-                    }
-
-                    $stdIndicatorsList[] = [
-                        'indicatorId'            => $ind->indicator_id,
-                        'indicatorCode'          => $ind->code,
-                        'indicatorName'          => $ind->name,
-                        'domainName'             => $sub->name,
-                        'mandatoryRequiredCount' => $mandatoryReqCount,
-                        'totalRequiredCount'     => $totalReqCount,
-                        'uploadedEvidenceCount'  => $uploadedCount,
-                        'validEvidenceCount'     => $validCount,
-                        'isSufficient'           => $isSufficient,
-                        'status'                 => $indicatorStatus,
-                        'uploadedEvidenceCount'  => $uploadedCount,
-                        'isSufficient'           => $isSufficient,
-                        'status'                 => $indicatorStatus,
-                        'evidences'              => $evidences->map(function ($ev) {
-                            return [
-                                'evidenceId'    => $ev->evidence_id,
-                                'title'         => $ev->title,
-                                'evidenceType'  => $ev->evidence_type,
-                                'status'        => $ev->status,
-                                'reviewerNotes' => $ev->reviewer_notes,
-                                'reviewedBy'    => $ev->reviewer?->full_name,
-                                'reviewedAt'    => $ev->reviewed_at?->toIso8601ZuluString(),
-                                'createdAt'     => $ev->created_at?->toIso8601ZuluString(),
-                                'versionsCount' => $ev->versions->count(),
-                            ];
-                        })->values(),
-                    ];
-                }
+            foreach ($std['indicators'] as $ind) {
+                $stdIndicatorsList[] = [
+                    'indicatorId'            => $ind['indicator_id'],
+                    'indicatorCode'          => $ind['code'],
+                    'indicatorName'          => $ind['name'],
+                    'domainName'             => $ind['domain_name'],
+                    'mandatoryRequiredCount' => $ind['mandatory_required_count'],
+                    'totalRequiredCount'     => $ind['total_required_count'],
+                    'uploadedEvidenceCount'  => $ind['uploaded_evidence_count'],
+                    'validEvidenceCount'     => $ind['valid_evidence_count'],
+                    'draftEvidenceCount'     => $ind['draft_evidence_count'],
+                    'isSufficient'           => $ind['is_sufficient'],
+                    'status'                 => $ind['status'],
+                    'evidences'              => $ind['evidences']->map(function ($ev) {
+                        return [
+                            'evidenceId'    => $ev->evidence_id,
+                            'title'         => $ev->title,
+                            'evidenceType'  => $ev->evidence_type,
+                            'status'        => $ev->status,
+                            'reviewerNotes' => $ev->reviewer_notes,
+                            'reviewedBy'    => $ev->reviewer?->full_name,
+                            'reviewedAt'    => $ev->reviewed_at?->toIso8601ZuluString(),
+                            'createdAt'     => $ev->created_at?->toIso8601ZuluString(),
+                            'versionsCount' => $ev->versions->count(),
+                        ];
+                    })->values(),
+                ];
             }
 
             $standardsBreakdown[] = [
-                'standardId'   => $standard->standard_id,
-                'standardCode' => $standard->code,
-                'standardName' => $standard->name,
+                'standardId'   => $std['standard_id'],
+                'standardCode' => $std['standard_code'],
+                'standardName' => $std['standard_name'],
                 'indicators'   => $stdIndicatorsList,
             ];
         }
-
-        $inventoryStatus = ($indicatorsMissingEvidence === 0) ? 'Complete' : 'Incomplete';
 
         return ApiResponse::success(
             data: [
                 'evaluationId'    => $evaluation->evaluation_id,
                 'schoolId'        => $evaluation->school_id,
                 'schoolName'      => $evaluation->school?->name,
-                'inventoryStatus' => $inventoryStatus,
+                'inventoryStatus' => $sufficiency['inventory_status'],
                 'summary'         => [
-                    'totalIndicators'                  => $totalIndicators,
-                    'indicatorsWithSufficientEvidence' => $indicatorsWithSufficientEvidence,
-                    'indicatorsMissingEvidence'        => $indicatorsMissingEvidence,
-                    'totalEvidencesUploaded'           => $totalEvidencesUploaded,
-                    'byType'                           => $byType,
-                    'byStatus'                         => $byStatus,
+                    'totalIndicators'                  => $sufficiency['total_indicators'],
+                    'indicatorsWithSufficientEvidence' => $sufficiency['indicators_with_sufficient_evidence'],
+                    'indicatorsMissingEvidence'        => $sufficiency['indicators_missing_evidence'],
+                    'totalEvidencesUploaded'           => $sufficiency['total_uploaded_evidences'],
+                    'totalValidEvidences'              => $sufficiency['total_valid_evidences'],
+                    'totalDraftEvidences'              => $sufficiency['total_draft_evidences'],
+                    'byType'                           => $sufficiency['by_type'],
+                    'byStatus'                         => $sufficiency['by_status'],
                 ],
                 'standards'       => $standardsBreakdown,
             ],

@@ -11,8 +11,11 @@ use App\Models\EvidenceVersion;
 use App\Models\Indicator;
 use App\Models\IndicatorEvidenceRequirement;
 use App\Models\IndicatorScoreDescriptor;
+use App\Models\Note;
 use App\Models\School;
+use App\Models\Standard;
 use App\Models\StandardVersion;
+use App\Models\SubStandard;
 use App\Models\User;
 use App\Services\ReportsAnalyticsService;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
@@ -1108,5 +1111,384 @@ class EvidenceOrganizationFeatureTest extends TestCase
         $failRes->assertStatus(422)
             ->assertJsonPath('message', 'تعذر إنشاء النتيجة التلقائية لعدم وجود واصفة تقييم معتمدة للدرجة (0) لهذا المؤشر في هذا الإصدار المعياري.')
             ->assertJsonStructure(['errors' => ['descriptor']]);
+    }
+
+    /**
+     * اختبار 23: التحقق من رفض رفع شاهد لمؤشر ينتمي لإصدار معياري مختلف عن إصدار دورة التقييم (422).
+     */
+    public function test_store_by_indicator_rejects_indicator_from_different_standard_version(): void
+    {
+        Sanctum::actingAs($this->evaluatorBelqees);
+
+        // إنشاء إصدار معياري آخر ومعيار ومؤشر تابع له
+        $otherVersion = StandardVersion::create([
+            'version_no'          => '2026.2-TEST',
+            'source_organization' => 'وزارة التربية والتعليم',
+            'status'              => 'Active',
+            'issue_date'          => '2026-01-01',
+        ]);
+
+        $otherStandard = Standard::create([
+            'version_id'    => $otherVersion->version_id,
+            'code'          => 'STD-V2',
+            'name'          => 'معيار الإصدار الثاني',
+            'weight'        => 10.0,
+            'display_order' => 99,
+        ]);
+
+        $otherSub = SubStandard::create([
+            'standard_id'   => $otherStandard->standard_id,
+            'code'          => 'SUB-V2',
+            'name'          => 'مجال الإصدار الثاني',
+            'display_order' => 1,
+        ]);
+
+        $otherIndicator = Indicator::create([
+            'sub_standard_id' => $otherSub->sub_standard_id,
+            'code'            => 'IND-V2-01',
+            'name'            => 'مؤشر تابع للإصدار الثاني',
+            'status'          => 'Active',
+        ]);
+
+        $file = UploadedFile::fake()->create('other_version.pdf', 100, 'application/pdf');
+        $res = $this->postJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$otherIndicator->indicator_id}/evidences", [
+            'title'         => 'شاهد لمؤشر إصدار مختلف',
+            'evidence_type' => 'report',
+            'file'          => $file,
+        ]);
+
+        $res->assertStatus(422)
+            ->assertJsonPath('message', 'المؤشر لا ينتمي للإصدار المعياري المعتمد لدورة التقييم.')
+            ->assertJsonPath('errors.indicator.0', 'المؤشر لا ينتمي للإصدار المعياري المعتمد لدورة التقييم.');
+    }
+
+    /**
+     * اختبار 24: التحقق من رفض ربط شاهد بمؤشر مستهدف ينتمي لإصدار معياري مختلف عن إصدار دورة التقييم (422).
+     */
+    public function test_link_indicator_rejects_target_indicator_from_different_standard_version(): void
+    {
+        Sanctum::actingAs($this->evaluatorBelqees);
+
+        $otherVersion = StandardVersion::create([
+            'version_no'          => '2026.3-TEST',
+            'source_organization' => 'وزارة التربية والتعليم',
+            'status'              => 'Active',
+            'issue_date'          => '2026-01-01',
+        ]);
+
+        $otherStandard = Standard::create([
+            'version_id'    => $otherVersion->version_id,
+            'code'          => 'STD-V3',
+            'name'          => 'معيار الإصدار الثالث',
+            'weight'        => 10.0,
+            'display_order' => 99,
+        ]);
+
+        $otherSub = SubStandard::create([
+            'standard_id'   => $otherStandard->standard_id,
+            'code'          => 'SUB-V3',
+            'name'          => 'مجال الإصدار الثالث',
+            'display_order' => 1,
+        ]);
+
+        $otherIndicator = Indicator::create([
+            'sub_standard_id' => $otherSub->sub_standard_id,
+            'code'            => 'IND-V3-01',
+            'name'            => 'مؤشر مستهدف بإصدار مختلف',
+            'status'          => 'Active',
+        ]);
+
+        $res = $this->postJson("/api/v1/evidences/{$this->evidenceBelqees->evidence_id}/link-indicator", [
+            'indicator_id' => $otherIndicator->indicator_id,
+        ]);
+
+        $res->assertStatus(422)
+            ->assertJsonPath('message', 'المؤشر المستهدف لا ينتمي للإصدار المعياري المعتمد لدورة التقييم.')
+            ->assertJsonPath('errors.indicator_id.0', 'المؤشر المستهدف لا ينتمي للإصدار المعياري المعتمد لدورة التقييم.');
+    }
+
+    /**
+     * اختبار 25: مقارنة أرقام inventory و evidence-summary لنفس التقييم وتطابقها في الحالات الثلاث:
+     * 1) مؤشر إلزامي بشاهد Draft (غير مستوفٍ في الاثنين، ونواقص متطابقة).
+     * 2) مؤشر إلزامي بشاهد Completed (مستوفٍ في الاثنين بنسبة 100%).
+     * 3) مؤشر غير إلزامي بلا شواهد (مستوفٍ في الاثنين ولا يُعد ناقصاً أبداً).
+     */
+    public function test_inventory_and_evidence_summary_metrics_match_strictly_across_all_three_cases(): void
+    {
+        Sanctum::actingAs($this->evaluatorBelqees);
+
+        // تنظيف الشواهد السابقة للتقييم
+        $results = EvaluationResult::where('evaluation_id', $this->evaluationBelqees->evaluation_id)->get();
+        foreach ($results as $r) {
+            foreach ($r->evidences as $ev) {
+                EvidenceVersion::where('evidence_id', $ev->evidence_id)->delete();
+                $ev->delete();
+            }
+        }
+
+        // اختيار مؤشر إلزامي أول: وضع شاهد Draft فقط
+        $mandatoryInd1 = IndicatorEvidenceRequirement::where('required', true)->value('indicator_id');
+        $this->assertNotNull($mandatoryInd1);
+        $res1 = EvaluationResult::firstOrCreate(
+            [
+                'evaluation_id' => $this->evaluationBelqees->evaluation_id,
+                'indicator_id'  => $mandatoryInd1,
+            ],
+            [
+                'standard_version_id' => $this->standardVersion->version_id,
+                'evaluator_user_id'   => $this->evaluatorBelqees->user_id,
+                'score_descriptor_id' => 1,
+                'score'               => 0,
+                'completion_status'   => 'Pending',
+            ]
+        );
+
+        $evDraft = Evidence::create([
+            'result_id'     => $res1->result_id,
+            'indicator_id'  => $mandatoryInd1,
+            'title'         => 'شاهد مسودة غير معتمد',
+            'status'        => 'Draft',
+            'evidence_type' => 'report',
+        ]);
+        EvidenceVersion::create([
+            'evidence_id' => $evDraft->evidence_id,
+            'version_no'  => 1,
+            'current'     => true,
+        ]);
+
+        // اختيار مؤشر إلزامي ثانٍ: استيفاء شواهده بالكامل بحالة Completed
+        $mandatoryInd2 = IndicatorEvidenceRequirement::where('required', true)
+            ->where('indicator_id', '!=', $mandatoryInd1)
+            ->value('indicator_id');
+        $this->assertNotNull($mandatoryInd2);
+
+        $res2 = EvaluationResult::firstOrCreate(
+            [
+                'evaluation_id' => $this->evaluationBelqees->evaluation_id,
+                'indicator_id'  => $mandatoryInd2,
+            ],
+            [
+                'standard_version_id' => $this->standardVersion->version_id,
+                'evaluator_user_id'   => $this->evaluatorBelqees->user_id,
+                'score_descriptor_id' => 1,
+                'score'               => 0,
+                'completion_status'   => 'Pending',
+            ]
+        );
+
+        $reqs2 = IndicatorEvidenceRequirement::where('indicator_id', $mandatoryInd2)->where('required', true)->get();
+        foreach ($reqs2 as $req) {
+            $evComp = Evidence::create([
+                'result_id'     => $res2->result_id,
+                'indicator_id'  => $mandatoryInd2,
+                'title'         => 'شاهد مكتمل للمتطلب ' . $req->requirement_id,
+                'status'        => 'Completed',
+                'evidence_type' => 'plan',
+            ]);
+            EvidenceVersion::create([
+                'evidence_id' => $evComp->evidence_id,
+                'version_no'  => 1,
+                'current'     => true,
+            ]);
+        }
+
+        // اختيار مؤشر ثالث وجعله غير إلزامي بلا شواهد لاختبار الحالة 3
+        $optionalInd = Indicator::where('status', 'Active')
+            ->whereNotIn('indicator_id', [$mandatoryInd1, $mandatoryInd2])
+            ->firstOrFail();
+
+        IndicatorEvidenceRequirement::where('indicator_id', $optionalInd->indicator_id)
+            ->update(['required' => false]);
+
+        // 1. طلب الجرد التفصيلي inventory
+        $invRes = $this->getJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/evidence-inventory");
+        $invRes->assertStatus(200);
+        $invData = $invRes->json('data');
+
+        // 2. طلب ملخص وتقارير الشواهد evidence-summary
+        $reportsService = app(ReportsAnalyticsService::class);
+        $summaryData = $reportsService->calculateEvidenceSummary($this->evaluationBelqees);
+
+        // التحقق من التطابق الإجمالي بين المصدرين
+        $this->assertEquals($invData['summary']['totalIndicators'], $summaryData['total_indicators']);
+        $this->assertEquals($invData['summary']['indicatorsWithSufficientEvidence'], $summaryData['indicators_complete_evidence']);
+        $this->assertEquals($invData['summary']['indicatorsMissingEvidence'], $summaryData['indicators_missing_evidence']);
+        $this->assertEquals($invData['summary']['totalValidEvidences'], $summaryData['total_valid_evidences']);
+        $this->assertEquals($invData['summary']['totalDraftEvidences'], $summaryData['total_draft_evidences']);
+
+        // فحص الحالة 1: مؤشر إلزامي بشاهد Draft
+        $invInd1 = null;
+        foreach ($invData['standards'] as $std) {
+            foreach ($std['indicators'] as $i) {
+                if ($i['indicatorId'] === $mandatoryInd1) {
+                    $invInd1 = $i;
+                    break 2;
+                }
+            }
+        }
+        $sumInd1 = null;
+        foreach ($summaryData['standards'] as $std) {
+            foreach ($std['indicators'] as $i) {
+                if ($i['indicator_id'] === $mandatoryInd1) {
+                    $sumInd1 = $i;
+                    break 2;
+                }
+            }
+        }
+        $this->assertFalse($invInd1['isSufficient']);
+        $this->assertEquals('Missing', $invInd1['status']);
+        $this->assertEquals(1, $invInd1['draftEvidenceCount']);
+        $this->assertEquals(0, $invInd1['validEvidenceCount']);
+
+        $this->assertFalse($sumInd1['is_satisfied']);
+        $this->assertEquals(0, $sumInd1['valid_count']);
+        $this->assertEquals(1, $sumInd1['draft_count']);
+        $this->assertGreaterThan(0, $sumInd1['missing_count']);
+
+        // فحص الحالة 2: مؤشر إلزامي بشاهد Completed
+        $invInd2 = null;
+        foreach ($invData['standards'] as $std) {
+            foreach ($std['indicators'] as $i) {
+                if ($i['indicatorId'] === $mandatoryInd2) {
+                    $invInd2 = $i;
+                    break 2;
+                }
+            }
+        }
+        $sumInd2 = null;
+        foreach ($summaryData['standards'] as $std) {
+            foreach ($std['indicators'] as $i) {
+                if ($i['indicator_id'] === $mandatoryInd2) {
+                    $sumInd2 = $i;
+                    break 2;
+                }
+            }
+        }
+        $this->assertTrue($invInd2['isSufficient']);
+        $this->assertEquals('Completed', $invInd2['status']);
+        $this->assertTrue($sumInd2['is_satisfied']);
+        $this->assertEquals(0, $sumInd2['missing_count']);
+        $this->assertEquals(100.0, $sumInd2['completion_rate']);
+
+        // فحص الحالة 3: مؤشر غير إلزامي بلا شواهد
+        $invInd3 = null;
+        foreach ($invData['standards'] as $std) {
+            foreach ($std['indicators'] as $i) {
+                if ($i['indicatorId'] === $optionalInd->indicator_id) {
+                    $invInd3 = $i;
+                    break 2;
+                }
+            }
+        }
+        $sumInd3 = null;
+        foreach ($summaryData['standards'] as $std) {
+            foreach ($std['indicators'] as $i) {
+                if ($i['indicator_id'] === $optionalInd->indicator_id) {
+                    $sumInd3 = $i;
+                    break 2;
+                }
+            }
+        }
+        $this->assertTrue($invInd3['isSufficient']);
+        $this->assertEquals('NotRequired', $invInd3['status']);
+        $this->assertTrue($sumInd3['is_satisfied']);
+        $this->assertEquals(0, $sumInd3['missing_count']);
+    }
+
+    /**
+     * اختبار 26: تنظيف وحذف النتيجة التلقائية المعلقة (Pending) عند نقل شاهده الوحيد إذا استوفت كافة شروط الحذف.
+     */
+    public function test_link_indicator_cleans_up_orphaned_pending_result_when_conditions_met(): void
+    {
+        Sanctum::actingAs($this->evaluatorBelqees);
+
+        // مؤشر أ بلا رصد وبلا شواهد سابقة
+        $indicatorA = $this->secondIndicator;
+        $indicatorB = $this->firstIndicator;
+
+        EvaluationResult::where('evaluation_id', $this->evaluationBelqees->evaluation_id)
+            ->where('indicator_id', $indicatorA->indicator_id)
+            ->delete();
+
+        // رفع شاهد لمؤشر أ -> ينشئ سجل EvaluationResult بحالة Pending تلقائياً
+        $file = UploadedFile::fake()->create('isolated_ev.pdf', 100, 'application/pdf');
+        $createRes = $this->postJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$indicatorA->indicator_id}/evidences", [
+            'title'         => 'شاهد مؤشر أ الوحيد',
+            'evidence_type' => 'report',
+            'file'          => $file,
+        ]);
+        $createRes->assertStatus(201);
+        $evidenceId = $createRes->json('data.evidenceId');
+
+        $resultA = EvaluationResult::where('evaluation_id', $this->evaluationBelqees->evaluation_id)
+            ->where('indicator_id', $indicatorA->indicator_id)
+            ->first();
+        $this->assertNotNull($resultA);
+        $this->assertEquals('Pending', $resultA->completion_status);
+        $this->assertEquals(1, $resultA->evidences()->count());
+
+        // نقل الشاهد من المؤشر أ إلى المؤشر ب
+        $linkRes = $this->postJson("/api/v1/evidences/{$evidenceId}/link-indicator", [
+            'indicator_id' => $indicatorB->indicator_id,
+        ]);
+        $linkRes->assertStatus(200);
+
+        // التحقق من حذف النتيجة القديمة للمؤشر أ لأنها Pending وبلا شواهد وبلا ملاحظات
+        $this->assertDatabaseMissing('evaluation_results', [
+            'result_id'     => $resultA->result_id,
+            'evaluation_id' => $this->evaluationBelqees->evaluation_id,
+            'indicator_id'  => $indicatorA->indicator_id,
+        ]);
+    }
+
+    /**
+     * اختبار 27: عدم حذف النتيجة السابقة Pending عند نقل الشاهد إذا كانت تحتوي على ملاحظات تدقيقية (notes).
+     */
+    public function test_link_indicator_preserves_old_pending_result_if_it_contains_a_note(): void
+    {
+        Sanctum::actingAs($this->evaluatorBelqees);
+
+        $indicatorA = $this->secondIndicator;
+        $indicatorB = $this->firstIndicator;
+
+        EvaluationResult::where('evaluation_id', $this->evaluationBelqees->evaluation_id)
+            ->where('indicator_id', $indicatorA->indicator_id)
+            ->delete();
+
+        // رفع شاهد لمؤشر أ
+        $file = UploadedFile::fake()->create('note_ev.pdf', 100, 'application/pdf');
+        $createRes = $this->postJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$indicatorA->indicator_id}/evidences", [
+            'title'         => 'شاهد مؤشر أ مع ملاحظة',
+            'evidence_type' => 'record',
+            'file'          => $file,
+        ]);
+        $createRes->assertStatus(201);
+        $evidenceId = $createRes->json('data.evidenceId');
+
+        $resultA = EvaluationResult::where('evaluation_id', $this->evaluationBelqees->evaluation_id)
+            ->where('indicator_id', $indicatorA->indicator_id)
+            ->firstOrFail();
+
+        // إضافة ملاحظة نصية على النتيجة أ
+        Note::create([
+            'result_id'      => $resultA->result_id,
+            'author_user_id' => $this->evaluatorBelqees->user_id,
+            'text'           => 'ملاحظة توثيقية تمنع حذف السجل',
+            'created_at'     => now(),
+            'updated_at'     => now(),
+        ]);
+
+        // نقل الشاهد من المؤشر أ إلى المؤشر ب
+        $linkRes = $this->postJson("/api/v1/evidences/{$evidenceId}/link-indicator", [
+            'indicator_id' => $indicatorB->indicator_id,
+        ]);
+        $linkRes->assertStatus(200);
+
+        // التحقق من بقاء النتيجة القديمة للمؤشر أ في قاعدة البيانات لوجود ملاحظة مسجلة عليها
+        $this->assertDatabaseHas('evaluation_results', [
+            'result_id'     => $resultA->result_id,
+            'evaluation_id' => $this->evaluationBelqees->evaluation_id,
+            'indicator_id'  => $indicatorA->indicator_id,
+        ]);
     }
 }

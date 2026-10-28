@@ -86,11 +86,19 @@ const App = {
       const data = isJson ? await response.json() : null;
 
       if (!response.ok) {
+        let msg = data?.message;
+        if (!msg) {
+          if (response.status === 401) msg = "انتهت صلاحية الجلسة أو لم يتم تسجيل الدخول (401).";
+          else if (response.status === 403) msg = "غير مصرح لك بإجراء هذه العملية (403).";
+          else if (response.status === 404) msg = "المورد المطلوب غير موجود أو يخص مدرسة أخرى (404).";
+          else if (response.status === 422) msg = "البيانات المدخلة غير صالحة أو التقييم مقفل (422).";
+          else msg = `خطأ في الطلب (${response.status})`;
+        }
         return {
           ok: false,
           status: response.status,
           data: data,
-          message: data?.message || `خطأ في الطلب (${response.status})`,
+          message: msg,
           errors: data?.errors || null,
         };
       }
@@ -1023,6 +1031,9 @@ const App = {
     if (this.state.currentEvaluation?.evaluationId) {
       this.loadStandardsTree(this.state.currentEvaluation.evaluationId);
     }
+    if (this.state.currentScreen === 'evidence-inventory') {
+      this.loadEvidenceInventory();
+    }
   },
 
   async triggerNewVersionUpload(evidenceId) {
@@ -1158,22 +1169,131 @@ const App = {
   },
 
   async promptLinkIndicator(evidenceId, currentIndicatorId) {
-    const newIndicatorId = prompt(`أدخل معرّف المؤشر المستهدف (Indicator ID) لربط الشاهد به (الحالي: ${currentIndicatorId}):`);
-    if (!newIndicatorId || isNaN(newIndicatorId)) return;
+    this.openLinkEvidenceModal(evidenceId, currentIndicatorId);
+  },
+
+  async openLinkEvidenceModal(evidenceId, currentIndicatorId) {
+    const modal = document.getElementById('modal-link-evidence');
+    if (!modal) return;
+
+    this.state.linkingEvidence = { evidenceId, currentIndicatorId };
+    const alertEl = document.getElementById('link-ev-alert');
+    if (alertEl) alertEl.classList.add('hidden');
+
+    const searchInput = document.getElementById('link-ev-search');
+    if (searchInput) searchInput.value = '';
+
+    // العثور على عنوان الشاهد الحالي
+    const ev = (this.state.currentEvidences || []).find(e => e.evidenceId === evidenceId);
+    const titleEl = document.getElementById('link-ev-title');
+    if (titleEl) titleEl.textContent = ev ? ev.title : `شاهد #${evidenceId}`;
+
+    const currentIndEl = document.getElementById('link-ev-current-indicator');
+    if (currentIndEl) currentIndEl.textContent = this.state.currentIndicator?.code ? `${this.state.currentIndicator.code}: ${this.state.currentIndicator.name}` : `مؤشر #${currentIndicatorId}`;
+
+    // جلب شجرة المؤشرات لملء القائمة المنسدلة
+    const evalId = this.getEvaluationId();
+    if (!this.state.cachedIndicatorsList) {
+      const res = await this.request(`/evaluations/${evalId}/standards-tree`);
+      const list = [];
+      if (res.ok && res.data?.standards) {
+        for (const std of res.data.standards) {
+          for (const sub of (std.subStandards || [])) {
+            for (const ind of (sub.indicators || [])) {
+              list.push({
+                indicatorId: ind.indicatorId,
+                code: ind.code,
+                name: ind.name,
+                standardName: std.name,
+              });
+            }
+          }
+        }
+      }
+      this.state.cachedIndicatorsList = list;
+    }
+
+    this.renderLinkIndicatorOptions();
+    modal.classList.remove('hidden');
+  },
+
+  renderLinkIndicatorOptions(filterText = '') {
+    const select = document.getElementById('link-ev-target-select');
+    if (!select) return;
+
+    const list = this.state.cachedIndicatorsList || [];
+    const term = filterText.toLowerCase().trim();
+    const currentIndId = this.state.linkingEvidence?.currentIndicatorId;
+
+    const filtered = list.filter(ind => {
+      if (!term) return true;
+      return ind.code.toLowerCase().includes(term) || ind.name.toLowerCase().includes(term) || ind.standardName.toLowerCase().includes(term);
+    });
+
+    select.innerHTML = filtered.map(ind => {
+      const isCurrent = ind.indicatorId === currentIndId;
+      return `<option value="${ind.indicatorId}" ${isCurrent ? 'disabled style="color: #94a3b8;"' : ''}>
+        ${ind.code} - ${ind.name} ${isCurrent ? '(المؤشر الحالي)' : ''}
+      </option>`;
+    }).join('');
+
+    if (select.options.length > 0 && !select.value) {
+      for (let i = 0; i < select.options.length; i++) {
+        if (!select.options[i].disabled) {
+          select.selectedIndex = i;
+          break;
+        }
+      }
+    }
+  },
+
+  filterLinkIndicatorOptions(term) {
+    this.renderLinkIndicatorOptions(term);
+  },
+
+  closeLinkEvidenceModal() {
+    const modal = document.getElementById('modal-link-evidence');
+    if (modal) modal.classList.add('hidden');
+    this.state.linkingEvidence = null;
+  },
+
+  async submitLinkEvidence() {
+    const alertEl = document.getElementById('link-ev-alert');
+    if (!this.state.linkingEvidence) return;
+
+    const select = document.getElementById('link-ev-target-select');
+    const targetId = select ? parseInt(select.value) : null;
+
+    if (!targetId || isNaN(targetId)) {
+      if (alertEl) {
+        alertEl.textContent = 'يرجى اختيار المؤشر المستهدف من القائمة.';
+        alertEl.classList.remove('hidden');
+      }
+      return;
+    }
+
+    const evidenceId = this.state.linkingEvidence.evidenceId;
     const res = await this.request(`/evidences/${evidenceId}/link-indicator`, {
       method: 'POST',
-      body: JSON.stringify({ indicator_id: parseInt(newIndicatorId) }),
+      body: JSON.stringify({ indicator_id: targetId }),
     });
-    if (res.ok) {
-      this.showAlert(res.message || 'تم ربط الشاهد بالمؤشر بنجاح.', 'success');
-      if (this.state.currentIndicator) {
-        this.loadEvidences(this.state.currentIndicator);
+
+    if (!res.ok) {
+      if (alertEl) {
+        alertEl.textContent = res.message || 'فشل نقل الشاهد للمؤشر المحدد.';
+        alertEl.classList.remove('hidden');
       }
-      if (this.state.currentScreen === 'evidence-inventory') {
-        this.loadEvidenceInventory();
-      }
-    } else {
-      this.showAlert(res.message || 'فشل ربط الشاهد بالمؤشر.', 'error');
+      return;
+    }
+
+    this.closeLinkEvidenceModal();
+    this.showAlert(res.message || 'تم نقل وربط الشاهد بالمؤشر المستهدف بنجاح.', 'success');
+
+    if (this.state.currentIndicator) {
+      this.loadEvidences(this.state.currentIndicator);
+    }
+    if (this.state.currentScreen === 'evidence-inventory') {
+      this.loadEvidenceInventory();
     }
   },
 
@@ -1244,6 +1364,14 @@ const App = {
     const elDocs = document.getElementById('evinv-kpi-total-docs');
     if (elDocs) elDocs.textContent = data.summary?.totalEvidencesUploaded || 0;
 
+    const elDraftDocs = document.getElementById('evinv-kpi-draft-docs');
+    if (elDraftDocs) elDraftDocs.textContent = data.summary?.totalDraftEvidences || 0;
+
+    const btnSubmit = document.getElementById('btn-evinv-submit');
+    if (btnSubmit) {
+      btnSubmit.style.display = this.hasPermission('evaluations.submit') ? 'inline-block' : 'none';
+    }
+
     // تعبئة توزيع الأنواع
     const typeLabels = { minutes: 'محاضر', plan: 'خطط', record: 'سجلات', report: 'تقارير', board: 'لوحات', image: 'صور', other: 'أخرى' };
     const typesDiv = document.getElementById('evinv-types-breakdown');
@@ -1305,7 +1433,7 @@ const App = {
                   </div>
                   <div style="display: flex; gap: 0.35rem; align-items: center; flex-wrap: wrap;">
                     ${ind.isSufficient ? '<span class="badge badge-green">مستوفٍ ✅</span>' : '<span class="badge badge-red">ناقص الشواهد ⚠️</span>'}
-                    <span class="badge badge-gray">مرفوع: ${ind.uploadedEvidenceCount} / مطلوب: ${ind.mandatoryRequiredCount}</span>
+                    <span class="badge badge-gray">صالح: ${ind.validEvidenceCount} / مسودة: ${ind.draftEvidenceCount || 0} / مطلوب: ${ind.mandatoryRequiredCount}</span>
                     <button class="btn btn-sm btn-primary" onclick="App.openIndicatorEvidencesModal(${ind.indicatorId}, '${ind.indicatorCode}', '${encodeURIComponent(ind.indicatorName)}')">
                       📁 إدارة الشواهد
                     </button>
@@ -2898,6 +3026,68 @@ const App = {
     });
   },
 
+  showSubmitErrorsModal(res) {
+    const modal = document.getElementById('modal-submit-errors');
+    if (!modal) return;
+
+    const banner = document.getElementById('submit-error-banner');
+    if (banner) banner.textContent = res.message || 'لا يمكن تقديم التقييم لوجود متطلبات ناقصة.';
+
+    const unscoredList = res.errors?.unscored_indicators || [];
+    const unscoredSec = document.getElementById('submit-unscored-section');
+    const unscoredContainer = document.getElementById('submit-unscored-list');
+    const unscoredCount = document.getElementById('submit-unscored-count-badge');
+
+    if (unscoredCount) unscoredCount.textContent = `${unscoredList.length} مؤشر`;
+    if (unscoredList.length > 0 && unscoredContainer) {
+      unscoredSec.style.display = 'block';
+      unscoredContainer.innerHTML = unscoredList.map(ind => `
+        <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.4rem 0.6rem; background: #fff; border-radius: 4px; border: 1px solid #fed7aa; font-size: 0.82rem;">
+          <div>
+            <strong style="color: #991b1b;">${ind.code}</strong>: ${ind.name}
+          </div>
+          <button class="btn btn-sm btn-primary" onclick="App.closeSubmitErrorsModal(); App.navTo('indicators');">
+            ✏️ رصد الدرجة
+          </button>
+        </div>
+      `).join('');
+    } else if (unscoredSec) {
+      unscoredSec.style.display = 'none';
+    }
+
+    const missingList = res.errors?.missing_evidence_indicators || [];
+    const missingSec = document.getElementById('submit-missing-ev-section');
+    const missingContainer = document.getElementById('submit-missing-ev-list');
+    const missingCount = document.getElementById('submit-missing-ev-count-badge');
+
+    if (missingCount) missingCount.textContent = `${missingList.length} مؤشر`;
+    if (missingList.length > 0 && missingContainer) {
+      missingSec.style.display = 'block';
+      missingContainer.innerHTML = missingList.map(ind => `
+        <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.4rem 0.6rem; background: #fff; border-radius: 4px; border: 1px solid #fed7aa; font-size: 0.82rem;">
+          <div>
+            <strong style="color: #c2410c;">${ind.code}</strong>: ${ind.name}
+            <span class="badge badge-gray" style="margin-right: 0.5rem; font-size: 0.75rem;">
+              صالح: ${ind.valid_evidence_count ?? ind.uploaded_evidence_count ?? 0} / مطلوب: ${ind.required_requirements_count}
+            </span>
+          </div>
+          <button class="btn btn-sm btn-primary" onclick="App.closeSubmitErrorsModal(); App.openIndicatorEvidencesModal(${ind.indicator_id}, '${ind.code}', '${encodeURIComponent(ind.name)}');">
+            📁 إدارة الشواهد
+          </button>
+        </div>
+      `).join('');
+    } else if (missingSec) {
+      missingSec.style.display = 'none';
+    }
+
+    modal.classList.remove('hidden');
+  },
+
+  closeSubmitErrorsModal() {
+    const modal = document.getElementById('modal-submit-errors');
+    if (modal) modal.classList.add('hidden');
+  },
+
   async handleEvaluationSubmit() {
     if (!this.hasPermission('evaluations.submit')) {
       this.showAlert('غير مصرح لك بتقديم هذا التقييم (تتطلب evaluations.submit).', 'error');
@@ -2916,19 +3106,11 @@ const App = {
     });
 
     if (!res.ok) {
-      let errorMsg = res.message || 'فشل إغلاق التقييم.';
-      if (res.errors) {
-        if (res.errors.indicators) {
-          errorMsg += '\n\n• ' + res.errors.indicators.join('\n• ');
-        }
-        if (res.errors.evidences) {
-          errorMsg += '\n\n• ' + res.errors.evidences.join('\n• ');
-        }
-        if (res.errors.evaluation) {
-          errorMsg += '\n\n• ' + res.errors.evaluation.join('\n• ');
-        }
+      if (res.status === 422 && res.errors && (res.errors.unscored_indicators || res.errors.missing_evidence_indicators)) {
+        this.showSubmitErrorsModal(res);
+      } else {
+        this.showAlert(res.message || 'فشل إغلاق التقييم.', 'error');
       }
-      alert(errorMsg);
       return;
     }
 

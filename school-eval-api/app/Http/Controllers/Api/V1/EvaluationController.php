@@ -654,47 +654,18 @@ class EvaluationController extends Controller
             ], 'لا يمكن تقديم تقييم غير مكتمل الرصد.');
         }
 
-        // 4. التحقق من استيفاء الحد الأدنى من الشواهد الإلزامية المطلوبة
-        // الحد الأدنى: كل مؤشر له متطلب شاهد إلزامي (required=true) يجب أن يتوفر له شاهد مستوفٍ (Completed أو Audited)
-        $requiredEvidenceMap = DB::table('indicator_evidence_requirements')
-            ->where('required', true)
-            ->get(['requirement_id', 'indicator_id', 'title'])
-            ->groupBy('indicator_id');
+        // 4. التحقق من استيفاء الحد الأدنى من الشواهد الإلزامية المطلوبة عبر خدمة الكفاية الموحدة
+        /** @var \App\Services\EvidenceSufficiencyService $sufficiencyService */
+        $sufficiencyService = app(\App\Services\EvidenceSufficiencyService::class);
+        $sufficiency = $sufficiencyService->evaluateEvaluation($evaluation);
 
-        $resultsWithEvidence = EvaluationResult::query()
-            ->where('evaluation_id', $evaluation->evaluation_id)
-            ->with(['evidences' => function ($q) {
-                $q->whereIn('status', ['Completed', 'Audited']);
-            }])
-            ->get()
-            ->keyBy('indicator_id');
-
-        $missingEvidenceIndicators = [];
-
-        foreach ($allActiveIndicators as $ind) {
-            $reqList = $requiredEvidenceMap->get($ind->indicator_id);
-            if ($reqList && $reqList->isNotEmpty()) {
-                $result = $resultsWithEvidence->get($ind->indicator_id);
-                $evidenceCount = $result ? $result->evidences->count() : 0;
-                if ($evidenceCount < 1) {
-                    $missingEvidenceIndicators[] = [
-                        'indicator_id' => $ind->indicator_id,
-                        'code' => $ind->code,
-                        'name' => $ind->name,
-                        'required_requirements_count' => $reqList->count(),
-                        'uploaded_evidence_count' => $evidenceCount,
-                    ];
-                }
-            }
-        }
-
-        if (!empty($missingEvidenceIndicators)) {
-            $missingCount = count($missingEvidenceIndicators);
+        if (!empty($sufficiency['missing_evidence_indicators'])) {
+            $missingCount = count($sufficiency['missing_evidence_indicators']);
             return ApiResponse::validationError([
                 'evidences' => [
                     "يوجد عدد {$missingCount} مؤشر لم يستوفِ الحد الأدنى من الشواهد الإلزامية المطلوبة.",
                 ],
-                'missing_evidence_indicators' => $missingEvidenceIndicators,
+                'missing_evidence_indicators' => $sufficiency['missing_evidence_indicators'],
             ], 'لا يمكن تقديم التقييم لعدم استيفاء الحد الأدنى من الشواهد المطلوبة.');
         }
 
