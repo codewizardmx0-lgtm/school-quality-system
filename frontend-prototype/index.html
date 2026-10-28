@@ -208,6 +208,15 @@
         <!-- تنبيه خطأ رصد خاص بالدورة أو التقييم (422) -->
         <div id="score-modal-alert" class="alert alert-error hidden"></div>
 
+        <!-- بطاقة الدعم الاسترشادي من واقع إحصاءات المدرسة (الشريحة 6) -->
+        <div id="indicator-context-card" class="hidden" style="margin-bottom: 1.25rem; padding: 0.75rem 1rem; border-radius: 6px; background: #f0fdf4; border: 1px solid #bbf7d0;">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.35rem;">
+            <span style="font-weight: 700; color: #166534; font-size: 0.85rem;">📊 سياق المدرسة الاسترشادي (دعم القرار):</span>
+            <span id="indicator-context-badge" class="badge badge-green" style="font-size: 0.75rem;">المستوى المقترح</span>
+          </div>
+          <div id="indicator-context-message" style="font-size: 0.8rem; color: #15803d; line-height: 1.4;"></div>
+        </div>
+
         <form id="form-score-indicator" onsubmit="App.handleSaveScore(event)">
           <!-- اختيار التقدير من البطاقات الأربع المتجاورة للواصفات (Score Descriptors Cards) -->
           <div class="form-group">

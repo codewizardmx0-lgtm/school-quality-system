@@ -682,6 +682,10 @@ class EvaluationController extends Controller
 
         // 5. التحديث داخل Transaction وإطلاق حدث القفل
         DB::transaction(function () use ($evaluation, $user) {
+            // حفظ لقطة مجمدة من سياق وإحصاءات المدرسة والمرافق (الشريحة 6)
+            $metricsService = app(\App\Services\SchoolMetricsService::class);
+            $evaluation->school_context_snapshot = $metricsService->calculateIndicatorsContext($evaluation);
+
             $evaluation->status = 'Completed';
             $evaluation->updated_at = now();
             $evaluation->save();
@@ -719,6 +723,49 @@ class EvaluationController extends Controller
         }
 
         return $this->submit($request, $assessmentId);
+    }
+
+    /**
+     * استعراض السياق الاسترشادي لمؤشرات التقييم من واقع إحصاءات ومرافق المدرسة (الشريحة 6).
+     *
+     * GET /api/v1/evaluations/{id}/indicators-context
+     */
+    public function indicatorsContext(Request $request, int $id): JsonResponse
+    {
+        $user = $request->user();
+        $evaluation = Evaluation::with(['cycle', 'school'])->find($id);
+
+        if (!$evaluation) {
+            return ApiResponse::notFound('ملف التقييم غير موجود.');
+        }
+
+        // العزل المؤسسي الصارم
+        if ($user && $user->user_type === 'school' && (int) $user->school_id !== (int) $evaluation->school_id) {
+            return ApiResponse::notFound('ملف التقييم غير موجود.');
+        }
+
+        $metricsService = app(\App\Services\SchoolMetricsService::class);
+        $context = $metricsService->calculateIndicatorsContext($evaluation);
+
+        return ApiResponse::success(
+            data: $context,
+            message: 'تم استرجاع السياق الاسترشادي لمؤشرات التقييم بنجاح.'
+        );
+    }
+
+    /**
+     * استعراض السياق الاسترشادي لمؤشرات التقييم عبر مسار المدرسة المباشر.
+     *
+     * GET /api/v1/schools/{school}/assessments/{assessment}/indicators-context
+     */
+    public function indicatorsContextBySchool(Request $request, int $schoolId, int $assessmentId): JsonResponse
+    {
+        $evaluation = Evaluation::find($assessmentId);
+        if (!$evaluation || (int) $evaluation->school_id !== (int) $schoolId) {
+            return ApiResponse::notFound('ملف التقييم المطلوب غير موجود.');
+        }
+
+        return $this->indicatorsContext($request, $assessmentId);
     }
 
     /**

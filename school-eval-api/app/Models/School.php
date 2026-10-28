@@ -55,6 +55,14 @@ class School extends Model
         'educational_district',
         'governorate',
         'status',
+        'address',
+        'phone',
+        'email',
+        'educational_admin',
+        'building_type',
+        'shift_type',
+        'total_area',
+        'built_up_area',
     ];
 
     /**
@@ -66,6 +74,8 @@ class School extends Model
     {
         return [
             'school_id' => 'integer',
+            'total_area' => 'decimal:2',
+            'built_up_area' => 'decimal:2',
         ];
     }
 
@@ -124,5 +134,35 @@ class School extends Model
     public function improvementPlans(): HasMany
     {
         return $this->hasMany(ImprovementPlan::class, 'school_id', 'school_id');
+    }
+
+    /**
+     * إحصاءات الكادر التعليمي والإداري للمدرسة عبر الأعوام (الشريحة 6).
+     *
+     * @return HasMany
+     */
+    public function staffMetrics(): HasMany
+    {
+        return $this->hasMany(SchoolStaffMetric::class, 'school_id', 'school_id');
+    }
+
+    /**
+     * إحصاءات قيد وتوزيع الطلاب والفصول عبر الأعوام (الشريحة 6).
+     *
+     * @return HasMany
+     */
+    public function enrollmentMetrics(): HasMany
+    {
+        return $this->hasMany(SchoolEnrollmentMetric::class, 'school_id', 'school_id');
+    }
+
+    /**
+     * مرافق وتجهيزات المدرسة التشغيلية (الشريحة 6).
+     *
+     * @return HasMany
+     */
+    public function facilities(): HasMany
+    {
+        return $this->hasMany(SchoolFacility::class, 'school_id', 'school_id');
     }
 }
