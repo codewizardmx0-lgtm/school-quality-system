@@ -147,7 +147,15 @@
             <h2 id="tree-school-title" style="font-size: 1.2rem; color: var(--primary);">استمارة التقييم الذاتي</h2>
             <p id="tree-cycle-info" style="font-size: 0.85rem; color: var(--text-muted);"></p>
           </div>
-          <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+          <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center;">
+            <div class="dev-only-tools" style="display: none; gap: 0.35rem; align-items: center; background: #f5f3ff; border: 1px dashed #8b5cf6; padding: 0.25rem 0.5rem; border-radius: 6px;">
+              <button id="btn-dev-fill" class="btn btn-sm" style="background: #8b5cf6; color: white;" onclick="App.handleDevFillEvaluation()" title="تعبئة 109 مؤشراً بدرجات وشواهد صالحة للاختبار">
+                ⚡ تعبئة إلزامية للاختبار (Dev Only)
+              </button>
+              <button id="btn-dev-reset" class="btn btn-sm" style="background: #ef4444; color: white;" onclick="App.handleDevResetEvaluation()" title="إفراغ الدرجات والشواهد وتركه فارغاً">
+                🧹 إفراغ التقييم التجريبي
+              </button>
+            </div>
             <button class="btn btn-secondary btn-sm" onclick="App.navTo('suggestions')">
               💡 اقتراحات التحسين (FR-SCH-16)
             </button>
@@ -155,7 +163,7 @@
               📋 خطط التحسين المدرسية
             </button>
             <button id="btn-submit-eval" class="btn btn-sm btn-success" onclick="App.handleEvaluationSubmit()">
-              🔒 إغلاق واعتماد التقييم
+              🔒 إنهاء وتقديم التقييم
             </button>
           </div>
         </div>
@@ -374,8 +382,8 @@
       <div class="modal-content" style="max-width: 650px; max-height: 85vh; display: flex; flex-direction: column;">
         <div class="modal-header" style="border-bottom: 1px solid #fecaca; background: #fef2f2; border-radius: 8px 8px 0 0;">
           <div>
-            <h3 style="font-size: 1.15rem; color: #dc2626; margin: 0;">⚠️ متطلبات اعتماد وإغلاق التقييم غير مكتملة</h3>
-            <span style="font-size: 0.8rem; color: #991b1b;">لا يمكن إغلاق التقييم الذاتي واعتماده قبل استيفاء رصد كافة المؤشرات والحد الأدنى من الشواهد</span>
+            <h3 style="font-size: 1.15rem; color: #dc2626; margin: 0;">⚠️ متطلبات إنهاء وتقديم التقييم غير مكتملة</h3>
+            <span style="font-size: 0.8rem; color: #991b1b;">لا يمكن إنهاء التقييم الذاتي وتقديمه قبل استيفاء رصد كافة المؤشرات والحد الأدنى من الشواهد</span>
           </div>
           <button class="modal-close" onclick="App.closeSubmitErrorsModal()">&times;</button>
         </div>
@@ -1023,7 +1031,15 @@
             </p>
           </div>
           <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
-            <button id="btn-evinv-submit" class="btn btn-sm btn-success" onclick="App.handleEvaluationSubmit()" style="display: none;">🔒 إغلاق واعتماد التقييم</button>
+            <div class="dev-only-tools" style="display: none; gap: 0.35rem; align-items: center; background: #f5f3ff; border: 1px dashed #8b5cf6; padding: 0.25rem 0.5rem; border-radius: 6px;">
+              <button class="btn btn-sm" style="background: #8b5cf6; color: white;" onclick="App.handleDevFillEvaluation()" title="تعبئة 109 مؤشراً بدرجات وشواهد صالحة للاختبار">
+                ⚡ تعبئة إلزامية للاختبار (Dev Only)
+              </button>
+              <button class="btn btn-sm" style="background: #ef4444; color: white;" onclick="App.handleDevResetEvaluation()" title="إفراغ الدرجات والشواهد وتركه فارغاً">
+                🧹 إفراغ التقييم التجريبي
+              </button>
+            </div>
+            <button id="btn-evinv-submit" class="btn btn-sm btn-success" onclick="App.handleEvaluationSubmit()" style="display: none;">🔒 إنهاء وتقديم التقييم</button>
             <button class="btn btn-sm btn-secondary" onclick="App.loadEvidenceInventory()">🔄 تحديث الجرد</button>
             <button class="btn btn-sm btn-primary" onclick="App.navTo('evidence-summary')">📁 ملخص النسب</button>
           </div>
@@ -1058,7 +1074,7 @@
           <div class="kpi-card" style="border-right-color: #94a3b8;">
             <div class="kpi-label">شواهد قيد المسودة (Draft)</div>
             <div id="evinv-kpi-draft-docs" class="kpi-value" style="color: #64748b;">0</div>
-            <div id="evinv-kpi-draft-docs-sub" class="kpi-sub">بحاجة لاعتماد وتدقيق</div>
+            <div id="evinv-kpi-draft-docs-sub" class="kpi-sub">بحاجة لاستكمال وتدقيق</div>
           </div>
         </div>
 
@@ -1231,6 +1247,21 @@
     </section>
 
   </main>
+
+  <!-- نافذة تقدم التعبئة الإلزامية التجريبية (Dev Only) -->
+  <div id="modal-dev-progress" class="modal-overlay hidden" style="z-index: 9999; display: none;">
+    <div class="modal-card" style="max-width: 480px; text-align: center; padding: 2rem;">
+      <h3 style="color: var(--primary); margin-bottom: 0.5rem;">⚡ جاري التعبئة الإلزامية للاختبار...</h3>
+      <p id="dev-progress-status" style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 1.5rem;">
+        يتم الآن رصد الدرجات ورفع الشواهد للمؤشرات الـ 109 تلقائياً.
+      </p>
+      <div style="background: #e2e8f0; border-radius: 9999px; height: 16px; width: 100%; overflow: hidden; margin-bottom: 1rem;">
+        <div id="dev-progress-bar" style="background: #8b5cf6; height: 100%; width: 0%; transition: width 0.15s ease;"></div>
+      </div>
+      <div id="dev-progress-percent" style="font-weight: bold; font-size: 1.1rem; color: #8b5cf6; margin-bottom: 1rem;">0%</div>
+      <small style="color: #64748b;">يرجى الانتظار حتى اكتمال التعبئة التلقائية...</small>
+    </div>
+  </div>
 
   <script src="app.js"></script>
 </body>

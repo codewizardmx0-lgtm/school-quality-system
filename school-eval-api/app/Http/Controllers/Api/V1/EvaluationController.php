@@ -565,7 +565,7 @@ class EvaluationController extends Controller
     }
 
     /**
-     * إغلاق وتقديم التقييم الذاتي المدرسي واعتماده كمكتمل (G-01 / BR-SCH-03).
+     * إنهاء وتقديم التقييم الذاتي المدرسي كمكتمل وقفل العمليات التعديلية (G-01 / BR-SCH-03).
      *
      * الشروط الحاكمة:
      * 1. اكتمال رصد كافة المؤشرات الفعالة ووجود درجات لها (0-3).
@@ -719,5 +719,68 @@ class EvaluationController extends Controller
         }
 
         return $this->submit($request, $assessmentId);
+    }
+
+    /**
+     * إفراغ التقييم التجريبي من كافة الدرجات والشواهد الوهمية (مخصص للتطوير والاختبار التجريبي).
+     *
+     * POST /api/v1/evaluations/{id}/dev-reset
+     */
+    public function devReset(Request $request, int $id): JsonResponse
+    {
+        $user = $request->user();
+
+        $evaluation = Evaluation::find($id);
+        if (!$evaluation) {
+            return ApiResponse::notFound('ملف التقييم غير موجود.');
+        }
+
+        // عزل المدارس (القرار المعماري 9)
+        if ($user->user_type === 'school' && (int) $user->school_id !== (int) $evaluation->school_id) {
+            return ApiResponse::notFound('ملف التقييم غير موجود.');
+        }
+
+        if ($evaluation->status === 'Completed' || EvaluationLockChecker::isEvaluationLocked($evaluation)) {
+            return ApiResponse::validationError([
+                'evaluation' => ['لا يمكن إفراغ تقييم مقفل ومكتمل مسبقاً.'],
+            ], 'التقييم مقفل ومكتمل مسبقاً ولا يمكن تعديله أو إفراغه.');
+        }
+
+        DB::transaction(function () use ($evaluation) {
+            $results = EvaluationResult::where('evaluation_id', $evaluation->evaluation_id)->get();
+            $resultIds = $results->pluck('result_id')->toArray();
+
+            if (!empty($resultIds)) {
+                $areaIds = \App\Models\ImprovementArea::whereIn('result_id', $resultIds)->pluck('area_id')->toArray();
+                if (!empty($areaIds)) {
+                    \App\Models\ImprovementAction::whereIn('area_id', $areaIds)->delete();
+                    DB::table('plan_improvement_areas')->whereIn('area_id', $areaIds)->delete();
+                    \App\Models\ImprovementArea::whereIn('area_id', $areaIds)->delete();
+                }
+
+                foreach ($results as $result) {
+                    $evidences = \App\Models\Evidence::where('result_id', $result->result_id)->get();
+                    foreach ($evidences as $evidence) {
+                        $versions = \App\Models\EvidenceVersion::where('evidence_id', $evidence->evidence_id)->get();
+                        foreach ($versions as $version) {
+                            \App\Models\Attachment::where('target_type', 'evidence_version')
+                                ->where('target_id', $version->evidence_version_id)
+                                ->delete();
+                            $version->delete();
+                        }
+                        $evidence->delete();
+                    }
+
+                    DB::table('evaluation_result_verification_methods')->where('evaluation_result_id', $result->result_id)->delete();
+                    \App\Models\Note::where('result_id', $result->result_id)->delete();
+                    $result->delete();
+                }
+            }
+        });
+
+        return ApiResponse::success(
+            data: null,
+            message: 'تم إفراغ التقييم التجريبي بنجاح.'
+        );
     }
 }

@@ -248,6 +248,27 @@ const App = {
     const primaryRole = this.state.user.roles?.[0];
     const roleTitle = primaryRole?.description || primaryRole?.roleName || this.state.user.userType;
     document.getElementById('user-role').textContent = roleTitle;
+
+    this.updateDevToolsVisibility();
+  },
+
+  isDevMode() {
+    if (localStorage.getItem('dev_mode') === 'true') return true;
+    if (!this.state.user) return false;
+    const email = this.state.user.email || '';
+    const username = this.state.user.username || '';
+    if (email.endsWith('.local') || username.includes('evaluator') || username.includes('admin')) {
+      return true;
+    }
+    return false;
+  },
+
+  updateDevToolsVisibility() {
+    const devTools = document.querySelectorAll('.dev-only-tools');
+    const show = this.isDevMode();
+    devTools.forEach(el => {
+      el.style.display = show ? 'inline-flex' : 'none';
+    });
   },
 
   hasPermission(permission) {
@@ -398,6 +419,7 @@ const App = {
 
     this.state.standardsTree = res.data;
     const data = res.data;
+    this.updateDevToolsVisibility();
 
     // تحديث ترويسة الشجرة والإنجاز الإجمالي من بيانات الـ API (قراءة schoolName و academicYear مباشرة من الاستجابة)
     const schoolName = data.schoolName || this.state.currentEvaluation?.school?.schoolName || this.state.user?.school?.schoolName || 'المدرسة';
@@ -1334,6 +1356,7 @@ const App = {
 
     const data = res.data;
     this.state.evidenceInventory = data;
+    this.updateDevToolsVisibility();
 
     // تعبئة بطاقات الـ KPI
     const isComplete = data.inventoryStatus === 'Complete';
@@ -2963,7 +2986,7 @@ const App = {
       <div class="kpi-card kpi-danger">
         <div class="kpi-label">شواهد وخطط التحسين</div>
         <div class="kpi-value">${exec.strengths_count} قوة | ${exec.improvement_opportunities_count} تحسين</div>
-        <div class="kpi-sub">جاهز للاعتماد والرفع الوزاري</div>
+        <div class="kpi-sub">جاهز للإنهاء والتقديم للإشراف الوزاري</div>
       </div>
     `;
 
@@ -3097,7 +3120,7 @@ const App = {
     const evalId = this.state.currentEvaluation?.evaluationId;
     if (!evalId) return;
 
-    if (!confirm('هل أنت متأكد من رغبتك في إغلاق واعتماد التقييم الذاتي؟\n\nتنبيه: بعد الإغلاق سيتم قفل التقييم نهائياً ولن يُسمح بأي تعديلات على الدرجات أو الشواهد (BR-SCH-03).')) {
+    if (!confirm('هل أنت متأكد من رغبتك في إنهاء وتقديم التقييم الذاتي؟\n\nتنبيه: بعد الإنهاء سيتم قفل التقييم نهائياً ولن يُسمح بأي تعديلات على الدرجات أو الشواهد (BR-SCH-03).')) {
       return;
     }
 
@@ -3109,16 +3132,175 @@ const App = {
       if (res.status === 422 && res.errors && (res.errors.unscored_indicators || res.errors.missing_evidence_indicators)) {
         this.showSubmitErrorsModal(res);
       } else {
-        this.showAlert(res.message || 'فشل إغلاق التقييم.', 'error');
+        this.showAlert(res.message || 'فشل إنهاء التقييم.', 'error');
       }
       return;
     }
 
-    this.showAlert(res.message || 'تم إغلاق التقييم الذاتي واعتماده بنجاح.', 'success');
+    this.showAlert(res.message || 'تم إنهاء التقييم الذاتي وتقديمه بنجاح.', 'success');
     if (this.state.currentEvaluation) {
       this.state.currentEvaluation.status = 'Completed';
     }
     await this.loadStandardsTree(evalId);
+  },
+
+  async handleDevFillEvaluation() {
+    if (!this.isDevMode()) {
+      this.showAlert('خاصية التعبئة متاحة فقط لبيئة التطوير والاختبار (Dev Only).', 'error');
+      return;
+    }
+
+    const evalId = this.getEvaluationId();
+    if (!evalId) {
+      this.showAlert('يرجى تحديد ملف التقييم أولاً.', 'error');
+      return;
+    }
+
+    if (this.state.currentEvaluation?.status === 'Completed') {
+      this.showAlert('التقييم مقفل ومكتمل مسبقاً ولا يمكن تعديله أو تعبئته.', 'warning');
+      return;
+    }
+
+    if (!confirm('⚠️ تحذير: هذا الزر للاختبار والتطوير فقط، ولا يُستخدم في بيئة الإنتاج.\n\nهل ترغب في البدء في التعبئة الإلزامية التلقائية لكافة المؤشرات الـ 109 بدرجات وشواهد صالحة للانتقال مباشرة لمراحل ما بعد التقييم؟')) {
+      return;
+    }
+
+    const progressModal = document.getElementById('modal-dev-progress');
+    const progressBar = document.getElementById('dev-progress-bar');
+    const progressPercent = document.getElementById('dev-progress-percent');
+    const progressStatus = document.getElementById('dev-progress-status');
+
+    if (progressModal) {
+      progressModal.style.display = 'flex';
+      progressModal.classList.remove('hidden');
+    }
+
+    try {
+      if (progressStatus) progressStatus.textContent = 'جارِ استدعاء شجرة المعايير والمؤشرات...';
+
+      const treeRes = await this.request(`/evaluations/${evalId}/standards-tree`);
+      if (!treeRes.ok || !treeRes.data?.standards) {
+        throw new Error(treeRes.message || 'تعذر تحميل شجرة المعايير.');
+      }
+
+      const allIndicators = [];
+      (treeRes.data.standards || []).forEach(std => {
+        (std.subStandards || []).forEach(sub => {
+          (sub.indicators || []).forEach(ind => {
+            allIndicators.push(ind);
+          });
+        });
+      });
+
+      const total = allIndicators.length;
+      if (total === 0) {
+        throw new Error('لا توجد مؤشرات في ملف التقييم.');
+      }
+
+      for (let i = 0; i < total; i++) {
+        const ind = allIndicators[i];
+        const pct = Math.round(((i + 1) / total) * 100);
+
+        if (progressBar) progressBar.style.width = `${pct}%`;
+        if (progressPercent) progressPercent.textContent = `${pct}% (${i + 1} / ${total})`;
+        if (progressStatus) progressStatus.textContent = `جارِ تعبئة المؤشر [${ind.code}]: ${ind.name.substring(0, 35)}...`;
+
+        // 1. رصد الدرجة (Score = 3)
+        const toolIds = (ind.verificationTools || []).map(t => t.id || t.toolId || t.tool_id).filter(Boolean);
+        const scoreBody = {
+          score: 3,
+          textualResult: `تم استيفاء متطلبات المؤشر ${ind.code} ضمن بيانات الاختبار التجريبي.`,
+          verificationToolIds: toolIds.length > 0 ? toolIds : undefined,
+        };
+
+        await this.request(`/evaluations/${evalId}/indicators/${ind.indicatorId}/score`, {
+          method: 'PUT',
+          body: scoreBody,
+        });
+
+        // 2. رفع الشاهد بصيغة FormData
+        const dummyContent = `ملف شاهد تجريبي للمؤشر ${ind.code}\nتاريخ الإنشاء: ${new Date().toISOString()}\nالغرض: الاختبار والتطوير الآلي.`;
+        const blob = new Blob([dummyContent], { type: 'text/plain' });
+        const file = new File([blob], `evidence_${ind.code}.txt`, { type: 'text/plain' });
+
+        const formData = new FormData();
+        formData.append('title', `شاهد تجريبي معتمد للمؤشر ${ind.code}`);
+        formData.append('evidence_type', 'report');
+        formData.append('file', file);
+
+        const evRes = await this.request(`/evaluations/${evalId}/indicators/${ind.indicatorId}/evidences`, {
+          method: 'POST',
+          body: formData,
+          isFormData: true,
+        });
+
+        // 3. ضبط حالة الشاهد لتكون Completed
+        if (evRes.ok && evRes.data?.evidenceId) {
+          await this.request(`/evidences/${evRes.data.evidenceId}/status`, {
+            method: 'PATCH',
+            body: { status: 'Completed' },
+          });
+        }
+      }
+
+      if (progressModal) {
+        progressModal.style.display = 'none';
+        progressModal.classList.add('hidden');
+      }
+
+      this.showAlert('⚡ تمت التعبئة الإلزامية لـ 109 مؤشرات بنجاح! التقييم جاهز الآن لإنهاء وتقديم التقييم أو استعراض التقارير وخطط التحسين.', 'success');
+
+      if (this.state.currentScreen === 'standards-tree') {
+        await this.loadStandardsTree(evalId);
+      } else if (this.state.currentScreen === 'evidence-inventory') {
+        await this.loadEvidenceInventory(evalId);
+      }
+    } catch (err) {
+      if (progressModal) {
+        progressModal.style.display = 'none';
+        progressModal.classList.add('hidden');
+      }
+      this.showAlert(`حدث خطأ أثناء التعبئة التجريبية: ${err.message}`, 'error');
+    }
+  },
+
+  async handleDevResetEvaluation() {
+    if (!this.isDevMode()) {
+      this.showAlert('خاصية إفراغ التقييم متاحة فقط لبيئة التطوير والاختبار (Dev Only).', 'error');
+      return;
+    }
+
+    const evalId = this.getEvaluationId();
+    if (!evalId) {
+      this.showAlert('يرجى تحديد ملف التقييم أولاً.', 'error');
+      return;
+    }
+
+    if (this.state.currentEvaluation?.status === 'Completed') {
+      this.showAlert('التقييم مقفل ومكتمل مسبقاً ولا يمكن تعديله أو إفراغه.', 'warning');
+      return;
+    }
+
+    if (!confirm('⚠️ تنبيه: هل أنت متأكد من رغبتك في إفراغ التقييم التجريبي بالكامل؟\n\nسيتم حذف جميع الدرجات والشواهد الوهمية المرتبطة بهذا التقييم وتركه فارغاً للاختبار من جديد.')) {
+      return;
+    }
+
+    const res = await this.request(`/evaluations/${evalId}/dev-reset`, {
+      method: 'POST',
+    });
+
+    if (!res.ok) {
+      this.showAlert(res.message || 'تعذر إفراغ التقييم التجريبي.', 'error');
+      return;
+    }
+
+    this.showAlert('🧹 تم إفراغ التقييم التجريبي بنجاح وحذف كافة الدرجات والشواهد الوهمية.', 'success');
+
+    if (this.state.currentScreen === 'standards-tree') {
+      await this.loadStandardsTree(evalId);
+    } else if (this.state.currentScreen === 'evidence-inventory') {
+      await this.loadEvidenceInventory(evalId);
+    }
   },
 
 };

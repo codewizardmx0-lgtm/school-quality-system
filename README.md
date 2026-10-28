@@ -44,7 +44,8 @@ school-quality-system/
 * التفاصيل الكاملة للشريحة: [`docs/slices/slice5_evidence_organization.md`](docs/slices/slice5_evidence_organization.md)
 * خارطة الطريق للشرائح المستقبلية (12 شريحة): [`docs/slices_roadmap.md`](docs/slices_roadmap.md)
 * سجل حصر الفجوات والقرارات التقنية: [`gaps.md`](gaps.md)
-* توثيق النموذج الأولي التفاعلي (16 شاشة): [`frontend-prototype/README.md`](frontend-prototype/README.md)
+* دليل التحقق اليدوي للواجهات المؤقتة (مُعاد بناؤه ومبوّب بالشرائح): [`frontend-prototype/verification-guide.md`](frontend-prototype/verification-guide.md)
+* توثيق النموذج الأولي التفاعلي (16 شاشة مع أداة التعبئة الإلزامية Dev-Only): [`frontend-prototype/README.md`](frontend-prototype/README.md)
 
 ---
 

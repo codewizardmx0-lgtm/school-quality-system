@@ -1702,4 +1702,40 @@ class EvidenceOrganizationFeatureTest extends TestCase
         $this->expectExceptionMessage('دورة التقييم غير مرتبطة بإصدار معياري معتمد.');
         app(\App\Services\EvidenceSufficiencyService::class)->evaluateEvaluation($evalWithoutVersion);
     }
+
+    /**
+     * اختبار 30: التحقق من عمل مسار إفراغ التقييم التجريبي (dev-reset) وحذف الدرجات والشواهد الوهمية، ورفضه على التقييم المقفل.
+     */
+    public function test_dev_reset_clears_results_and_evidences_for_unlocked_evaluation(): void
+    {
+        Sanctum::actingAs($this->evaluatorBelqees);
+
+        // التأكد من وجود نتيجة وشاهد للتقييم
+        $evalId = $this->evaluationBelqees->evaluation_id;
+        $this->assertDatabaseHas('evaluation_results', [
+            'evaluation_id' => $evalId,
+        ]);
+        $this->assertDatabaseHas('evidences', [
+            'evidence_id' => $this->evidenceBelqees->evidence_id,
+        ]);
+
+        // تنفيذ طلب الإفراغ التجريبي
+        $resetRes = $this->postJson("/api/v1/evaluations/{$evalId}/dev-reset");
+        $resetRes->assertStatus(200)
+            ->assertJsonPath('message', 'تم إفراغ التقييم التجريبي بنجاح.');
+
+        // التحقق من حذف كافة النتائج والشواهد المرتبطة بهذا التقييم
+        $this->assertDatabaseMissing('evaluation_results', [
+            'evaluation_id' => $evalId,
+        ]);
+        $this->assertDatabaseMissing('evidences', [
+            'evidence_id' => $this->evidenceBelqees->evidence_id,
+        ]);
+
+        // التحقق من رفض الإفراغ على التقييم المكتمل المقفل
+        $this->evaluationBelqees->update(['status' => 'Completed']);
+        $lockedResetRes = $this->postJson("/api/v1/evaluations/{$evalId}/dev-reset");
+        $lockedResetRes->assertStatus(422)
+            ->assertJsonValidationErrors(['evaluation']);
+    }
 }
