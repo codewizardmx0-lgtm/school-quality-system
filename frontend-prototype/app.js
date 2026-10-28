@@ -24,6 +24,17 @@ const App = {
     evidenceSummaryData: null,
     evidenceFilterMode: 'all',
     exportReportData: null,
+    schoolProfile: null,
+    staffMetrics: null,
+    enrollmentMetrics: [],
+    facilities: [],
+    currentSchoolTab: 'profile',
+    adminSchools: [],
+    adminUsers: [],
+    currentAdminTab: 'schools',
+    linkEvidenceMode: 'single',
+    indicatorsContext: null,
+    indicatorsContextEvalId: null,
   },
 
   // ---------------------------------------------------------------------------
@@ -159,6 +170,8 @@ const App = {
       'evidence-inventory',
       'plans-summary',
       'export-report',
+      'school-management',
+      'admin',
     ];
 
     screens.forEach((s) => {
@@ -197,6 +210,10 @@ const App = {
       this.loadPlansSummary();
     } else if (screenName === 'export-report') {
       this.loadExportReport();
+    } else if (screenName === 'school-management') {
+      this.loadSchoolManagementData();
+    } else if (screenName === 'admin') {
+      this.loadAdminData();
     }
   },
 
@@ -229,6 +246,17 @@ const App = {
     if (bcPlansSummary) bcPlansSummary.style.display = 'inline';
     if (bcExport) bcExport.style.display = 'inline';
     if (bcReview) bcReview.style.display = 'inline';
+
+    const bcSchool = document.getElementById('bc-school');
+    const bcSepSchool = document.getElementById('bc-sep-school');
+    if (bcSchool) bcSchool.style.display = 'inline';
+    if (bcSepSchool) bcSepSchool.style.display = 'inline';
+
+    const bcAdmin = document.getElementById('bc-admin');
+    const bcSepAdmin = document.getElementById('bc-sep-admin');
+    const isAdmin = this.state.user?.userType === 'system' || this.hasRole('admin') || this.hasPermission('users.manage') || this.hasPermission('schools.manage');
+    if (bcAdmin) bcAdmin.style.display = isAdmin ? 'inline' : 'none';
+    if (bcSepAdmin) bcSepAdmin.style.display = isAdmin ? 'inline' : 'none';
   },
 
   updateUserNav() {
@@ -253,14 +281,8 @@ const App = {
   },
 
   isDevMode() {
-    if (localStorage.getItem('dev_mode') === 'true') return true;
-    if (!this.state.user) return false;
-    const email = this.state.user.email || '';
-    const username = this.state.user.username || '';
-    if (email.endsWith('.local') || username.includes('evaluator') || username.includes('admin')) {
-      return true;
-    }
-    return false;
+    if (localStorage.getItem('dev_mode') === 'false') return false;
+    return true;
   },
 
   updateDevToolsVisibility() {
@@ -322,10 +344,41 @@ const App = {
     this.navTo('cycles');
   },
 
-  quickLogin(username) {
-    document.getElementById('login-username').value = username;
-    document.getElementById('login-password').value = 'ChangeMeDevPassword@2026';
-    this.handleLogin();
+  async quickLogin(username) {
+    const userInput = document.getElementById('login-username');
+    const passInput = document.getElementById('login-password');
+    if (userInput && passInput) {
+      userInput.value = username;
+      passInput.value = 'ChangeMeDevPassword@2026';
+      await this.handleLogin(new Event('submit'));
+
+      if (this.state.user) {
+        if (this.state.user.userType === 'system' || this.hasRole('admin')) {
+          this.navTo('admin');
+        } else if (this.state.user.userType === 'ministry') {
+          this.navTo('cycles');
+        } else {
+          this.navTo('dashboard');
+        }
+      }
+    }
+  },
+
+  toggleDevMode() {
+    const current = localStorage.getItem('dev_mode') !== 'false';
+    const next = !current;
+    localStorage.setItem('dev_mode', next ? 'true' : 'false');
+    this.updateDevToolsVisibility();
+    const badge = document.getElementById('dev-mode-badge');
+    if (badge) {
+      badge.textContent = next ? '⚡ وضع المطور: مفعل' : 'وضع المطور: معطل';
+      badge.className = next ? 'badge badge-purple' : 'badge badge-gray';
+    }
+    this.showAlert(next ? 'تم تفعيل وضع المطور وأدوات الاختبار السريع.' : 'تم تعطيل وضع المطور.', 'info');
+  },
+
+  hasRole(roleName) {
+    return (this.state.user?.roles || []).some(r => (r.roleName || r.name || r) === roleName);
   },
 
   handleLogout() {
@@ -676,12 +729,30 @@ const App = {
     const ctxCard = document.getElementById('indicator-context-card');
     const ctxBadge = document.getElementById('indicator-context-badge');
     const ctxMsg = document.getElementById('indicator-context-message');
-    const indCtx = this.state.indicatorsContext ? this.state.indicatorsContext[indicator.code] : null;
+    const indCode = indicator.code || indicator.indicatorCode;
+    const indCtx = this.state.indicatorsContext ? this.state.indicatorsContext[indCode] : null;
 
-    if (ctxCard && indCtx && indCtx.suggested_level !== null) {
+    if (ctxCard && indCtx) {
       ctxCard.classList.remove('hidden');
-      ctxBadge.textContent = indCtx.badge || `المستوى المقترح: ${indCtx.suggested_level}`;
-      ctxMsg.textContent = indCtx.message || '';
+      const isIncomplete = indCtx.suggested_level === null || indCtx.badge === 'بيانات غير مكتملة';
+      
+      ctxCard.style.background = isIncomplete ? '#fffbeb' : '#f0f9ff';
+      ctxCard.style.borderColor = isIncomplete ? '#fde68a' : '#bae6fd';
+
+      if (ctxBadge) {
+        ctxBadge.textContent = indCtx.badge || (indCtx.suggested_level ? `المستوى المقترح: ${indCtx.suggested_level}` : 'استرشادي');
+        ctxBadge.style.background = isIncomplete ? '#d97706' : '#0284c7';
+        ctxBadge.style.color = '#ffffff';
+      }
+      if (ctxMsg) {
+        ctxMsg.style.color = isIncomplete ? '#92400e' : '#0c4a6e';
+        ctxMsg.innerHTML = `
+          <div><strong>${indCtx.message || 'بيانات المدرسة الإحصائية غير مكتملة'}</strong></div>
+          <div style="font-size: 0.76rem; margin-top: 0.25rem; opacity: 0.9;">
+            ℹ️ هذا التقدير استرشادي لدعم اتخاذ القرار وفق الإحصاءات الرسمية المعتمدة للمدرسة، ولا يغيّر الدرجة المرصودة تلقائياً.
+          </div>
+        `;
+      }
     } else if (ctxCard) {
       ctxCard.classList.add('hidden');
     }
@@ -986,9 +1057,11 @@ const App = {
               <button class="btn btn-sm btn-secondary" onclick="App.promptLinkIndicator(${ev.evidenceId}, ${ev.indicatorId})">
                 🔗 ربط بمؤشر
               </button>
-              <button class="btn btn-sm btn-secondary" onclick="App.promptReviewNotes(${ev.evidenceId})">
-                📝 ملاحظة مراجع
-              </button>
+              ${(this.hasPermission('reviews.write') || this.hasRole('school_principal') || this.hasRole('ministry_supervisor') || this.hasRole('admin')) ? `
+                <button class="btn btn-sm btn-secondary" onclick="App.promptReviewNotes(${ev.evidenceId})" title="تدوين ملاحظات وتوجيهات المراجع">
+                  📝 ملاحظة مراجع
+                </button>
+              ` : ''}
             </div>
           ` : ''}
 
@@ -1168,7 +1241,7 @@ const App = {
     }
     const res = await this.request(`/evidences/${evidenceId}/classify`, {
       method: 'PATCH',
-      body: JSON.stringify({ evidence_type: selected.id }),
+      body: { evidence_type: selected.id },
     });
     if (res.ok) {
       this.showAlert(`تم تصنيف الشاهد كـ [${selected.label}] بنجاح.`, 'success');
@@ -1199,7 +1272,7 @@ const App = {
     }
     const res = await this.request(`/evidences/${evidenceId}/status`, {
       method: 'PATCH',
-      body: JSON.stringify({ status: selected.id }),
+      body: { status: selected.id },
     });
     if (res.ok) {
       this.showAlert(`تم تحديث حالة الشاهد إلى [${selected.label}] بنجاح.`, 'success');
@@ -1306,7 +1379,61 @@ const App = {
   async submitLinkEvidence() {
     const alertEl = document.getElementById('link-ev-alert');
     if (!this.state.linkingEvidence) return;
+    const { evidenceId, currentIndicatorId } = this.state.linkingEvidence;
 
+    if (this.state.linkEvidenceMode === 'multi') {
+      const checkboxes = document.querySelectorAll('input[name="multiLinkIndicatorIds"]:checked');
+      const selectedIds = Array.from(checkboxes).map(cb => parseInt(cb.value));
+
+      if (selectedIds.length === 0) {
+        if (alertEl) {
+          alertEl.textContent = 'يرجى اختيار مؤشر إضافي واحد على الأقل للربط المتعدد.';
+          alertEl.classList.remove('hidden');
+        }
+        return;
+      }
+
+      const ev = (this.state.currentEvidences || []).find(e => e.evidenceId === evidenceId);
+      const evalId = this.getEvaluationId();
+
+      let successCount = 0;
+      for (const targetId of selectedIds) {
+        const formData = new FormData();
+        formData.append('title', ev ? ev.title : `شاهد مشترك #${evidenceId}`);
+        if (ev?.description) formData.append('description', ev.description);
+        if (ev?.justification) formData.append('justification', ev.justification);
+        formData.append('evidence_type', ev?.evidenceType || 'other');
+
+        const content = `شاهد مشترك ومربوط من المؤشر الأصل #${currentIndicatorId}\nالعنوان: ${ev?.title || ''}`;
+        const blob = new Blob([content], { type: 'text/plain' });
+        const file = new File([blob], `evidence_link_${targetId}.txt`, { type: 'text/plain' });
+        formData.append('file', file);
+
+        const res = await this.request(`/evaluations/${evalId}/indicators/${targetId}/evidences`, {
+          method: 'POST',
+          body: formData,
+          isFormData: true,
+        });
+
+        if (res.ok) {
+          successCount++;
+          if (ev?.status && res.data?.evidenceId) {
+            await this.request(`/evidences/${res.data.evidenceId}/status`, {
+              method: 'PATCH',
+              body: { status: ev.status },
+            });
+          }
+        }
+      }
+
+      this.closeLinkEvidenceModal();
+      this.showAlert(`تم ربط الشاهد بنجاح بـ ${successCount} مؤشرات إضافية (Multi-link).`, 'success');
+      if (this.state.currentIndicator) this.loadEvidences(this.state.currentIndicator);
+      if (this.state.currentScreen === 'evidence-inventory') this.loadEvidenceInventory();
+      return;
+    }
+
+    // الوضع الفردي: نقل الشاهد لمؤشر آخر
     const select = document.getElementById('link-ev-target-select');
     const targetId = select ? parseInt(select.value) : null;
 
@@ -1318,10 +1445,9 @@ const App = {
       return;
     }
 
-    const evidenceId = this.state.linkingEvidence.evidenceId;
     const res = await this.request(`/evidences/${evidenceId}/link-indicator`, {
       method: 'POST',
-      body: JSON.stringify({ indicator_id: targetId }),
+      body: { indicator_id: targetId },
     });
 
     if (!res.ok) {
@@ -1344,14 +1470,20 @@ const App = {
   },
 
   async promptReviewNotes(evidenceId) {
-    const note = prompt('أدخل ملاحظات المراجع / المقيم على كفاية الشاهد:');
+    const canReview = this.hasPermission('reviews.write') || this.hasRole('school_principal') || this.hasRole('ministry_supervisor') || this.hasRole('admin');
+    if (!canReview) {
+      this.showAlert('عفواً: تدوين ملاحظات وتوجيهات المراجع خاص بمدير المدرسة (المراجع الداخلي) أو المشرف الوزاري فقط.', 'warning');
+      return;
+    }
+
+    const note = prompt('أدخل ملاحظات وتوجيهات المراجع على كفاية الشاهد:');
     if (!note || note.trim() === '') return;
     const res = await this.request(`/evidences/${evidenceId}/review-notes`, {
       method: 'POST',
-      body: JSON.stringify({ notes: note.trim() }),
+      body: { notes: note.trim() },
     });
     if (res.ok) {
-      this.showAlert('تمت إضافة ملاحظات المراجع بنجاح.', 'success');
+      this.showAlert('تمت إضافة ملاحظات وتوجيهات المراجع بنجاح.', 'success');
       if (this.state.currentIndicator) {
         this.loadEvidences(this.state.currentIndicator);
       }
@@ -1582,38 +1714,48 @@ const App = {
       return;
     }
 
-    tbody.innerHTML = this.state.suggestions.map((s, idx) => `
-      <tr>
-        <td><strong>${s.indicatorCode}</strong></td>
-        <td>${s.indicatorName}</td>
-        <td><span class="badge ${s.score <= 1 ? 'badge-red' : 'badge-yellow'}">${s.score}</span></td>
-        <td>${s.targetScore}</td>
-        <td>-${s.gap}</td>
-        <td>
-          <span class="badge ${s.suggestedPriority === 'High' ? 'badge-red' : 'badge-yellow'}">
-            ${s.priorityLabel || s.suggestedPriority}
-          </span>
-        </td>
-        <td>
-          ${s.isAlreadyAdopted 
-            ? '<span class="badge badge-green">متبنى مسبقاً ✓</span>' 
-            : '<span class="badge badge-gray">غير متبنى</span>'}
-        </td>
-        <td>
-          ${this.hasPermission('plans.manage') ? `
-            <button class="btn btn-sm ${s.isAlreadyAdopted ? 'btn-secondary' : 'btn-success'}" 
-                    ${s.isAlreadyAdopted ? 'disabled' : ''}
-                    onclick="App.openAdoptModal(${idx})">
-              ${s.isAlreadyAdopted ? 'تم التبني' : 'تبني كمجال تحسين'}
-            </button>
-          ` : `
-            <span style="font-size: 0.75rem; color: var(--text-muted);">
-              ${s.isAlreadyAdopted ? 'متبنى مسبقاً' : 'عرض فقط'}
+    tbody.innerHTML = this.state.suggestions.map((s, idx) => {
+      const isSatisfied = s.score >= 2;
+      const scoreBadge = s.score <= 1 
+        ? `<span class="badge badge-red">${s.score} (غير ملبى)</span>` 
+        : `<span class="badge badge-green">${s.score} (متحقق كافٍ)</span>`;
+      
+      return `
+        <tr style="${isSatisfied ? 'background: #fcfdfd;' : ''}">
+          <td><strong>${s.indicatorCode}</strong></td>
+          <td>
+            ${s.indicatorName}
+            ${isSatisfied ? '<div style="font-size: 0.74rem; color: #166534;">✅ استوفى الحد الأدنى للجودة (فرصة تطوير للتميز)</div>' : ''}
+          </td>
+          <td>${scoreBadge}</td>
+          <td>${s.targetScore}</td>
+          <td>-${s.gap}</td>
+          <td>
+            <span class="badge ${s.suggestedPriority === 'High' ? 'badge-red' : 'badge-yellow'}">
+              ${s.priorityLabel || s.suggestedPriority}
             </span>
-          `}
-        </td>
-      </tr>
-    `).join('');
+          </td>
+          <td>
+            ${s.isAlreadyAdopted 
+              ? '<span class="badge badge-green">متبنى مسبقاً ✓</span>' 
+              : '<span class="badge badge-gray">غير متبنى</span>'}
+          </td>
+          <td>
+            ${this.hasPermission('plans.manage') ? `
+              <button class="btn btn-sm ${s.isAlreadyAdopted ? 'btn-secondary' : 'btn-success'}" 
+                      ${s.isAlreadyAdopted ? 'disabled' : ''}
+                      onclick="App.openAdoptModal(${idx})">
+                ${s.isAlreadyAdopted ? 'تم التبني' : 'تبني كمجال تحسين'}
+              </button>
+            ` : `
+              <span style="font-size: 0.75rem; color: var(--text-muted);">
+                ${s.isAlreadyAdopted ? 'متبنى مسبقاً' : 'عرض فقط'}
+              </span>
+            `}
+          </td>
+        </tr>
+      `;
+    }).join('');
   },
 
   openAdoptModal(idx) {
@@ -1663,10 +1805,27 @@ const App = {
     const alertEl = document.getElementById('adopt-modal-alert');
     if (alertEl) alertEl.classList.add('hidden');
 
+    let resultId = s.resultId;
+    if (!resultId && this.state.standardsTree) {
+      for (const std of (this.state.standardsTree.standards || [])) {
+        for (const sub of (std.subStandards || [])) {
+          for (const ind of (sub.indicators || [])) {
+            if (ind.indicatorId === s.indicatorId && ind.resultId) {
+              resultId = ind.resultId;
+              break;
+            }
+          }
+        }
+      }
+    }
+    if (!resultId) {
+      resultId = s.resultId || s.indicatorId;
+    }
+
     const res = await this.request('/improvement-areas', {
       method: 'POST',
       body: {
-        indicatorId: s.indicatorId,
+        resultId: parseInt(resultId),
         name: name,
         description: description,
         priority: priority,
@@ -1683,6 +1842,7 @@ const App = {
       return;
     }
 
+    s.isAlreadyAdopted = true;
     this.closeAdoptModal();
     this.showAlert(`تم تبني مجال التحسين بنجاح للأولوية: ${priority}`, 'success');
     this.loadSuggestions();
@@ -3325,6 +3485,1253 @@ const App = {
     } else if (this.state.currentScreen === 'evidence-inventory') {
       await this.loadEvidenceInventory(evalId);
     }
+  },
+
+  // ===========================================================================
+  // 17. الشريحة 6: إدارة المدرسة (الملف التعريفي، الإحصاءات، المرافق)
+  // ===========================================================================
+  getSchoolId() {
+    return this.state.user?.schoolId 
+      || this.state.user?.school?.schoolId 
+      || this.state.currentEvaluation?.schoolId 
+      || 1;
+  },
+
+  async loadSchoolManagementData() {
+    const schoolId = this.getSchoolId();
+    const year = document.getElementById('schmgmt-year-select')?.value || '2025/2026';
+
+    const schoolNameEl = document.getElementById('schmgmt-school-name');
+    const schoolCodeEl = document.getElementById('schmgmt-school-code');
+    const schoolMetaEl = document.getElementById('schmgmt-school-meta');
+
+    if (schoolNameEl) schoolNameEl.textContent = this.state.user?.school?.schoolName || 'مدرسة بلقيس النموذجية';
+    if (schoolCodeEl) schoolCodeEl.textContent = `مدرسة #${schoolId}`;
+    if (schoolMetaEl) {
+      schoolMetaEl.textContent = `المرحلة: ${this.state.user?.school?.educationalStage || 'أساسي وثانوي'} | المديرية: ${this.state.user?.school?.educationalDistrict || 'التحرير'} | المحافظة: ${this.state.user?.school?.governorate || 'أمانة العاصمة'}`;
+    }
+
+    const activeTab = this.state.currentSchoolTab || 'profile';
+    this.switchSchoolTab(activeTab);
+  },
+
+  switchSchoolTab(tabName) {
+    this.state.currentSchoolTab = tabName;
+    const tabs = ['profile', 'staff', 'enrollment', 'facilities'];
+
+    tabs.forEach(t => {
+      const btn = document.getElementById(`tab-btn-${t}`);
+      const pane = document.getElementById(`schmgmt-tab-${t}`);
+      if (btn) btn.classList.toggle('active', t === tabName);
+      if (pane) pane.classList.toggle('hidden', t !== tabName);
+    });
+
+    const schoolId = this.getSchoolId();
+    const year = document.getElementById('schmgmt-year-select')?.value || '2025/2026';
+
+    if (tabName === 'profile') {
+      this.loadSchoolProfile(schoolId);
+    } else if (tabName === 'staff') {
+      this.loadStaffMetrics(schoolId, year);
+    } else if (tabName === 'enrollment') {
+      this.loadEnrollmentMetrics(schoolId, year);
+    } else if (tabName === 'facilities') {
+      this.loadFacilities(schoolId);
+    }
+  },
+
+  handleSchoolYearChange(year) {
+    this.switchSchoolTab(this.state.currentSchoolTab || 'profile');
+  },
+
+  // ---------------------------------------------------------------------------
+  // 17.1 ملف المدرسة التعريفي (School Profile)
+  // ---------------------------------------------------------------------------
+  async loadSchoolProfile(schoolId) {
+    const res = await this.request(`/schools/${schoolId}/profile`);
+    if (!res.ok) {
+      this.showSchoolProfileAlert(res.message || 'تعذر تحميل بيانات الملف التعريفي للمدرسة.', 'error');
+      return;
+    }
+
+    const p = res.data;
+    this.state.schoolProfile = p;
+
+    const setVal = (id, val) => {
+      const el = document.getElementById(id);
+      if (el) el.value = val !== null && val !== undefined ? val : '';
+    };
+
+    setVal('prof-educational-admin', p.educationalAdmin || p.educational_admin);
+    setVal('prof-phone', p.phone);
+    setVal('prof-email', p.email);
+    setVal('prof-building-type', p.buildingType || p.building_type);
+    setVal('prof-shift-type', p.shiftType || p.shift_type);
+    setVal('prof-total-area', p.totalArea || p.total_area);
+    setVal('prof-built-up-area', p.builtUpArea || p.built_up_area);
+    setVal('prof-address', p.address);
+
+    const schoolNameEl = document.getElementById('schmgmt-school-name');
+    if (schoolNameEl && p.schoolName) schoolNameEl.textContent = p.schoolName;
+  },
+
+  showSchoolProfileAlert(msg, type = 'info') {
+    const el = document.getElementById('schmgmt-profile-alert');
+    if (el) {
+      el.className = `alert alert-${type}`;
+      el.textContent = msg;
+      el.classList.remove('hidden');
+    }
+  },
+
+  async handleSaveSchoolProfile(event) {
+    event.preventDefault();
+    this.clearErrors(['prof-phone', 'prof-email', 'prof-totalArea', 'prof-builtUpArea']);
+    const alertEl = document.getElementById('schmgmt-profile-alert');
+    if (alertEl) alertEl.classList.add('hidden');
+
+    const schoolId = this.getSchoolId();
+    const phone = document.getElementById('prof-phone')?.value.trim();
+    const email = document.getElementById('prof-email')?.value.trim();
+    const totalAreaVal = document.getElementById('prof-total-area')?.value;
+    const builtUpAreaVal = document.getElementById('prof-built-up-area')?.value;
+
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      document.getElementById('err-prof-email').textContent = 'البريد الإلكتروني غير صالح.';
+      return;
+    }
+
+    const payload = {
+      address: document.getElementById('prof-address')?.value.trim() || null,
+      phone: phone || null,
+      email: email || null,
+      educationalAdmin: document.getElementById('prof-educational-admin')?.value.trim() || null,
+      buildingType: document.getElementById('prof-building-type')?.value || null,
+      shiftType: document.getElementById('prof-shift-type')?.value || null,
+      totalArea: totalAreaVal !== '' ? parseFloat(totalAreaVal) : null,
+      builtUpArea: builtUpAreaVal !== '' ? parseFloat(builtUpAreaVal) : null,
+    };
+
+    const res = await this.request(`/schools/${schoolId}/profile`, {
+      method: 'PUT',
+      body: payload,
+    });
+
+    if (!res.ok) {
+      if (res.errors) {
+        if (res.errors.email) document.getElementById('err-prof-email').textContent = res.errors.email[0];
+        if (res.errors.phone) document.getElementById('err-prof-phone').textContent = res.errors.phone[0];
+        if (res.errors.totalArea) document.getElementById('err-prof-totalArea').textContent = res.errors.totalArea[0];
+      }
+      this.showSchoolProfileAlert(res.message || 'فشل تحديث بيانات الملف التعريفي.', 'error');
+      return;
+    }
+
+    this.showSchoolProfileAlert('تم حفظ بيانات الملف التعريفي للمدرسة بنجاح.', 'success');
+    this.showAlert('تم تحديث ملف المدرسة بنجاح.', 'success');
+  },
+
+  resetSchoolProfileForm() {
+    if (this.state.schoolProfile) {
+      this.loadSchoolProfile(this.getSchoolId());
+      this.showSchoolProfileAlert('تم التراجع عن التعديلات غير المحفوظة.', 'info');
+    }
+  },
+
+  // ---------------------------------------------------------------------------
+  // 17.2 إحصاءات الكادر التعليمي والإداري (Staff Metrics)
+  // ---------------------------------------------------------------------------
+  async loadStaffMetrics(schoolId, year) {
+    const res = await this.request(`/schools/${schoolId}/staff-metrics?academic_year=${encodeURIComponent(year)}`);
+    const data = res.ok && res.data ? res.data : null;
+    this.state.staffMetrics = data;
+
+    const setVal = (id, val) => {
+      const el = document.getElementById(id);
+      if (el) el.value = val !== null && val !== undefined ? val : 0;
+    };
+
+    setVal('staff-total-teachers', data?.totalTeachers || data?.total_teachers || 0);
+    setVal('staff-qualified-teachers', data?.qualifiedTeachers || data?.qualified_teachers_count || 0);
+    setVal('staff-permanent-teachers', data?.permanentTeachers || data?.permanent_teachers_count || 0);
+    setVal('staff-matched-teachers', data?.specializationMatchedTeachers || data?.matched_specialization_count || 0);
+    setVal('staff-admin-count', data?.administrativeStaff || data?.total_admin_staff || 0);
+    setVal('staff-service-count', data?.serviceStaff || data?.total_service_staff || 0);
+    setVal('staff-counselors-count', data?.counselorsCount || 0);
+
+    this.recalcStaffLiveMetrics();
+  },
+
+  recalcStaffLiveMetrics() {
+    const getNum = (id) => Math.max(0, parseInt(document.getElementById(id)?.value || 0));
+
+    const total = getNum('staff-total-teachers');
+    const qualified = getNum('staff-qualified-teachers');
+    const permanent = getNum('staff-permanent-teachers');
+    const matched = getNum('staff-matched-teachers');
+    const adminStaff = getNum('staff-admin-count');
+    const serviceStaff = getNum('staff-service-count');
+    const counselors = getNum('staff-counselors-count');
+
+    const calcPct = (val) => total > 0 ? Math.round((val / total) * 1000) / 10 : 0;
+
+    const qualPct = calcPct(qualified);
+    const permPct = calcPct(permanent);
+    const matchPct = calcPct(matched);
+
+    const qualPctEl = document.getElementById('live-staff-qualified-pct');
+    const qualBadgeEl = document.getElementById('live-staff-qualified-badge');
+    const permPctEl = document.getElementById('live-staff-permanent-pct');
+    const permBadgeEl = document.getElementById('live-staff-permanent-badge');
+    const matchPctEl = document.getElementById('live-staff-matched-pct');
+    const matchBadgeEl = document.getElementById('live-staff-matched-badge');
+    const supportTotalEl = document.getElementById('live-staff-support-total');
+
+    if (qualPctEl) qualPctEl.textContent = total > 0 ? `${qualPct}%` : 'غير مكتمل';
+    if (permPctEl) permPctEl.textContent = total > 0 ? `${permPct}%` : 'غير مكتمل';
+    if (matchPctEl) matchPctEl.textContent = total > 0 ? `${matchPct}%` : 'غير مكتمل';
+    if (supportTotalEl) supportTotalEl.textContent = (adminStaff + serviceStaff + counselors);
+
+    const getLevelBadge = (pct) => {
+      if (total <= 0) return { label: 'بيانات غير مكتملة', cls: 'badge-gray' };
+      if (pct < 55) return { label: 'المستوى 1 (أقل من 55%)', cls: 'badge-red' };
+      if (pct <= 78) return { label: 'المستوى 2 (56% إلى 78%)', cls: 'badge-blue' };
+      return { label: 'المستوى 3 (79% إلى 100%)', cls: 'badge-green' };
+    };
+
+    if (qualBadgeEl) {
+      const b = getLevelBadge(qualPct);
+      qualBadgeEl.textContent = b.label;
+      qualBadgeEl.className = `badge ${b.cls}`;
+    }
+    if (permBadgeEl) {
+      const b = getLevelBadge(permPct);
+      permBadgeEl.textContent = b.label;
+      permBadgeEl.className = `badge ${b.cls}`;
+    }
+    if (matchBadgeEl) {
+      const b = getLevelBadge(matchPct);
+      matchBadgeEl.textContent = b.label;
+      matchBadgeEl.className = `badge ${b.cls}`;
+    }
+
+    const lblQual = document.getElementById('lbl-qualified-ratio');
+    const warnQual = document.getElementById('warn-qualified');
+    const boxQual = document.getElementById('calc-box-qualified');
+    if (lblQual) lblQual.textContent = `${qualPct}%`;
+    if (warnQual && boxQual) {
+      const isOver = qualified > total;
+      warnQual.style.display = isOver ? 'inline' : 'none';
+      boxQual.className = isOver ? 'live-calc-box danger' : 'live-calc-box';
+    }
+
+    const lblPerm = document.getElementById('lbl-permanent-ratio');
+    const warnPerm = document.getElementById('warn-permanent');
+    const boxPerm = document.getElementById('calc-box-permanent');
+    if (lblPerm) lblPerm.textContent = `${permPct}%`;
+    if (warnPerm && boxPerm) {
+      const isOver = permanent > total;
+      warnPerm.style.display = isOver ? 'inline' : 'none';
+      boxPerm.className = isOver ? 'live-calc-box danger' : 'live-calc-box';
+    }
+
+    const lblMatch = document.getElementById('lbl-matched-ratio');
+    const warnMatch = document.getElementById('warn-matched');
+    const boxMatch = document.getElementById('calc-box-matched');
+    if (lblMatch) lblMatch.textContent = `${matchPct}%`;
+    if (warnMatch && boxMatch) {
+      const isOver = matched > total;
+      warnMatch.style.display = isOver ? 'inline' : 'none';
+      boxMatch.className = isOver ? 'live-calc-box danger' : 'live-calc-box';
+    }
+  },
+
+  async handleSaveStaffMetrics(event) {
+    event.preventDefault();
+    this.clearErrors(['staff-totalTeachers', 'staff-qualifiedTeachers', 'staff-permanentTeachers', 'staff-specializationMatchedTeachers']);
+    const alertEl = document.getElementById('schmgmt-staff-alert');
+    if (alertEl) alertEl.classList.add('hidden');
+
+    const schoolId = this.getSchoolId();
+    const year = document.getElementById('schmgmt-year-select')?.value || '2025/2026';
+
+    const getNum = (id) => Math.max(0, parseInt(document.getElementById(id)?.value || 0));
+
+    const total = getNum('staff-total-teachers');
+    const qualified = getNum('staff-qualified-teachers');
+    const permanent = getNum('staff-permanent-teachers');
+    const matched = getNum('staff-matched-teachers');
+    const adminStaff = getNum('staff-admin-count');
+    const serviceStaff = getNum('staff-service-count');
+    const counselors = getNum('staff-counselors-count');
+
+    if (qualified > total) {
+      document.getElementById('err-staff-qualifiedTeachers').textContent = 'عدد المؤهلين لا يمكن أن يتجاوز إجمالي المعلمين.';
+      return;
+    }
+    if (permanent > total) {
+      document.getElementById('err-staff-permanentTeachers').textContent = 'عدد المثبتين لا يمكن أن يتجاوز إجمالي المعلمين.';
+      return;
+    }
+    if (matched > total) {
+      document.getElementById('err-staff-specializationMatchedTeachers').textContent = 'عدد متطابقي التخصص لا يمكن أن يتجاوز إجمالي المعلمين.';
+      return;
+    }
+
+    const payload = {
+      academicYear: year,
+      totalTeachers: total,
+      qualifiedTeachers: qualified,
+      permanentTeachers: permanent,
+      specializationMatchedTeachers: matched,
+      administrativeStaff: adminStaff,
+      serviceStaff: serviceStaff,
+      counselorsCount: counselors,
+    };
+
+    const res = await this.request(`/schools/${schoolId}/staff-metrics`, {
+      method: 'POST',
+      body: payload,
+    });
+
+    if (!res.ok) {
+      if (alertEl) {
+        alertEl.className = 'alert alert-error';
+        alertEl.textContent = res.message || 'فشل حفظ إحصاءات الكادر التعليمي.';
+        alertEl.classList.remove('hidden');
+      }
+      return;
+    }
+
+    if (alertEl) {
+      alertEl.className = 'alert alert-success';
+      alertEl.textContent = 'تم حفظ وتحديث إحصاءات الكادر التعليمي والإداري بنجاح.';
+      alertEl.classList.remove('hidden');
+    }
+    this.showAlert('تم حفظ إحصاءات الكادر بنجاح.', 'success');
+    this.recalcStaffLiveMetrics();
+  },
+
+  // ---------------------------------------------------------------------------
+  // 17.3 إحصاءات الطلاب والشعب (Enrollment Metrics)
+  // ---------------------------------------------------------------------------
+  async loadEnrollmentMetrics(schoolId, year) {
+    const res = await this.request(`/schools/${schoolId}/enrollment-metrics?academic_year=${encodeURIComponent(year)}`);
+    const data = res.ok && Array.isArray(res.data) ? res.data : [];
+    this.state.enrollmentMetrics = data;
+
+    if (this.state.enrollmentMetrics.length === 0) {
+      const defaultGrades = [
+        'الصف الأول الأساسي', 'الصف الثاني الأساسي', 'الصف الثالث الأساسي',
+        'الصف الرابع الأساسي', 'الصف الخامس الأساسي', 'الصف السادس الأساسي',
+        'الصف السابع الأساسي', 'الصف الثامن الأساسي', 'الصف التاسع الأساسي',
+        'الأول الثانوي', 'الثاني الثانوي', 'الثالث الثانوي'
+      ];
+      this.state.enrollmentMetrics = defaultGrades.map(g => ({
+        gradeLevel: g,
+        totalStudents: 0,
+        maleStudents: 0,
+        femaleStudents: 0,
+        classesCount: 1,
+        specialNeedsStudents: 0,
+        giftedStudents: 0,
+      }));
+    }
+
+    this.renderEnrollmentTable();
+    this.recalcEnrollmentSummary();
+  },
+
+  renderEnrollmentTable() {
+    const tbody = document.getElementById('enrollment-rows-body');
+    if (!tbody) return;
+
+    const rows = this.state.enrollmentMetrics || [];
+    tbody.innerHTML = rows.map((r, idx) => {
+      const classes = Math.max(1, parseInt(r.classesCount || 1));
+      const total = parseInt(r.totalStudents || 0);
+      const density = Math.round((total / classes) * 10) / 10;
+      const densityCls = density > 45 ? 'badge-red' : (density < 20 ? 'badge-yellow' : 'badge-green');
+
+      return `
+        <tr data-index="${idx}">
+          <td>
+            <input type="text" class="form-control form-control-sm enr-grade" value="${r.gradeLevel || ''}" placeholder="اسم الصف">
+          </td>
+          <td>
+            <input type="number" min="0" class="form-control form-control-sm enr-total" value="${r.totalStudents || 0}" oninput="App.handleEnrollmentInput(${idx})">
+          </td>
+          <td>
+            <input type="number" min="0" class="form-control form-control-sm enr-male" value="${r.maleStudents || 0}" oninput="App.handleEnrollmentGenderInput(${idx}, 'male')">
+          </td>
+          <td>
+            <input type="number" min="0" class="form-control form-control-sm enr-female" value="${r.femaleStudents || 0}" oninput="App.handleEnrollmentGenderInput(${idx}, 'female')">
+          </td>
+          <td>
+            <input type="number" min="1" class="form-control form-control-sm enr-classes" value="${classes}" oninput="App.handleEnrollmentInput(${idx})">
+          </td>
+          <td>
+            <input type="number" min="0" class="form-control form-control-sm enr-special" value="${r.specialNeedsStudents || 0}" oninput="App.recalcEnrollmentSummary()">
+          </td>
+          <td>
+            <input type="number" min="0" class="form-control form-control-sm enr-gifted" value="${r.giftedStudents || 0}" oninput="App.recalcEnrollmentSummary()">
+          </td>
+          <td style="text-align: center;">
+            <span class="badge ${densityCls}" id="enr-density-${idx}">${density} طالب/شعبة</span>
+          </td>
+          <td style="text-align: center;">
+            <button type="button" class="btn btn-sm" style="color: #ef4444; padding: 0.15rem 0.4rem;" onclick="App.deleteEnrollmentRow(${idx})" title="حذف الصف">✖</button>
+          </td>
+        </tr>
+      `;
+    }).join('');
+  },
+
+  handleEnrollmentGenderInput(idx, type) {
+    const tbody = document.getElementById('enrollment-rows-body');
+    const tr = tbody?.querySelector(`tr[data-index="${idx}"]`);
+    if (!tr) return;
+
+    const maleInput = tr.querySelector('.enr-male');
+    const femaleInput = tr.querySelector('.enr-female');
+    const totalInput = tr.querySelector('.enr-total');
+
+    const male = Math.max(0, parseInt(maleInput?.value || 0));
+    const female = Math.max(0, parseInt(femaleInput?.value || 0));
+
+    if (totalInput) totalInput.value = (male + female);
+    this.handleEnrollmentInput(idx);
+  },
+
+  handleEnrollmentInput(idx) {
+    const tbody = document.getElementById('enrollment-rows-body');
+    const tr = tbody?.querySelector(`tr[data-index="${idx}"]`);
+    if (!tr) return;
+
+    const total = Math.max(0, parseInt(tr.querySelector('.enr-total')?.value || 0));
+    const classes = Math.max(1, parseInt(tr.querySelector('.enr-classes')?.value || 1));
+    const density = Math.round((total / classes) * 10) / 10;
+
+    const badge = document.getElementById(`enr-density-${idx}`);
+    if (badge) {
+      badge.textContent = `${density} طالب/شعبة`;
+      badge.className = `badge ${density > 45 ? 'badge-red' : (density < 20 ? 'badge-yellow' : 'badge-green')}`;
+    }
+
+    this.recalcEnrollmentSummary();
+  },
+
+  recalcEnrollmentSummary() {
+    const tbody = document.getElementById('enrollment-rows-body');
+    if (!tbody) return;
+
+    let grandTotal = 0;
+    let maleTotal = 0;
+    let femaleTotal = 0;
+    let classesTotal = 0;
+    let specialTotal = 0;
+    let giftedTotal = 0;
+
+    const rows = tbody.querySelectorAll('tr');
+    rows.forEach(tr => {
+      grandTotal += Math.max(0, parseInt(tr.querySelector('.enr-total')?.value || 0));
+      maleTotal += Math.max(0, parseInt(tr.querySelector('.enr-male')?.value || 0));
+      femaleTotal += Math.max(0, parseInt(tr.querySelector('.enr-female')?.value || 0));
+      classesTotal += Math.max(1, parseInt(tr.querySelector('.enr-classes')?.value || 1));
+      specialTotal += Math.max(0, parseInt(tr.querySelector('.enr-special')?.value || 0));
+      giftedTotal += Math.max(0, parseInt(tr.querySelector('.enr-gifted')?.value || 0));
+    });
+
+    const avgDensity = classesTotal > 0 ? Math.round((grandTotal / classesTotal) * 10) / 10 : 0;
+
+    const totEl = document.getElementById('live-enrollment-total-students');
+    const maleEl = document.getElementById('lbl-male-total');
+    const femaleEl = document.getElementById('lbl-female-total');
+    const clsEl = document.getElementById('live-enrollment-total-classes');
+    const denEl = document.getElementById('live-enrollment-avg-density');
+    const specEl = document.getElementById('lbl-special-needs-total');
+    const giftEl = document.getElementById('lbl-gifted-total');
+    const badgeEl = document.getElementById('live-enrollment-density-badge');
+
+    if (totEl) totEl.textContent = grandTotal;
+    if (maleEl) maleEl.textContent = maleTotal;
+    if (femaleEl) femaleEl.textContent = femaleTotal;
+    if (clsEl) clsEl.textContent = classesTotal;
+    if (denEl) denEl.textContent = avgDensity;
+    if (specEl) specEl.textContent = specialTotal;
+    if (giftEl) giftEl.textContent = giftedTotal;
+
+    if (badgeEl) {
+      if (avgDensity > 45) {
+        badgeEl.textContent = 'كثافة مرتفعة (فوق 45)';
+        badgeEl.className = 'badge badge-red';
+      } else if (avgDensity >= 25 && avgDensity <= 40) {
+        badgeEl.textContent = 'مطابق للمعايير الوطنية (25-40)';
+        badgeEl.className = 'badge badge-green';
+      } else {
+        badgeEl.textContent = 'كثافة مقبولة';
+        badgeEl.className = 'badge badge-blue';
+      }
+    }
+  },
+
+  addEnrollmentRow() {
+    const list = this.state.enrollmentMetrics || [];
+    list.push({
+      gradeLevel: `صف جديد (${list.length + 1})`,
+      totalStudents: 0,
+      maleStudents: 0,
+      femaleStudents: 0,
+      classesCount: 1,
+      specialNeedsStudents: 0,
+      giftedStudents: 0,
+    });
+    this.renderEnrollmentTable();
+    this.recalcEnrollmentSummary();
+  },
+
+  deleteEnrollmentRow(idx) {
+    if (this.state.enrollmentMetrics && this.state.enrollmentMetrics.length > idx) {
+      this.state.enrollmentMetrics.splice(idx, 1);
+      this.renderEnrollmentTable();
+      this.recalcEnrollmentSummary();
+    }
+  },
+
+  async handleSaveEnrollmentMetrics() {
+    const alertEl = document.getElementById('schmgmt-enrollment-alert');
+    if (alertEl) alertEl.classList.add('hidden');
+
+    const schoolId = this.getSchoolId();
+    const year = document.getElementById('schmgmt-year-select')?.value || '2025/2026';
+    const tbody = document.getElementById('enrollment-rows-body');
+
+    const metrics = [];
+    const rows = tbody.querySelectorAll('tr');
+
+    for (let i = 0; i < rows.length; i++) {
+      const tr = rows[i];
+      const grade = tr.querySelector('.enr-grade')?.value.trim();
+      const total = Math.max(0, parseInt(tr.querySelector('.enr-total')?.value || 0));
+      const male = Math.max(0, parseInt(tr.querySelector('.enr-male')?.value || 0));
+      const female = Math.max(0, parseInt(tr.querySelector('.enr-female')?.value || 0));
+      const classes = parseInt(tr.querySelector('.enr-classes')?.value || 1);
+      const special = Math.max(0, parseInt(tr.querySelector('.enr-special')?.value || 0));
+      const gifted = Math.max(0, parseInt(tr.querySelector('.enr-gifted')?.value || 0));
+
+      if (!grade) {
+        this.showAlert(`الصف رقم ${i + 1} يتطلب كتابة اسم الصف.`, 'error');
+        return;
+      }
+      if (classes < 1) {
+        this.showAlert(`الصف [${grade}]: عدد الشعب يجب أن يكون 1 على الأقل.`, 'error');
+        return;
+      }
+      if (male + female !== total) {
+        this.showAlert(`الصف [${grade}]: مجموع الذكور (${male}) والإناث (${female}) يجب أن يساوي إجمالي الطلاب (${total}).`, 'error');
+        return;
+      }
+
+      metrics.push({
+        gradeLevel: grade,
+        totalStudents: total,
+        maleStudents: male,
+        femaleStudents: female,
+        classesCount: classes,
+        specialNeedsStudents: special,
+        giftedStudents: gifted,
+      });
+    }
+
+    const res = await this.request(`/schools/${schoolId}/enrollment-metrics`, {
+      method: 'POST',
+      body: {
+        academicYear: year,
+        metrics: metrics,
+      },
+    });
+
+    if (!res.ok) {
+      if (alertEl) {
+        alertEl.className = 'alert alert-error';
+        alertEl.textContent = res.message || 'فشل حفظ إحصاءات الطلاب والشعب.';
+        alertEl.classList.remove('hidden');
+      }
+      return;
+    }
+
+    if (alertEl) {
+      alertEl.className = 'alert alert-success';
+      alertEl.textContent = 'تم حفظ إحصاءات الطلاب والشعب بنجاح لكافة الصفوف.';
+      alertEl.classList.remove('hidden');
+    }
+    this.showAlert('تم حفظ بيانات الطلاب والشعب بنجاح.', 'success');
+  },
+
+  // ---------------------------------------------------------------------------
+  // 17.4 مرافق المدرسة وتجهيزات السلامة (School Facilities)
+  // ---------------------------------------------------------------------------
+  async loadFacilities(schoolId) {
+    const tbody = document.getElementById('facilities-table-body');
+    if (!tbody) return;
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align: center;">جارِ جلب قائمة المرافق...</td></tr>';
+
+    const res = await this.request(`/schools/${schoolId}/facilities`);
+    if (!res.ok) {
+      tbody.innerHTML = `<tr><td colspan="8" style="color: red; text-align: center;">${res.message}</td></tr>`;
+      return;
+    }
+
+    const facilities = res.data || [];
+    this.state.facilities = facilities;
+
+    const scienceLabs = facilities.filter(f => f.facilityType === 'science_lab');
+    const compLabs = facilities.filter(f => f.facilityType === 'computer_lab');
+    const libraries = facilities.filter(f => f.facilityType === 'library');
+    const safetyFacilities = facilities.filter(f => f.hasSafetyEquipment);
+
+    const scCountEl = document.getElementById('kpi-science-labs-count');
+    const scBadgeEl = document.getElementById('kpi-science-labs-badge');
+    const compCountEl = document.getElementById('kpi-comp-labs-count');
+    const compBadgeEl = document.getElementById('kpi-comp-labs-badge');
+    const libStatusEl = document.getElementById('kpi-library-status');
+    const libBadgeEl = document.getElementById('kpi-library-badge');
+    const safeStatusEl = document.getElementById('kpi-safety-status');
+    const safeBadgeEl = document.getElementById('kpi-safety-badge');
+
+    if (scCountEl) scCountEl.textContent = scienceLabs.length;
+    if (scBadgeEl) {
+      scBadgeEl.textContent = scienceLabs.length > 0 ? 'متوفر ✓' : 'غير متوفر ❌';
+      scBadgeEl.className = `badge ${scienceLabs.length > 0 ? 'badge-green' : 'badge-red'}`;
+    }
+
+    if (compCountEl) compCountEl.textContent = compLabs.length;
+    if (compBadgeEl) {
+      compBadgeEl.textContent = compLabs.length > 0 ? 'متوفر ✓' : 'غير متوفر ❌';
+      compBadgeEl.className = `badge ${compLabs.length > 0 ? 'badge-green' : 'badge-red'}`;
+    }
+
+    if (libStatusEl) libStatusEl.textContent = libraries.length > 0 ? `${libraries.length} مكتبة` : 'لا يوجد';
+    if (libBadgeEl) {
+      libBadgeEl.textContent = libraries.length > 0 ? 'متوفرة ✓' : 'غير متوفرة ❌';
+      libBadgeEl.className = `badge ${libraries.length > 0 ? 'badge-green' : 'badge-red'}`;
+    }
+
+    if (safeStatusEl) safeStatusEl.textContent = `${safetyFacilities.length} مرافق آمنة`;
+    if (safeBadgeEl) {
+      safeBadgeEl.textContent = safetyFacilities.length > 0 ? 'مجهزة جزئياً أو كلياً' : 'تفتقر للسلامة';
+      safeBadgeEl.className = `badge ${safetyFacilities.length > 0 ? 'badge-green' : 'badge-yellow'}`;
+    }
+
+    if (facilities.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; color: var(--text-muted);">لا توجد مرافق مسجلة لهذه المدرسة حتى الآن. انقر على زر إضافة مرفق لبدء الحصر.</td></tr>';
+      return;
+    }
+
+    const typeNames = {
+      classroom: 'فصل دراسي',
+      science_lab: 'معمل علوم / مختبر',
+      computer_lab: 'معمل حاسوب',
+      library: 'مكتبة مدرسية',
+      sports_field: 'ملعب / ساحة رياضية',
+      clinic: 'عيادة مدرسية',
+      activity_room: 'قاعة أنشطة',
+      admin_office: 'مكتب إداري',
+      other: 'أخرى',
+    };
+
+    const conditionBadges = {
+      excellent: '<span class="badge badge-condition-excellent">ممتاز (جاهزية تامة)</span>',
+      good: '<span class="badge badge-condition-good">جيد (صالح)</span>',
+      fair: '<span class="badge badge-condition-fair">متوسط (يحتاج صيانة)</span>',
+      poor: '<span class="badge badge-condition-poor">ضعيف</span>',
+      out_of_service: '<span class="badge badge-condition-out_of_service">خارج الخدمة</span>',
+    };
+
+    tbody.innerHTML = facilities.map(f => `
+      <tr>
+        <td><strong>${f.facilityName}</strong></td>
+        <td><span class="badge badge-gray">${typeNames[f.facilityType] || f.facilityType}</span></td>
+        <td style="text-align: center;">${f.count}</td>
+        <td style="text-align: center;">${f.capacity || '-'}</td>
+        <td>${conditionBadges[f.conditionStatus] || f.conditionStatus}</td>
+        <td>
+          ${f.hasSafetyEquipment 
+            ? '<span class="badge badge-green">متوفرة ✅</span>' 
+            : '<span class="badge badge-gray" style="color: #94a3b8;">غير متوفرة ❌</span>'}
+        </td>
+        <td style="font-size: 0.82rem; color: var(--text-muted); max-width: 200px;">${f.notes || '-'}</td>
+        <td>
+          <div style="display: flex; gap: 0.35rem;">
+            <button class="btn btn-sm btn-secondary" onclick="App.openEditFacilityModal(${f.facilityId})">تعديل</button>
+            <button class="btn btn-sm btn-outline-danger" style="color: #dc2626; border: 1px solid #fca5a5;" onclick="App.handleDeleteFacility(${f.facilityId})">حذف</button>
+          </div>
+        </td>
+      </tr>
+    `).join('');
+  },
+
+  openAddFacilityModal() {
+    const modal = document.getElementById('modal-facility');
+    if (!modal) return;
+    document.getElementById('facility-modal-title').textContent = 'إضافة مرفق مدرسي جديد';
+    document.getElementById('fac-id').value = '';
+    document.getElementById('fac-name').value = '';
+    document.getElementById('fac-type').value = 'classroom';
+    document.getElementById('fac-count').value = '1';
+    document.getElementById('fac-capacity').value = '';
+    document.getElementById('fac-condition').value = 'good';
+    document.getElementById('fac-safety').checked = true;
+    document.getElementById('fac-notes').value = '';
+
+    const alertEl = document.getElementById('facility-modal-alert');
+    if (alertEl) alertEl.classList.add('hidden');
+    modal.classList.remove('hidden');
+  },
+
+  openEditFacilityModal(facilityId) {
+    const f = (this.state.facilities || []).find(item => item.facilityId === facilityId);
+    if (!f) return;
+
+    const modal = document.getElementById('modal-facility');
+    if (!modal) return;
+
+    document.getElementById('facility-modal-title').textContent = `تعديل مرفق: ${f.facilityName}`;
+    document.getElementById('fac-id').value = f.facilityId;
+    document.getElementById('fac-name').value = f.facilityName;
+    document.getElementById('fac-type').value = f.facilityType;
+    document.getElementById('fac-count').value = f.count;
+    document.getElementById('fac-capacity').value = f.capacity || '';
+    document.getElementById('fac-condition').value = f.conditionStatus;
+    document.getElementById('fac-safety').checked = !!f.hasSafetyEquipment;
+    document.getElementById('fac-notes').value = f.notes || '';
+
+    const alertEl = document.getElementById('facility-modal-alert');
+    if (alertEl) alertEl.classList.add('hidden');
+    modal.classList.remove('hidden');
+  },
+
+  closeFacilityModal() {
+    const modal = document.getElementById('modal-facility');
+    if (!modal) return;
+    modal.classList.add('hidden');
+  },
+
+  async handleSaveFacility(event) {
+    event.preventDefault();
+    this.clearErrors(['fac-facilityName', 'fac-count']);
+    const alertEl = document.getElementById('facility-modal-alert');
+    if (alertEl) alertEl.classList.add('hidden');
+
+    const schoolId = this.getSchoolId();
+    const facId = document.getElementById('fac-id')?.value;
+    const name = document.getElementById('fac-name')?.value.trim();
+    const type = document.getElementById('fac-type')?.value;
+    const count = parseInt(document.getElementById('fac-count')?.value || 1);
+    const capacityVal = document.getElementById('fac-capacity')?.value;
+    const condition = document.getElementById('fac-condition')?.value;
+    const safety = document.getElementById('fac-safety')?.checked;
+    const notes = document.getElementById('fac-notes')?.value.trim();
+
+    if (!name) {
+      document.getElementById('err-fac-facilityName').textContent = 'اسم المرفق إلزامي.';
+      return;
+    }
+
+    const payload = {
+      facilityName: name,
+      facilityType: type,
+      count: count,
+      capacity: capacityVal !== '' ? parseInt(capacityVal) : null,
+      conditionStatus: condition,
+      hasSafetyEquipment: safety,
+      notes: notes || null,
+    };
+
+    let res;
+    if (facId) {
+      res = await this.request(`/schools/${schoolId}/facilities/${facId}`, {
+        method: 'PUT',
+        body: payload,
+      });
+    } else {
+      res = await this.request(`/schools/${schoolId}/facilities`, {
+        method: 'POST',
+        body: payload,
+      });
+    }
+
+    if (!res.ok) {
+      if (alertEl) {
+        alertEl.textContent = res.message || 'فشلت عملية حفظ المرفق.';
+        alertEl.classList.remove('hidden');
+      }
+      return;
+    }
+
+    this.closeFacilityModal();
+    this.showAlert(facId ? 'تم تحديث بيانات المرفق بنجاح.' : 'تمت إضافة المرفق بنجاح.', 'success');
+    this.loadFacilities(schoolId);
+  },
+
+  async handleDeleteFacility(facilityId) {
+    if (!confirm('هل أنت متأكد من رغبتك في حذف هذا المرفق نهائياً؟')) return;
+
+    const schoolId = this.getSchoolId();
+    const res = await this.request(`/schools/${schoolId}/facilities/${facilityId}`, {
+      method: 'DELETE',
+    });
+
+    if (!res.ok) {
+      this.showAlert(res.message || 'فشل حذف المرفق.', 'error');
+      return;
+    }
+
+    this.showAlert('تم حذف المرفق بنجاح.', 'success');
+    this.loadFacilities(schoolId);
+  },
+
+  // ===========================================================================
+  // 18. الشريحة 1: لوحة الإدارة لمسؤول النظام (Admin Hub)
+  // ===========================================================================
+  async loadAdminData() {
+    if (!this.hasPermission('users.manage') && !this.hasPermission('schools.manage') && !this.hasRole('admin')) {
+      this.showAlert('عفواً: لوحة الإدارة خاصة بمسؤول النظام فقط (admin).', 'error');
+      this.navTo('cycles');
+      return;
+    }
+
+    const activeTab = this.state.currentAdminTab || 'schools';
+    this.switchAdminTab(activeTab);
+  },
+
+  switchAdminTab(tabName) {
+    this.state.currentAdminTab = tabName;
+    const btnSchools = document.getElementById('tab-btn-admin-schools');
+    const btnUsers = document.getElementById('tab-btn-admin-users');
+    const paneSchools = document.getElementById('admin-tab-schools');
+    const paneUsers = document.getElementById('admin-tab-users');
+
+    if (btnSchools) btnSchools.classList.toggle('active', tabName === 'schools');
+    if (btnUsers) btnUsers.classList.toggle('active', tabName === 'users');
+    if (paneSchools) paneSchools.classList.toggle('hidden', tabName !== 'schools');
+    if (paneUsers) paneUsers.classList.toggle('hidden', tabName !== 'users');
+
+    if (tabName === 'schools') {
+      this.loadAdminSchools();
+    } else {
+      this.loadAdminUsers();
+    }
+  },
+
+  async loadAdminSchools() {
+    const tbody = document.getElementById('admin-schools-table-body');
+    if (!tbody) return;
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align: center;">جارِ جلب قائمة المدارس...</td></tr>';
+
+    const res = await this.request('/schools');
+    if (!res.ok) {
+      tbody.innerHTML = `<tr><td colspan="7" style="color: red; text-align: center;">${res.message}</td></tr>`;
+      return;
+    }
+
+    const schools = res.data || [];
+    this.state.adminSchools = schools;
+
+    if (schools.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align: center;">لا توجد مدارس مسجلة.</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = schools.map(s => `
+      <tr>
+        <td><strong>#${s.schoolId}</strong></td>
+        <td><code>${s.identificationData}</code></td>
+        <td><strong>${s.schoolName}</strong></td>
+        <td>${s.educationalStage || '-'}</td>
+        <td>${s.governorate} / ${s.educationalDistrict}</td>
+        <td>
+          <span class="badge ${s.status === 'Active' ? 'badge-green' : 'badge-red'}">
+            ${s.status === 'Active' ? 'نشطة (مفعلة)' : 'معطلة'}
+          </span>
+        </td>
+        <td>
+          <div style="display: flex; gap: 0.35rem;">
+            <button class="btn btn-sm btn-secondary" onclick="App.openEditSchoolModal(${s.schoolId})">تعديل</button>
+            <button class="btn btn-sm ${s.status === 'Active' ? 'btn-outline-danger' : 'btn-success'}" 
+                    onclick="App.handleToggleSchoolStatus(${s.schoolId})" 
+                    title="تفعيل أو تعطيل المدرسة (تعطيل لا حذف)">
+              ${s.status === 'Active' ? 'تعطيل' : 'تفعيل'}
+            </button>
+          </div>
+        </td>
+      </tr>
+    `).join('');
+  },
+
+  openAddSchoolModal() {
+    const modal = document.getElementById('modal-admin-school');
+    if (!modal) return;
+    document.getElementById('admin-school-modal-title').textContent = 'إضافة مدرسة جديدة للنظام';
+    document.getElementById('admsch-id').value = '';
+    document.getElementById('admsch-name').value = '';
+    document.getElementById('admsch-code').value = '';
+    document.getElementById('admsch-stage').value = 'أساسي وثانوي';
+    document.getElementById('admsch-governorate').value = 'أمانة العاصمة';
+    document.getElementById('admsch-district').value = '';
+
+    const alertEl = document.getElementById('admin-school-modal-alert');
+    if (alertEl) alertEl.classList.add('hidden');
+    modal.classList.remove('hidden');
+  },
+
+  openEditSchoolModal(schoolId) {
+    const s = (this.state.adminSchools || []).find(item => item.schoolId === schoolId);
+    if (!s) return;
+
+    const modal = document.getElementById('modal-admin-school');
+    if (!modal) return;
+
+    document.getElementById('admin-school-modal-title').textContent = `تعديل بيانات: ${s.schoolName}`;
+    document.getElementById('admsch-id').value = s.schoolId;
+    document.getElementById('admsch-name').value = s.schoolName;
+    document.getElementById('admsch-code').value = s.identificationData;
+    document.getElementById('admsch-stage').value = s.educationalStage || 'أساسي وثانوي';
+    document.getElementById('admsch-governorate').value = s.governorate;
+    document.getElementById('admsch-district').value = s.educationalDistrict;
+
+    const alertEl = document.getElementById('admin-school-modal-alert');
+    if (alertEl) alertEl.classList.add('hidden');
+    modal.classList.remove('hidden');
+  },
+
+  closeAdminSchoolModal() {
+    const modal = document.getElementById('modal-admin-school');
+    if (!modal) return;
+    modal.classList.add('hidden');
+  },
+
+  async handleSaveAdminSchool(event) {
+    event.preventDefault();
+    this.clearErrors(['admsch-schoolName', 'admsch-identificationData']);
+    const alertEl = document.getElementById('admin-school-modal-alert');
+    if (alertEl) alertEl.classList.add('hidden');
+
+    const schoolId = document.getElementById('admsch-id')?.value;
+    const name = document.getElementById('admsch-name')?.value.trim();
+    const code = document.getElementById('admsch-code')?.value.trim();
+    const stage = document.getElementById('admsch-stage')?.value;
+    const gov = document.getElementById('admsch-governorate')?.value.trim();
+    const dist = document.getElementById('admsch-district')?.value.trim();
+
+    if (!name) {
+      document.getElementById('err-admsch-schoolName').textContent = 'اسم المدرسة إلزامي.';
+      return;
+    }
+    if (!code) {
+      document.getElementById('err-admsch-identificationData').textContent = 'كود الهوية إلزامي.';
+      return;
+    }
+
+    const payload = {
+      schoolName: name,
+      identificationData: code,
+      educationalStage: stage,
+      governorate: gov,
+      educationalDistrict: dist,
+    };
+
+    let res;
+    if (schoolId) {
+      res = await this.request(`/schools/${schoolId}`, {
+        method: 'PUT',
+        body: payload,
+      });
+    } else {
+      res = await this.request('/schools', {
+        method: 'POST',
+        body: payload,
+      });
+    }
+
+    if (!res.ok) {
+      if (alertEl) {
+        alertEl.textContent = res.message || 'فشلت عملية حفظ المدرسة.';
+        alertEl.classList.remove('hidden');
+      }
+      return;
+    }
+
+    this.closeAdminSchoolModal();
+    this.showAlert(schoolId ? 'تم تحديث بيانات المدرسة بنجاح.' : 'تمت إضافة المدرسة بنجاح.', 'success');
+    this.loadAdminSchools();
+  },
+
+  async handleToggleSchoolStatus(schoolId) {
+    const res = await this.request(`/schools/${schoolId}/toggle-status`, {
+      method: 'PATCH',
+    });
+
+    if (!res.ok) {
+      this.showAlert(res.message || 'فشل تحديث حالة المدرسة.', 'error');
+      return;
+    }
+
+    this.showAlert(res.message || 'تم تحديث حالة المدرسة بنجاح.', 'success');
+    this.loadAdminSchools();
+  },
+
+  async loadAdminUsers() {
+    const tbody = document.getElementById('admin-users-table-body');
+    if (!tbody) return;
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align: center;">جارِ جلب قائمة المستخدمين...</td></tr>';
+
+    const res = await this.request('/users');
+    if (!res.ok) {
+      tbody.innerHTML = `<tr><td colspan="8" style="color: red; text-align: center;">${res.message}</td></tr>`;
+      return;
+    }
+
+    const users = res.data || [];
+    this.state.adminUsers = users;
+
+    if (users.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="8" style="text-align: center;">لا يوجد مستخدمون.</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = users.map(u => {
+      const org = u.school ? `🏫 ${u.school.schoolName}` : (u.ministry ? `🏛️ ${u.ministry.ministryName}` : '⚙️ النظام');
+      const rolesStr = (u.roles || []).map(r => r.description || r.roleName || r).join(', ') || u.userType;
+
+      return `
+        <tr>
+          <td><strong>${u.fullName || u.username}</strong></td>
+          <td><code>${u.username}</code></td>
+          <td style="font-size: 0.85rem;">${u.email}</td>
+          <td><span class="badge badge-gray">${u.userType}</span></td>
+          <td style="font-size: 0.82rem;">${org}</td>
+          <td><span class="badge badge-blue">${rolesStr}</span></td>
+          <td>
+            <span class="badge ${u.status === 'Active' ? 'badge-green' : 'badge-red'}">
+              ${u.status === 'Active' ? 'نشط' : 'معطل'}
+            </span>
+          </td>
+          <td>
+            <div style="display: flex; gap: 0.35rem;">
+              <button class="btn btn-sm btn-secondary" onclick="App.openEditUserModal(${u.userId})">تعديل</button>
+              <button class="btn btn-sm ${u.status === 'Active' ? 'btn-outline-danger' : 'btn-success'}" 
+                      onclick="App.handleToggleUserStatus(${u.userId})" 
+                      title="تفعيل أو تعطيل الحساب (تعطيل لا حذف)">
+                ${u.status === 'Active' ? 'تعطيل' : 'تفعيل'}
+              </button>
+            </div>
+          </td>
+        </tr>
+      `;
+    }).join('');
+  },
+
+  async populateUserSchoolsDropdown(selectedSchoolId = null) {
+    const select = document.getElementById('admusr-school-id');
+    if (!select) return;
+
+    if (!this.state.adminSchools || this.state.adminSchools.length === 0) {
+      const res = await this.request('/schools');
+      if (res.ok) this.state.adminSchools = res.data || [];
+    }
+
+    select.innerHTML = (this.state.adminSchools || []).map(s => `
+      <option value="${s.schoolId}" ${s.schoolId == selectedSchoolId ? 'selected' : ''}>
+        ${s.schoolName} (${s.governorate})
+      </option>
+    `).join('');
+  },
+
+  handleAdminUserTypeChange(type) {
+    const schoolGroup = document.getElementById('admusr-school-group');
+    if (schoolGroup) {
+      schoolGroup.style.display = type === 'school' ? 'block' : 'none';
+    }
+  },
+
+  async openAddUserModal() {
+    const modal = document.getElementById('modal-admin-user');
+    if (!modal) return;
+
+    await this.populateUserSchoolsDropdown();
+
+    document.getElementById('admin-user-modal-title').textContent = 'إضافة حساب مستخدم جديد للنظام';
+    document.getElementById('admusr-id').value = '';
+    document.getElementById('admusr-fullname').value = '';
+    document.getElementById('admusr-username').value = '';
+    document.getElementById('admusr-email').value = '';
+    document.getElementById('admusr-type').value = 'school';
+    document.getElementById('admusr-role').value = 'school_evaluator';
+    document.getElementById('admusr-password').value = 'ChangeMeDevPassword@2026';
+
+    this.handleAdminUserTypeChange('school');
+
+    const alertEl = document.getElementById('admin-user-modal-alert');
+    if (alertEl) alertEl.classList.add('hidden');
+    modal.classList.remove('hidden');
+  },
+
+  async openEditUserModal(userId) {
+    const u = (this.state.adminUsers || []).find(item => item.userId === userId);
+    if (!u) return;
+
+    const modal = document.getElementById('modal-admin-user');
+    if (!modal) return;
+
+    await this.populateUserSchoolsDropdown(u.schoolId);
+
+    document.getElementById('admin-user-modal-title').textContent = `تعديل حساب: ${u.fullName || u.username}`;
+    document.getElementById('admusr-id').value = u.userId;
+    document.getElementById('admusr-fullname').value = u.fullName;
+    document.getElementById('admusr-username').value = u.username;
+    document.getElementById('admusr-email').value = u.email;
+    document.getElementById('admusr-type').value = u.userType;
+    document.getElementById('admusr-role').value = u.roles?.[0]?.roleName || 'school_evaluator';
+    document.getElementById('admusr-password').value = '';
+
+    this.handleAdminUserTypeChange(u.userType);
+
+    const alertEl = document.getElementById('admin-user-modal-alert');
+    if (alertEl) alertEl.classList.add('hidden');
+    modal.classList.remove('hidden');
+  },
+
+  closeAdminUserModal() {
+    const modal = document.getElementById('modal-admin-user');
+    if (!modal) return;
+    modal.classList.add('hidden');
+  },
+
+  async handleSaveAdminUser(event) {
+    event.preventDefault();
+    this.clearErrors(['admusr-fullName', 'admusr-username', 'admusr-email', 'admusr-password']);
+    const alertEl = document.getElementById('admin-user-modal-alert');
+    if (alertEl) alertEl.classList.add('hidden');
+
+    const userId = document.getElementById('admusr-id')?.value;
+    const fullName = document.getElementById('admusr-fullname')?.value.trim();
+    const username = document.getElementById('admusr-username')?.value.trim();
+    const email = document.getElementById('admusr-email')?.value.trim();
+    const type = document.getElementById('admusr-type')?.value;
+    const schoolId = type === 'school' ? parseInt(document.getElementById('admusr-school-id')?.value || 1) : null;
+    const role = document.getElementById('admusr-role')?.value;
+    const password = document.getElementById('admusr-password')?.value;
+
+    const payload = {
+      fullName: fullName,
+      username: username,
+      email: email,
+      userType: type,
+      schoolId: schoolId,
+      role: role,
+    };
+    if (password) payload.password = password;
+
+    let res;
+    if (userId) {
+      res = await this.request(`/users/${userId}`, {
+        method: 'PUT',
+        body: payload,
+      });
+    } else {
+      if (!password) {
+        document.getElementById('err-admusr-password').textContent = 'كلمة المرور مطلوبة للمستخدم الجديد.';
+        return;
+      }
+      res = await this.request('/users', {
+        method: 'POST',
+        body: payload,
+      });
+    }
+
+    if (!res.ok) {
+      if (alertEl) {
+        alertEl.textContent = res.message || 'فشلت عملية حفظ المستخدم.';
+        alertEl.classList.remove('hidden');
+      }
+      return;
+    }
+
+    this.closeAdminUserModal();
+    this.showAlert(userId ? 'تم تحديث الحساب بنجاح.' : 'تم إنشاء الحساب بنجاح.', 'success');
+    this.loadAdminUsers();
+  },
+
+  async handleToggleUserStatus(userId) {
+    const res = await this.request(`/users/${userId}/toggle-status`, {
+      method: 'PATCH',
+    });
+
+    if (!res.ok) {
+      this.showAlert(res.message || 'فشل تحديث حالة الحساب.', 'error');
+      return;
+    }
+
+    this.showAlert(res.message || 'تم تحديث حالة الحساب بنجاح.', 'success');
+    this.loadAdminUsers();
+  },
+
+  // ---------------------------------------------------------------------------
+  // 19. تحسينات ربط الشواهد (Multi-link & Unlink)
+  // ---------------------------------------------------------------------------
+  switchLinkEvidenceMode(mode) {
+    this.state.linkEvidenceMode = mode;
+    const btnSingle = document.getElementById('tab-link-single-btn');
+    const btnMulti = document.getElementById('tab-link-multi-btn');
+    const paneSingle = document.getElementById('link-mode-single');
+    const paneMulti = document.getElementById('link-mode-multi');
+
+    if (btnSingle) btnSingle.classList.toggle('active', mode === 'single');
+    if (btnMulti) btnMulti.classList.toggle('active', mode === 'multi');
+    if (paneSingle) paneSingle.classList.toggle('hidden', mode !== 'single');
+    if (paneMulti) paneMulti.classList.toggle('hidden', mode !== 'multi');
+
+    if (mode === 'multi') {
+      this.renderMultiLinkCheckboxes();
+    }
+  },
+
+  renderMultiLinkCheckboxes(filterText = '') {
+    const container = document.getElementById('link-ev-multi-container');
+    if (!container) return;
+
+    const list = this.state.cachedIndicatorsList || [];
+    const term = filterText.toLowerCase().trim();
+    const currentIndId = this.state.linkingEvidence?.currentIndicatorId;
+
+    const filtered = list.filter(ind => {
+      if (!term) return true;
+      return ind.code.toLowerCase().includes(term) || ind.name.toLowerCase().includes(term);
+    });
+
+    container.innerHTML = filtered.map(ind => {
+      const isCurrent = ind.indicatorId === currentIndId;
+      return `
+        <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.82rem; cursor: pointer; padding: 0.25rem 0.4rem; background: ${isCurrent ? '#f1f5f9' : '#fff'}; border-radius: 4px;">
+          <input type="checkbox" name="multiLinkIndicatorIds" value="${ind.indicatorId}" ${isCurrent ? 'disabled' : ''}>
+          <span><strong>[${ind.code}]</strong> ${ind.name} ${isCurrent ? '<span style="color: var(--text-muted);">(المؤشر الحالي)</span>' : ''}</span>
+        </label>
+      `;
+    }).join('') || '<div style="font-size: 0.8rem; color: var(--text-muted); padding: 0.5rem;">لا توجد مؤشرات مطابقة.</div>';
+  },
+
+  filterMultiLinkCheckboxes(term) {
+    this.renderMultiLinkCheckboxes(term);
+  },
+
+  async handleUnlinkEvidence() {
+    if (!this.state.linkingEvidence) return;
+    const { evidenceId, currentIndicatorId } = this.state.linkingEvidence;
+
+    if (!confirm('هل ترغب في فك ارتباط هذا الشاهد من هذا المؤشر؟')) return;
+
+    this.showAlert('لفك ارتباط الشاهد تماماً من هذا المؤشر، يرجى نقله للمؤشر المناسب عبر التبويب الأول.', 'info');
   },
 
 };
