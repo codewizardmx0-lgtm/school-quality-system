@@ -1425,14 +1425,14 @@ const App = {
 
           <div style="display: flex; flex-direction: column; gap: 0.75rem;">
             ${filteredIndicators.map(ind => `
-              <div style="background: #f8fafc; border: 1px solid ${ind.isSufficient ? '#e2e8f0' : '#fecaca'}; border-radius: 6px; padding: 0.75rem;">
+              <div style="background: #f8fafc; border: 1px solid ${(ind.isSufficient || ind.status === 'Completed') ? '#e2e8f0' : '#fecaca'}; border-radius: 6px; padding: 0.75rem;">
                 <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.5rem;">
                   <div>
                     <strong style="color: var(--primary);">${ind.indicatorCode}</strong>: ${ind.indicatorName}
                     <span style="font-size: 0.75rem; color: var(--text-muted); margin-right: 0.5rem;">[${ind.domainName}]</span>
                   </div>
                   <div style="display: flex; gap: 0.35rem; align-items: center; flex-wrap: wrap;">
-                    ${ind.isSufficient ? '<span class="badge badge-green">مستوفٍ ✅</span>' : '<span class="badge badge-red">ناقص الشواهد ⚠️</span>'}
+                    ${(ind.isSufficient || ind.status === 'Completed') ? '<span class="badge badge-green">مستوفٍ ✅</span>' : '<span class="badge badge-red">ناقص الشواهد ⚠️</span>'}
                     <span class="badge badge-gray">صالح: ${ind.validEvidenceCount} / مسودة: ${ind.draftEvidenceCount || 0} / مطلوب: ${ind.mandatoryRequiredCount}</span>
                     <button class="btn btn-sm btn-primary" onclick="App.openIndicatorEvidencesModal(${ind.indicatorId}, '${ind.indicatorCode}', '${encodeURIComponent(ind.indicatorName)}')">
                       📁 إدارة الشواهد

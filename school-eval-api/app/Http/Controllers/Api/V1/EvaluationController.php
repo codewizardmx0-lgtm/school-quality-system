@@ -381,8 +381,15 @@ class EvaluationController extends Controller
             return ApiResponse::notFound('المؤشر المطلوب غير موجود.');
         }
 
-        // التحقق من أن المؤشر يتبع إصدار الدورة التقييمية
-        $versionId = (int) $evaluation->cycle?->version_id;
+        // التحقق من أن دورة التقييم مرتبطة بإصدار معياري معتمد
+        $evaluation->loadMissing('cycle');
+        $versionId = (int) ($evaluation->cycle?->standard_version_id ?? $evaluation->cycle?->version_id);
+        if (!$versionId) {
+            return ApiResponse::validationError([
+                'cycle' => ['دورة التقييم غير مرتبطة بإصدار معياري معتمد.'],
+            ], 'دورة التقييم غير مرتبطة بإصدار معياري معتمد.');
+        }
+
         if ((int) $indicator->subStandard?->standard?->version_id !== $versionId) {
             return ApiResponse::validationError([
                 'indicator' => ['المؤشر لا ينتمي للإصدار المعياري المعتمد لدورة التقييم.'],
@@ -615,13 +622,17 @@ class EvaluationController extends Controller
         }
 
         // 3. التحقق من اكتمال رصد درجات جميع المؤشرات الفعالة
-        $versionId = $evaluation->cycle?->version_id;
-        $indicatorsQuery = Indicator::query()->where('status', 'Active');
-        if ($versionId) {
-            $indicatorsQuery->whereHas('subStandard.standard', function ($q) use ($versionId) {
-                $q->where('version_id', $versionId);
-            });
+        $versionId = (int) ($evaluation->cycle?->standard_version_id ?? $evaluation->cycle?->version_id);
+        if (!$versionId) {
+            return ApiResponse::validationError([
+                'cycle' => ['دورة التقييم غير مرتبطة بإصدار معياري معتمد.'],
+            ], 'دورة التقييم غير مرتبطة بإصدار معياري معتمد.');
         }
+
+        $indicatorsQuery = Indicator::query()->where('status', 'Active');
+        $indicatorsQuery->whereHas('subStandard.standard', function ($q) use ($versionId) {
+            $q->where('version_id', $versionId);
+        });
         $allActiveIndicators = $indicatorsQuery->get(['indicator_id', 'code', 'name']);
         $totalIndicatorsCount = $allActiveIndicators->count();
 

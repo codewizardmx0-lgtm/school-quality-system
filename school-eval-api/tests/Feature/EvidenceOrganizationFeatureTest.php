@@ -1491,4 +1491,215 @@ class EvidenceOrganizationFeatureTest extends TestCase
             'indicator_id'  => $indicatorA->indicator_id,
         ]);
     }
+
+    /**
+     * اختبار 28: احتساب completion_rate على مستوى المعيار والتقييم بحيث يقيد البسط بـ min(valid, required) لكل مؤشر.
+     * مثال الاختبار: مؤشر يتطلب 2 وله 3 صالحة، ومؤشر يتطلب 2 وله 0؛ النسبة المتوقعة للمعيار 50% وليست 75%.
+     * والتحقق من تطابق الرقم بين ReportsAnalyticsService و evidence-inventory.
+     */
+    public function test_completion_rate_caps_numerator_at_mandatory_count_per_indicator(): void
+    {
+        Sanctum::actingAs($this->evaluatorBelqees);
+
+        // إنشاء إصدار ودورة وتقييم مستقل لاختبار الحسبة بدقة
+        $version = StandardVersion::create([
+            'version_name'        => 'إصدار اختبار النسبة',
+            'version_no'          => '2026.RATE-TEST',
+            'source_organization' => 'وزارة التربية والتعليم',
+            'issue_date'          => '2026-01-01',
+            'status'              => 'Active',
+        ]);
+
+        $standard = Standard::create([
+            'version_id'    => $version->version_id,
+            'code'          => 'STD-RATE',
+            'name'          => 'معيار اختبار النسبة',
+            'weight'        => 10.0,
+            'display_order' => 1,
+        ]);
+
+        $subStandard = \App\Models\SubStandard::create([
+            'standard_id'   => $standard->standard_id,
+            'code'          => 'SUB-RATE',
+            'name'          => 'مجال اختبار النسبة',
+            'weight'        => 10.0,
+            'display_order' => 1,
+        ]);
+
+        $ind1 = Indicator::create([
+            'sub_standard_id' => $subStandard->sub_standard_id,
+            'code'            => 'IND-RATE-1',
+            'name'            => 'مؤشر النسبة 1',
+            'weight'          => 5.0,
+            'display_order'   => 1,
+            'status'          => 'Active',
+        ]);
+
+        $ind2 = Indicator::create([
+            'sub_standard_id' => $subStandard->sub_standard_id,
+            'code'            => 'IND-RATE-2',
+            'name'            => 'مؤشر النسبة 2',
+            'weight'          => 5.0,
+            'display_order'   => 2,
+            'status'          => 'Active',
+        ]);
+
+        // ربط متطلبين إلزاميين لكل مؤشر (المجموع المطلوب للمعيار = 4)
+        for ($i = 1; $i <= 2; $i++) {
+            IndicatorEvidenceRequirement::create([
+                'indicator_id'        => $ind1->indicator_id,
+                'standard_version_id' => $version->version_id,
+                'title'               => "متطلب إلزامي {$i} للمؤشر 1",
+                'required'            => true,
+                'display_order'       => $i,
+            ]);
+            IndicatorEvidenceRequirement::create([
+                'indicator_id'        => $ind2->indicator_id,
+                'standard_version_id' => $version->version_id,
+                'title'               => "متطلب إلزامي {$i} للمؤشر 2",
+                'required'            => true,
+                'display_order'       => $i,
+            ]);
+        }
+
+        $cycle = EvaluationCycle::create([
+            'academic_year'       => '2026-2027',
+            'start_date'          => '2026-09-01',
+            'end_date'            => '2027-06-30',
+            'standard_version_id' => $version->version_id,
+            'version_id'          => $version->version_id,
+            'status'              => 'Active',
+        ]);
+
+        $evaluation = Evaluation::create([
+            'school_id'          => $this->schoolBelqees->school_id,
+            'cycle_id'           => $cycle->cycle_id,
+            'created_by_user_id' => $this->evaluatorBelqees->user_id,
+            'status'             => 'InProgress',
+        ]);
+
+        $level0 = \App\Models\ScoreLevel::create([
+            'standard_version_id' => $version->version_id,
+            'score_value'         => 0,
+            'label'               => 'غير متحقق',
+            'display_order'       => 1,
+        ]);
+
+        $desc1 = \App\Models\IndicatorScoreDescriptor::create([
+            'indicator_id'        => $ind1->indicator_id,
+            'standard_version_id' => $version->version_id,
+            'score_level_id'      => $level0->score_level_id,
+            'label'               => 'غير متحقق',
+            'description'         => 'واصفة الصفر للمؤشر 1',
+            'display_order'       => 1,
+            'is_active'           => true,
+        ]);
+
+        // مؤشر 1: إنشاء نتيجة له وربط 3 شواهد صالحة (Completed) -> المطلوب 2 والصالح 3
+        $result1 = EvaluationResult::create([
+            'evaluation_id'       => $evaluation->evaluation_id,
+            'indicator_id'        => $ind1->indicator_id,
+            'score_descriptor_id' => $desc1->descriptor_id,
+            'standard_version_id' => $version->version_id,
+            'evaluator_user_id'   => $this->evaluatorBelqees->user_id,
+            'score'               => 0,
+            'completion_status'   => 'Pending',
+        ]);
+
+        for ($e = 1; $e <= 3; $e++) {
+            Evidence::create([
+                'result_id'      => $result1->result_id,
+                'indicator_id'   => $ind1->indicator_id,
+                'title'          => "شاهد صالح {$e} للمؤشر 1",
+                'evidence_type'  => 'report',
+                'status'         => 'Completed',
+                'current_version'=> 1,
+            ]);
+        }
+
+        // مؤشر 2: لا ننشئ له أي شواهد (المطلوب 2 والصالح 0)
+        // الحسبة المتوقعة:
+        // مؤشر 1: min(3, 2) = 2
+        // مؤشر 2: min(0, 2) = 0
+        // بسط المعيار = 2 + 0 = 2
+        // مقام المعيار = 2 + 2 = 4
+        // نسبة إكمال المعيار = (2 / 4) * 100 = 50.0% (وليست 75%)
+
+        /** @var \App\Services\EvidenceSufficiencyService $sufficiencyService */
+        $sufficiencyService = app(\App\Services\EvidenceSufficiencyService::class);
+        $data = $sufficiencyService->evaluateEvaluation($evaluation);
+
+        $stdData = collect($data['standards'])->firstWhere('standard_id', $standard->standard_id);
+        $this->assertNotNull($stdData);
+        $this->assertEquals(4, $stdData['mandatory_required_count']);
+        $this->assertEquals(3, $stdData['valid_evidence_count']);
+        $this->assertEquals(50.0, $stdData['completion_rate']); // 50% بدلاً من 75%
+        $this->assertEquals(50.0, $data['overall_evidence_completion_rate']);
+
+        // التحقق من مطابقة ReportsAnalyticsService لنفس الرقم (50.0%)
+        /** @var \App\Services\ReportsAnalyticsService $reportsService */
+        $reportsService = app(\App\Services\ReportsAnalyticsService::class);
+        $summary = $reportsService->calculateEvidenceSummary($evaluation);
+        $stdSummary = collect($summary['standards'])->firstWhere('standard_id', $standard->standard_id);
+        $this->assertNotNull($stdSummary);
+        $this->assertEquals(50.0, $stdSummary['completion_rate']);
+        $this->assertEquals(50.0, $summary['overall_evidence_completion_rate']);
+
+        // التحقق من استجابة مسار evidence-inventory وتطابق الرقم نفسه تماماً
+        $invRes = $this->getJson("/api/v1/evaluations/{$evaluation->evaluation_id}/evidence-inventory");
+        $invRes->assertStatus(200);
+        $invStd = collect($invRes->json('data.standards'))->firstWhere('standardId', $standard->standard_id);
+        $this->assertNotNull($invStd);
+        $this->assertEquals(50.0, $invStd['completionRate']);
+        $this->assertEquals(50.0, $invRes->json('data.overallEvidenceCompletionRate'));
+    }
+
+    /**
+     * اختبار 29: رفض العمليات برمز 422 واستثناء عربي عند غياب إصدار الدورة المعياري (غياب ?? 1).
+     */
+    public function test_rejection_when_cycle_lacks_standard_version(): void
+    {
+        Sanctum::actingAs($this->evaluatorBelqees);
+
+        // إنشاء دورة بدون إصدار معياري (version_id = 0)
+        \Illuminate\Support\Facades\DB::statement('SET FOREIGN_KEY_CHECKS=0;');
+        $cycleWithoutVersion = EvaluationCycle::create([
+            'academic_year'       => '2026-NO-VERSION',
+            'start_date'          => '2026-09-01',
+            'end_date'            => '2027-06-30',
+            'standard_version_id' => null,
+            'version_id'          => 0,
+            'status'              => 'Active',
+        ]);
+
+        $evalWithoutVersion = Evaluation::create([
+            'school_id'          => $this->schoolBelqees->school_id,
+            'cycle_id'           => $cycleWithoutVersion->cycle_id,
+            'created_by_user_id' => $this->evaluatorBelqees->user_id,
+            'status'             => 'InProgress',
+        ]);
+        \Illuminate\Support\Facades\DB::statement('SET FOREIGN_KEY_CHECKS=1;');
+
+        // 1. فحص مسار رفع الشاهد للمؤشر: يرفض 422 برسالة عربية واضحة
+        $file = UploadedFile::fake()->create('no_version.pdf', 100, 'application/pdf');
+        $storeRes = $this->postJson("/api/v1/evaluations/{$evalWithoutVersion->evaluation_id}/indicators/{$this->firstIndicator->indicator_id}/evidences", [
+            'title'         => 'شاهد دورة بلا إصدار',
+            'evidence_type' => 'report',
+            'file'          => $file,
+        ]);
+        $storeRes->assertStatus(422)
+            ->assertJsonValidationErrors(['cycle'])
+            ->assertJsonPath('errors.cycle.0', 'دورة التقييم غير مرتبطة بإصدار معياري معتمد.');
+
+        // 2. فحص مسار جرد الشواهد evidence-inventory: يرفض 422 برسالة عربية
+        $invRes = $this->getJson("/api/v1/evaluations/{$evalWithoutVersion->evaluation_id}/evidence-inventory");
+        $invRes->assertStatus(422)
+            ->assertJsonValidationErrors(['cycle'])
+            ->assertJsonPath('errors.cycle.0', 'دورة التقييم غير مرتبطة بإصدار معياري معتمد.');
+
+        // 3. فحص استدعاء الخدمة المباشر EvidenceSufficiencyService: يرمي InvalidArgumentException بالعربية
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('دورة التقييم غير مرتبطة بإصدار معياري معتمد.');
+        app(\App\Services\EvidenceSufficiencyService::class)->evaluateEvaluation($evalWithoutVersion);
+    }
 }

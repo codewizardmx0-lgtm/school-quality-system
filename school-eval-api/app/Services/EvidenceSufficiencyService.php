@@ -92,7 +92,11 @@ class EvidenceSufficiencyService
     public function evaluateEvaluation(Evaluation $evaluation): array
     {
         $evaluation->loadMissing(['cycle', 'school']);
-        $versionId = (int) ($evaluation->cycle?->standard_version_id ?? $evaluation->cycle?->version_id ?? 1);
+        $versionId = (int) ($evaluation->cycle?->standard_version_id ?? $evaluation->cycle?->version_id);
+
+        if (!$versionId) {
+            throw new \InvalidArgumentException('دورة التقييم غير مرتبطة بإصدار معياري معتمد.');
+        }
 
         $standards = Standard::query()
             ->where('version_id', $versionId)
@@ -125,6 +129,7 @@ class EvidenceSufficiencyService
         $totalUploadedEvidences = 0;
         $totalValidEvidences = 0;
         $totalDraftEvidences = 0;
+        $totalCappedValidEvidences = 0;
 
         $byType = [
             'minutes' => 0,
@@ -155,6 +160,7 @@ class EvidenceSufficiencyService
             $stdUploadedEvidences = 0;
             $stdValidEvidences = 0;
             $stdDraftEvidences = 0;
+            $stdCappedValidEvidences = 0;
 
             $indicatorsList = [];
 
@@ -179,6 +185,10 @@ class EvidenceSufficiencyService
 
                     $totalDraftEvidences += $evaluatedInd['draft_evidence_count'];
                     $stdDraftEvidences += $evaluatedInd['draft_evidence_count'];
+
+                    $indCappedValid = min($evaluatedInd['valid_evidence_count'], $evaluatedInd['mandatory_required_count']);
+                    $stdCappedValidEvidences += $indCappedValid;
+                    $totalCappedValidEvidences += $indCappedValid;
 
                     if ($evaluatedInd['is_sufficient']) {
                         $indicatorsWithSufficientEvidence++;
@@ -229,7 +239,7 @@ class EvidenceSufficiencyService
             }
 
             $stdCompletionRate = $stdMandatoryRequired > 0
-                ? min(100.0, round(($stdValidEvidences / $stdMandatoryRequired) * 100, 2))
+                ? min(100.0, round(($stdCappedValidEvidences / $stdMandatoryRequired) * 100, 2))
                 : 100.0;
 
             $standardsData[] = [
@@ -251,7 +261,7 @@ class EvidenceSufficiencyService
         }
 
         $overallCompletionRate = $totalMandatoryRequired > 0
-            ? min(100.0, round(($totalValidEvidences / $totalMandatoryRequired) * 100, 2))
+            ? min(100.0, round(($totalCappedValidEvidences / $totalMandatoryRequired) * 100, 2))
             : 100.0;
 
         $inventoryStatus = ($indicatorsMissingEvidence === 0 && $totalIndicators > 0) ? 'Complete' : 'Incomplete';

@@ -321,6 +321,7 @@ class ReportsAnalyticsService
                     'missing_count'     => $ind['missing_count'],
                     'completion_rate'   => $ind['completion_rate'],
                     'is_satisfied'      => $ind['is_sufficient'],
+                    'status'            => $ind['status'],
                 ];
             }
 
@@ -354,6 +355,7 @@ class ReportsAnalyticsService
             'total_valid_evidences'            => $data['total_valid_evidences'],
             'total_draft_evidences'            => $data['total_draft_evidences'],
             'overall_evidence_completion_rate' => $data['overall_evidence_completion_rate'],
+            'completion_rate'                  => $data['overall_evidence_completion_rate'],
             'standards'                        => $standardsSummary,
         ];
     }

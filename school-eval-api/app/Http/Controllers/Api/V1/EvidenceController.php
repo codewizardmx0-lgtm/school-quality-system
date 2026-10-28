@@ -127,9 +127,15 @@ class EvidenceController extends Controller
             return ApiResponse::notFound('المؤشر المطلوب غير موجود أو غير فعّال.');
         }
 
-        // التحقق من أن المؤشر يتبع إصدار الدورة التقييمية
+        // التحقق من أن دورة التقييم مرتبطة بإصدار معياري معتمد
         $evaluation->loadMissing('cycle');
-        $versionId = (int) ($evaluation->cycle?->standard_version_id ?? $evaluation->cycle?->version_id ?? 1);
+        $versionId = (int) ($evaluation->cycle?->standard_version_id ?? $evaluation->cycle?->version_id);
+        if (!$versionId) {
+            return ApiResponse::validationError([
+                'cycle' => ['دورة التقييم غير مرتبطة بإصدار معياري معتمد.'],
+            ], 'دورة التقييم غير مرتبطة بإصدار معياري معتمد.');
+        }
+
         if ((int) $indicator->subStandard?->standard?->version_id !== $versionId) {
             return ApiResponse::validationError([
                 'indicator' => ['المؤشر لا ينتمي للإصدار المعياري المعتمد لدورة التقييم.'],
@@ -216,9 +222,15 @@ class EvidenceController extends Controller
             return ApiResponse::notFound('المؤشر المطلوب غير موجود أو غير فعّال.');
         }
 
-        // التحقق من أن المؤشر يتبع إصدار الدورة التقييمية
+        // التحقق من أن دورة التقييم مرتبطة بإصدار معياري معتمد
         $evaluation->loadMissing('cycle');
-        $versionId = (int) ($evaluation->cycle?->standard_version_id ?? $evaluation->cycle?->version_id ?? 1);
+        $versionId = (int) ($evaluation->cycle?->standard_version_id ?? $evaluation->cycle?->version_id);
+        if (!$versionId) {
+            return ApiResponse::validationError([
+                'cycle' => ['دورة التقييم غير مرتبطة بإصدار معياري معتمد.'],
+            ], 'دورة التقييم غير مرتبطة بإصدار معياري معتمد.');
+        }
+
         if ((int) $indicator->subStandard?->standard?->version_id !== $versionId) {
             return ApiResponse::validationError([
                 'indicator' => ['المؤشر لا ينتمي للإصدار المعياري المعتمد لدورة التقييم.'],
@@ -231,8 +243,6 @@ class EvidenceController extends Controller
             ->first();
 
         if (!$result) {
-            $evaluation->loadMissing('cycle');
-            $versionId = (int) ($evaluation->cycle?->standard_version_id ?? $evaluation->cycle?->version_id ?? 1);
             $descriptor = IndicatorScoreDescriptor::where('indicator_id', $actualIndicatorId)
                 ->where('standard_version_id', $versionId)
                 ->whereHas('scoreLevel', function ($q) {
@@ -505,9 +515,15 @@ class EvidenceController extends Controller
             ]);
         }
 
-        // التحقق من أن المؤشر المستهدف يتبع إصدار الدورة التقييمية
+        // التحقق من أن دورة التقييم مرتبطة بإصدار معياري معتمد
         $evaluation->loadMissing('cycle');
-        $versionId = (int) ($evaluation->cycle?->standard_version_id ?? $evaluation->cycle?->version_id ?? 1);
+        $versionId = (int) ($evaluation->cycle?->standard_version_id ?? $evaluation->cycle?->version_id);
+        if (!$versionId) {
+            return ApiResponse::validationError([
+                'cycle' => ['دورة التقييم غير مرتبطة بإصدار معياري معتمد.'],
+            ], 'دورة التقييم غير مرتبطة بإصدار معياري معتمد.');
+        }
+
         if ((int) $targetIndicator->subStandard?->standard?->version_id !== $versionId) {
             return ApiResponse::validationError([
                 'indicator_id' => ['المؤشر المستهدف لا ينتمي للإصدار المعياري المعتمد لدورة التقييم.'],
@@ -748,6 +764,15 @@ class EvidenceController extends Controller
             return ApiResponse::forbidden('غير مصرح لك باستعراض شواهد هذا التقييم.');
         }
 
+        // التحقق من أن دورة التقييم مرتبطة بإصدار معياري معتمد
+        $evaluation->loadMissing(['cycle', 'school']);
+        $versionId = (int) ($evaluation->cycle?->standard_version_id ?? $evaluation->cycle?->version_id);
+        if (!$versionId) {
+            return ApiResponse::validationError([
+                'cycle' => ['دورة التقييم غير مرتبطة بإصدار معياري معتمد.'],
+            ], 'دورة التقييم غير مرتبطة بإصدار معياري معتمد.');
+        }
+
         /** @var \App\Services\EvidenceSufficiencyService $sufficiencyService */
         $sufficiencyService = app(\App\Services\EvidenceSufficiencyService::class);
         $sufficiency = $sufficiencyService->evaluateEvaluation($evaluation);
@@ -766,6 +791,8 @@ class EvidenceController extends Controller
                     'uploadedEvidenceCount'  => $ind['uploaded_evidence_count'],
                     'validEvidenceCount'     => $ind['valid_evidence_count'],
                     'draftEvidenceCount'     => $ind['draft_evidence_count'],
+                    'completionRate'         => $ind['completion_rate'],
+                    'completion_rate'        => $ind['completion_rate'],
                     'isSufficient'           => $ind['is_sufficient'],
                     'status'                 => $ind['status'],
                     'evidences'              => $ind['evidences']->map(function ($ev) {
@@ -785,19 +812,28 @@ class EvidenceController extends Controller
             }
 
             $standardsBreakdown[] = [
-                'standardId'   => $std['standard_id'],
-                'standardCode' => $std['standard_code'],
-                'standardName' => $std['standard_name'],
-                'indicators'   => $stdIndicatorsList,
+                'standardId'             => $std['standard_id'],
+                'standardCode'           => $std['standard_code'],
+                'standardName'           => $std['standard_name'],
+                'mandatoryRequiredCount' => $std['mandatory_required_count'],
+                'uploadedEvidenceCount'  => $std['uploaded_evidence_count'],
+                'validEvidenceCount'     => $std['valid_evidence_count'],
+                'draftEvidenceCount'     => $std['draft_evidence_count'],
+                'completionRate'         => $std['completion_rate'],
+                'completion_rate'        => $std['completion_rate'],
+                'indicators'             => $stdIndicatorsList,
             ];
         }
 
         return ApiResponse::success(
             data: [
-                'evaluationId'    => $evaluation->evaluation_id,
-                'schoolId'        => $evaluation->school_id,
-                'schoolName'      => $evaluation->school?->name,
-                'inventoryStatus' => $sufficiency['inventory_status'],
+                'evaluationId'                  => $evaluation->evaluation_id,
+                'schoolId'                      => $evaluation->school_id,
+                'schoolName'                    => $evaluation->school?->name,
+                'inventoryStatus'               => $sufficiency['inventory_status'],
+                'overallEvidenceCompletionRate' => $sufficiency['overall_evidence_completion_rate'],
+                'completionRate'                => $sufficiency['overall_evidence_completion_rate'],
+                'completion_rate'               => $sufficiency['overall_evidence_completion_rate'],
                 'summary'         => [
                     'totalIndicators'                  => $sufficiency['total_indicators'],
                     'indicatorsWithSufficientEvidence' => $sufficiency['indicators_with_sufficient_evidence'],
@@ -805,6 +841,9 @@ class EvidenceController extends Controller
                     'totalEvidencesUploaded'           => $sufficiency['total_uploaded_evidences'],
                     'totalValidEvidences'              => $sufficiency['total_valid_evidences'],
                     'totalDraftEvidences'              => $sufficiency['total_draft_evidences'],
+                    'overallEvidenceCompletionRate'    => $sufficiency['overall_evidence_completion_rate'],
+                    'completionRate'                   => $sufficiency['overall_evidence_completion_rate'],
+                    'completion_rate'                  => $sufficiency['overall_evidence_completion_rate'],
                     'byType'                           => $sufficiency['by_type'],
                     'byStatus'                         => $sufficiency['by_status'],
                 ],
