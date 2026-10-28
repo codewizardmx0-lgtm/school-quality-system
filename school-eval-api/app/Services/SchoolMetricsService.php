@@ -121,8 +121,12 @@ class SchoolMetricsService
         if ($evaluation->status === 'Completed' && !empty($evaluation->school_context_snapshot)) {
             $snapshot = $evaluation->school_context_snapshot;
             $snapshot['is_snapshot'] = true;
+            $snapshot['is_legacy_completed_without_snapshot'] = false;
+            $snapshot['notice'] = 'هذه البيانات مجمدة ومطابقة لواقع المدرسة عند إنهاء وتقديم التقييم (BR-SCH-03).';
             return $snapshot;
         }
+
+        $isLegacyCompletedWithoutSnapshot = ($evaluation->status === 'Completed' && empty($evaluation->school_context_snapshot));
 
         $school = $evaluation->school;
         $academicYear = $evaluation->cycle?->academic_year ?? '2025/2026';
@@ -374,12 +378,21 @@ class SchoolMetricsService
             ],
         ];
 
+        $notice = null;
+        if ($isLegacyCompletedWithoutSnapshot) {
+            $notice = 'هذا التقييم مكتمل ومقفل سابقاً قبل تفعيل ميزة لقطة السياق (Snapshot). الأرقام المعروضة استرشادية مستمدة من السجلات الميدانية الحالية وقد لا تمثل واقع التقييم وقت قفله.';
+        } elseif ($evaluation->status !== 'Completed') {
+            $notice = 'سياق المدرسة حي ومباشر وقابل للتغيير حتى يتم إنهاء وتقديم التقييم الذاتي ليتم تجميده بالـ Snapshot.';
+        }
+
         return [
             'school_id' => $school->school_id,
             'school_name' => $school->school_name,
             'evaluation_id' => $evaluation->evaluation_id,
             'academic_year' => $academicYear,
             'is_snapshot' => false,
+            'is_legacy_completed_without_snapshot' => $isLegacyCompletedWithoutSnapshot,
+            'notice' => $notice,
             'summary' => [
                 'staff' => $staff,
                 'enrollment' => $enrollment,

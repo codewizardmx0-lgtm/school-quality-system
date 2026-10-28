@@ -14,10 +14,19 @@ class SaveEnrollmentMetricsRequest extends FormRequest
         return true; // يُفحص التصريح والعزل داخل الـ Controller
     }
 
+    protected function prepareForValidation(): void
+    {
+        if ($this->has('academicYear') && is_string($this->academicYear)) {
+            $this->merge([
+                'academicYear' => str_replace('-', '/', trim($this->academicYear)),
+            ]);
+        }
+    }
+
     public function rules(): array
     {
         return [
-            'academicYear'                 => ['required', 'string', 'max:20'],
+            'academicYear'                 => ['required', 'string', 'max:20', 'regex:/^\d{4}\/\d{4}$/'],
             'items'                        => ['required', 'array', 'min:1'],
             'items.*.educationLevel'       => ['required', 'string', 'max:50'],
             'items.*.gradeLevel'           => ['required', 'string', 'max:50'],
@@ -33,6 +42,7 @@ class SaveEnrollmentMetricsRequest extends FormRequest
     {
         return [
             'academicYear.required'            => 'حقل العام الدراسي مطلوب.',
+            'academicYear.regex'               => 'صيغة العام الدراسي يجب أن تكون بصيغة YYYY/YYYY (مثال: 2025/2026).',
             'items.required'                   => 'يجب تقديم صف إحصائي واحد على الأقل.',
             'items.*.educationLevel.required'  => 'حقل المرحلة التعليمية مطلوب لكل صف.',
             'items.*.gradeLevel.required'      => 'حقل الصف الدراسي مطلوب.',

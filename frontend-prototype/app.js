@@ -479,6 +479,11 @@ const App = {
       const ctxRes = await this.request(`/evaluations/${evalId}/indicators-context`);
       if (ctxRes.ok && ctxRes.data) {
         this.state.indicatorsContext = ctxRes.data.indicators || {};
+        this.state.indicatorsContextMeta = {
+          is_snapshot: !!ctxRes.data.is_snapshot,
+          is_legacy_completed_without_snapshot: !!ctxRes.data.is_legacy_completed_without_snapshot,
+          notice: ctxRes.data.notice || ''
+        };
       }
     } catch (e) {
       this.state.indicatorsContext = {};
@@ -746,10 +751,20 @@ const App = {
       }
       if (ctxMsg) {
         ctxMsg.style.color = isIncomplete ? '#92400e' : '#0c4a6e';
+        const meta = this.state.indicatorsContextMeta || {};
+        let statusNotice = '';
+        if (meta.is_legacy_completed_without_snapshot) {
+          statusNotice = '<div style="margin-top:0.35rem; padding:0.25rem 0.5rem; background:#fef3c7; border:1px solid #fde68a; border-radius:4px; font-size:0.75rem; color:#92400e;">⚠️ هذا التقييم مقفل سابقاً دون لقطة سياق مجمدة، والأرقام استرشادية من واقع السجلات الحالية.</div>';
+        } else if (meta.is_snapshot) {
+          statusNotice = '<div style="margin-top:0.35rem; padding:0.25rem 0.5rem; background:#ecfdf5; border:1px solid #a7f3d0; border-radius:4px; font-size:0.75rem; color:#065f46;">🔒 لقطة سياق مجمدة (Snapshot): الأرقام مطابقة لواقع المدرسة وقت التقديم.</div>';
+        } else {
+          statusNotice = '<div style="margin-top:0.35rem; padding:0.25rem 0.5rem; background:#f0f9ff; border:1px solid #bae6fd; border-radius:4px; font-size:0.75rem; color:#0369a1;">ℹ️ سياق مباشر حي: الأرقام قابلة للتحديث حتى إنهاء وتقديم التقييم.</div>';
+        }
         ctxMsg.innerHTML = `
           <div><strong>${indCtx.message || 'بيانات المدرسة الإحصائية غير مكتملة'}</strong></div>
-          <div style="font-size: 0.76rem; margin-top: 0.25rem; opacity: 0.9;">
-            ℹ️ هذا التقدير استرشادي لدعم اتخاذ القرار وفق الإحصاءات الرسمية المعتمدة للمدرسة، ولا يغيّر الدرجة المرصودة تلقائياً.
+          ${statusNotice}
+          <div style="font-size: 0.74rem; margin-top: 0.25rem; opacity: 0.9;">
+            ℹ️ هذا التقدير استرشادي لدعم القرار، ولا يغيّر الدرجة تلقائياً.
           </div>
         `;
       }

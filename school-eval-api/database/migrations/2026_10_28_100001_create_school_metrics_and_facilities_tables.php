@@ -70,6 +70,7 @@ return new class extends Migration
             $table->boolean('is_usable')->default(true); // صالح للاستخدام والتشغيل
             $table->json('details')->nullable(); // تفاصيل إضافية (أجهزة صالحة، شبكة، نظافة، طفايات سلامة)
             $table->timestamps();
+            $table->softDeletes(); // دعم الحذف اللطيف التزاماً بقاعدة "تعطيل لا حذف"
 
             $table->foreign('school_id')->references('school_id')->on('schools')->onDelete('cascade');
         });
