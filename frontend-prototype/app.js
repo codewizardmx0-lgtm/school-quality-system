@@ -93,7 +93,15 @@ const App = {
   // ---------------------------------------------------------------------------
   // 2. طلبات الشبكة (HTTP Requests Helper with Unified Error Handling & Spinner)
   // ---------------------------------------------------------------------------
-  async request(endpoint, options = {}) {
+  async request(endpoint, options = {}, bodyPayload = null) {
+    // دعم الاستدعاء بالصيغة المختصرة: request('/path', 'POST', body)
+    if (typeof options === 'string') {
+      options = {
+        method: options.toUpperCase(),
+        body: bodyPayload
+      };
+    }
+
     const url = `${this.state.apiUrl}${endpoint.startsWith('/') ? '' : '/'}${endpoint}`;
     const headers = options.headers || {};
 
@@ -2626,17 +2634,57 @@ const App = {
         notice.className = 'alert alert-info';
         notice.style.background = '#ecfdf5';
         notice.style.color = '#065f46';
-        notice.innerHTML = '🔒 <strong>إصدار مُقرّ وساري المفعول:</strong> محمي ومحصن ضد أي تعديل لضمان نزاهة التقييمات السابقة. يمكنك استنساخه كمسودة جديدة.';
+        notice.innerHTML = `
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
+            <div>
+              🔒 <strong>إصدار مُقرّ وساري المفعول (محمي ضد التعديل):</strong>
+              كافة نصوص المعايير والمؤشرات والواصفات والأوزان مجمدة لضمان نزاهة تقييمات المدارس. لتعديل أي عنصر، انقر على زر الاستنساخ لفتح مسودة عمل مستقلة.
+            </div>
+            <button class="btn btn-sm btn-primary" onclick="App.openCloneVersionModal()" style="font-weight: 700;">
+              📋 استنساخ كمسودة جديدة لفتح أزرار التعديل
+            </button>
+          </div>
+        `;
       }
     }
 
     const btnClone = document.getElementById('btn-clone-version');
     const btnApprove = document.getElementById('btn-approve-version');
     const btnArchive = document.getElementById('btn-archive-version');
+    const btnEditMeta = document.getElementById('btn-edit-version-meta');
 
-    if (btnClone) btnClone.style.display = isApproved ? 'inline-block' : 'none';
-    if (btnApprove) btnApprove.style.display = isDraft ? 'inline-block' : 'none';
-    if (btnArchive) btnArchive.style.display = isApproved ? 'inline-block' : 'none';
+    if (btnClone) {
+      btnClone.style.display = 'inline-block';
+      btnClone.disabled = isDraft;
+      btnClone.title = isDraft ? 'لا يمكن استنساخ مسودة، الاستنساخ متاح للإصدارات المُقرّة فقط' : 'استنساخ هذا الإصدار كمسودة جديدة';
+    }
+
+    if (btnApprove) {
+      btnApprove.style.display = 'inline-block';
+      if (isDraft) {
+        btnApprove.disabled = false;
+        btnApprove.className = 'btn btn-sm btn-success';
+        btnApprove.innerHTML = '✅ إقرار المسودة';
+        btnApprove.title = 'إقرار المسودة رسميًا كإصدار نافذ';
+      } else {
+        btnApprove.disabled = true;
+        btnApprove.className = 'btn btn-sm btn-secondary';
+        btnApprove.innerHTML = 'مُقرّ رسمياً ✅';
+        btnApprove.title = 'هذا الإصدار مُقرّ مسبقاً وساري المفعول';
+      }
+    }
+
+    if (btnEditMeta) {
+      btnEditMeta.style.display = 'inline-block';
+      btnEditMeta.disabled = !isDraft;
+      btnEditMeta.title = isDraft ? 'تعديل البيانات التعريفية للإصدار' : 'البيانات التعريفية مجمدة للإصدار المُقرّ';
+    }
+
+    if (btnArchive) {
+      btnArchive.style.display = 'inline-block';
+      btnArchive.disabled = !isApproved;
+      btnArchive.title = isApproved ? 'أرشفة هذا الإصدار' : 'الأرشفة متاحة للإصدارات المُقرّة فقط';
+    }
   },
 
   async fetchAndRenderSelectedVersion() {
@@ -2687,7 +2735,20 @@ const App = {
     totalSum = Math.round(totalSum * 100) / 100;
     this.updateWeightsTotalDisplay(totalSum, isDraft);
 
-    if (btnSave) btnSave.style.display = (isDraft && isStandardsManager) ? 'inline-block' : 'none';
+    if (btnSave) {
+      btnSave.style.display = isStandardsManager ? 'inline-block' : 'none';
+      if (isDraft) {
+        btnSave.disabled = false;
+        btnSave.className = 'btn btn-sm btn-primary';
+        btnSave.innerHTML = '💾 حفظ الأوزان';
+        btnSave.title = 'حفظ مصفوفة الأوزان (بشرط المجموع = 100.00%)';
+      } else {
+        btnSave.disabled = true;
+        btnSave.className = 'btn btn-sm btn-secondary';
+        btnSave.innerHTML = '🔒 الأوزان مجمدة ومقرة';
+        btnSave.title = 'لا يمكن تعديل أوزان إصدار مُقرّ. انقر على استنساخ مسودة لتعديل الأوزان.';
+      }
+    }
 
     tbody.innerHTML = standards.map(std => {
       const w = parseFloat(std.weight) || 0;
@@ -3156,7 +3217,7 @@ const App = {
               <span>${std.code} — ${std.name}</span>
               ${(isDraft && isStandardsManager) 
                 ? `<button class="btn btn-sm btn-outline-primary" style="padding: 0.15rem 0.5rem; font-size: 0.75rem;" onclick="event.stopPropagation(); App.openEditStandardModal(${std.standardId})">✏️ تعديل المعيار</button>` 
-                : ''}
+                : (isStandardsManager ? `<span class="badge badge-gray" style="font-size: 0.72rem; padding: 2px 6px;" title="محمي ضد التعديل لأنه إصدار مُقرّ. استنسخ كمسودة للتعديل.">🔒 محمي (مُقرّ)</span>` : '')}
             </div>
             ${std.description ? `<div style="font-size: 0.8rem; font-weight: normal; color: var(--text-muted); margin-top: 0.2rem;">${std.description}</div>` : ''}
           </div>
@@ -3174,7 +3235,7 @@ const App = {
                     <span>${sub.code} — ${sub.name}</span>
                     ${(isDraft && isStandardsManager)
                       ? `<button class="btn btn-sm btn-outline-secondary" style="padding: 0.15rem 0.45rem; font-size: 0.7rem;" onclick="event.stopPropagation(); App.openEditSubStandardModal(${sub.subStandardId})">✏️ تعديل المجال</button>`
-                      : ''}
+                      : (isStandardsManager ? `<span class="badge badge-gray" style="font-size: 0.7rem; padding: 2px 6px;" title="المجال محمي ضد التعديل في الإصدار المُقرّ.">🔒 محمي</span>` : '')}
                   </div>
                   ${sub.description ? `<div style="font-size: 0.75rem; font-weight: normal; color: var(--text-muted);">${sub.description}</div>` : ''}
                 </div>
@@ -3197,7 +3258,7 @@ const App = {
                           <strong style="color: var(--primary); font-size: 0.95rem;">${ind.code} — ${ind.name}</strong>
                           ${(isDraft && isStandardsManager)
                             ? `<button class="btn btn-sm btn-outline-primary" style="padding: 0.1rem 0.4rem; font-size: 0.7rem;" onclick="App.openEditIndicatorModal(${ind.indicatorId})">✏️ تعديل المؤشر</button>`
-                            : ''}
+                            : (isStandardsManager ? `<button class="btn btn-sm btn-outline-secondary" style="padding: 0.1rem 0.45rem; font-size: 0.72rem;" onclick="App.openCloneVersionModal()" title="لا يمكن تعديل مؤشر في إصدار مُقرّ. انقر هنا لاستنساخ هذا الإصدار كمسودة وتعديل المؤشرات فوراً!">🔒 تعديل (يتطلب مسودة)</button>` : '')}
                         </div>
                         <div style="font-size: 0.85rem; color: #475569; margin-top: 0.25rem; line-height: 1.4;">
                           ${ind.description || 'لا يوجد وصف للمؤشر'}
@@ -3214,7 +3275,7 @@ const App = {
                         <span style="font-size: 0.8rem; font-weight: 700; color: #334155;">سلم الواصفات المعيارية الأربع (0 - 3):</span>
                         ${(isDraft && isStandardsManager)
                           ? `<button class="btn btn-sm btn-outline-secondary" style="padding: 0.1rem 0.4rem; font-size: 0.7rem;" onclick="App.openEditDescriptorsModal(${ind.indicatorId})">📝 تعديل الواصفات</button>`
-                          : ''}
+                          : (isStandardsManager ? `<button class="btn btn-sm btn-outline-secondary" style="padding: 0.1rem 0.45rem; font-size: 0.7rem;" onclick="App.openCloneVersionModal()" title="الواصفات محصنة في الإصدار المُقرّ. انقر للاستنساخ كمسودة وتعديلها">🔒 الواصفات مجمدة</button>` : '')}
                       </div>
                       <div class="descriptor-cards-grid">
                         ${(ind.scoreDescriptors || []).sort((a,b)=>(a.scoreValue??a.displayOrder)-(b.scoreValue??b.displayOrder)).map(d => `
@@ -3235,7 +3296,7 @@ const App = {
                         <span style="font-size: 0.8rem; font-weight: 700; color: #334155;">متطلبات الشواهد والأدلة الرسمية:</span>
                         ${(isDraft && isStandardsManager)
                           ? `<button class="btn btn-sm btn-outline-primary" style="padding: 0.1rem 0.4rem; font-size: 0.7rem;" onclick="App.openAddRequirementModal(${ind.indicatorId})">➕ إضافة متطلب شاهد</button>`
-                          : ''}
+                          : (isStandardsManager ? `<button class="btn btn-sm btn-outline-secondary" style="padding: 0.1rem 0.45rem; font-size: 0.7rem;" onclick="App.openCloneVersionModal()" title="المتطلبات محصنة في الإصدار المُقرّ. انقر للاستنساخ كمسودة">🔒 الشواهد مجمدة</button>` : '')}
                       </div>
                       <div style="display: flex; flex-direction: column; gap: 0.35rem;">
                         ${(ind.evidenceRequirements || []).length > 0

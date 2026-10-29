@@ -894,8 +894,9 @@
 
           <!-- أزرار الإجراءات على الإصدار لمدير المعايير -->
           <div id="standards-version-actions" style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
-            <button id="btn-create-version-draft" class="btn btn-sm btn-outline-primary" onclick="App.openCreateVersionModal()">➕ إنشاء مسودة جديدة</button>
+            <button id="btn-create-version-draft" class="btn btn-sm btn-outline-primary" onclick="App.openCreateVersionModal()">➕ مسودة جديدة</button>
             <button id="btn-clone-version" class="btn btn-sm btn-outline-secondary" onclick="App.openCloneVersionModal()">📋 استنساخ مسودة</button>
+            <button id="btn-edit-version-meta" class="btn btn-sm btn-outline-primary" onclick="App.openEditVersionModal(App.state.selectedVersionId)">✏️ تعديل بيانات الإصدار</button>
             <button id="btn-approve-version" class="btn btn-sm btn-success" onclick="App.handleApproveVersion()">✅ إقرار الإصدار</button>
             <button id="btn-archive-version" class="btn btn-sm btn-outline-danger" onclick="App.handleArchiveVersion()">📁 أرشفة</button>
           </div>
