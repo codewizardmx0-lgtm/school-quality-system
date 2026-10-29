@@ -27,18 +27,41 @@ school-quality-system/
 | **الشريحة 4** | التقارير والتحليلات وحساب النتائج (لوحة المعلومات، حساب الدرجات، الشواهد، تصدير JSON) | مكتملة 100% | [`docs/slices/slice4_reports_analytics.md`](docs/slices/slice4_reports_analytics.md) |
 | **الشريحة 4.1** | إنهاء وتقديم التقييم وقفل التعديل النهائي (G-01 / BR-SCH-03) | مكتملة 100% | [`gaps.md`](gaps.md) |
 | **الشريحة 5** | تنظيم الشواهد وتصنيفها وربطها بالمؤشرات وحصرها (بدون ذكاء اصطناعي) | مكتملة 100% | [`docs/slices/slice5_evidence_organization.md`](docs/slices/slice5_evidence_organization.md) |
-| **الشريحة 6** | **إدارة المدرسة: الملف التعريفي، الإحصاءات التجميعية، المرافق، وسياق المؤشرات** | **مكتملة 100%** | [`docs/slices/slice6_school_profile.md`](docs/slices/slice6_school_profile.md) |
+| **الشريحة 6** | إدارة المدرسة: الملف التعريفي، الإحصاءات التجميعية، المرافق، وسياق المؤشرات | مكتملة 100% | [`docs/slices/slice6_school_profile.md`](docs/slices/slice6_school_profile.md) |
+| **الشريحة 7** | **إدارة المعايير وإصداراتها وأوزانها النسبية (Standards & Versions Management)** | **مكتملة 100%** | [`docs/slices/slice7_standards_management.md`](docs/slices/slice7_standards_management.md) |
 
 ---
 
 ## نقطة الاسترجاع والوسم الرسمي للمرحلة (Milestone Release Tag)
 
 > [!TIP]
-> **الوسم المرجعي للمرحلة الأولى:** `v0.6.0-slices-1-to-6-complete`  
-> يمثل هذا الوسم نقطة استرجاع مستقرة ومكتملة 100% لنصف النظام الأساسي (الشرائح 1 إلى 6)، شاملاً:
-> 1. الباك إند المكتمل لجميع المسارات مع 160 اختباراً آلياً ناجحاً بنسبة 100% (7,793 تأكيداً).
-> 2. النموذج الأولي التفاعلي للواجهات (`frontend-prototype/`) كمرجع حي (Living Spec) يغطي الأدوار الخمسة والتوجيه التلقائي وسير العمليات بدون أخطاء.
-> 3. كافة التوثيقات وسجل الفجوات (`gaps.md`) وأدلة التحقق الميداني.
+> **الوسم المرجعي للمرحلة السابقة (الشرائح 1 إلى 6):** `v0.6.0-slices-1-to-6-complete` (مدمج في main)  
+> **فرع الشريحة السابعة:** `feature/slice7-standards-management` مع 172 اختباراً آلياً ناجحاً بنسبة 100% (7,859 تأكيداً).
+
+---
+
+## الشريحة السابعة: إدارة المعايير وإصداراتها وأوزانها النسبية (Standards & Versions Management)
+
+### نقاط النهاية المتاحة (Endpoints)
+- `GET /api/v1/standard-versions` — استعراض قائمة الإصدارات المعيارية مع إمكانية التصفية بالحالة (`?status=Draft`).
+- `POST /api/v1/standard-versions` — إنشاء مسودة إصدار فارغة جديدة.
+- `POST /api/v1/standard-versions/{id}/clone` — استنساخ إصدار مُقرّ كمسودة جديدة مع الشجرة الهرمية الكاملة (المعايير، المجالات، المؤشرات، الواصفات، والمتطلبات).
+- `PUT /api/v1/standard-versions/{id}` — تعديل البيانات الوصفية للمسودة.
+- `PUT /api/v1/standard-versions/{id}/weights` — تحديث مصفوفة الأوزان النسبية للمعايير مع التحقق الصارم من مجموع 100.00%.
+- `POST /api/v1/standard-versions/{id}/approve` — إقرار المسودة رسمياً كإصدار نافذ وأرشفة الإصدار السابق تلقائياً بعد فحص الـ 100%.
+- `POST /api/v1/standard-versions/{id}/archive` — أرشفة يدوية لإصدار مُقرّ.
+- `PUT /api/v1/standards/{id}` — تعديل اسم أو رمز معيار رئيسي في مسودة.
+- `PUT /api/v1/sub-standards/{id}` — تعديل اسم أو رمز مجال فرعي في مسودة.
+- `PUT /api/v1/indicators/{id}` — تعديل اسم أو رمز أو وزن مؤشر في مسودة.
+- `PUT /api/v1/indicators/{id}/descriptors` — تعديل صياغة واصفات درجات المؤشر في مسودة.
+- `POST /api/v1/indicators/{id}/requirements` — إضافة متطلب شاهد جديد لمؤشر في مسودة.
+- `PUT /api/v1/indicators/{id}/requirements/{reqId}` — تعديل متطلب شاهد في مسودة.
+- `DELETE /api/v1/indicators/{id}/requirements/{reqId}` — حذف متطلب شاهد من مؤشر في مسودة.
+
+### واجهات النموذج الأولي التفاعلي للشريحة 7
+- **شريط التحكم بالإصدارات:** اختيار الإصدار، شارة الحالة الملونة (مسودة/مُقرّ/مؤرشف)، وأزرار الإجراءات (مسودة جديدة، استنساخ، إقرار، أرشفة).
+- **مصفوفة الأوزان النسبية:** جدول تفاعلي لتعديل الأوزان مع عدّاد لحظي (أخضر عند 100.00% وأحمر عند أي انحراف) وتعطيل تلقائي للأزرار عند عدم التوازن.
+- **أدوات التحرير المشروطة بحالة المسودة:** إظهار أزرار التعديل والإضافة والحذف حصراً للمسودات، وإخفائها للإصدارات المُقرّة والمؤرشفة (Immutability).
 
 ---
 
@@ -74,12 +97,13 @@ school-quality-system/
 - `POST|PATCH /api/v1/evidences/{id}/review-notes` — إضافة ملاحظات المراجع وهوية وتاريخ المراجعة.
 - `GET /api/v1/evaluations/{id}/evidence-inventory` (المسار البديل: `/api/v1/schools/{school}/assessments/{assessment}/evidence-inventory`) — جرد وحصر الشواهد التفصيلي للتقييم وبيان النواقص والمكتمل وفق حالة الشاهد (Completed / Audited).
 
+* التفاصيل الكاملة للشريحة 7: [`docs/slices/slice7_standards_management.md`](docs/slices/slice7_standards_management.md)
 * التفاصيل الكاملة للشريحة 6: [`docs/slices/slice6_school_profile.md`](docs/slices/slice6_school_profile.md)
 * التفاصيل الكاملة للشريحة 5: [`docs/slices/slice5_evidence_organization.md`](docs/slices/slice5_evidence_organization.md)
 * خارطة الطريق للشرائح المستقبلية (12 شريحة): [`docs/slices_roadmap.md`](docs/slices_roadmap.md)
 * سجل حصر الفجوات والقرارات التقنية: [`gaps.md`](gaps.md)
-* دليل التحقق اليدوي للواجهات المؤقتة (مُعاد بناؤه ومبوّب بالشرائح 1-6 مع أدلة الأدوار ومراكز الإشراف والمعايير): [`frontend-prototype/verification-guide.md`](frontend-prototype/verification-guide.md)
-* توثيق النموذج الأولي التفاعلي (21 شاشة مع شريط تنقل ديناميكي حسب الدور، مركز الإشراف، مركز المعايير، أداة التعبئة الإلزامية والدخول السريع): [`frontend-prototype/README.md`](frontend-prototype/README.md)
+* دليل التحقق اليدوي للواجهات المؤقتة (مُعاد بناؤه ومبوّب بالشرائح 1-7 مع أدلة الأدوار ومراكز الإشراف والمعايير): [`frontend-prototype/verification-guide.md`](frontend-prototype/verification-guide.md)
+* توثيق النموذج الأولي التفاعلي (21 شاشة مع شريط تنقل ديناميكي حسب الدور، مركز الإشراف، مركز المعايير وإدارتها، أداة التعبئة الإلزامية والدخول السريع): [`frontend-prototype/README.md`](frontend-prototype/README.md)
 
 ---
 
@@ -91,6 +115,6 @@ php artisan test
 ```
 
 **نتيجة الاختبارات الإجمالية:**
-- **160 اختباراً ناجحاً بنسبة 100%**
-- **7,793 تأكيداً (Assertions)**
+- **172 اختباراً ناجحاً بنسبة 100%**
+- **7,859 تأكيداً (Assertions)**
 - **0 إخفاقات / 0 أخطاء**
