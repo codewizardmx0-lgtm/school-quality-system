@@ -67,9 +67,27 @@ Route::prefix('v1')->group(function () {
             Route::patch('/{id}/toggle-status', [\App\Http\Controllers\Api\V1\UserController::class, 'toggleStatus'])->name('api.v1.users.toggle-status');
         });
 
-        // الإصدارات المعيارية وشجرة المعايير والمؤشرات (Standard Versions)
+        // الإصدارات المعيارية وإدارة معايير الاعتماد المدرسي (Standard Versions Management - الشريحة 7)
         Route::prefix('standard-versions')->group(function () {
+            Route::get('/', [\App\Http\Controllers\Api\V1\StandardManagementController::class, 'index'])->name('api.v1.standard-versions.index');
+            Route::post('/', [\App\Http\Controllers\Api\V1\StandardManagementController::class, 'store'])->name('api.v1.standard-versions.store');
             Route::get('/{id}', [\App\Http\Controllers\Api\V1\StandardVersionController::class, 'show'])->name('api.v1.standard-versions.show');
+            Route::put('/{id}', [\App\Http\Controllers\Api\V1\StandardManagementController::class, 'update'])->name('api.v1.standard-versions.update');
+            Route::post('/{id}/clone', [\App\Http\Controllers\Api\V1\StandardManagementController::class, 'clone'])->name('api.v1.standard-versions.clone');
+            Route::put('/{id}/weights', [\App\Http\Controllers\Api\V1\StandardManagementController::class, 'updateWeights'])->name('api.v1.standard-versions.weights.update');
+            Route::post('/{id}/approve', [\App\Http\Controllers\Api\V1\StandardManagementController::class, 'approve'])->name('api.v1.standard-versions.approve');
+            Route::post('/{id}/archive', [\App\Http\Controllers\Api\V1\StandardManagementController::class, 'archive'])->name('api.v1.standard-versions.archive');
+        });
+
+        // إدارة نصوص وأوزان المعايير والمجالات والمؤشرات ومتطلبات الشواهد في المسودة (الشريحة 7)
+        Route::put('standards/{id}', [\App\Http\Controllers\Api\V1\StandardManagementController::class, 'updateStandard'])->name('api.v1.standards.update');
+        Route::put('sub-standards/{id}', [\App\Http\Controllers\Api\V1\StandardManagementController::class, 'updateSubStandard'])->name('api.v1.sub-standards.update');
+        Route::prefix('indicators')->group(function () {
+            Route::put('/{id}', [\App\Http\Controllers\Api\V1\StandardManagementController::class, 'updateIndicator'])->name('api.v1.indicators.update');
+            Route::put('/{id}/descriptors', [\App\Http\Controllers\Api\V1\StandardManagementController::class, 'updateIndicatorDescriptors'])->name('api.v1.indicators.descriptors.update');
+            Route::post('/{id}/requirements', [\App\Http\Controllers\Api\V1\StandardManagementController::class, 'storeRequirement'])->name('api.v1.indicators.requirements.store');
+            Route::put('/{indicatorId}/requirements/{requirementId}', [\App\Http\Controllers\Api\V1\StandardManagementController::class, 'updateRequirement'])->name('api.v1.indicators.requirements.update');
+            Route::delete('/{indicatorId}/requirements/{requirementId}', [\App\Http\Controllers\Api\V1\StandardManagementController::class, 'deleteRequirement'])->name('api.v1.indicators.requirements.delete');
         });
 
         // عمليات التقييم المدرسي مع العزل المؤسسي ورصد الدرجات (Evaluations)
