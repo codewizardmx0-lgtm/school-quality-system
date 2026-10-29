@@ -77,7 +77,13 @@ const App = {
     if (this.state.token && this.state.user) {
       this.updateUserNav();
       this.renderRoleNav();
-      this.redirectAfterLogin();
+      if (this.state.user.userType !== 'system' && this.hasPermission('evaluations.view')) {
+        this.ensureCurrentEvaluation().then(() => {
+          this.redirectAfterLogin();
+        });
+      } else {
+        this.redirectAfterLogin();
+      }
     } else {
       this.renderRoleNav();
       this.navTo('login');
@@ -239,11 +245,11 @@ const App = {
       this.loadDashboard();
     } else if (screenName === 'cycles') {
       this.loadEvaluations();
-    } else if (screenName === 'standards-tree' && this.state.currentEvaluation) {
-      this.loadStandardsTree(this.state.currentEvaluation.evaluationId);
+    } else if (screenName === 'standards-tree') {
+      this.loadStandardsTree();
     } else if (screenName === 'standards-review') {
       this.loadStandardsReview();
-    } else if (screenName === 'suggestions' && this.state.currentEvaluation) {
+    } else if (screenName === 'suggestions') {
       this.loadSuggestions();
     } else if (screenName === 'plans') {
       this.loadPlans();
@@ -272,6 +278,7 @@ const App = {
 
   updateBreadcrumbs(screen) {
     const bc = document.getElementById('breadcrumbs');
+    const trail = document.getElementById('bc-trail');
     if (!bc) return;
 
     if (screen === 'login' || !this.state.user) {
@@ -280,48 +287,48 @@ const App = {
     }
 
     bc.classList.remove('hidden');
-    const bcDash = document.getElementById('bc-dashboard');
-    const bcCycles = document.getElementById('bc-cycles');
-    const bcTree = document.getElementById('bc-tree');
-    const bcResults = document.getElementById('bc-results');
-    const bcEvidence = document.getElementById('bc-evidence-summary');
-    const bcEvidenceInv = document.getElementById('bc-evidence-inventory');
-    const bcPlansSummary = document.getElementById('bc-plans-summary');
-    const bcExport = document.getElementById('bc-export');
-    const bcReview = document.getElementById('bc-standards-review');
+    const titles = {
+      'admin': 'إدارة النظام',
+      'school-management': 'إدارة المدرسة',
+      'cycles': 'لوحة التقييمات',
+      'standards-tree': 'استمارة التقييم الذاتي',
+      'standards-review': 'معايير الاعتماد المدرسي',
+      'suggestions': 'اقتراحات التحسين',
+      'plans': 'خطط التحسين المدرسية',
+      'dashboard': 'لوحة معلومات المدرسة',
+      'assessment-results': 'نتائج التقييم الشاملة',
+      'standard-result': 'نتائج المعيار',
+      'evidence-summary': 'ملخص الشواهد',
+      'evidence-inventory': 'جرد وتنظيم الشواهد',
+      'plans-summary': 'ملخص خطط التحسين',
+      'export-report': 'تصدير التقرير',
+      'supervision': 'مركز الإشراف والمتابعة',
+      'standards-manager': 'مركز معايير الاعتماد المدرسي',
+      'under-development': 'قيد التطوير',
+    };
 
-    if (bcDash) bcDash.style.display = 'inline';
-    if (bcCycles) bcCycles.style.display = 'inline';
-    if (bcTree) bcTree.style.display = this.state.currentEvaluation ? 'inline' : 'none';
-    if (bcResults) bcResults.style.display = 'inline';
-    if (bcEvidence) bcEvidence.style.display = 'inline';
-    if (bcEvidenceInv) bcEvidenceInv.style.display = 'inline';
-    if (bcPlansSummary) bcPlansSummary.style.display = 'inline';
-    if (bcExport) bcExport.style.display = 'inline';
-    if (bcReview) bcReview.style.display = 'inline';
+    const currentTitle = titles[screen] || screen;
+    if (trail) {
+      trail.innerHTML = `<a onclick="App.redirectAfterLogin()">الرئيسية</a> &rsaquo; <span>${currentTitle}</span>`;
+    }
+  },
 
-    const bcSchool = document.getElementById('bc-school');
-    const bcSepSchool = document.getElementById('bc-sep-school');
-    if (bcSchool) bcSchool.style.display = 'inline';
-    if (bcSepSchool) bcSepSchool.style.display = 'inline';
+  async ensureCurrentEvaluation() {
+    if (this.state.currentEvaluation && (this.state.currentEvaluation.evaluationId || this.state.currentEvaluation.evaluation_id)) {
+      return this.state.currentEvaluation;
+    }
 
-    const bcAdmin = document.getElementById('bc-admin');
-    const bcSepAdmin = document.getElementById('bc-sep-admin');
-    const isAdmin = this.state.user?.userType === 'system' || this.hasRole('admin') || this.hasPermission('users.manage') || this.hasPermission('schools.manage');
-    if (bcAdmin) bcAdmin.style.display = isAdmin ? 'inline' : 'none';
-    if (bcSepAdmin) bcSepAdmin.style.display = isAdmin ? 'inline' : 'none';
+    if (this.state.user && this.state.user.userType !== 'system' && this.hasPermission('evaluations.view')) {
+      const res = await this.request('/evaluations');
+      if (res.ok && Array.isArray(res.data) && res.data.length > 0) {
+        this.state.evaluations = res.data;
+        const activeEval = res.data.find(e => e.status === 'InProgress') || res.data[0];
+        this.state.currentEvaluation = activeEval;
+        return activeEval;
+      }
+    }
 
-    const bcSup = document.getElementById('bc-supervision');
-    const bcSepSup = document.getElementById('bc-sep-supervision');
-    const isSup = this.hasRole('ministry_supervisor') || this.hasRole('admin');
-    if (bcSup) bcSup.style.display = isSup ? 'inline' : 'none';
-    if (bcSepSup) bcSepSup.style.display = isSup ? 'inline' : 'none';
-
-    const bcStdMgr = document.getElementById('bc-standards-manager');
-    const bcSepStdMgr = document.getElementById('bc-sep-standards-manager');
-    const isStdMgr = this.hasRole('ministry_standards_manager') || this.hasRole('admin');
-    if (bcStdMgr) bcStdMgr.style.display = isStdMgr ? 'inline' : 'none';
-    if (bcSepStdMgr) bcSepStdMgr.style.display = isStdMgr ? 'inline' : 'none';
+    return null;
   },
 
   updateUserNav() {
@@ -537,6 +544,10 @@ const App = {
     this.renderRoleNav();
     this.showAlert(`مرحباً بك: ${this.state.user.fullName}`, 'success');
 
+    if (this.state.user.userType !== 'system' && this.hasPermission('evaluations.view')) {
+      await this.ensureCurrentEvaluation();
+    }
+
     this.redirectAfterLogin();
   },
 
@@ -642,8 +653,22 @@ const App = {
   // 6. الشاشة 3: شجرة التقييم ورصد الدرجات (Screen 3: Standards Tree)
   // ---------------------------------------------------------------------------
   async loadStandardsTree(evalId) {
+    if (!evalId) {
+      const ev = await this.ensureCurrentEvaluation();
+      evalId = ev?.evaluationId || ev?.evaluation_id;
+    }
+
     const container = document.getElementById('tree-content-container');
     if (!container) return;
+
+    if (!evalId) {
+      container.innerHTML = '<div class="card" style="text-align: center; padding: 2rem;">' +
+        '<div style="font-size: 1.1rem; color: var(--text-muted); margin-bottom: 1rem;">لا يوجد ملف تقييم نشط حالياً لهذه المدرسة.</div>' +
+        '<button class="btn btn-primary" onclick="App.navTo(\'cycles\')">الانتقال إلى لوحة التقييمات</button>' +
+        '</div>';
+      return;
+    }
+
     container.innerHTML = '<div class="card" style="text-align: center;">جارِ تحميل شجرة المعايير والمؤشرات...</div>';
 
     const res = await this.request(`/evaluations/${evalId}/standards-tree`);
@@ -1695,10 +1720,19 @@ const App = {
   // ---------------------------------------------------------------------------
   // الشاشة 15: جرد وحصر الشواهد التفصيلي (Evidence Inventory)
   // ---------------------------------------------------------------------------
-  async loadEvidenceInventory() {
-    const evalId = this.getEvaluationId();
+  async loadEvidenceInventory(forcedEvalId) {
+    if (!forcedEvalId) {
+      await this.ensureCurrentEvaluation();
+    }
+    const evalId = forcedEvalId || this.getEvaluationId();
     const container = document.getElementById('evinv-standards-container');
     if (!container) return;
+
+    if (!evalId) {
+      container.innerHTML = '<div class="alert alert-warning" style="text-align: center;">يرجى اختيار ملف تقييم أولاً لعرض جرد الشواهد.</div>';
+      return;
+    }
+
     container.innerHTML = '<div style="text-align: center; padding: 2rem; color: var(--text-muted);">جارِ جرد وحصر الشواهد التفصيلي...</div>';
 
     const res = await this.request(`/evaluations/${evalId}/evidence-inventory`);
@@ -1884,8 +1918,12 @@ const App = {
   // 9. الشاشة 6: اقتراحات التحسين (Screen 6: Suggestions)
   // ---------------------------------------------------------------------------
   async loadSuggestions() {
-    const evalId = this.state.currentEvaluation?.evaluationId;
-    if (!evalId) return;
+    const ev = await this.ensureCurrentEvaluation();
+    const evalId = ev?.evaluationId || ev?.evaluation_id;
+    if (!evalId) {
+      this.showAlert('يرجى اختيار ملف تقييم أولاً لعرض اقتراحات التحسين.', 'warning');
+      return;
+    }
 
     const tbody = document.getElementById('suggestions-table-body');
     if (!tbody) return;
@@ -2507,25 +2545,27 @@ const App = {
     if (!this.state.standardsTree) {
       container.innerHTML = '<div class="card" style="text-align: center;">جارِ جلب شجرة المعايير والمؤشرات والواصفات...</div>';
       
-      if (!this.state.currentEvaluation) {
-        const evRes = await this.request('/evaluations');
-        if (evRes.ok && evRes.data && evRes.data.length > 0) {
-          this.state.currentEvaluation = evRes.data[0];
+      const ev = await this.ensureCurrentEvaluation();
+      if (ev && (ev.evaluationId || ev.evaluation_id)) {
+        const evalId = ev.evaluationId || ev.evaluation_id;
+        const treeRes = await this.request(`/evaluations/${evalId}/standards-tree`);
+        if (treeRes.ok && treeRes.data) {
+          this.state.standardsTree = treeRes.data;
+          this.renderStandardsReview();
+          return;
         }
       }
 
-      if (this.state.currentEvaluation) {
-        const treeRes = await this.request(`/evaluations/${this.state.currentEvaluation.evaluationId}/standards-tree`);
-        if (treeRes.ok) {
-          this.state.standardsTree = treeRes.data;
-        } else {
-          container.innerHTML = `<div class="card" style="color: red;">${treeRes.message || 'فشل جلب المعايير.'}</div>`;
-          return;
-        }
-      } else {
-        container.innerHTML = '<div class="card" style="color: red;">لا يوجد ملف تقييم متاح لاستعراض شجرة معاييره.</div>';
+      // في حال لم يتوفر تقييم (مثل مسؤول المعايير أو النظام)، جلب الإصدار المرجعي الوطني مباشرة
+      const verRes = await this.request('/standard-versions/1');
+      if (verRes.ok && verRes.data) {
+        this.state.standardsTree = verRes.data;
+        this.renderStandardsReview();
         return;
       }
+
+      container.innerHTML = '<div class="card" style="color: red; text-align: center;">تعذر جلب وثيقة المعايير والمؤشرات. يرجى التحقق من اتصال الخادم والصلاحيات.</div>';
+      return;
     }
 
     this.renderStandardsReview();
@@ -2714,6 +2754,8 @@ const App = {
       || this.state.currentEvaluation?.school_id
       || this.state.user?.school?.schoolId
       || this.state.user?.school_id
+      || (this.state.evaluations?.[0]?.school?.schoolId)
+      || (this.state.evaluations?.[0]?.school_id)
       || 1;
   },
 
@@ -2721,7 +2763,8 @@ const App = {
     return this.state.currentEvaluation?.evaluationId
       || this.state.currentEvaluation?.evaluation_id
       || (this.state.evaluations?.[0]?.evaluationId)
-      || 1;
+      || (this.state.evaluations?.[0]?.evaluation_id)
+      || null;
   },
 
   openResultsForEvaluation(evalId, schoolId) {
@@ -2751,6 +2794,7 @@ const App = {
   // الشاشة 10: لوحة معلومات المدرسة الموحدة (Dashboard)
   // ---------------------------------------------------------------------------
   async loadDashboard() {
+    await this.ensureCurrentEvaluation();
     const schoolId = this.getSchoolId();
     const res = await this.request(`/schools/${schoolId}/dashboard`);
 
@@ -2867,11 +2911,21 @@ const App = {
   // الشاشة 11: نتائج التقييم الشاملة (Assessment Results)
   // ---------------------------------------------------------------------------
   async loadAssessmentResults() {
+    await this.ensureCurrentEvaluation();
     const schoolId = this.getSchoolId();
     const evalId = this.getEvaluationId();
     const alertBox = document.getElementById('res-incomplete-alert');
     const bannerBox = document.getElementById('res-summary-banner');
     const stdContainer = document.getElementById('res-standards-container');
+
+    if (!schoolId || !evalId) {
+      if (bannerBox) bannerBox.innerHTML = '';
+      if (alertBox) {
+        alertBox.classList.remove('hidden');
+        alertBox.innerHTML = 'يرجى اختيار ملف تقييم أولاً لعرض النتائج.';
+      }
+      return;
+    }
 
     bannerBox.innerHTML = 'جارِ حساب وتحليل نتائج التقييم...';
     stdContainer.innerHTML = '';
@@ -3134,9 +3188,17 @@ const App = {
   // الشاشة 13: ملخص ونسب اكتمال الشواهد (Evidence Summary)
   // ---------------------------------------------------------------------------
   async loadEvidenceSummary() {
+    await this.ensureCurrentEvaluation();
     const schoolId = this.getSchoolId();
     const evalId = this.getEvaluationId();
     const container = document.getElementById('evsum-standards-container');
+
+    if (!container) return;
+
+    if (!schoolId || !evalId) {
+      container.innerHTML = '<div class="alert alert-warning" style="text-align: center;">يرجى اختيار ملف تقييم أولاً لعرض ملخص الشواهد.</div>';
+      return;
+    }
 
     container.innerHTML = '<div class="card" style="text-align: center;">جارِ جلب ملخص الشواهد...</div>';
 
@@ -3320,11 +3382,20 @@ const App = {
   // الشاشة 15: تصدير تقرير التقييم الكامل (Export Assessment Report)
   // ---------------------------------------------------------------------------
   async loadExportReport() {
+    await this.ensureCurrentEvaluation();
     const schoolId = this.getSchoolId();
     const evalId = this.getEvaluationId();
     const alertBox = document.getElementById('export-error-alert');
     const container = document.getElementById('export-content-container');
     const jsonPre = document.getElementById('export-json-code');
+
+    if (!schoolId || !evalId) {
+      if (alertBox) {
+        alertBox.classList.remove('hidden');
+        alertBox.innerHTML = 'يرجى اختيار ملف تقييم أولاً لتصدير تقريره.';
+      }
+      return;
+    }
 
     jsonPre.textContent = 'جارِ توليد وتجهيز وثيقة التصدير...';
     alertBox.classList.add('hidden');

@@ -56,33 +56,9 @@
     <!-- شريط الإشعارات والتنبيهات العامة -->
     <div id="global-alert" class="alert hidden"></div>
 
-    <!-- شريط المسار (Breadcrumbs) للتنقل السريع بين الشاشات -->
+    <!-- مسار الشاشة الحالية (Breadcrumb Trail) -->
     <div id="breadcrumbs" class="breadcrumbs hidden">
-      <a id="bc-dashboard" onclick="App.navTo('dashboard')">📊 لوحة المعلومات</a>
-      <span id="bc-sep0">/</span>
-      <a id="bc-cycles" onclick="App.navTo('cycles')">لوحة التقييمات</a>
-      <span id="bc-sep1">/</span>
-      <a id="bc-tree" onclick="App.navTo('standards-tree')">شجرة المعايير</a>
-      <span id="bc-sep2">/</span>
-      <a id="bc-results" onclick="App.navTo('assessment-results')">🎯 نتائج التقييم</a>
-      <span id="bc-sep3">/</span>
-      <a id="bc-evidence-summary" onclick="App.navTo('evidence-summary')">📁 ملخص الشواهد</a>
-      <span id="bc-sep-inv">/</span>
-      <a id="bc-evidence-inventory" onclick="App.navTo('evidence-inventory')">📑 جرد الشواهد (الشريحة 5)</a>
-      <span id="bc-sep4">/</span>
-      <a id="bc-plans-summary" onclick="App.navTo('plans-summary')">📈 ملخص الخطط</a>
-      <span id="bc-sep5">/</span>
-      <a id="bc-export" onclick="App.navTo('export-report')">📥 تصدير التقرير</a>
-      <span id="bc-sep6">/</span>
-      <a id="bc-standards-review" onclick="App.navTo('standards-review')">مراجعة المعايير 📖</a>
-      <span id="bc-sep-school" class="hidden">/</span>
-      <a id="bc-school" class="hidden" onclick="App.navTo('school-management')">🏫 إدارة المدرسة</a>
-      <span id="bc-sep-supervision" class="hidden">/</span>
-      <a id="bc-supervision" class="hidden" onclick="App.navTo('supervision')">👁️ المتابعة الإشرافية</a>
-      <span id="bc-sep-standards-manager" class="hidden">/</span>
-      <a id="bc-standards-manager" class="hidden" onclick="App.navTo('standards-manager')">📑 مركز المعايير</a>
-      <span id="bc-sep-admin" class="hidden">/</span>
-      <a id="bc-admin" class="hidden" onclick="App.navTo('admin')">👑 إدارة النظام</a>
+      <span id="bc-trail">الرئيسية</span>
     </div>
 
     <!-- ========================================================================= -->

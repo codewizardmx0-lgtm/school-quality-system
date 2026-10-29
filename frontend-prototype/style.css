@@ -128,22 +128,25 @@ main {
   padding: 0 1rem;
 }
 
-/* Breadcrumbs / Navigation tabs */
+/* Breadcrumb Trail */
 .breadcrumbs {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
   font-size: 0.85rem;
   color: var(--text-muted);
   margin-bottom: 1rem;
-  flex-wrap: wrap;
+  padding: 0.35rem 0.75rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  width: fit-content;
 }
 
 .breadcrumbs a {
   color: var(--primary);
   text-decoration: none;
   cursor: pointer;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .breadcrumbs a:hover {
