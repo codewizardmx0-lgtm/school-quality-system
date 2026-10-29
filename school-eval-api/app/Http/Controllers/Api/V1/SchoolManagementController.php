@@ -79,7 +79,8 @@ class SchoolManagementController extends Controller
             return ApiResponse::notFound('المدرسة المطلوبة غير موجودة.');
         }
 
-        $academicYear = $request->query('academic_year') ?? $request->input('academicYear') ?? '2025/2026';
+        $rawYear = $request->query('academic_year') ?? $request->input('academicYear') ?? '2025/2026';
+        $academicYear = str_replace('-', '/', trim((string) $rawYear));
         $context = $service->getSchoolContext($school, $academicYear);
 
         return ApiResponse::success(
@@ -135,7 +136,8 @@ class SchoolManagementController extends Controller
             return ApiResponse::notFound('المدرسة المطلوبة غير موجودة.');
         }
 
-        $academicYear = $request->query('academic_year') ?? $request->input('academicYear') ?? '2025/2026';
+        $rawYear = $request->query('academic_year') ?? $request->input('academicYear') ?? '2025/2026';
+        $academicYear = str_replace('-', '/', trim((string) $rawYear));
         $metric = $school->staffMetrics()->where('academic_year', $academicYear)->first();
 
         return ApiResponse::success(
@@ -211,7 +213,8 @@ class SchoolManagementController extends Controller
             return ApiResponse::notFound('المدرسة المطلوبة غير موجودة.');
         }
 
-        $academicYear = $request->query('academic_year') ?? $request->input('academicYear') ?? '2025/2026';
+        $rawYear = $request->query('academic_year') ?? $request->input('academicYear') ?? '2025/2026';
+        $academicYear = str_replace('-', '/', trim((string) $rawYear));
         $rows = $school->enrollmentMetrics()
             ->where('academic_year', $academicYear)
             ->orderBy('id')

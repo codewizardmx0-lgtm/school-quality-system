@@ -34,6 +34,7 @@ class SchoolManagementFeatureTest extends TestCase
     protected User $evaluatorFarouq;
     protected User $admin;
     protected User $standardsManager;
+    protected ?User $supervisor;
     protected School $schoolBelqees;
     protected School $schoolFarouq;
     protected Evaluation $evaluationBelqees;
@@ -53,6 +54,7 @@ class SchoolManagementFeatureTest extends TestCase
         $this->evaluatorFarouq  = User::where('username', 'quality_farouq')->firstOrFail();
         $this->admin            = User::where('username', 'admin')->firstOrFail();
         $this->standardsManager = User::where('username', 'standards_manager_ministry')->firstOrFail();
+        $this->supervisor       = User::where('username', 'supervisor_ministry')->first();
 
         $this->cycle = EvaluationCycle::where('status', 'Active')->firstOrFail();
 
@@ -331,14 +333,21 @@ class SchoolManagementFeatureTest extends TestCase
         ]);
         $isoRes->assertStatus(404);
 
-        // 4. حذف المرفق
+        // 4. حذف المرفق اللطيف التزاماً بقاعدة "تعطيل لا حذف" (Soft Delete)
         Sanctum::actingAs($this->evaluatorBelqees);
         $delRes = $this->deleteJson("/api/v1/schools/{$this->schoolBelqees->school_id}/facilities/{$facilityId}");
         $delRes->assertStatus(200);
 
-        $this->assertDatabaseMissing('school_facilities', [
+        // التأكد من الحذف اللطيف وبقاء السجل في قاعدة البيانات للتدقيق التاريخي
+        $this->assertSoftDeleted('school_facilities', [
             'facility_id' => $facilityId,
         ]);
+
+        // التأكد من استبعاده من قائمة المرافق النشطة
+        $listRes = $this->getJson("/api/v1/schools/{$this->schoolBelqees->school_id}/facilities");
+        $listRes->assertStatus(200);
+        $ids = collect($listRes->json('data.facilities'))->pluck('facilityId');
+        $this->assertNotContains($facilityId, $ids);
     }
 
     /**
@@ -448,6 +457,151 @@ class SchoolManagementFeatureTest extends TestCase
             // النسبة ما زالت 80% (محمية ومجمدة)، وليست 10%!
             ->assertJsonPath('data.indicators.1-1-2.calculated_ratio', 80)
             ->assertJsonPath('data.indicators.1-1-2.suggested_level', 3);
+    }
+
+    /**
+     * 14. التوافق الرجعي: تقييم قديم مكتمل ومقفل سابقاً بلا Snapshot لا ينهار ويعيد تنبيهاً صريحاً.
+     */
+    public function test_legacy_completed_evaluation_without_snapshot_returns_notice_and_does_not_crash(): void
+    {
+        // محاكاة تقييم قديم أُغلق قبل إضافة ميزة الـ Snapshot
+        $this->evaluationBelqees->update([
+            'status'                  => 'Completed',
+            'school_context_snapshot' => null, // لم يكن الحقل موجوداً وقتها
+            'submitted_at'            => now()->subMonths(3),
+        ]);
+
+        Sanctum::actingAs($this->evaluatorBelqees);
+
+        $response = $this->getJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators-context");
+
+        $response->assertStatus(200)
+            ->assertJsonPath('data.is_snapshot', false)
+            ->assertJsonPath('data.is_legacy_completed_without_snapshot', true)
+            ->assertJsonPath('data.school_id', $this->schoolBelqees->school_id)
+            ->assertJsonFragment([
+                'is_legacy_completed_without_snapshot' => true,
+            ]);
+
+        $this->assertStringContainsString('لقطة السياق', $response->json('data.notice'));
+    }
+
+    /**
+     * 15. التقييم المفتوح غير المقدم يعيد تنبيهاً بأن البيانات حية وقابلة للتغيير.
+     */
+    public function test_unsubmitted_evaluation_indicators_context_marks_data_as_live_notice(): void
+    {
+        Sanctum::actingAs($this->evaluatorBelqees);
+
+        $this->evaluationBelqees->update(['status' => 'InProgress', 'school_context_snapshot' => null]);
+
+        $response = $this->getJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators-context");
+
+        $response->assertStatus(200)
+            ->assertJsonPath('data.is_snapshot', false)
+            ->assertJsonPath('data.is_legacy_completed_without_snapshot', false);
+
+        $this->assertStringContainsString('سياق المدرسة حي ومباشر وقابل للتغيير', $response->json('data.notice'));
+    }
+
+    /**
+     * 16. توحيد وتطبيع صيغة العام الدراسي: تحويل الشرطة إلى سلاش تلقائياً، ورفض الصيغ غير المطابقة بـ 422.
+     */
+    public function test_academic_year_hyphen_normalization_and_regex_validation(): void
+    {
+        Sanctum::actingAs($this->principalBelqees);
+
+        // 1. إرسال بصيغة الشرطة 2026-2027 يتم تطبيعها تلقائياً إلى 2026/2027
+        $normRes = $this->putJson("/api/v1/schools/{$this->schoolBelqees->school_id}/staff-metrics", [
+            'academicYear'               => '2026-2027',
+            'totalTeachers'              => 25,
+            'qualifiedTeachersCount'     => 20,
+            'permanentTeachersCount'     => 22,
+            'matchedSpecializationCount' => 19,
+            'totalAdminStaff'            => 4,
+            'totalServiceStaff'          => 2,
+        ]);
+
+        $normRes->assertStatus(200)
+            ->assertJsonPath('data.academicYear', '2026/2027');
+
+        $this->assertDatabaseHas('school_staff_metrics', [
+            'school_id'     => $this->schoolBelqees->school_id,
+            'academic_year' => '2026/2027',
+            'total_teachers' => 25,
+        ]);
+
+        // 2. إرسال صيغة غير صالحة إطلاقاً (مثل 2026 فقط أو نص عشوائي) يفشل بـ 422
+        $invalidRes = $this->putJson("/api/v1/schools/{$this->schoolBelqees->school_id}/staff-metrics", [
+            'academicYear'               => '2026', // صيغة غير صالحة
+            'totalTeachers'              => 25,
+            'qualifiedTeachersCount'     => 20,
+            'permanentTeachersCount'     => 22,
+            'matchedSpecializationCount' => 19,
+            'totalAdminStaff'            => 4,
+            'totalServiceStaff'          => 2,
+        ]);
+
+        $invalidRes->assertStatus(422)
+            ->assertJsonValidationErrors(['academicYear']);
+    }
+
+    /**
+     * 17. التحقق من صلاحيات مدير المدرسة الكاملة في إدارة ملف المدرسة وإحصاءاتها ومرافقها.
+     */
+    public function test_principal_has_full_permissions_to_manage_school_and_facilities(): void
+    {
+        Sanctum::actingAs($this->principalBelqees);
+
+        // 1. تعديل ملف المدرسة
+        $profRes = $this->putJson("/api/v1/schools/{$this->schoolBelqees->school_id}/profile", [
+            'phone'   => '01444555',
+            'address' => 'صنعاء - التحرير المحدث',
+        ]);
+        $profRes->assertStatus(200)
+            ->assertJsonPath('data.phone', '01444555');
+
+        // 2. إضافة مرفق مدرسي جديد
+        $facRes = $this->postJson("/api/v1/schools/{$this->schoolBelqees->school_id}/facilities", [
+            'facilityType' => 'library',
+            'name'         => 'مكتبة المدرسة النموذجية بواسطة المدير',
+            'count'        => 1,
+            'isUsable'     => true,
+            'details'      => ['books_count' => 1500],
+        ]);
+        $facRes->assertStatus(201);
+        $facId = $facRes->json('data.facilityId');
+
+        // 3. حذف المرفق اللطيف
+        $delRes = $this->deleteJson("/api/v1/schools/{$this->schoolBelqees->school_id}/facilities/{$facId}");
+        $delRes->assertStatus(200);
+
+        $this->assertSoftDeleted('school_facilities', [
+            'facility_id' => $facId,
+        ]);
+    }
+
+    /**
+     * 18. رفض الوصول للمشرف الوزاري أو المستخدم غير المصرح برمز 403 عند محاولة تعديل بيانات المدرسة أو مرافقها.
+     */
+    public function test_supervisor_and_unauthorized_roles_receive_403_on_school_management(): void
+    {
+        // 1. المشرف الوزاري يحاول تعديل ملف المدرسة
+        Sanctum::actingAs($this->supervisor);
+
+        $supProfRes = $this->putJson("/api/v1/schools/{$this->schoolBelqees->school_id}/profile", [
+            'phone' => '09999999',
+        ]);
+        $supProfRes->assertStatus(403);
+
+        // 2. المشرف الوزاري يحاول إضافة مرفق
+        $supFacRes = $this->postJson("/api/v1/schools/{$this->schoolBelqees->school_id}/facilities", [
+            'facilityType' => 'playground',
+            'name'         => 'ملعب غير مصرح للمشرف',
+            'count'        => 1,
+            'isUsable'     => true,
+        ]);
+        $supFacRes->assertStatus(403);
     }
 
     /**

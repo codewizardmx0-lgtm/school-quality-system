@@ -14,10 +14,19 @@ class SaveStaffMetricsRequest extends FormRequest
         return true; // يُفحص التصريح والعزل داخل الـ Controller
     }
 
+    protected function prepareForValidation(): void
+    {
+        if ($this->has('academicYear') && is_string($this->academicYear)) {
+            $this->merge([
+                'academicYear' => str_replace('-', '/', trim($this->academicYear)),
+            ]);
+        }
+    }
+
     public function rules(): array
     {
         return [
-            'academicYear'                 => ['required', 'string', 'max:20'],
+            'academicYear'                 => ['required', 'string', 'max:20', 'regex:/^\d{4}\/\d{4}$/'],
             'totalTeachers'                => ['required', 'integer', 'min:0'],
             'qualifiedTeachersCount'       => ['required', 'integer', 'min:0', 'lte:totalTeachers'],
             'permanentTeachersCount'       => ['required', 'integer', 'min:0', 'lte:totalTeachers'],
@@ -31,6 +40,7 @@ class SaveStaffMetricsRequest extends FormRequest
     {
         return [
             'academicYear.required'               => 'حقل العام الدراسي مطلوب.',
+            'academicYear.regex'                  => 'صيغة العام الدراسي يجب أن تكون بصيغة YYYY/YYYY (مثال: 2025/2026).',
             'totalTeachers.required'              => 'حقل إجمالي عدد المعلمين مطلوب.',
             'totalTeachers.integer'               => 'إجمالي المعلمين يجب أن يكون رقماً صحيحاً.',
             'totalTeachers.min'                   => 'إجمالي المعلمين لا يمكن أن يكون سالباً.',

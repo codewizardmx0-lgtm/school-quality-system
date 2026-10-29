@@ -128,22 +128,25 @@ main {
   padding: 0 1rem;
 }
 
-/* Breadcrumbs / Navigation tabs */
+/* Breadcrumb Trail */
 .breadcrumbs {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
   font-size: 0.85rem;
   color: var(--text-muted);
   margin-bottom: 1rem;
-  flex-wrap: wrap;
+  padding: 0.35rem 0.75rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  width: fit-content;
 }
 
 .breadcrumbs a {
   color: var(--primary);
   text-decoration: none;
   cursor: pointer;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .breadcrumbs a:hover {
@@ -828,4 +831,288 @@ tr:hover {
   padding: 0.65rem 0.85rem;
   font-size: 0.85rem;
   color: #854d0e;
+}
+
+/* Tabbed Layout for School Management & Admin Hub */
+.tabs-nav {
+  display: flex;
+  gap: 0.5rem;
+  border-bottom: 2px solid var(--border);
+  margin-bottom: 1.25rem;
+  flex-wrap: wrap;
+}
+
+.tab-btn {
+  background: transparent;
+  border: none;
+  border-bottom: 3px solid transparent;
+  padding: 0.65rem 1.1rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.2s;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.tab-btn:hover {
+  color: var(--primary);
+  background: #f8fafc;
+}
+
+.tab-btn.active {
+  color: var(--primary);
+  border-bottom-color: var(--primary);
+  background: #eff6ff;
+  border-radius: 6px 6px 0 0;
+}
+
+/* Facility Condition Badges */
+.badge-condition-excellent {
+  background: #dcfce7;
+  color: #15803d;
+  border: 1px solid #86efac;
+}
+
+.badge-condition-good {
+  background: #e0f2fe;
+  color: #0369a1;
+  border: 1px solid #7dd3fc;
+}
+
+.badge-condition-fair {
+  background: #fef9c3;
+  color: #a16207;
+  border: 1px solid #fde047;
+}
+
+.badge-condition-poor {
+  background: #ffedd5;
+  color: #c2410c;
+  border: 1px solid #fdba74;
+}
+
+.badge-condition-out_of_service {
+  background: #fee2e2;
+  color: #b91c1c;
+  border: 1px solid #fca5a5;
+}
+
+/* Live Calc Card */
+.live-calc-box {
+  background: #f0fdf4;
+  border: 1px dashed #86efac;
+  border-radius: 6px;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.82rem;
+  color: #166534;
+  margin-top: 0.25rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.live-calc-box.warning {
+  background: #fffbeb;
+  border-color: #fde047;
+  color: #854d0e;
+}
+
+.live-calc-box.danger {
+  background: #fef2f2;
+  border-color: #fca5a5;
+  color: #991b1b;
+}
+
+
+/* ==========================================================================
+   Global Network Loading Spinner & Toast Overlay
+   ========================================================================== */
+.global-spinner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(15, 23, 42, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 99999;
+  backdrop-filter: blur(2px);
+  transition: opacity 0.2s ease;
+}
+
+.spinner-box {
+  background: #ffffff;
+  padding: 1.25rem 2rem;
+  border-radius: 12px;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.2);
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  font-weight: 600;
+  color: #1e293b;
+  font-size: 0.95rem;
+  border: 1px solid var(--border);
+}
+
+.spinner {
+  width: 26px;
+  height: 26px;
+  border: 3px solid #e2e8f0;
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: spin 0.75s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ==========================================================================
+   Role-Based Navigation Bar (Sidebar / Sub-Navbar)
+   ========================================================================== */
+.role-nav {
+  background: #ffffff;
+  border-bottom: 2px solid #e2e8f0;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.04);
+  position: sticky;
+  top: 57px;
+  z-index: 95;
+  transition: all 0.2s ease;
+}
+
+.role-nav-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.4rem 1rem;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.role-nav-container::-webkit-scrollbar {
+  height: 4px;
+}
+
+.role-nav-container::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+
+.role-nav-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.45rem 0.85rem;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: #475569;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.role-nav-btn:hover {
+  background: #f1f5f9;
+  color: #0f172a;
+}
+
+.role-nav-btn.active {
+  background: #e0f2fe;
+  color: #0369a1;
+  border-color: #bae6fd;
+}
+
+.role-nav-btn .nav-icon {
+  font-size: 1rem;
+}
+
+/* Role Badges in Header */
+.badge-role-admin {
+  background: #fef3c7;
+  color: #92400e;
+  border: 1px solid #fde68a;
+}
+
+.badge-role-principal {
+  background: #e0e7ff;
+  color: #3730a3;
+  border: 1px solid #c7d2fe;
+}
+
+.badge-role-evaluator {
+  background: #dcfce7;
+  color: #166534;
+  border: 1px solid #bbf7d0;
+}
+
+.badge-role-supervisor {
+  background: #f3e8ff;
+  color: #6b21a8;
+  border: 1px solid #e9d5ff;
+}
+
+.badge-role-standards {
+  background: #ffedd5;
+  color: #9a3412;
+  border: 1px solid #fed7aa;
+}
+
+/* Multi-link selector */
+.multi-indicator-list {
+  max-height: 220px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #ffffff;
+  padding: 0.4rem;
+}
+
+.multi-indicator-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.35rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.82rem;
+  transition: background 0.15s;
+}
+
+.multi-indicator-item:hover {
+  background: #f8fafc;
+}
+
+.multi-indicator-item input[type="checkbox"] {
+  margin-top: 0.2rem;
+}
+
+/* Supervision Dashboard */
+.supervision-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.supervision-stat-card {
+  background: #ffffff;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1.25rem;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+
+.supervision-stat-card .val {
+  font-size: 1.8rem;
+  font-weight: 700;
+  margin: 0.35rem 0;
 }
