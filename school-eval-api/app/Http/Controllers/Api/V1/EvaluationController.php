@@ -12,6 +12,7 @@ use App\Models\IndicatorScoreDescriptor;
 use App\Models\Note;
 use App\Models\StandardVersion;
 use App\Services\EvaluationLockChecker;
+use App\Events\EvaluationSubmitted;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -206,9 +207,9 @@ class EvaluationController extends Controller
                                 'weight'                 => (float) $ind->weight,
                                 'status'                 => $ind->status,
                                 'resultId'               => $result?->result_id,
-                                'score'                  => $result?->score,
-                                'scoreDescriptorId'      => $result?->score_descriptor_id,
-                                'scoreDescriptorLabel'   => $result?->scoreDescriptor?->label,
+                                'score'                  => ($result && $result->completion_status === 'Completed') ? $result->score : null,
+                                'scoreDescriptorId'      => ($result && $result->completion_status === 'Completed') ? $result->score_descriptor_id : null,
+                                'scoreDescriptorLabel'   => ($result && $result->completion_status === 'Completed') ? $result->scoreDescriptor?->label : null,
                                 'completionStatus'       => $result?->completion_status,
                                 'textualResult'          => $result?->textual_result,
                                 'evidenceCount'          => $result ? $result->evidences->count() : 0,
@@ -380,8 +381,15 @@ class EvaluationController extends Controller
             return ApiResponse::notFound('المؤشر المطلوب غير موجود.');
         }
 
-        // التحقق من أن المؤشر يتبع إصدار الدورة التقييمية
-        $versionId = (int) $evaluation->cycle?->version_id;
+        // التحقق من أن دورة التقييم مرتبطة بإصدار معياري معتمد
+        $evaluation->loadMissing('cycle');
+        $versionId = (int) ($evaluation->cycle?->standard_version_id ?? $evaluation->cycle?->version_id);
+        if (!$versionId) {
+            return ApiResponse::validationError([
+                'cycle' => ['دورة التقييم غير مرتبطة بإصدار معياري معتمد.'],
+            ], 'دورة التقييم غير مرتبطة بإصدار معياري معتمد.');
+        }
+
         if ((int) $indicator->subStandard?->standard?->version_id !== $versionId) {
             return ApiResponse::validationError([
                 'indicator' => ['المؤشر لا ينتمي للإصدار المعياري المعتمد لدورة التقييم.'],
@@ -553,6 +561,273 @@ class EvaluationController extends Controller
             ],
             message: 'تم حفظ الملاحظة بنجاح.',
             status: 201
+        );
+    }
+
+    /**
+     * إنهاء وتقديم التقييم الذاتي المدرسي كمكتمل وقفل العمليات التعديلية (G-01 / BR-SCH-03).
+     *
+     * الشروط الحاكمة:
+     * 1. اكتمال رصد كافة المؤشرات الفعالة ووجود درجات لها (0-3).
+     * 2. تحقق الحد الأدنى من الشواهد الإلزامية المطلوبة (شاهد واحد على الأقل لكل مؤشر له متطلب إلزامي).
+     * 3. ألا يكون التقييم مكتملاً أو مقفلاً مسبقاً، وألا تكون دورة التقييم مغلقة.
+     * 4. امتلاك صلاحية evaluations.submit والعزل المؤسسي (المدرسة المطابقة حصراً 404/403).
+     *
+     * POST /api/v1/evaluations/{id}/submit
+     */
+    public function submit(Request $request, int $id): JsonResponse
+    {
+        $user = $request->user();
+
+        $evaluation = Evaluation::with(['cycle', 'school'])->find($id);
+
+        if (!$evaluation) {
+            return ApiResponse::notFound('ملف التقييم المطلوب غير موجود.');
+        }
+
+        // عزل المدارس الصارم (القرار المعماري 9): إرجاع 404 إذا طلب مستخدم مدرسة تقييم مدرسة أخرى
+        if ($user->user_type === 'school' && (int) $user->school_id !== (int) $evaluation->school_id) {
+            return ApiResponse::notFound('ملف التقييم المطلوب غير موجود.');
+        }
+
+        // فحص الصلاحية عبر مصفوفة الصلاحيات أو السياسة
+        if (!$user->hasPermission('evaluations.submit')) {
+            return ApiResponse::forbidden('غير مصرح لك بتقديم هذا التقييم.');
+        }
+
+        if ($user->cannot('submit', $evaluation)) {
+            return ApiResponse::forbidden('غير مصرح لك بتقديم هذا التقييم.');
+        }
+
+        // 1. التحقق من حالة الدورة التقييمية (FR-SCH-01)
+        if ($evaluation->cycle && $evaluation->cycle->status === 'Closed') {
+            return ApiResponse::validationError([
+                'cycle' => ['دورة التقييم مغلقة حالياً ولا يُسمح بتقديم أو تعديل التقييم.'],
+            ], 'دورة التقييم مغلقة حالياً ولا يُسمح بتقديم التقييم.');
+        }
+
+        // 2. التحقق من أن التقييم غير مكتمل أو مقفل مسبقاً (BR-SCH-03)
+        if ($evaluation->status === 'Completed') {
+            return ApiResponse::validationError([
+                'evaluation' => ['ملف التقييم مكتمل ومقفل مسبقاً ولا يمكن إعادة تقديمه.'],
+            ], 'ملف التقييم مكتمل ومقفل مسبقاً ولا يمكن إعادة تقديمه.');
+        }
+
+        if (EvaluationLockChecker::isEvaluationLocked($evaluation)) {
+            $lockStatus = EvaluationLockChecker::checkEvaluationGeneralStatus($evaluation);
+            $reason = $lockStatus['reason'] ?? 'ملف التقييم مقفل حالياً.';
+            return ApiResponse::validationError([
+                'evaluation' => [$reason],
+            ], $reason);
+        }
+
+        // 3. التحقق من اكتمال رصد درجات جميع المؤشرات الفعالة
+        $versionId = (int) ($evaluation->cycle?->standard_version_id ?? $evaluation->cycle?->version_id);
+        if (!$versionId) {
+            return ApiResponse::validationError([
+                'cycle' => ['دورة التقييم غير مرتبطة بإصدار معياري معتمد.'],
+            ], 'دورة التقييم غير مرتبطة بإصدار معياري معتمد.');
+        }
+
+        $indicatorsQuery = Indicator::query()->where('status', 'Active');
+        $indicatorsQuery->whereHas('subStandard.standard', function ($q) use ($versionId) {
+            $q->where('version_id', $versionId);
+        });
+        $allActiveIndicators = $indicatorsQuery->get(['indicator_id', 'code', 'name']);
+        $totalIndicatorsCount = $allActiveIndicators->count();
+
+        $scoredIndicatorIds = EvaluationResult::query()
+            ->where('evaluation_id', $evaluation->evaluation_id)
+            ->where('completion_status', 'Completed')
+            ->whereNotNull('score')
+            ->pluck('indicator_id')
+            ->all();
+
+        $unscoredIndicators = $allActiveIndicators->filter(function ($ind) use ($scoredIndicatorIds) {
+            return !in_array($ind->indicator_id, $scoredIndicatorIds);
+        })->values();
+
+        if ($unscoredIndicators->isNotEmpty()) {
+            $missingCount = $unscoredIndicators->count();
+            $unscoredList = $unscoredIndicators->map(function ($ind) {
+                return [
+                    'indicator_id' => $ind->indicator_id,
+                    'code' => $ind->code,
+                    'name' => $ind->name,
+                ];
+            })->all();
+
+            return ApiResponse::validationError([
+                'indicators' => [
+                    "التقييم غير مكتمل. يتبقى عدد {$missingCount} مؤشر بدون رصد درجات من أصل {$totalIndicatorsCount} مؤشر.",
+                ],
+                'unscored_indicators' => $unscoredList,
+            ], 'لا يمكن تقديم تقييم غير مكتمل الرصد.');
+        }
+
+        // 4. التحقق من استيفاء الحد الأدنى من الشواهد الإلزامية المطلوبة عبر خدمة الكفاية الموحدة
+        /** @var \App\Services\EvidenceSufficiencyService $sufficiencyService */
+        $sufficiencyService = app(\App\Services\EvidenceSufficiencyService::class);
+        $sufficiency = $sufficiencyService->evaluateEvaluation($evaluation);
+
+        if (!empty($sufficiency['missing_evidence_indicators'])) {
+            $missingCount = count($sufficiency['missing_evidence_indicators']);
+            return ApiResponse::validationError([
+                'evidences' => [
+                    "يوجد عدد {$missingCount} مؤشر لم يستوفِ الحد الأدنى من الشواهد الإلزامية المطلوبة.",
+                ],
+                'missing_evidence_indicators' => $sufficiency['missing_evidence_indicators'],
+            ], 'لا يمكن تقديم التقييم لعدم استيفاء الحد الأدنى من الشواهد المطلوبة.');
+        }
+
+        // 5. التحديث داخل Transaction وإطلاق حدث القفل
+        DB::transaction(function () use ($evaluation, $user) {
+            // حفظ لقطة مجمدة من سياق وإحصاءات المدرسة والمرافق (الشريحة 6)
+            $metricsService = app(\App\Services\SchoolMetricsService::class);
+            $evaluation->school_context_snapshot = $metricsService->calculateIndicatorsContext($evaluation);
+
+            $evaluation->status = 'Completed';
+            $evaluation->updated_at = now();
+            $evaluation->save();
+
+            event(new EvaluationSubmitted($evaluation, $user));
+        });
+
+        return ApiResponse::success(
+            data: [
+                'evaluationId' => $evaluation->evaluation_id,
+                'schoolId' => $evaluation->school_id,
+                'status' => $evaluation->status,
+                'completedAt' => $evaluation->updated_at?->toIso8601ZuluString(),
+                'submittedByUser' => [
+                    'userId' => $user->user_id,
+                    'name' => $user->full_name,
+                    'role' => $user->roles->first()?->role_name,
+                ],
+                'isLocked' => true,
+            ],
+            message: 'تم إغلاق التقييم الذاتي واعتماده بنجاح وقفل العمليات التعديلية (BR-SCH-03).'
+        );
+    }
+
+    /**
+     * إغلاق وتقديم التقييم الذاتي عبر مسار المدرسة المباشر.
+     *
+     * POST /api/v1/schools/{school}/assessments/{assessment}/submit
+     */
+    public function submitBySchool(Request $request, int $schoolId, int $assessmentId): JsonResponse
+    {
+        $evaluation = Evaluation::find($assessmentId);
+        if (!$evaluation || (int) $evaluation->school_id !== (int) $schoolId) {
+            return ApiResponse::notFound('ملف التقييم المطلوب غير موجود.');
+        }
+
+        return $this->submit($request, $assessmentId);
+    }
+
+    /**
+     * استعراض السياق الاسترشادي لمؤشرات التقييم من واقع إحصاءات ومرافق المدرسة (الشريحة 6).
+     *
+     * GET /api/v1/evaluations/{id}/indicators-context
+     */
+    public function indicatorsContext(Request $request, int $id): JsonResponse
+    {
+        $user = $request->user();
+        $evaluation = Evaluation::with(['cycle', 'school'])->find($id);
+
+        if (!$evaluation) {
+            return ApiResponse::notFound('ملف التقييم غير موجود.');
+        }
+
+        // العزل المؤسسي الصارم
+        if ($user && $user->user_type === 'school' && (int) $user->school_id !== (int) $evaluation->school_id) {
+            return ApiResponse::notFound('ملف التقييم غير موجود.');
+        }
+
+        $metricsService = app(\App\Services\SchoolMetricsService::class);
+        $context = $metricsService->calculateIndicatorsContext($evaluation);
+
+        return ApiResponse::success(
+            data: $context,
+            message: 'تم استرجاع السياق الاسترشادي لمؤشرات التقييم بنجاح.'
+        );
+    }
+
+    /**
+     * استعراض السياق الاسترشادي لمؤشرات التقييم عبر مسار المدرسة المباشر.
+     *
+     * GET /api/v1/schools/{school}/assessments/{assessment}/indicators-context
+     */
+    public function indicatorsContextBySchool(Request $request, int $schoolId, int $assessmentId): JsonResponse
+    {
+        $evaluation = Evaluation::find($assessmentId);
+        if (!$evaluation || (int) $evaluation->school_id !== (int) $schoolId) {
+            return ApiResponse::notFound('ملف التقييم المطلوب غير موجود.');
+        }
+
+        return $this->indicatorsContext($request, $assessmentId);
+    }
+
+    /**
+     * إفراغ التقييم التجريبي من كافة الدرجات والشواهد الوهمية (مخصص للتطوير والاختبار التجريبي).
+     *
+     * POST /api/v1/evaluations/{id}/dev-reset
+     */
+    public function devReset(Request $request, int $id): JsonResponse
+    {
+        $user = $request->user();
+
+        $evaluation = Evaluation::find($id);
+        if (!$evaluation) {
+            return ApiResponse::notFound('ملف التقييم غير موجود.');
+        }
+
+        // عزل المدارس (القرار المعماري 9)
+        if ($user->user_type === 'school' && (int) $user->school_id !== (int) $evaluation->school_id) {
+            return ApiResponse::notFound('ملف التقييم غير موجود.');
+        }
+
+        if ($evaluation->status === 'Completed' || EvaluationLockChecker::isEvaluationLocked($evaluation)) {
+            return ApiResponse::validationError([
+                'evaluation' => ['لا يمكن إفراغ تقييم مقفل ومكتمل مسبقاً.'],
+            ], 'التقييم مقفل ومكتمل مسبقاً ولا يمكن تعديله أو إفراغه.');
+        }
+
+        DB::transaction(function () use ($evaluation) {
+            $results = EvaluationResult::where('evaluation_id', $evaluation->evaluation_id)->get();
+            $resultIds = $results->pluck('result_id')->toArray();
+
+            if (!empty($resultIds)) {
+                $areaIds = \App\Models\ImprovementArea::whereIn('result_id', $resultIds)->pluck('area_id')->toArray();
+                if (!empty($areaIds)) {
+                    \App\Models\ImprovementAction::whereIn('area_id', $areaIds)->delete();
+                    DB::table('plan_improvement_areas')->whereIn('area_id', $areaIds)->delete();
+                    \App\Models\ImprovementArea::whereIn('area_id', $areaIds)->delete();
+                }
+
+                foreach ($results as $result) {
+                    $evidences = \App\Models\Evidence::where('result_id', $result->result_id)->get();
+                    foreach ($evidences as $evidence) {
+                        $versions = \App\Models\EvidenceVersion::where('evidence_id', $evidence->evidence_id)->get();
+                        foreach ($versions as $version) {
+                            \App\Models\Attachment::where('target_type', 'evidence_version')
+                                ->where('target_id', $version->evidence_version_id)
+                                ->delete();
+                            $version->delete();
+                        }
+                        $evidence->delete();
+                    }
+
+                    DB::table('evaluation_result_verification_methods')->where('evaluation_result_id', $result->result_id)->delete();
+                    \App\Models\Note::where('result_id', $result->result_id)->delete();
+                    $result->delete();
+                }
+            }
+        });
+
+        return ApiResponse::success(
+            data: null,
+            message: 'تم إفراغ التقييم التجريبي بنجاح.'
         );
     }
 }

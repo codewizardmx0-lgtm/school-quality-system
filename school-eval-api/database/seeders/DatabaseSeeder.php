@@ -42,6 +42,9 @@ class DatabaseSeeder extends Seeder
             // المجموعة الثالثة: دورات التقييم والمشاركة (ERD-03)
             EvaluationCycleSeeder::class,               // 17. دورة التقييم للعام 2026
             CycleParticipationSeeder::class,            // 18. مشاركة المدرسة في الدورة
+
+            // المجموعة الرابعة: إحصاءات ومرافق المدارس النموذجية (الشريحة 6)
+            SchoolMetricsAndFacilitiesSeeder::class,     // 19. إحصاءات الكادر والطلاب والمرافق النموذجية
         ]);
     }
 }

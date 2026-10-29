@@ -1,8 +1,8 @@
 # الفصل الرابع: تصميم النظام (System Design)
 
 > **المشروع:** نظام إدارة الجودة والخطط التعليمية في المدارس  
-> **الحالة:** مسودة محدثة معتمدة مع الشريحتين 1 و2 وتحديثات قاموس البيانات — 25 أكتوبر 2026م  
-> **توثيق التنفيذ والشرائح البرمجية:** يُحال للواقع المنفذ فعلياً وتفاصيل كل شريحة واختباراتها إلى دليل الشرائح في [docs/slices/README.md](../slices/README.md) والملفات التفصيلية [slice1_auth_admin.md](../slices/slice1_auth_admin.md) و[slice2_evaluation_evidence.md](../slices/slice2_evaluation_evidence.md).  
+> **الحالة:** مسودة محدثة معتمدة مع الشرائح 1 و2 و3 و4 والنموذج الأولي التفاعلي — 27 أكتوبر 2026م  
+> **توثيق التنفيذ والشرائح البرمجية:** يُحال للواقع المنفذ فعلياً وتفاصيل كل شريحة واختباراتها إلى دليل الشرائح في [docs/slices/README.md](../slices/README.md) والملفات التفصيلية [slice1_auth_admin.md](../slices/slice1_auth_admin.md) و[slice2_evaluation_evidence.md](../slices/slice2_evaluation_evidence.md) و[slice3_improvement_plans.md](../slices/slice3_improvement_plans.md) و[slice4_reports_analytics.md](../slices/slice4_reports_analytics.md).  
 > **تسمية الفصل ورقمه:** الفصل الرابع: تصميم النظام (وفق هيكل التقرير الأكاديمي المعتمد).
 
 ## مفتاح الوسوم المستخدمة في هذه المسودة
@@ -244,11 +244,21 @@ school-quality-system/            # مستودع واحد (Monorepo)
 | POST | `/api/v1/evaluations/{eId}/indicators/{iId}/notes` | FR-SCH-12 (ملاحظة المؤشر المرصود) | `evaluations.edit` (فحص BR-SCH-03) | [منفّذ] |
 | POST | `/api/v1/evaluation-results/{id}/evidences` | UC-SCH-03 / FR-SCH-13..14 (إنشاء شاهد مع أول نسخة) | `evidence.manage` (فحص BR-SCH-03) | [منفّذ] |
 | POST | `/api/v1/evidences/{id}/versions` | FR-SCH-14b (نسخة جديدة current=true واحدة) | `evidence.manage` (فحص BR-SCH-03) | [منفّذ] |
-| GET / POST / PATCH | `/api/v1/improvement-areas` | UC-SCH-04 / FR-SCH-16..19 | `evaluations.view` / `plans.manage` | [مقترح] |
-| GET / POST / PATCH | `/api/v1/improvement-plans` وإجراءاتها | UC-SCH-05 / FR-SCH-20..27 | `plans.view` / `plans.manage` | [مقترح] |
-| POST | `/api/v1/improvement-plans/{id}/review-notes` | UC-PRIN-01 / FR-PRIN-03 | `reviews.write` | [مقترح] |
-| POST | `/api/v1/evaluations/{id}/reports` | UC-SCH-06/07 / FR-SCH-30 | `reports.generate` | [مقترح] |
-| GET | `/api/v1/reports/{id}` | UC-SCH-06 | `reports.view` | [مقترح] |
+| GET | `/api/v1/evaluations/{id}/improvement-suggestions` | FR-SCH-16..17 (اقتراحات التحسين للمؤشرات < 3) | `evaluations.view` | [منفّذ] |
+| GET / POST | `/api/v1/evaluations/{id}/improvement-areas` | UC-SCH-04 / FR-SCH-16..19 (تبني واستعراض مجالات التحسين) | `evaluations.view` / `plans.manage` | [منفّذ] |
+| PATCH / DELETE | `/api/v1/improvement-areas/{id}` | FR-SCH-19 (تعديل وحذف مجال غير مرتبط بخطة) | `plans.manage` | [منفّذ] |
+| GET / POST | `/api/v1/evaluations/{id}/improvement-plans` | UC-SCH-05 / FR-SCH-19..20 (إنشاء واستعراض خطط التحسين) | `plans.view` / `plans.manage` | [منفّذ] |
+| GET / PUT / DELETE | `/api/v1/improvement-plans/{id}` | FR-SCH-20..22 (تفاصيل وتحديث وحذف خطة التحسين) | `plans.view` / `plans.manage` | [منفّذ] |
+| PATCH | `/api/v1/improvement-plans/{id}/status` | FR-SCH-24 (دورة حياة الخطة: Draft -> Active -> Completed) | `plans.manage` | [منفّذ] |
+| POST | `/api/v1/improvement-plans/{id}/actions` | FR-SCH-20..21 (إضافة إجراء تنفيذي بالمفتاح المركب) | `plans.manage` | [منفّذ] |
+| PUT / DELETE | `/api/v1/improvement-actions/{id}` | FR-SCH-21..23 (تعديل وحذف إجراء تنفيذي) | `plans.manage` | [منفّذ] |
+| POST | `/api/v1/improvement-plans/{id}/review-notes` | UC-PRIN-01 / FR-PRIN-03 (ملاحظات مراجعة مدير المدرسة) | `reviews.write` | [منفّذ] |
+| GET | `/api/v1/schools/{s}/assessments/{a}/dashboard` | UC-SCH-06 / FR-REP-01 (لوحة معلومات وتقارير المدرسة) | `reports.view` | [منفّذ] |
+| GET | `/api/v1/schools/{s}/assessments/{a}/results` | FR-REP-02..03 (النتائج الموزونة الشاملة واشتراط الاكتمال) | `reports.view` | [منفّذ] |
+| GET | `/api/v1/schools/{s}/assessments/{a}/standards/{std}/results` | FR-REP-03 (نتائج معيار محدد وتفصيل مؤشراته) | `reports.view` | [منفّذ] |
+| GET | `/api/v1/schools/{s}/assessments/{a}/evidence-summary` | FR-REP-04 (ملخص ونسب اكتمال الشواهد الـ 278) | `reports.view` | [منفّذ] |
+| GET | `/api/v1/schools/{s}/assessments/{a}/improvement-plans/summary` | FR-REP-05 (ملخص خطط التحسين وحالات التأخر) | `improvement.view` | [منفّذ] |
+| GET | `/api/v1/schools/{s}/assessments/{a}/export` | FR-REP-06 (تصدير التقرير النهائي بصيغة JSON) | `reports.export` | [منفّذ] |
 | POST | `/api/v1/reports/{id}/internal-review-notes` | FR-PRIN-02 | `reviews.write` | [مقترح] |
 | POST | `/api/v1/reports/{id}/submissions` | UC-SCH-07 / FR-SCH-33 (الإرسال النهائي) | `evaluations.submit` | [مقترح] |
 | GET | `/api/v1/evaluation-submissions?status=` | UC-SUP-03 / FR-SUP-03 | `supervision.review` | [مقترح] |
@@ -385,7 +395,19 @@ flowchart TD
 
 ## 4.8 تصميم واجهات المستخدم (Frontend)
 
-### 4.8.1 هيكل تطبيق React المنفذ والمقترح
+### 4.8.1 هيكل واجهات المستخدم والنموذج الأولي التفاعلي
+
+يعتمد النظام في مرحلته الحالية على مسارين متكاملين للواجهة الأمامية:
+1. **النموذج الأولي التفاعلي الشامل (`frontend-prototype/`) [منفّذ بالكامل للشرائح 1-4]:**
+   مبني بتقنية HTML5 + Vanilla JS + CSS3 خالصة دون تبعيات خارجية (Zero Dependencies)، ويغطي كافة العمليات التشغيلية عبر 15 شاشة ونافذة منبثقة تفاعلية مرتبطة مباشرة بـ API الخلفي:
+   * شاشات المصادقة والدورات (الشاشات 1 و 2).
+   * شجرة التقييم ورصد الدرجات والواصفات والشواهد والملاحظات (الشاشات 3 و 4 و 5).
+   * اقتراحات التحسين وتبني المجالات وإدارة الخطط والإجراءات ومراجعة المدير (الشاشات 6 و 7 و 8).
+   * استعراض وتدقيق المعايير الـ 7 والمؤشرات الـ 109 والواصفات الـ 436 (الشاشة 9).
+   * لوحة معلومات وتقارير المدرسة (Dashboard) والنتائج الموزونة الشاملة (الشاشات 10 و 11).
+   * نتائج المعايير الفردية، ملخص الشواهد الـ 278، ملخص الخطط وحالات التأخر، وتصدير JSON (الشاشات 12 إلى 15).
+
+2. **الهيكل الأساسي لتطبيق React الممتد (`school-eval-web/`) [منفّذ ومستمر بالتوازي]:**
 
 ```text
 school-eval-web/src/
@@ -393,10 +415,10 @@ school-eval-web/src/
 ├── features/
 │   ├── auth/             # المصادقة وشاشة تسجيل الدخول [منفّذ]
 │   ├── admin/            # إدارة المدارس والمستخدمين [منفّذ]
-│   ├── standards/        # تصفح شجرة المعايير [مقترح]
-│   ├── evaluation/       # التقييم ورصد الدرجات وإرفاق الشواهد [مقترح]
-│   ├── improvement/      # خطط التحسين ومجالاتها [مقترح]
-│   ├── reports/          # التقارير والمخرجات والإرسال [مقترح]
+│   ├── standards/        # تصفح شجرة المعايير [منفّذ في النموذج الأولي / مستمر]
+│   ├── evaluation/       # التقييم ورصد الدرجات وإرفاق الشواهد [منفّذ في النموذج الأولي / مستمر]
+│   ├── improvement/      # خطط التحسين ومجالاتها [منفّذ في النموذج الأولي / مستمر]
+│   ├── reports/          # التقارير والمخرجات والإرسال [منفّذ في النموذج الأولي / مستمر]
 │   ├── supervision/      # المراجعة الوزارية وطلبات الاستكمال [مقترح]
 │   └── ai-assistant/     # نافذة التحليل والاستشارة [مقترح]
 ├── components/           # المكونات المشتركة ولوحات الهبوط [منفّذ]
@@ -423,26 +445,37 @@ school-eval-web/src/
 | `FR-SCH-01..05` | `UI-SCH-01`, `UI-SCH-02` | `GET /api/v1/evaluations/{id}/standards-tree` | `evaluations`, `evaluation_results` | `EvaluationAndEvidenceFeatureTest::test_evaluator_can_view_evaluation_standards_tree_with_meta_and_results` |
 | `FR-SCH-10..12` | `UI-SCH-03` | `PUT .../score`, `POST .../notes` | `evaluation_results`, `notes` | `EvaluationAndEvidenceFeatureTest::test_evaluator_can_score_indicator_with_auto_derived_descriptor` |
 | `FR-SCH-13..15` | `UI-SCH-04`, `UI-SCH-05` | `POST .../evidences`, `POST .../versions` | `evidences`, `evidence_versions`, `attachments` | `EvaluationAndEvidenceFeatureTest::test_evaluator_can_upload_evidence_for_scored_indicator` و `test_evaluator_can_add_new_version_with_only_single_current_true` |
+| `FR-SCH-16..19` | `UI-SCH-06` | `GET .../suggestions`, `GET/POST .../improvement-areas` | `improvement_areas`, `evaluation_results` | `ImprovementPlanFeatureTest::test_improvement_suggestions_generated_for_scores_below_target` و `test_create_and_update_improvement_area` |
+| `FR-SCH-20..27` | `UI-SCH-07`, `UI-SCH-08` | `GET/POST/PUT/PATCH .../improvement-plans` وإجراءاتها | `improvement_plans`, `plan_improvement_areas`, `improvement_actions` | `ImprovementPlanFeatureTest::test_action_composite_key_enforcement` و `test_plan_lifecycle_transitions_and_rules` |
+| `FR-PRIN-03` | `UI-PRIN-03` | `POST .../improvement-plans/{id}/review-notes` | `internal_review_notes`, `users` | `ImprovementPlanFeatureTest::test_school_principal_can_read_and_review_but_cannot_modify` |
+| `FR-REP-01` | `UI-REP-01` (Dashboard) | `GET .../assessments/{a}/dashboard` | `evaluations`, `evaluation_results`, `improvement_plans` | `ReportsAnalyticsFeatureTest::test_school_dashboard_overview` |
+| `FR-REP-02..03` | `UI-REP-02` (Results) | `GET .../assessments/{a}/results` | `evaluations`, `standards`, `indicators`, `evaluation_results` | `ReportsAnalyticsFeatureTest::test_cannot_calculate_final_results_for_incomplete_evaluation` و `test_calculates_overall_school_results_with_official_weights` |
+| `FR-REP-04` | `UI-REP-03` (Evidence) | `GET .../assessments/{a}/evidence-summary` | `evidence_requirements`, `evidences`, `evidence_versions` | `ReportsAnalyticsFeatureTest::test_evidence_summary_calculation` |
+| `FR-REP-05` | `UI-REP-04` (Plans) | `GET .../assessments/{a}/improvement-plans/summary` | `improvement_plans`, `improvement_actions` | `ReportsAnalyticsFeatureTest::test_improvement_plans_summary_with_delayed_plans_and_actions` |
+| `FR-REP-06` | `UI-REP-05` (Export) | `GET .../assessments/{a}/export` | `evaluations`, `schools`, `evaluation_cycles` | `ReportsAnalyticsFeatureTest::test_export_assessment_report_as_structured_json` |
 
 ---
 
 ## 4.10 استراتيجية وبيئة الاختبار
 
 ### 4.10.1 إحصاءات الاختبارات الفعلية للنظام
-* **تاريخ آخر تشغيل للاختبارات:** 25 أكتوبر 2026.
-* **إجمالي الاختبارات الآلية:** **65 اختباراً** ناجحاً بنسبة **100%**.
-* **إجمالي التأكيدات (Assertions):** **5,757 تأكيداً**.
-* **توزيع الاختبارات بحسب الطبقات:**
-  * النماذج وقواعد البيانات والقيود: 25 اختباراً ناجحاً `[منفّذ]`
-  * البيانات المرجعية ومصفوفة الصلاحيات (Seeders): 15 اختباراً ناجحاً `[منفّذ]`
-  * المصادقة والعزل المؤسسي (الشريحة الأولى): 12 اختباراً ناجحاً `[منفّذ]`
-  * التقييم الذاتي والشواهد والقفل (الشريحة الثانية): 13 اختباراً ناجحاً `[منفّذ]`
+* **تاريخ آخر تشغيل للاختبارات:** 27 أكتوبر 2026.
+* **إجمالي الاختبارات الآلية:** **103 اختبارات** ناجحة بنسبة **100%**.
+* **إجمالي التأكيدات (Assertions):** **7,369 تأكيداً**.
+* **توزيع الاختبارات بحسب الطبقات والمجموعات الوظيفية:**
+  * النماذج وقواعد البيانات والقيود والعلاقات متعددة الأشكال: 18 اختباراً ناجحاً `[منفّذ]`
+  * البيانات المرجعية وتدقيق المعايير ومصفوفة الصلاحيات (Seeders & Audit): 16 اختباراً ناجحاً `[منفّذ]`
+  * المصادقة والعزل المؤسسي ورموز الوصول (الشريحة الأولى): 15 اختباراً ناجحاً `[منفّذ]`
+  * التقييم الذاتي والشواهد وقفل التقييم والنسخ (الشريحة الثانية): 24 اختباراً ناجحاً `[منفّذ]`
+  * خطط التحسين والمجالات والإجراءات ومراجعة المدير (الشريحة الثالثة): 11 اختباراً ناجحاً `[منفّذ]`
+  * التقارير والتحليلات وحساب النتائج الموزونة واللوحة وتصدير JSON (الشريحة الرابعة): 15 اختباراً ناجحاً `[منفّذ]`
+  * اختبارات السلامة والتأكيد الأساسية (Base Feature & Unit): اختباران ناجحان `[منفّذ]`
 
 ---
 
 ## 4.11 ملخص الفصل
 
-قدم هذا الفصل التصميم الهندسي والمعماري المتكامل لنظام إدارة الجودة والخطط التعليمية في المدارس محدثاً ليعكس واقع ما نُفّذ في الشريحتين الأولى والثانية. اعتمد النظام معمارية الطبقات المنفصلة (Decoupled Architecture) بتكامل واجهة أمامية عربية عبر React مع خلفية برمجية متطورة مبنية بإطار Laravel API، محكومة بمصادقة Bearer Tokens عبر Laravel Sanctum، ومصفوفة صلاحيات وظيفية صارمة (RBAC) تميز بين الفاعلين الخمسة بـ 19 صلاحية محددة. كما فصّل الفصل بنية قاعدة البيانات المعتمدة المكونة من 40 جدولاً، وقواعد العزل المؤسسي الصارمة، وخدمة قفل التقييم بعد الإرسال، وإدارة النسخ التاريخية للشواهد. يمهد هذا التصميم المتماسك للانتقال المباشر إلى استكمال شرائح خطط التحسين والمخرجات والمراجعة الإشرافية.
+قدم هذا الفصل التصميم الهندسي والمعماري المتكامل لنظام إدارة الجودة والخطط التعليمية في المدارس محدثاً ليعكس واقع ما نُفّذ في الشرائح الأربع الأولى بالكامل (المصادقة والعزل، التقييم الذاتي والشواهد، خطط التحسين، والتقارير والتحليلات وحساب النتائج). اعتمد النظام معمارية الطبقات المنفصلة (Decoupled Architecture) بتكامل واجهة أمامية تفاعلية عربية كاملة تغطي 15 شاشة ونافذة تفاعلية مع خلفية برمجية متطورة مبنية بإطار Laravel API، محكومة بمصادقة Bearer Tokens عبر Laravel Sanctum، ومصفوفة صلاحيات وظيفية صارمة (RBAC) تميز بين الفاعلين الخمسة بـ 19 صلاحية محددة. كما فصّل الفصل بنية قاعدة البيانات المعتمدة المكونة من 40 جدولاً، وقواعد العزل المؤسسي الصارمة، وخدمة قفل التقييم بعد الإرسال، وإدارة النسخ التاريخية للشواهد، وحساب الأوزان الرسمية السبعة، والتتبع اللحظي لحالات التأخر وتصدير التقارير بصيغة JSON. يمهد هذا التصميم المتماسك والمثبت بـ 103 اختبارات آلية للانتقال الواثق إلى استكمال شرائح المراجعة الإشرافية والذكاء الاصطناعي.
 
 ---
 

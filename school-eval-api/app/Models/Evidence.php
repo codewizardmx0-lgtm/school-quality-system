@@ -45,6 +45,11 @@ class Evidence extends Model
         'title',
         'description',
         'justification',
+        'evidence_type',
+        'status',
+        'reviewer_notes',
+        'reviewed_by_user_id',
+        'reviewed_at',
     ];
 
     /**
@@ -57,6 +62,8 @@ class Evidence extends Model
         return [
             'result_id' => 'integer',
             'indicator_id' => 'integer',
+            'reviewed_by_user_id' => 'integer',
+            'reviewed_at' => 'datetime',
             'created_at' => 'datetime',
             'updated_at' => 'datetime',
         ];
@@ -111,5 +118,15 @@ class Evidence extends Model
     public function completionRequestItems(): HasMany
     {
         return $this->hasMany(CompletionRequestItem::class, 'evidence_id', 'evidence_id');
+    }
+
+    /**
+     * المستخدم المراجع الذي قام بتدوين الملاحظات وتدقيق الشاهد.
+     *
+     * @return BelongsTo
+     */
+    public function reviewer(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'reviewed_by_user_id', 'user_id');
     }
 }
