@@ -1947,64 +1947,124 @@
     </section>
 
     <!-- ========================================================================= -->
-    <!-- الشاشة 19: مركز إدارة المعايير (Standards Hub) لمسؤول المعايير بالوزارة   -->
+    <!-- الشاشة 19 (الشريحة 7): مركز إدارة معايير الاعتماد المدرسي وإصداراتها      -->
     <!-- ========================================================================= -->
     <section id="screen-standards-manager" class="hidden">
-      <div class="card" style="margin-bottom: 1rem;">
+      <!-- بطاقة الهيدر والإجراءات السريعة -->
+      <div class="card" style="margin-bottom: 1rem; border-right: 4px solid #ea580c;">
         <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem;">
           <div>
-            <h2 style="font-size: 1.3rem; color: #ea580c; margin: 0;">📑 مركز معايير الاعتماد المدرسي (مسؤول المعايير)</h2>
-            <p style="font-size: 0.85rem; color: var(--text-muted); margin-top: 0.25rem;">
-              استعراض ومتابعة هيكل ومصفوفة معايير الاعتماد المدرسي الوطنية ومؤشراتها وأدوات التحقق.
+            <h2 style="font-size: 1.3rem; color: #ea580c; margin: 0; display: flex; align-items: center; gap: 0.5rem;">
+              <span>📑</span> مركز إدارة معايير الاعتماد المدرسي وإصداراتها
+            </h2>
+            <p style="font-size: 0.85rem; color: var(--text-muted); margin-top: 0.35rem;">
+              الإدارة المركزية الرسمية لدورة حياة وثيقة المعايير الوطنية، إنشاء واستنساخ المسودات، حوكمة الأوزان النسبية، وإقرار الإصدارات النافذة.
             </p>
           </div>
-          <div style="display: flex; gap: 0.5rem;">
-            <button class="btn btn-sm btn-secondary" onclick="App.navTo('standards-review')">📖 دليل المعايير</button>
+          <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+            <button class="btn btn-sm btn-primary" onclick="App.openCreateVersionModal()">➕ مسودة إصدار جديدة</button>
+            <button class="btn btn-sm btn-secondary" onclick="App.navTo('standards-review')">📖 محرر المعايير والمؤشرات</button>
+            <button class="btn btn-sm btn-outline-secondary" onclick="App.loadStandardsManagerData()">🔄 تحديث البيانات</button>
           </div>
         </div>
       </div>
 
-      <div class="alert alert-info" style="display: flex; align-items: flex-start; gap: 0.75rem;">
-        <span style="font-size: 1.4rem;">ℹ️</span>
-        <div>
-          <strong>إشعار الشريحة 7 القادمة:</strong>
-          <p style="margin: 0.25rem 0 0 0; font-size: 0.85rem;">
-            إدارة وثائق معايير الاعتماد المدرسي، وإنشاء نسخ معيارية جديدة، وتعديل صياغة المؤشرات ومستويات التقدير مفصولة عن تقييمات المدارس وهي قيد التطوير المتقدم في الشريحة 7.
-          </p>
-        </div>
-      </div>
-
-      <div class="kpi-grid" style="margin-top: 1rem; margin-bottom: 1rem;">
-        <div class="kpi-card kpi-primary">
-          <div class="kpi-label">المجالات المحددة</div>
-          <div class="kpi-value">4</div>
-          <div class="kpi-sub">مجالات تقييم رئيسية</div>
-        </div>
-        <div class="kpi-card kpi-primary">
-          <div class="kpi-label">المعايير المحددة</div>
-          <div class="kpi-value">7</div>
-          <div class="kpi-sub">معايير الاعتماد المدرسي</div>
-        </div>
+      <!-- شبكة المؤشرات الحية والإحصاءات -->
+      <div id="std-hub-kpis" class="kpi-grid" style="margin-top: 1rem; margin-bottom: 1rem;">
         <div class="kpi-card kpi-success">
-          <div class="kpi-label">إجمالي المؤشرات</div>
-          <div class="kpi-value">109</div>
-          <div class="kpi-sub">مؤشر أداء محدد</div>
+          <div class="kpi-label">الإصدار الرسمي النافذ</div>
+          <div id="kpi-approved-version-no" class="kpi-value" style="font-size: 1.3rem;">--</div>
+          <div id="kpi-approved-version-sub" class="kpi-sub">إصدار مُقرّ نافذ للدورات</div>
         </div>
         <div class="kpi-card kpi-warning">
-          <div class="kpi-label">الإصدار المعياري الحالي</div>
-          <div class="kpi-value" style="font-size: 1.2rem;">2024 V1</div>
-          <div class="kpi-sub">النسخة الرسمية الحالية</div>
+          <div class="kpi-label">المسودات قيد التطوير</div>
+          <div id="kpi-drafts-count" class="kpi-value">0</div>
+          <div class="kpi-sub">مسودة تحت الإعداد</div>
+        </div>
+        <div class="kpi-card" style="border-right: 4px solid #64748b;">
+          <div class="kpi-label">الإصدارات المؤرشفة</div>
+          <div id="kpi-archived-count" class="kpi-value">0</div>
+          <div class="kpi-sub">إصدار تاريخي سابق</div>
+        </div>
+        <div class="kpi-card kpi-primary">
+          <div class="kpi-label">الهيكل المعياري الوطني</div>
+          <div class="kpi-value">7 / 109</div>
+          <div class="kpi-sub">7 معايير • 14 مجالاً • 109 مؤشرات</div>
         </div>
       </div>
 
-      <div class="card">
-        <div class="card-title">
-          <span>استعراض هيكل المعايير المفصل</span>
-          <button class="btn btn-sm btn-primary" onclick="App.navTo('standards-review')">الانتقال إلى دليل المعايير والمؤشرات</button>
+      <!-- جدول دورة حياة الإصدارات المعيارية -->
+      <div class="card" style="margin-bottom: 1.25rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem;">
+          <div>
+            <strong style="font-size: 1rem; color: var(--primary);">سجل الإصدارات المعيارية الرسمية ودورة حياتها</strong>
+            <div style="font-size: 0.8rem; color: var(--text-muted);">
+              استعراض كافة الإصدارات وحالاتها (مسودة / مُقرّ / مؤرشف) وإجراءات الاستنساخ والإقرار والأرشفة.
+            </div>
+          </div>
+          <div style="display: flex; gap: 0.5rem; align-items: center;">
+            <select id="hub-versions-filter" class="form-control" style="width: auto; font-size: 0.85rem;" onchange="App.filterHubVersions(this.value)">
+              <option value="">جميع الحالات</option>
+              <option value="Draft">مسودات (Draft)</option>
+              <option value="Approved">مُقرّة (Approved)</option>
+              <option value="Archived">مؤرشفة (Archived)</option>
+            </select>
+          </div>
         </div>
-        <p style="font-size: 0.85rem; color: var(--text-muted);">
-          يمكنك استعراض شجرة المجالات والمعايير الـ 7 وقوائم المؤشرات وأدوات التحقق ومستويات الأداء الـ 4 لكل مؤشر.
-        </p>
+
+        <div style="overflow-x: auto;">
+          <table class="table" style="width: 100%; font-size: 0.88rem; margin: 0;">
+            <thead>
+              <tr style="background: var(--bg-card-header);">
+                <th style="padding: 0.65rem 0.75rem;">رقم الإصدار</th>
+                <th style="padding: 0.65rem 0.75rem;">الجهة المصدرة ورقم المرجع</th>
+                <th style="padding: 0.65rem 0.75rem;">تاريخ الصدور</th>
+                <th style="padding: 0.65rem 0.75rem;">الحالة الرسمية</th>
+                <th style="padding: 0.65rem 0.75rem; text-align: center;">المعايير / الأوزان</th>
+                <th style="padding: 0.65rem 0.75rem; text-align: center;">الإجراءات الإدارية</th>
+              </tr>
+            </thead>
+            <tbody id="hub-versions-tbody">
+              <tr>
+                <td colspan="6" style="text-align: center; padding: 2rem; color: var(--text-muted);">
+                  ⏳ جاري تحميل سجل الإصدارات من الخادم...
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- مصفوفة الأوزان النسبية الاستعراضية للإصدار المعتمد النافذ -->
+      <div id="hub-weights-preview-card" class="card" style="margin-bottom: 1.25rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; flex-wrap: wrap; gap: 0.5rem;">
+          <div>
+            <strong style="font-size: 0.95rem; color: var(--primary);">مصفوفة الأوزان النسبية المعتمدة (الإصدار النافذ)</strong>
+            <span id="hub-active-ver-badge" class="badge badge-green" style="margin-right: 0.5rem;">2026.1</span>
+          </div>
+          <div style="font-size: 0.85rem; font-weight: 700;">
+            إجمالي الأوزان: <span class="badge badge-green">100.00%</span>
+          </div>
+        </div>
+        <div id="hub-weights-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 0.75rem;">
+          <!-- تُحقن كروت الأوزان عبر JS -->
+        </div>
+      </div>
+
+      <!-- ميثاق الحوكمة الرقابية وحصانة الإصدارات -->
+      <div class="card" style="background: #f8fafc; border: 1px solid #e2e8f0;">
+        <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
+          <span style="font-size: 1.2rem;">🛡️</span>
+          <strong style="font-size: 0.95rem; color: #1e293b;">ميثاق الحوكمة المؤسسية لإدارة معايير الاعتماد المدرسي (الشريحة 7)</strong>
+        </div>
+        <ul style="font-size: 0.83rem; color: #475569; margin: 0; padding-right: 1.25rem; line-height: 1.6;">
+          <li><strong>حصانة الإصدار المُقرّ (Immutability):</strong> الإصدار المُقرّ أو المؤرشف غير قابل لأي تعديل على نصوصه أو أوزانه أو متطلباته نهائياً. التعديل مسموح فقط في حالة المسودة (Draft).</li>
+          <li><strong>حوكمة الـ 100.00% الإلزامية:</strong> يُشترط تساوي مجموع الأوزان النسبية للمعايير الرئيسة لـ 100.00% تماماً عند حفظ الأوزان وعند الإقرار النهائي.</li>
+          <li><strong>الاستنساخ العميق الآمن (Deep Clone):</strong> استنساخ الشجرة الهرمية الكاملة من إصدار مُقرّ يمنح مسودة مستقلة تماماً لا تمس الإصدار الأصلي.</li>
+          <li><strong>الأرشفة التلقائية الحتمية:</strong> عند إقرار مسودة جديدة، يُحوّل الإصدار السابق تلقائياً إلى حالة مؤرشف (Archived) لضمان إصدار نافذ واحد فقط.</li>
+          <li><strong>حماية دورات التقييم المدرسية:</strong> لا يمكن ربط أي دورة تقييم بمسودة غير مُقرّة؛ فالنظام يشترط إصداراً مُقرّاً نافذاً لضمان النزاهة.</li>
+          <li><strong>الحصانة التراجعية للتقييمات السابقة:</strong> نتائج المدارس المكتملة تحتفظ بارتباطها بإصدارها وأوزانه الأصلية ولا تتأثر بإقرار إصدارات أحدث.</li>
+        </ul>
       </div>
     </section>
 
@@ -2308,6 +2368,34 @@
         <div style="display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem;">
           <button type="button" class="btn btn-secondary" onclick="App.closeCloneVersionModal()">إلغاء</button>
           <button type="submit" class="btn btn-primary">بدء الاستنساخ الشامل</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- نافذة تعديل البيانات التعريفية للإصدار -->
+  <div id="modal-edit-version" class="modal-overlay hidden">
+    <div class="modal-content" style="max-width: 500px;">
+      <h3 style="font-size: 1.15rem; color: var(--primary);">✏️ تعديل البيانات التعريفية للإصدار</h3>
+      <div id="edit-version-alert" class="alert alert-error hidden" style="margin-top: 0.5rem;"></div>
+
+      <form onsubmit="App.handleSaveEditVersion(event)" style="margin-top: 1rem;">
+        <input type="hidden" id="editver-id">
+        <div class="form-group">
+          <label class="form-label" for="editver-org">الجهة المصدرة:</label>
+          <input type="text" id="editver-org" class="form-control" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="editver-number">رقم القرار الوزاري / المرجع:</label>
+          <input type="text" id="editver-number" class="form-control" placeholder="مثال: قرار وزاري رقم (2) لسنة 2026م">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="editver-desc">الوصف التوثيقي:</label>
+          <textarea id="editver-desc" class="form-control" rows="3"></textarea>
+        </div>
+        <div style="display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem;">
+          <button type="button" class="btn btn-secondary" onclick="App.closeEditVersionModal()">إلغاء</button>
+          <button type="submit" class="btn btn-primary">حفظ البيانات</button>
         </div>
       </form>
     </div>

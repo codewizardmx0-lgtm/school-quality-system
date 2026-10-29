@@ -417,8 +417,8 @@ const App = {
       ];
     } else if (this.hasRole('ministry_standards_manager')) {
       items = [
-        { id: 'std-hub', label: '📑 مركز معايير الاعتماد المدرسي', screen: 'standards-manager' },
-        { id: 'std-review', label: '📖 دليل المعايير والمؤشرات', screen: 'standards-review' },
+        { id: 'std-hub', label: '📑 لوحة إدارة الإصدارات', screen: 'standards-manager' },
+        { id: 'std-review', label: '📖 محرر ومصفوفة المعايير', screen: 'standards-review' },
       ];
     } else {
       items = [
@@ -2544,8 +2544,7 @@ const App = {
     const container = document.getElementById('standards-review-content');
     if (!container) return;
 
-    const user = this.state.currentUser;
-    const isStandardsManager = this.hasPermission('standards.manage') || (user && user.primaryRole === 'ministry_standards_manager');
+    const isStandardsManager = this.hasRole('ministry_standards_manager') || this.hasRole('admin') || this.hasPermission('standards.manage');
 
     // 1. جلب قائمة الإصدارات المعيارية
     const verListRes = await this.request('/standard-versions');
@@ -2656,8 +2655,7 @@ const App = {
     this.state.standardsTree = res.data;
     const versions = this.state.standardsVersions || [];
     const currentVer = versions.find(v => v.version_id === vId) || { status: res.data.status || 'Approved' };
-    const user = this.state.currentUser;
-    const isStandardsManager = this.hasPermission('standards.manage') || (user && user.primaryRole === 'ministry_standards_manager');
+    const isStandardsManager = this.hasRole('ministry_standards_manager') || this.hasRole('admin') || this.hasPermission('standards.manage');
 
     this.renderStandardsVersionBar(versions, isStandardsManager);
     this.renderWeightsMatrix(res.data.standards || [], currentVer.status === 'Draft', isStandardsManager);
@@ -2804,10 +2802,11 @@ const App = {
     }
   },
 
-  openCloneVersionModal() {
+  openCloneVersionModal(sourceId = null, sourceNo = '') {
     const modal = document.getElementById('modal-clone-version');
     if (!modal) return;
-    document.getElementById('clonever-number').value = '';
+    this.state.cloneSourceVersionId = sourceId || this.state.selectedVersionId;
+    document.getElementById('clonever-number').value = sourceNo ? `${sourceNo}-draft` : '';
     document.getElementById('clone-version-alert').classList.add('hidden');
     modal.classList.remove('hidden');
   },
@@ -2821,7 +2820,7 @@ const App = {
     event.preventDefault();
     const versionNo = document.getElementById('clonever-number').value.trim();
     const alertEl = document.getElementById('clone-version-alert');
-    const vId = this.state.selectedVersionId;
+    const vId = this.state.cloneSourceVersionId || this.state.selectedVersionId;
 
     const res = await this.request(`/standard-versions/${vId}/clone`, 'POST', {
       version_no: versionNo,
@@ -2830,38 +2829,51 @@ const App = {
     if (res.ok && res.data) {
       this.closeCloneVersionModal();
       this.state.selectedVersionId = res.data.version_id;
-      await this.loadStandardsReview();
+      this.showAlert(`تم استنساخ الإصدار كمسودة جديدة (${res.data.version_no}) بنجاح!`, 'success');
+      if (this.state.currentScreen === 'standards-manager') {
+        await this.loadStandardsManagerData();
+      } else {
+        await this.loadStandardsReview();
+      }
     } else {
       alertEl.textContent = res.message || 'فشل استنساخ الإصدار.';
       alertEl.classList.remove('hidden');
     }
   },
 
-  async handleApproveVersion() {
-    const vId = this.state.selectedVersionId;
+  async handleApproveVersion(targetVersionId = null) {
+    const vId = targetVersionId || this.state.selectedVersionId;
     if (!confirm('هل أنت متأكد من إقرار هذا الإصدار المعياري رسميًا؟ سيتم تجميده ضد أي تعديل لاحق وأرشفة الإصدار السابق تلقائيًا.')) {
       return;
     }
 
     const res = await this.request(`/standard-versions/${vId}/approve`, 'POST');
     if (res.ok) {
-      alert('تم إقرار الإصدار بنجاح وأصبح ساري المفعول!');
-      await this.loadStandardsReview();
+      this.showAlert('تم إقرار الإصدار بنجاح وأصبح ساري المفعول للدورات والتقييمات!', 'success');
+      if (this.state.currentScreen === 'standards-manager') {
+        await this.loadStandardsManagerData();
+      } else {
+        await this.loadStandardsReview();
+      }
     } else {
-      alert('فشل إقرار الإصدار: ' + (res.message || 'يرجى مراجعة الأوزان'));
+      alert('فشل إقرار الإصدار: ' + (res.message || 'يرجى مراجعة الأوزان النسبية'));
     }
   },
 
-  async handleArchiveVersion() {
-    const vId = this.state.selectedVersionId;
+  async handleArchiveVersion(targetVersionId = null) {
+    const vId = targetVersionId || this.state.selectedVersionId;
     if (!confirm('هل أنت متأكد من أرشفة هذا الإصدار المعياري؟')) return;
 
     const res = await this.request(`/standard-versions/${vId}/archive`, 'POST');
     if (res.ok) {
-      alert('تمت أرشفة الإصدار بنجاح.');
-      await this.loadStandardsReview();
+      this.showAlert('تمت أرشفة الإصدار بنجاح.', 'info');
+      if (this.state.currentScreen === 'standards-manager') {
+        await this.loadStandardsManagerData();
+      } else {
+        await this.loadStandardsReview();
+      }
     } else {
-      alert('فشل أرشفة الإصدار: ' + res.message);
+      alert('فشل أرشفة الإصدار: ' + (res.message || 'خطأ في عملية الأرشفة'));
     }
   },
 
@@ -5798,10 +5810,261 @@ const App = {
   },
 
   // ---------------------------------------------------------------------------
-  // 22. مركز معايير الاعتماد المدرسي (Standards Hub) لمسؤول المعايير
+  // 22. مركز معايير الاعتماد المدرسي (Standards Hub) لمسؤول المعايير (الشريحة 7)
   // ---------------------------------------------------------------------------
-  loadStandardsManagerData() {
-    // صفحة عرض هيكل ومصفوفة المعايير
+  async loadStandardsManagerData() {
+    const tbody = document.getElementById('hub-versions-tbody');
+    if (!tbody) return;
+
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="6" style="text-align: center; padding: 2rem; color: var(--text-muted);">
+          ⏳ جاري جلب سجل الإصدارات المعيارية من الخادم...
+        </td>
+      </tr>
+    `;
+
+    const res = await this.request('/standard-versions');
+    if (!res.ok || !Array.isArray(res.data)) {
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="6" style="text-align: center; padding: 2rem; color: var(--danger);">
+            ⚠️ تعذر تحميل سجل الإصدارات: ${res.message || 'خطأ في الاتصال بالخادم'}
+          </td>
+        </tr>
+      `;
+      return;
+    }
+
+    const versions = res.data;
+    this.state.standardsVersions = versions;
+
+    // 1. تحديث بطاقات المؤشرات (KPIs)
+    const approvedVer = versions.find(v => v.status === 'Approved' || v.status === 'Active');
+    const drafts = versions.filter(v => v.status === 'Draft');
+    const archived = versions.filter(v => v.status === 'Archived');
+
+    const kpiApprovedNo = document.getElementById('kpi-approved-version-no');
+    const kpiApprovedSub = document.getElementById('kpi-approved-version-sub');
+    const kpiDrafts = document.getElementById('kpi-drafts-count');
+    const kpiArchived = document.getElementById('kpi-archived-count');
+    const hubActiveBadge = document.getElementById('hub-active-ver-badge');
+
+    if (kpiApprovedNo) {
+      kpiApprovedNo.textContent = approvedVer ? approvedVer.version_no : 'لا يوجد';
+    }
+    if (kpiApprovedSub && approvedVer) {
+      kpiApprovedSub.textContent = approvedVer.issue_date ? `تاريخ الصدور: ${approvedVer.issue_date.split('T')[0]}` : 'إصدار رسمي معتمد';
+    }
+    if (hubActiveBadge) {
+      hubActiveBadge.textContent = approvedVer ? approvedVer.version_no : '--';
+    }
+    if (kpiDrafts) kpiDrafts.textContent = drafts.length;
+    if (kpiArchived) kpiArchived.textContent = archived.length;
+
+    // 2. رسم جدول الإصدارات
+    this.renderHubVersions(versions);
+
+    // 3. رسم أوزان الإصدار المعتمد
+    if (approvedVer) {
+      await this.renderHubActiveWeights(approvedVer.version_id);
+    }
+  },
+
+  renderHubVersions(versions) {
+    const tbody = document.getElementById('hub-versions-tbody');
+    if (!tbody) return;
+
+    if (!versions || versions.length === 0) {
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="6" style="text-align: center; padding: 2rem; color: var(--text-muted);">
+            لا توجد إصدارات معيارية مسجلة في هذا التصنيف.
+          </td>
+        </tr>
+      `;
+      return;
+    }
+
+    const isStandardsManager = this.hasRole('ministry_standards_manager') || this.hasRole('admin') || this.hasPermission('standards.manage');
+
+    tbody.innerHTML = versions.map(v => {
+      let badgeClass = 'badge-gray';
+      let statusText = 'مؤرشف';
+
+      if (v.status === 'Approved' || v.status === 'Active') {
+        badgeClass = 'badge-green';
+        statusText = 'مُقرّ رسميًا';
+      } else if (v.status === 'Draft') {
+        badgeClass = 'badge-warning';
+        statusText = 'مسودة عمل';
+      }
+
+      const isDraft = v.status === 'Draft';
+      const isApproved = v.status === 'Approved' || v.status === 'Active';
+      const isArchived = v.status === 'Archived';
+
+      const dateStr = v.issue_date ? v.issue_date.split('T')[0] : (v.created_at ? v.created_at.split('T')[0] : '--');
+
+      let actionButtons = `
+        <button class="btn btn-xs btn-primary" onclick="App.navigateToVersionInEditor(${v.version_id})" title="استعراض وتعديل بالمحرر">
+          📝 المحرر
+        </button>
+      `;
+
+      if (isStandardsManager) {
+        if (isApproved) {
+          actionButtons += `
+            <button class="btn btn-xs btn-outline-secondary" onclick="App.openCloneVersionModal(${v.version_id}, '${v.version_no}')" title="استنساخ كمسودة جديدة">
+              📋 استنساخ
+            </button>
+            <button class="btn btn-xs btn-outline-danger" onclick="App.handleArchiveVersion(${v.version_id})" title="أرشفة الإصدار">
+              📁 أرشفة
+            </button>
+          `;
+        } else if (isDraft) {
+          actionButtons += `
+            <button class="btn btn-xs btn-outline-primary" onclick="App.openEditVersionModal(${v.version_id})" title="تعديل البيانات التعريفية">
+              ✏️ تعديل
+            </button>
+            <button class="btn btn-xs btn-outline-secondary" onclick="App.navigateToVersionInEditor(${v.version_id}, true)" title="ضبط مصفوفة الأوزان">
+              ⚖️ الأوزان
+            </button>
+            <button class="btn btn-xs btn-success" onclick="App.handleApproveVersion(${v.version_id})" title="إقرار المسودة رسميًا">
+              ✅ إقرار
+            </button>
+          `;
+        }
+      }
+
+      return `
+        <tr style="${isApproved ? 'background: #f0fdf4;' : ''}">
+          <td style="padding: 0.65rem 0.75rem; font-weight: 700;">
+            <div style="font-size: 0.95rem; color: var(--primary);">${v.version_no}</div>
+            <div style="font-size: 0.75rem; color: var(--text-muted);">${v.version_name || 'وثيقة المعايير الوطنية'}</div>
+          </td>
+          <td style="padding: 0.65rem 0.75rem;">
+            <div style="font-weight: 600; color: #1e293b;">${v.source_organization || 'وزارة التربية والتعليم'}</div>
+            <div style="font-size: 0.78rem; color: var(--text-muted);">${v.source_number || 'بدون رقم قرار'}</div>
+          </td>
+          <td style="padding: 0.65rem 0.75rem; white-space: nowrap; color: #475569;">
+            ${dateStr}
+          </td>
+          <td style="padding: 0.65rem 0.75rem;">
+            <span class="badge ${badgeClass}">${statusText}</span>
+          </td>
+          <td style="padding: 0.65rem 0.75rem; text-align: center;">
+            <span style="font-size: 0.8rem; background: #f1f5f9; padding: 2px 8px; border-radius: 4px; font-weight: 600;">
+              7 معايير • 109 مؤشرات
+            </span>
+          </td>
+          <td style="padding: 0.65rem 0.75rem; text-align: center;">
+            <div style="display: flex; gap: 0.35rem; justify-content: center; flex-wrap: wrap;">
+              ${actionButtons}
+            </div>
+          </td>
+        </tr>
+      `;
+    }).join('');
+  },
+
+  filterHubVersions(filterStatus) {
+    const all = this.state.standardsVersions || [];
+    if (!filterStatus) {
+      this.renderHubVersions(all);
+      return;
+    }
+
+    const filtered = all.filter(v => {
+      if (filterStatus === 'Approved') {
+        return v.status === 'Approved' || v.status === 'Active';
+      }
+      return v.status === filterStatus;
+    });
+
+    this.renderHubVersions(filtered);
+  },
+
+  navigateToVersionInEditor(versionId, scrollToWeights = false) {
+    this.state.selectedVersionId = parseInt(versionId);
+    this.navTo('standards-review');
+    if (scrollToWeights) {
+      setTimeout(() => {
+        const el = document.getElementById('standards-weights-card');
+        if (el) el.scrollIntoView({ behavior: 'smooth' });
+      }, 350);
+    }
+  },
+
+  openEditVersionModal(versionId) {
+    const modal = document.getElementById('modal-edit-version');
+    if (!modal) return;
+    const v = (this.state.standardsVersions || []).find(item => item.version_id === versionId);
+    if (!v) return;
+
+    document.getElementById('editver-id').value = v.version_id;
+    document.getElementById('editver-org').value = v.source_organization || '';
+    document.getElementById('editver-number').value = v.source_number || '';
+    document.getElementById('editver-desc').value = v.source_description || '';
+    document.getElementById('edit-version-alert').classList.add('hidden');
+    modal.classList.remove('hidden');
+  },
+
+  closeEditVersionModal() {
+    const modal = document.getElementById('modal-edit-version');
+    if (modal) modal.classList.add('hidden');
+  },
+
+  async handleSaveEditVersion(event) {
+    event.preventDefault();
+    const vId = document.getElementById('editver-id').value;
+    const alertEl = document.getElementById('edit-version-alert');
+    const payload = {
+      source_organization: document.getElementById('editver-org').value.trim(),
+      source_number: document.getElementById('editver-number').value.trim(),
+      source_description: document.getElementById('editver-desc').value.trim(),
+    };
+
+    const res = await this.request(`/standard-versions/${vId}`, 'PUT', payload);
+    if (res.ok) {
+      this.closeEditVersionModal();
+      this.showAlert('تم تحديث البيانات التعريفية للإصدار بنجاح.', 'success');
+      if (this.state.currentScreen === 'standards-manager') {
+        await this.loadStandardsManagerData();
+      } else {
+        await this.loadStandardsReview();
+      }
+    } else {
+      alertEl.textContent = res.message || 'فشل تحديث بيانات الإصدار.';
+      alertEl.classList.remove('hidden');
+    }
+  },
+
+  async renderHubActiveWeights(activeVerId) {
+    const container = document.getElementById('hub-weights-grid');
+    if (!container) return;
+
+    const res = await this.request(`/standard-versions/${activeVerId}`);
+    if (!res.ok || !res.data || !Array.isArray(res.data.standards)) {
+      container.innerHTML = '<div style="color: var(--text-muted); font-size: 0.85rem;">تعذر تحميل مصفوفة الأوزان.</div>';
+      return;
+    }
+
+    const standards = res.data.standards;
+    container.innerHTML = standards.map(std => {
+      const weight = parseFloat(std.weight) || 0;
+      return `
+        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 0.65rem 0.85rem;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">
+            <strong style="font-size: 0.85rem; color: #1e293b;">${std.code} - ${std.name}</strong>
+            <span class="badge badge-green" style="font-size: 0.8rem; font-weight: 700;">${weight.toFixed(1)}%</span>
+          </div>
+          <div style="background: #e2e8f0; border-radius: 9999px; height: 6px; overflow: hidden;">
+            <div style="background: #16a34a; width: ${Math.min(weight * 3, 100)}%; height: 100%;"></div>
+          </div>
+        </div>
+      `;
+    }).join('');
   },
 
 };
