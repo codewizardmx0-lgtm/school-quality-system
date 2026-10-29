@@ -64,6 +64,23 @@ class EvaluationCycle extends Model
     }
 
     /**
+     * خطاف التحقق الحتمي لمنع ربط دورة تقييم بإصدار ليس Approved (مُقرّ).
+     */
+    protected static function booted(): void
+    {
+        static::creating(function (EvaluationCycle $cycle) {
+            if ($cycle->version_id) {
+                $version = StandardVersion::find($cycle->version_id);
+                if (!$version || !$version->isApproved()) {
+                    throw \Illuminate\Validation\ValidationException::withMessages([
+                        'version_id' => ['لا يمكن ربط دورة تقييم بإصدار غير مُقرّ.'],
+                    ]);
+                }
+            }
+        });
+    }
+
+    /**
      * إصدار المعايير الوطنية المعتمد الحاكم لهذه الدورة التقييمية.
      *
      * @return BelongsTo

@@ -16,6 +16,36 @@ class StandardVersion extends Model
 {
     use HasFactory;
 
+    public const STATUS_DRAFT = 'Draft';
+    public const STATUS_APPROVED = 'Approved';
+    public const STATUS_ACTIVE = 'Active'; // متوافق مع الإصدار الأولي المُقرّ
+    public const STATUS_ARCHIVED = 'Archived';
+
+    /**
+     * هل الإصدار مسودة قابلة للتعديل؟
+     */
+    public function isDraft(): bool
+    {
+        return $this->status === self::STATUS_DRAFT;
+    }
+
+    /**
+     * هل الإصدار مُقرّ وساري المفعول؟
+     * (يدعم كلاً من Approved و Active للتوافق مع الاختبارات السابقة).
+     */
+    public function isApproved(): bool
+    {
+        return in_array($this->status, [self::STATUS_APPROVED, self::STATUS_ACTIVE], true);
+    }
+
+    /**
+     * هل الإصدار مؤرشف؟
+     */
+    public function isArchived(): bool
+    {
+        return in_array($this->status, [self::STATUS_ARCHIVED, 'Retired'], true);
+    }
+
     /**
      * اسم الجدول المرتبط بالنموذج في قاعدة البيانات.
      *
