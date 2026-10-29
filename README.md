@@ -16,11 +16,11 @@ school-quality-system/
 
 ---
 
-## الشرائح المنجزة والمعتمدة (Implemented Slices)
+## الشرائح المنجزة والرسمية (Implemented Slices)
 
 | الشريحة | العنوان | الحالة | التوثيق |
 |---|---|---|---|
-| **الشريحة 0** | قاعدة البيانات، النماذج Eloquent، ومصفوفة الصلاحيات المعتمدة | مكتملة 100% | [`docs/slices/README.md`](docs/slices/README.md) |
+| **الشريحة 0** | قاعدة البيانات، النماذج Eloquent، ومصفوفة الصلاحيات الرسمية | مكتملة 100% | [`docs/slices/README.md`](docs/slices/README.md) |
 | **الشريحة 1** | المصادقة، العزل المؤسسي للمدارس، وإدارة النظام للمسؤول | مكتملة 100% | [`docs/slices/slice1_auth_admin.md`](docs/slices/slice1_auth_admin.md) |
 | **الشريحة 2** | التقييم الذاتي، رصد درجات المؤشرات، وإدارة الشواهد والنسخ التاريخية | مكتملة 100% | [`docs/slices/slice2_evaluation_evidence.md`](docs/slices/slice2_evaluation_evidence.md) |
 | **الشريحة 3** | خطط التحسين المدرسي، الإجراءات التنفيذية، وملاحظات المراجعة | مكتملة 100% | [`docs/slices/slice3_improvement_plans.md`](docs/slices/slice3_improvement_plans.md) |
@@ -67,8 +67,8 @@ school-quality-system/
 * التفاصيل الكاملة للشريحة 5: [`docs/slices/slice5_evidence_organization.md`](docs/slices/slice5_evidence_organization.md)
 * خارطة الطريق للشرائح المستقبلية (12 شريحة): [`docs/slices_roadmap.md`](docs/slices_roadmap.md)
 * سجل حصر الفجوات والقرارات التقنية: [`gaps.md`](gaps.md)
-* دليل التحقق اليدوي للواجهات المؤقتة (مُعاد بناؤه ومبوّب بالشرائح 1-6): [`frontend-prototype/verification-guide.md`](frontend-prototype/verification-guide.md)
-* توثيق النموذج الأولي التفاعلي (18 شاشة مع أداة التعبئة الإلزامية Dev-Only والدخول السريع للأدوار الستة): [`frontend-prototype/README.md`](frontend-prototype/README.md)
+* دليل التحقق اليدوي للواجهات المؤقتة (مُعاد بناؤه ومبوّب بالشرائح 1-6 مع أدلة الأدوار ومراكز الإشراف والمعايير): [`frontend-prototype/verification-guide.md`](frontend-prototype/verification-guide.md)
+* توثيق النموذج الأولي التفاعلي (21 شاشة مع شريط تنقل ديناميكي حسب الدور، مركز الإشراف، مركز المعايير، أداة التعبئة الإلزامية والدخول السريع): [`frontend-prototype/README.md`](frontend-prototype/README.md)
 
 ---
 

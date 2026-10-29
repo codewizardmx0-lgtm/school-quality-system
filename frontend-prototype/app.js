@@ -37,6 +37,24 @@ const App = {
     indicatorsContextEvalId: null,
   },
 
+  loadingCount: 0,
+  showLoading(text = 'جارٍ معالجة الطلب...') {
+    this.loadingCount++;
+    const spinner = document.getElementById('global-spinner');
+    const spinnerText = document.getElementById('global-spinner-text');
+    if (spinner) {
+      if (spinnerText && text) spinnerText.textContent = text;
+      spinner.classList.remove('hidden');
+    }
+  },
+  hideLoading() {
+    this.loadingCount = Math.max(0, this.loadingCount - 1);
+    if (this.loadingCount === 0) {
+      const spinner = document.getElementById('global-spinner');
+      if (spinner) spinner.classList.add('hidden');
+    }
+  },
+
   // ---------------------------------------------------------------------------
   // 1. التهيئة الأولية (Initialization)
   // ---------------------------------------------------------------------------
@@ -54,16 +72,20 @@ const App = {
       btnLogout.addEventListener('click', () => this.handleLogout());
     }
 
+    this.updateDevModeDisplay();
+
     if (this.state.token && this.state.user) {
       this.updateUserNav();
-      this.navTo('cycles');
+      this.renderRoleNav();
+      this.redirectAfterLogin();
     } else {
+      this.renderRoleNav();
       this.navTo('login');
     }
   },
 
   // ---------------------------------------------------------------------------
-  // 2. طلبات الشبكة (HTTP Requests Helper)
+  // 2. طلبات الشبكة (HTTP Requests Helper with Unified Error Handling & Spinner)
   // ---------------------------------------------------------------------------
   async request(endpoint, options = {}) {
     const url = `${this.state.apiUrl}${endpoint.startsWith('/') ? '' : '/'}${endpoint}`;
@@ -91,6 +113,11 @@ const App = {
       config.body = options.isFormData ? options.body : JSON.stringify(options.body);
     }
 
+    const showSpinner = options.silent !== true;
+    if (showSpinner) {
+      this.showLoading(options.loadingText || 'جارٍ معالجة الطلب...');
+    }
+
     try {
       const response = await fetch(url, config);
       const isJson = (response.headers.get('content-type') || '').includes('application/json');
@@ -99,12 +126,25 @@ const App = {
       if (!response.ok) {
         let msg = data?.message;
         if (!msg) {
-          if (response.status === 401) msg = "انتهت صلاحية الجلسة أو لم يتم تسجيل الدخول (401).";
-          else if (response.status === 403) msg = "غير مصرح لك بإجراء هذه العملية (403).";
-          else if (response.status === 404) msg = "المورد المطلوب غير موجود أو يخص مدرسة أخرى (404).";
-          else if (response.status === 422) msg = "البيانات المدخلة غير صالحة أو التقييم مقفل (422).";
-          else msg = `خطأ في الطلب (${response.status})`;
+          if (response.status === 401) msg = "انتهت صلاحية الجلسة، يرجى إعادة تسجيل الدخول (401).";
+          else if (response.status === 403) msg = "ليس لديك صلاحية لتنفيذ هذا الإجراء (403).";
+          else if (response.status === 404) msg = "المورد المطلوب غير موجود أو يخص مدرسة أخرى (404 - عزل مؤسسي).";
+          else if (response.status === 422) msg = "بيانات غير صالحة أو قيود العمل غير مستوفاة (422).";
+          else if (response.status >= 500) msg = "حدث خطأ غير متوقع في الخادم (500). يرجى المحاولة لاحقاً.";
+          else msg = `خطأ في معالجة الطلب (${response.status})`;
         }
+
+        if (response.status === 401 && this.state.token) {
+          this.state.token = null;
+          this.state.user = null;
+          localStorage.removeItem('eval_token');
+          localStorage.removeItem('eval_user');
+          this.updateUserNav();
+          this.renderRoleNav();
+          this.navTo('login');
+          this.showAlert('انتهت صلاحية الجلسة، يرجى إعادة تسجيل الدخول.', 'warning');
+        }
+
         return {
           ok: false,
           status: response.status,
@@ -123,12 +163,17 @@ const App = {
       };
     } catch (err) {
       console.error('Network error:', err);
+      this.showAlert('تعذر الاتصال بالخادم. يرجى التأكد من تشغيل الـ API وشبكة الاتصال.', 'error');
       return {
         ok: false,
         status: 0,
         message: 'تعذر الاتصال بالخادم. يرجى التأكد من تشغيل الـ API.',
         errors: null,
       };
+    } finally {
+      if (showSpinner) {
+        this.hideLoading();
+      }
     }
   },
 
@@ -172,6 +217,9 @@ const App = {
       'export-report',
       'school-management',
       'admin',
+      'supervision',
+      'standards-manager',
+      'under-development',
     ];
 
     screens.forEach((s) => {
@@ -184,6 +232,7 @@ const App = {
 
     this.state.currentScreen = screenName;
     this.updateBreadcrumbs(screenName);
+    this.renderRoleNav();
 
     // تحميل البيانات التلقائي حسب الشاشة
     if (screenName === 'dashboard') {
@@ -214,6 +263,10 @@ const App = {
       this.loadSchoolManagementData();
     } else if (screenName === 'admin') {
       this.loadAdminData();
+    } else if (screenName === 'supervision') {
+      this.loadSupervisionData();
+    } else if (screenName === 'standards-manager') {
+      this.loadStandardsManagerData();
     }
   },
 
@@ -257,6 +310,18 @@ const App = {
     const isAdmin = this.state.user?.userType === 'system' || this.hasRole('admin') || this.hasPermission('users.manage') || this.hasPermission('schools.manage');
     if (bcAdmin) bcAdmin.style.display = isAdmin ? 'inline' : 'none';
     if (bcSepAdmin) bcSepAdmin.style.display = isAdmin ? 'inline' : 'none';
+
+    const bcSup = document.getElementById('bc-supervision');
+    const bcSepSup = document.getElementById('bc-sep-supervision');
+    const isSup = this.hasRole('ministry_supervisor') || this.hasRole('admin');
+    if (bcSup) bcSup.style.display = isSup ? 'inline' : 'none';
+    if (bcSepSup) bcSepSup.style.display = isSup ? 'inline' : 'none';
+
+    const bcStdMgr = document.getElementById('bc-standards-manager');
+    const bcSepStdMgr = document.getElementById('bc-sep-standards-manager');
+    const isStdMgr = this.hasRole('ministry_standards_manager') || this.hasRole('admin');
+    if (bcStdMgr) bcStdMgr.style.display = isStdMgr ? 'inline' : 'none';
+    if (bcSepStdMgr) bcSepStdMgr.style.display = isStdMgr ? 'inline' : 'none';
   },
 
   updateUserNav() {
@@ -270,19 +335,150 @@ const App = {
 
     badge.classList.remove('hidden');
     document.getElementById('user-name').textContent = this.state.user.fullName || this.state.user.username;
-    document.getElementById('user-school').textContent = this.state.user.school?.schoolName || 'مدرسة غير محددة';
-    
-    // استخراج المسمى من كائن الدور القادم مباشرة من الـ API (حقل description أو roleName)
-    const primaryRole = this.state.user.roles?.[0];
-    const roleTitle = primaryRole?.description || primaryRole?.roleName || this.state.user.userType;
-    document.getElementById('user-role').textContent = roleTitle;
+    document.getElementById('user-school').textContent = this.state.user.school?.schoolName || (this.state.user.ministry?.ministryName || 'إدارة النظام');
 
-    this.updateDevToolsVisibility();
+    const primaryRole = this.state.user.roles?.[0];
+    const roleName = primaryRole?.roleName || primaryRole?.name || this.state.user.userType;
+    const roleTitle = primaryRole?.description || primaryRole?.roleName || this.state.user.userType;
+    const roleEl = document.getElementById('user-role');
+    if (roleEl) {
+      roleEl.textContent = roleTitle;
+      roleEl.className = 'role-tag';
+      if (roleName === 'admin' || this.state.user.userType === 'system') {
+        roleEl.classList.add('badge-role-admin');
+      } else if (roleName === 'school_principal') {
+        roleEl.classList.add('badge-role-principal');
+      } else if (roleName === 'school_evaluator') {
+        roleEl.classList.add('badge-role-evaluator');
+      } else if (roleName === 'ministry_supervisor') {
+        roleEl.classList.add('badge-role-supervisor');
+      } else if (roleName === 'ministry_standards_manager') {
+        roleEl.classList.add('badge-role-standards');
+      }
+    }
+
+    this.updateDevModeDisplay();
+  },
+
+  renderRoleNav() {
+    const nav = document.getElementById('role-nav');
+    const container = document.getElementById('role-nav-items');
+    if (!nav || !container) return;
+
+    if (!this.state.user || this.state.currentScreen === 'login') {
+      nav.classList.add('hidden');
+      container.innerHTML = '';
+      return;
+    }
+
+    nav.classList.remove('hidden');
+
+    let items = [];
+
+    if (this.state.user.userType === 'system' || this.hasRole('admin')) {
+      items = [
+        { id: 'admin-schools', label: '🏫 إدارة المدارس', screen: 'admin', tab: 'schools' },
+        { id: 'admin-users', label: '👥 إدارة الحسابات', screen: 'admin', tab: 'users' },
+        { id: 'admin-roles', label: '🛡️ الأدوار والصلاحيات', screen: 'admin', tab: 'roles' },
+        { id: 'admin-cycles', label: '📋 ملفات التقييم', screen: 'cycles' },
+        { id: 'admin-standards', label: '📖 معايير الاعتماد المدرسي', screen: 'standards-review' },
+      ];
+    } else if (this.hasRole('school_principal')) {
+      items = [
+        { id: 'prin-school', label: '🏫 ملف وبيانات المدرسة', screen: 'school-management', tab: 'profile' },
+        { id: 'prin-dash', label: '📊 لوحة المؤشرات', screen: 'dashboard' },
+        { id: 'prin-cycles', label: '📝 تقييمات المدرسة', screen: 'cycles' },
+        { id: 'prin-evinv', label: '📑 جرد الشواهد', screen: 'evidence-inventory' },
+        { id: 'prin-plans', label: '📈 خطط التحسين', screen: 'plans' },
+        { id: 'prin-export', label: '📥 تصدير التقرير', screen: 'export-report' },
+      ];
+    } else if (this.hasRole('school_evaluator')) {
+      items = [
+        { id: 'eval-tree', label: '📝 استمارة التقييم الذاتي', screen: 'standards-tree' },
+        { id: 'eval-cycles', label: '📋 ملفات التقييم', screen: 'cycles' },
+        { id: 'eval-results', label: '🎯 نتائج الرصد', screen: 'assessment-results' },
+        { id: 'eval-evinv', label: '📑 جرد وحصر الشواهد', screen: 'evidence-inventory' },
+        { id: 'eval-sugg', label: '💡 مجالات واقتراحات التحسين', screen: 'suggestions' },
+        { id: 'eval-plans', label: '📈 خطط التحسين', screen: 'plans' },
+        { id: 'eval-std', label: '📖 معايير الاعتماد المدرسي', screen: 'standards-review' },
+      ];
+    } else if (this.hasRole('ministry_supervisor')) {
+      items = [
+        { id: 'sup-hub', label: '👁️ المتابعة الإشرافية', screen: 'supervision' },
+        { id: 'sup-cycles', label: '📋 استعراض تقييمات المدارس', screen: 'cycles' },
+        { id: 'sup-std', label: '📖 معايير الاعتماد المدرسي', screen: 'standards-review' },
+      ];
+    } else if (this.hasRole('ministry_standards_manager')) {
+      items = [
+        { id: 'std-hub', label: '📑 مركز معايير الاعتماد المدرسي', screen: 'standards-manager' },
+        { id: 'std-review', label: '📖 دليل المعايير والمؤشرات', screen: 'standards-review' },
+      ];
+    } else {
+      items = [
+        { id: 'gen-dash', label: '📊 لوحة المعلومات', screen: 'dashboard' },
+        { id: 'gen-cycles', label: '📋 دورات التقييم', screen: 'cycles' },
+      ];
+    }
+
+    container.innerHTML = items.map(item => {
+      const isActive = this.state.currentScreen === item.screen;
+      return `
+        <button type="button" class="role-nav-btn ${isActive ? 'active' : ''}" 
+                onclick="App.handleRoleNavClick('${item.screen}', '${item.tab || ''}')">
+          ${item.label}
+        </button>
+      `;
+    }).join('');
+  },
+
+  handleRoleNavClick(screen, tab = '') {
+    this.navTo(screen);
+    if (screen === 'admin' && tab) {
+      this.switchAdminTab(tab);
+    } else if (screen === 'school-management' && tab) {
+      this.switchSchoolTab(tab);
+    }
+  },
+
+  redirectAfterLogin() {
+    if (!this.state.user) {
+      this.navTo('login');
+      return;
+    }
+
+    if (this.state.user.userType === 'system' || this.hasRole('admin')) {
+      this.navTo('admin');
+    } else if (this.hasRole('school_principal')) {
+      this.navTo('school-management');
+    } else if (this.hasRole('school_evaluator')) {
+      this.navTo(this.state.currentEvaluation ? 'standards-tree' : 'cycles');
+    } else if (this.hasRole('ministry_supervisor')) {
+      this.navTo('supervision');
+    } else if (this.hasRole('ministry_standards_manager')) {
+      this.navTo('standards-manager');
+    } else {
+      this.navTo('under-development');
+    }
   },
 
   isDevMode() {
     if (localStorage.getItem('dev_mode') === 'false') return false;
     return true;
+  },
+
+  updateDevModeDisplay() {
+    const isDev = this.isDevMode();
+    const btn = document.getElementById('btn-toggle-dev');
+    if (btn) {
+      btn.textContent = isDev ? '⚡ وضع المطور: مفعل' : 'وضع المطور: معطل';
+      btn.style.background = isDev ? '#8b5cf6' : '#94a3b8';
+      btn.style.color = '#ffffff';
+    }
+    const quickSection = document.getElementById('quick-login-section');
+    if (quickSection) {
+      quickSection.style.display = isDev ? 'block' : 'none';
+    }
+    this.updateDevToolsVisibility();
   },
 
   updateDevToolsVisibility() {
@@ -338,10 +534,10 @@ const App = {
     localStorage.setItem('eval_user', JSON.stringify(this.state.user));
 
     this.updateUserNav();
+    this.renderRoleNav();
     this.showAlert(`مرحباً بك: ${this.state.user.fullName}`, 'success');
 
-    // التوجيه: المقيم والمدير يذهبان إلى لوحة التقييمات
-    this.navTo('cycles');
+    this.redirectAfterLogin();
   },
 
   async quickLogin(username) {
@@ -351,16 +547,6 @@ const App = {
       userInput.value = username;
       passInput.value = 'ChangeMeDevPassword@2026';
       await this.handleLogin(new Event('submit'));
-
-      if (this.state.user) {
-        if (this.state.user.userType === 'system' || this.hasRole('admin')) {
-          this.navTo('admin');
-        } else if (this.state.user.userType === 'ministry') {
-          this.navTo('cycles');
-        } else {
-          this.navTo('dashboard');
-        }
-      }
     }
   },
 
@@ -368,13 +554,8 @@ const App = {
     const current = localStorage.getItem('dev_mode') !== 'false';
     const next = !current;
     localStorage.setItem('dev_mode', next ? 'true' : 'false');
-    this.updateDevToolsVisibility();
-    const badge = document.getElementById('dev-mode-badge');
-    if (badge) {
-      badge.textContent = next ? '⚡ وضع المطور: مفعل' : 'وضع المطور: معطل';
-      badge.className = next ? 'badge badge-purple' : 'badge badge-gray';
-    }
-    this.showAlert(next ? 'تم تفعيل وضع المطور وأدوات الاختبار السريع.' : 'تم تعطيل وضع المطور.', 'info');
+    this.updateDevModeDisplay();
+    this.showAlert(next ? 'تم تفعيل وضع المطور وأدوات الاختبار السريع.' : 'تم تعطيل وضع المطور وإخفاء أدوات الاختبار.', 'info');
   },
 
   hasRole(roleName) {
@@ -393,6 +574,7 @@ const App = {
     localStorage.removeItem('eval_user');
 
     this.updateUserNav();
+    this.renderRoleNav();
     this.navTo('login');
     this.showAlert('تم تسجيل الخروج بنجاح.', 'info');
   },
@@ -552,8 +734,8 @@ const App = {
             الوزن: ${ind.weight || 1} | ${scoreBadge}
           </div>
           <div class="tools-tags">
-            <span style="font-size: 0.75rem; color: var(--text-muted); align-self: center;">الأدوات المعتمدة:</span>
-            ${toolsTags || '<span style="font-size: 0.75rem; color: var(--text-muted);">لا توجد أدوات تحقق معتمدة لهذا المؤشر في قاعدة البيانات.</span>'}
+            <span style="font-size: 0.75rem; color: var(--text-muted); align-self: center;">الأدوات الرسمية:</span>
+            ${toolsTags || '<span style="font-size: 0.75rem; color: var(--text-muted);">لا توجد أدوات تحقق رسمية لهذا المؤشر في قاعدة البيانات.</span>'}
           </div>
         </div>
 
@@ -602,7 +784,7 @@ const App = {
     if (stdInfoEl) {
       stdInfoEl.textContent = indicator.standardName 
         ? `${indicator.standardName}${indicator.standardDescription ? ' — ' + indicator.standardDescription : ''}`
-        : 'المعيار المعتمد';
+        : 'المعيار الرسمي';
     }
     const subStdInfoEl = document.getElementById('score-substd-info');
     if (subStdInfoEl) {
@@ -660,7 +842,7 @@ const App = {
               <span>الدرجة: ${desc.scoreValue}</span>
               <span class="badge ${levelBadgeClass}">${desc.label}</span>
             </div>
-            <div class="card-desc-text">${desc.description || 'لا يوجد نص واصفة معتمد'}</div>
+            <div class="card-desc-text">${desc.description || 'لا يوجد نص واصفة محدد'}</div>
           </div>
         `;
       }).join('');
@@ -672,7 +854,7 @@ const App = {
     const usedToolIds = indicator.verificationToolIds || [];
 
     if (applicableTools.length === 0) {
-      toolsContainer.innerHTML = '<span style="font-size: 0.8rem; color: var(--text-muted);">لا توجد أدوات تحقق معتمدة لهذا المؤشر في قاعدة البيانات.</span>';
+      toolsContainer.innerHTML = '<span style="font-size: 0.8rem; color: var(--text-muted);">لا توجد أدوات تحقق رسمية لهذا المؤشر في قاعدة البيانات.</span>';
     } else {
       toolsContainer.innerHTML = applicableTools.map(tool => `
         <div class="tool-item-row">
@@ -1043,7 +1225,7 @@ const App = {
           
           <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 0.5rem; flex-wrap: wrap; gap: 0.5rem;">
             <div style="font-size: 0.82rem; color: #334155;">
-              📎 الملف المعتمد: <strong>${attachment?.fileName || 'وثيقة الشاهد'}</strong> 
+              📎 الملف المرفق: <strong>${attachment?.fileName || 'وثيقة الشاهد'}</strong> 
               ${attachment?.fileSize ? `<span style="color: var(--text-muted); font-size: 0.75rem;">(${Math.round(attachment.fileSize / 1024)} KB)</span>` : ''}
             </div>
             <div style="display: flex; gap: 0.35rem; flex-wrap: wrap;">
@@ -1239,7 +1421,7 @@ const App = {
   async promptClassify(evidenceId, currentType) {
     const types = [
       { id: 'minutes', label: 'محضر اجتماع / زيارة (Minutes)' },
-      { id: 'plan', label: 'خطة معتمدة (Plan)' },
+      { id: 'plan', label: 'خطة موثقة ورسمية (Plan)' },
       { id: 'record', label: 'سجل رسمي / كشف (Record)' },
       { id: 'report', label: 'تقرير دوري / ختامي (Report)' },
       { id: 'board', label: 'لوحة إعلانية / إرشادية (Board)' },
@@ -2418,7 +2600,7 @@ const App = {
                               <span>المستوى: ${d.scoreValue}</span>
                               <span class="badge ${d.scoreValue >= 2 ? 'badge-green' : (d.scoreValue === 1 ? 'badge-yellow' : 'badge-red')}">${d.label}</span>
                             </div>
-                            <div class="card-desc-text">${d.description || 'لا يوجد نص واصفة معتمد'}</div>
+                            <div class="card-desc-text">${d.description || 'لا يوجد نص واصفة محدد'}</div>
                           </div>
                         `).join('')}
                       </div>
@@ -2429,7 +2611,7 @@ const App = {
                       <!-- أدوات التحقق -->
                       <div>
                         <div style="font-size: 0.8rem; font-weight: 700; color: #334155; margin-bottom: 0.35rem;">
-                          أدوات التحقق المعتمدة:
+                          أدوات التحقق الرسمية:
                         </div>
                         <div style="display: flex; flex-direction: column; gap: 0.35rem;">
                           ${(ind.verificationTools || []).length > 0 
@@ -2599,7 +2781,7 @@ const App = {
         kpiScore.textContent = `${assessment.final_score}%`;
         kpiScoreSub.textContent = `مكتمل ومقفل | العام الدراسي: ${assessment.academic_year || '-'}`;
         kpiLevel.textContent = assessment.performance_level?.label || 'متميز';
-        kpiLevelSub.textContent = 'المستوى العام المعتمد';
+        kpiLevelSub.textContent = 'المستوى العام المحدد';
       } else {
         kpiScore.textContent = `${assessment.completion_percentage}%`;
         kpiScoreSub.textContent = `قيد الإجراء (${assessment.evaluated_indicators} من ${assessment.total_indicators} مؤشر)`;
@@ -2888,7 +3070,7 @@ const App = {
     const std = res.data;
     document.getElementById('stdres-title').textContent = `نتيجة المعيار: ${std.code} — ${std.name}`;
     document.getElementById('stdres-meta').textContent = 
-      `الوزن المعتمد: ${std.weight}% | الدرجة الخام: ${std.raw_score} من 3.00 | المساهمة الموزونة: ${std.weighted_score}% | عدد المؤشرات: ${std.total_indicators}`;
+      `الوزن النسبي: ${std.weight}% | الدرجة الخام: ${std.raw_score} من 3.00 | المساهمة الموزونة: ${std.weighted_score}% | عدد المؤشرات: ${std.total_indicators}`;
 
     const pct = std.percentage || 0;
     document.getElementById('stdres-pct-text').textContent = `${pct}%`;
@@ -2970,7 +3152,7 @@ const App = {
 
     // تعبئة الـ KPIs
     document.getElementById('evsum-kpi-rate').textContent = `${data.overall_evidence_completion_rate}%`;
-    document.getElementById('evsum-kpi-rate-sub').textContent = `من إجمالي متطلبات الشواهد المعتمدة`;
+    document.getElementById('evsum-kpi-rate-sub').textContent = `من إجمالي متطلبات الشواهد الرسمية`;
     document.getElementById('evsum-kpi-uploaded').textContent = data.total_uploaded_evidences;
     document.getElementById('evsum-kpi-required').textContent = data.total_required_evidences;
     document.getElementById('evsum-kpi-missing').textContent = data.indicators_missing_evidence;
@@ -3173,7 +3355,7 @@ const App = {
         <div class="kpi-sub">${exec.performance_level?.label || 'متميز'}</div>
       </div>
       <div class="kpi-card kpi-success">
-        <div class="kpi-label">المعايير المعتمدة</div>
+        <div class="kpi-label">المعايير الرسمية</div>
         <div class="kpi-value">${exec.total_standards} معايير</div>
         <div class="kpi-sub">أوزان رسمية 100%</div>
       </div>
@@ -3423,7 +3605,7 @@ const App = {
         const file = new File([blob], `evidence_${ind.code}.txt`, { type: 'text/plain' });
 
         const formData = new FormData();
-        formData.append('title', `شاهد تجريبي معتمد للمؤشر ${ind.code}`);
+        formData.append('title', `شاهد تجريبي مكتمل للمؤشر ${ind.code}`);
         formData.append('evidence_type', 'report');
         formData.append('file', file);
 
@@ -4324,19 +4506,79 @@ const App = {
     this.state.currentAdminTab = tabName;
     const btnSchools = document.getElementById('tab-btn-admin-schools');
     const btnUsers = document.getElementById('tab-btn-admin-users');
+    const btnRoles = document.getElementById('tab-btn-admin-roles');
     const paneSchools = document.getElementById('admin-tab-schools');
     const paneUsers = document.getElementById('admin-tab-users');
+    const paneRoles = document.getElementById('admin-tab-roles');
 
     if (btnSchools) btnSchools.classList.toggle('active', tabName === 'schools');
     if (btnUsers) btnUsers.classList.toggle('active', tabName === 'users');
+    if (btnRoles) btnRoles.classList.toggle('active', tabName === 'roles');
+
     if (paneSchools) paneSchools.classList.toggle('hidden', tabName !== 'schools');
     if (paneUsers) paneUsers.classList.toggle('hidden', tabName !== 'users');
+    if (paneRoles) paneRoles.classList.toggle('hidden', tabName !== 'roles');
 
     if (tabName === 'schools') {
       this.loadAdminSchools();
-    } else {
+    } else if (tabName === 'users') {
       this.loadAdminUsers();
+    } else if (tabName === 'roles') {
+      this.loadAdminRoles();
     }
+  },
+
+  async loadAdminRoles() {
+    const tbody = document.getElementById('admin-roles-table-body');
+    if (!tbody) return;
+    tbody.innerHTML = '<tr><td colspan="4" style="text-align: center;">جارِ جلب مصفوفة الأدوار والصلاحيات...</td></tr>';
+
+    const rolesData = [
+      {
+        code: 'admin',
+        title: 'مدير النظام (System Admin)',
+        scope: 'نظامي شامل (System)',
+        badge: 'badge-role-admin',
+        perms: 'إدارة كاملة للمدارس، الحسابات، إعادة التعيين، وتجاوز القيود التجريبية (users.manage, schools.manage, system.admin)',
+      },
+      {
+        code: 'school_principal',
+        title: 'مدير المدرسة / مراجع داخلي (School Principal)',
+        scope: 'مدرسي محلي (School)',
+        badge: 'badge-role-principal',
+        perms: 'إدارة ملف المدرسة والكادر والطلاب والمرافق، مراجعة وتقفيل التقييم، تدوين ملاحظات المراجع الداخلي، وتصدير التقارير (reviews.write, evaluations.submit, reports.view)',
+      },
+      {
+        code: 'school_evaluator',
+        title: 'مقيّم جودة المدرسة (School Evaluator)',
+        scope: 'مدرسي محلي (School)',
+        badge: 'badge-role-evaluator',
+        perms: 'رصد درجات المؤشرات الـ 109، إرفاق وتصنيف الشواهد، تبني مجالات التحسين، وصياغة خطط التحسين ومتابعتها (evaluations.edit, evidence.manage, plans.manage)',
+      },
+      {
+        code: 'ministry_supervisor',
+        title: 'مشرف ومراجع وزاري (Ministry Supervisor)',
+        scope: 'وزاري / إشرافي (Ministry)',
+        badge: 'badge-role-supervisor',
+        perms: 'متابعة تقييمات مدارس المحافظة، تدقيق الشواهد وجودة الرصد، تدوين الملاحظات التوجيهية، واقتراح خطط دعم (supervision.review, evaluations.view, reports.view)',
+      },
+      {
+        code: 'ministry_standards_manager',
+        title: 'مسؤول المعايير بالوزارة (Standards Manager)',
+        scope: 'وزاري مركزي (Ministry)',
+        badge: 'badge-role-standards',
+        perms: 'استعراض وإدارة وثائق معايير الاعتماد المدرسي ومؤشراتها وأدوات التحقق (standards.view, standards.manage)',
+      },
+    ];
+
+    tbody.innerHTML = rolesData.map(r => `
+      <tr>
+        <td><code>${r.code}</code></td>
+        <td><span class="badge ${r.badge}">${r.title}</span></td>
+        <td><span class="badge badge-gray">${r.scope}</span></td>
+        <td style="font-size: 0.85rem; line-height: 1.4;">${r.perms}</td>
+      </tr>
+    `).join('');
   },
 
   async loadAdminSchools() {
@@ -4699,13 +4941,18 @@ const App = {
     this.state.linkEvidenceMode = mode;
     const btnSingle = document.getElementById('tab-link-single-btn');
     const btnMulti = document.getElementById('tab-link-multi-btn');
+    const btnUnlink = document.getElementById('tab-link-unlink-btn');
     const paneSingle = document.getElementById('link-mode-single');
     const paneMulti = document.getElementById('link-mode-multi');
+    const paneUnlink = document.getElementById('link-mode-unlink');
 
     if (btnSingle) btnSingle.classList.toggle('active', mode === 'single');
     if (btnMulti) btnMulti.classList.toggle('active', mode === 'multi');
+    if (btnUnlink) btnUnlink.classList.toggle('active', mode === 'unlink');
+
     if (paneSingle) paneSingle.classList.toggle('hidden', mode !== 'single');
     if (paneMulti) paneMulti.classList.toggle('hidden', mode !== 'multi');
+    if (paneUnlink) paneUnlink.classList.toggle('hidden', mode !== 'unlink');
 
     if (mode === 'multi') {
       this.renderMultiLinkCheckboxes();
@@ -4746,7 +4993,186 @@ const App = {
 
     if (!confirm('هل ترغب في فك ارتباط هذا الشاهد من هذا المؤشر؟')) return;
 
-    this.showAlert('لفك ارتباط الشاهد تماماً من هذا المؤشر، يرجى نقله للمؤشر المناسب عبر التبويب الأول.', 'info');
+    this.showAlert('يتطلب نظام الجودة أن يرتبط الشاهد بمؤشر واحد على الأقل. لنقل الشاهد لمؤشر بديل، يرجى استخدام تبويب "نقل لمؤشر آخر".', 'info');
+  },
+
+  // ---------------------------------------------------------------------------
+  // 20. تحسينات سلسلة خطط التحسين (Adopted Areas Chain)
+  // ---------------------------------------------------------------------------
+  async loadImprovementAreas() {
+    const container = document.getElementById('adopted-areas-cards-container');
+    if (!container) return;
+    container.innerHTML = '<span style="font-size: 0.82rem; color: var(--text-muted);">جارِ جلب مجالات التحسين المتبناة...</span>';
+
+    const res = await this.request('/improvement-areas');
+    if (!res.ok) {
+      container.innerHTML = `<span style="font-size: 0.82rem; color: red;">${res.message || 'تعذر تحميل المجالات المتبناة.'}</span>`;
+      return;
+    }
+
+    const areas = res.data || [];
+    this.state.improvementAreas = areas;
+
+    const adoptedCountEl = document.getElementById('sugg-adopted-count');
+    if (adoptedCountEl) adoptedCountEl.textContent = areas.length;
+
+    if (areas.length === 0) {
+      container.innerHTML = '<span style="font-size: 0.85rem; color: var(--text-muted); padding: 0.5rem;">لم يتم تبني أي مجالات تحسين حتى الآن. انقر على «تبني كمجال تحسين» من الجدول أعلاه.</span>';
+      return;
+    }
+
+    container.innerHTML = areas.map(a => `
+      <div style="background: #ffffff; border: 1px solid #bbf7d0; border-right: 4px solid #16a34a; border-radius: 6px; padding: 0.75rem; box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.35rem;">
+          <strong style="color: #1e293b; font-size: 0.9rem;">${a.name}</strong>
+          <span class="badge badge-green" style="font-size: 0.72rem;">${a.priorityLabel || a.priority}</span>
+        </div>
+        <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.6rem;">
+          المؤشر: <code>${a.indicatorCode || `#${a.resultId}`}</code>
+        </div>
+        <button type="button" class="btn btn-sm btn-primary" style="width: 100%; font-size: 0.8rem;" 
+                onclick="App.createPlanFromAdoptedArea(${a.areaId}, '${(a.name || '').replace(/'/g, "\\'")}')">
+          ➕ إنشاء خطة تحسين فورية من هذا المجال
+        </button>
+      </div>
+    `).join('');
+  },
+
+  createPlanFromAdoptedArea(areaId, areaName) {
+    this.navTo('plans');
+    this.toggleCreatePlanForm(true);
+
+    const titleInput = document.getElementById('plan-title');
+    if (titleInput) {
+      titleInput.value = `خطة تحسين لمجال: ${areaName}`;
+    }
+
+    setTimeout(() => {
+      const checkboxes = document.getElementsByName('planCreateAreaIds');
+      checkboxes.forEach(cb => {
+        if (parseInt(cb.value) === areaId) {
+          cb.checked = true;
+        }
+      });
+    }, 200);
+  },
+
+  async populatePlanCreateAreas() {
+    const container = document.getElementById('plan-create-areas-checklist');
+    if (!container) return;
+    container.innerHTML = '<span style="font-size: 0.8rem; color: var(--text-muted);">جارِ جلب مجالات التحسين المتبناة...</span>';
+
+    const res = await this.request('/improvement-areas');
+    if (res.ok && res.data) {
+      this.state.improvementAreas = res.data;
+      if (res.data.length === 0) {
+        container.innerHTML = '<span style="font-size: 0.85rem; color: red;">لا توجد مجالات تحسين متبناة بعد. يرجى تبني مجال أولاً من شاشة الاقتراحات.</span>';
+      } else {
+        container.innerHTML = res.data.map(a => `
+          <label style="display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; cursor: pointer; padding: 0.2rem 0;">
+            <input type="checkbox" name="planCreateAreaIds" value="${a.areaId}">
+            <span>[${a.priorityLabel || a.priority}] <strong>${a.name}</strong> (${a.indicatorCode || ''})</span>
+          </label>
+        `).join('');
+      }
+    }
+  },
+
+  // ---------------------------------------------------------------------------
+  // 21. لوحة المتابعة الإشرافية (Supervision Hub) لمشرف الوزارة
+  // ---------------------------------------------------------------------------
+  async loadSupervisionData() {
+    const tbody = document.getElementById('supervision-schools-tbody');
+    if (!tbody) return;
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align: center;">جارِ جلب قائمة المدارس والتقييمات...</td></tr>';
+
+    const [schoolsRes, evalsRes] = await Promise.all([
+      this.request('/schools'),
+      this.request('/evaluations'),
+    ]);
+
+    const schools = schoolsRes.ok ? (schoolsRes.data || []) : [];
+    const evals = evalsRes.ok ? (evalsRes.data || []) : [];
+
+    const totalSchoolsEl = document.getElementById('sup-stat-total-schools');
+    const lockedEl = document.getElementById('sup-stat-locked');
+    const draftEl = document.getElementById('sup-stat-draft');
+
+    if (totalSchoolsEl) totalSchoolsEl.textContent = schools.length;
+    const lockedCount = evals.filter(e => e.status === 'Completed').length;
+    const draftCount = evals.filter(e => e.status !== 'Completed').length;
+
+    if (lockedEl) lockedEl.textContent = lockedCount;
+    if (draftEl) draftEl.textContent = draftCount;
+
+    if (schools.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align: center;">لا توجد مدارس مسجلة تحت نطاق الإشراف.</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = schools.map(sch => {
+      const schEvals = evals.filter(e => (e.school?.schoolId === sch.schoolId) || (e.schoolId === sch.schoolId));
+      const latestEval = schEvals[0] || null;
+      const statusBadge = latestEval 
+        ? (latestEval.status === 'Completed' 
+            ? '<span class="badge badge-green">مكتمل ومقفل</span>' 
+            : '<span class="badge badge-yellow">مسودة (قيد الرصد)</span>')
+        : '<span class="badge badge-gray">لا يوجد تقييم</span>';
+
+      const year = latestEval ? (latestEval.academicYear || latestEval.cycle?.academicYear || '2025/2026') : '-';
+
+      const actionButtons = latestEval ? `
+        <button class="btn btn-sm btn-secondary" onclick="App.openSupervisionEval(${latestEval.evaluationId})">
+          🔍 استعراض التقييم
+        </button>
+        <button class="btn btn-sm btn-secondary" onclick="App.openSupervisionInventory(${latestEval.evaluationId})">
+          📑 جرد الشواهد
+        </button>
+      ` : '<span style="font-size: 0.8rem; color: var(--text-muted);">بانتظار تدشين دورة</span>';
+
+      return `
+        <tr>
+          <td><strong>${sch.schoolName}</strong></td>
+          <td><code>${sch.identificationData || sch.schoolCode || '-'}</code></td>
+          <td><span class="badge badge-blue">${sch.educationalStage || 'أساسي/ثانوي'}</span></td>
+          <td style="font-size: 0.85rem;">${sch.governorate || 'أمانة العاصمة'} - ${sch.educationalDistrict || '-'}</td>
+          <td>${statusBadge}</td>
+          <td>${year}</td>
+          <td>
+            <div style="display: flex; gap: 0.35rem; flex-wrap: wrap;">
+              ${actionButtons}
+            </div>
+          </td>
+        </tr>
+      `;
+    }).join('');
+  },
+
+  async openSupervisionEval(evalId) {
+    const res = await this.request(`/evaluations/${evalId}`);
+    if (res.ok) {
+      this.state.currentEvaluation = res.data;
+      this.navTo('standards-tree');
+    } else {
+      this.showAlert(res.message || 'تعذر فتح ملف التقييم المحدد.', 'error');
+    }
+  },
+
+  async openSupervisionInventory(evalId) {
+    const res = await this.request(`/evaluations/${evalId}`);
+    if (res.ok) {
+      this.state.currentEvaluation = res.data;
+      this.navTo('evidence-inventory');
+    } else {
+      this.showAlert(res.message || 'تعذر فتح جرد الشواهد للتقييم المحدد.', 'error');
+    }
+  },
+
+  // ---------------------------------------------------------------------------
+  // 22. مركز معايير الاعتماد المدرسي (Standards Hub) لمسؤول المعايير
+  // ---------------------------------------------------------------------------
+  loadStandardsManagerData() {
+    // صفحة عرض هيكل ومصفوفة المعايير
   },
 
 };

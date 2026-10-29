@@ -8,6 +8,14 @@
 </head>
 <body>
 
+  <!-- مؤشر تحميل الشبكة الموحد (Global Network Loading Spinner) -->
+  <div id="global-spinner" class="global-spinner hidden">
+    <div class="spinner-box">
+      <div class="spinner"></div>
+      <span id="global-spinner-text">جارٍ معالجة الطلب...</span>
+    </div>
+  </div>
+
   <!-- شريط التنقل العلوي -->
   <header>
     <div class="header-container">
@@ -21,6 +29,10 @@
         <input type="text" id="api-url-input" value="http://127.0.0.1:8000/api/v1">
       </div>
 
+      <div style="display: flex; align-items: center; gap: 0.5rem;">
+        <button id="btn-toggle-dev" class="pill-btn" onclick="App.toggleDevMode()" title="تبديل إظهار أدوات الاختبار السريع">⚡ وضع المطور: مفعل</button>
+      </div>
+
       <div class="user-nav">
         <div id="user-badge" class="user-badge hidden">
           <span id="user-name">اسم المستخدم</span>
@@ -31,6 +43,13 @@
       </div>
     </div>
   </header>
+
+  <!-- شريط التنقل المبني على الأدوار (Role-Based Navigation) -->
+  <nav id="role-nav" class="role-nav hidden">
+    <div class="role-nav-container" id="role-nav-items">
+      <!-- تُحقن الأزرار ديناميكياً حسب دور وصلاحيات المستخدم -->
+    </div>
+  </nav>
 
   <!-- الحاوية الرئيسية -->
   <main>
@@ -56,15 +75,23 @@
       <a id="bc-export" onclick="App.navTo('export-report')">📥 تصدير التقرير</a>
       <span id="bc-sep6">/</span>
       <a id="bc-standards-review" onclick="App.navTo('standards-review')">مراجعة المعايير 📖</a>
+      <span id="bc-sep-school" class="hidden">/</span>
+      <a id="bc-school" class="hidden" onclick="App.navTo('school-management')">🏫 إدارة المدرسة</a>
+      <span id="bc-sep-supervision" class="hidden">/</span>
+      <a id="bc-supervision" class="hidden" onclick="App.navTo('supervision')">👁️ المتابعة الإشرافية</a>
+      <span id="bc-sep-standards-manager" class="hidden">/</span>
+      <a id="bc-standards-manager" class="hidden" onclick="App.navTo('standards-manager')">📑 مركز المعايير</a>
+      <span id="bc-sep-admin" class="hidden">/</span>
+      <a id="bc-admin" class="hidden" onclick="App.navTo('admin')">👑 إدارة النظام</a>
     </div>
 
     <!-- ========================================================================= -->
     <!-- الشاشة 1: تسجيل الدخول -->
     <!-- ========================================================================= -->
-    <section id="screen-login" class="card" style="max-width: 520px; margin: 2rem auto;">
+    <section id="screen-login" class="card" style="max-width: 540px; margin: 2rem auto;">
       <h2 class="card-title">تسجيل الدخول للمنصة</h2>
       <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem;">
-        يدعم تسجيل الدخول مصادقة Bearer Token عبر Sanctum وتحديد الصلاحيات ونطاق المدرسة (الشرائح 1-3).
+        يدعم تسجيل الدخول مصادقة Bearer Token عبر Sanctum وتحديد الصلاحيات ونطاق المدرسة (الشرائح 1-6).
       </p>
 
       <form id="form-login" onsubmit="App.handleLogin(event)">
@@ -85,22 +112,42 @@
         </button>
       </form>
 
-      <hr style="margin: 1.25rem 0; border: 0; border-top: 1px solid var(--border);">
+      <!-- قسم تسجيل الدخول السريع (يظهر تلقائياً في وضع المطور Dev Mode) -->
+      <div id="quick-login-section">
+        <hr style="margin: 1.25rem 0; border: 0; border-top: 1px solid var(--border);">
 
-      <label class="form-label">حسابات تجريبية سريعة للمراجعة والتحقق:</label>
-      <div class="quick-login-pills">
-        <button class="pill-btn" onclick="App.quickLogin('quality_belqees')">
-          👤 مقيّم مدرسة بلقيس (مدرسة 1)
-        </button>
-        <button class="pill-btn" onclick="App.quickLogin('principal_belqees')">
-          🎓 مدير مدرسة بلقيس (مدرسة 1)
-        </button>
-        <button class="pill-btn" onclick="App.quickLogin('quality_farouq')">
-          🚫 مقيّم مدرسة الفاروق (مدرسة 2 - فحص العزل)
-        </button>
-        <button class="pill-btn" onclick="App.quickLogin('principal_farouq')">
-          🚫 مدير مدرسة الفاروق (مدرسة 2 - فحص العزل)
-        </button>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+          <label class="form-label" style="margin: 0; font-weight: 700; color: #4338ca;">⚡ دخول سريع للأدوار الخمسة (Dev Mode):</label>
+          <span class="badge badge-purple" style="font-size: 0.72rem;">تجريبي</span>
+        </div>
+
+        <div class="quick-login-pills" style="margin-bottom: 0.75rem;">
+          <button type="button" class="pill-btn" onclick="App.quickLogin('admin')" title="مدير النظام (Admin) — إدارة المدارس والمستخدمين">
+            👑 مدير النظام (Admin)
+          </button>
+          <button type="button" class="pill-btn" onclick="App.quickLogin('principal_belqees')" title="مدير مدرسة بلقيس — مراجع داخلي">
+            🎓 مدير مدرسة بلقيس (Principal)
+          </button>
+          <button type="button" class="pill-btn" onclick="App.quickLogin('quality_belqees')" title="مقيّم مدرسة بلقيس — رصد الدرجات والشواهد">
+            👤 مقيّم مدرسة بلقيس (Evaluator)
+          </button>
+          <button type="button" class="pill-btn" onclick="App.quickLogin('supervisor_ministry')" title="مشرف الوزارة — متابعة المدارس وإبداء الملاحظات">
+            👁️ مشرف الوزارة (Supervisor)
+          </button>
+          <button type="button" class="pill-btn" onclick="App.quickLogin('standards_manager_ministry')" title="مسؤول المعايير بالوزارة — هيكل معايير الاعتماد المدرسي">
+            📑 مسؤول المعايير (Standards)
+          </button>
+        </div>
+
+        <div style="font-size: 0.78rem; color: var(--text-muted); margin-bottom: 0.35rem;">فحص العزل المؤسسي لمدرسة أخرى (404):</div>
+        <div class="quick-login-pills">
+          <button type="button" class="pill-btn" onclick="App.quickLogin('quality_farouq')" title="مقيّم مدرسة الفاروق (مدرسة 2) لفحص العزل">
+            🚫 مقيّم مدرسة الفاروق (مدرسة 2)
+          </button>
+          <button type="button" class="pill-btn" onclick="App.quickLogin('principal_farouq')" title="مدير مدرسة الفاروق (مدرسة 2) لفحص العزل">
+            🚫 مدير مدرسة الفاروق (مدرسة 2)
+          </button>
+        </div>
       </div>
     </section>
 
@@ -114,7 +161,7 @@
           <button class="btn btn-sm btn-secondary" onclick="App.loadEvaluations()">تحديث القائمة</button>
         </div>
         <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem;">
-          تُعرض ملفات التقييم المرتبطة بدورات التقييم المعتمدة للمدرسة مع حالة الملف (مسودة / مكتمل / مقفل).
+          تُعرض ملفات التقييم المرتبطة بدورات التقييم الرسمية للمدرسة مع حالة الملف (مسودة / مكتمل / مقفل).
         </p>
         <div class="table-responsive">
           <table>
@@ -220,7 +267,7 @@
         <form id="form-score-indicator" onsubmit="App.handleSaveScore(event)">
           <!-- اختيار التقدير من البطاقات الأربع المتجاورة للواصفات (Score Descriptors Cards) -->
           <div class="form-group">
-            <label class="form-label" style="font-weight: 700;">واصفات الأداء المعتمدة لسلم التقدير (انقر على البطاقة المناسبة لاختيار الدرجة):</label>
+            <label class="form-label" style="font-weight: 700;">واصفات الأداء الرسمية لسلم التقدير (انقر على البطاقة المناسبة لاختيار الدرجة):</label>
             <input type="hidden" id="selected-score-value" name="score">
             <input type="hidden" id="selected-descriptor-id" name="scoreDescriptorId">
             <div id="score-descriptor-cards" class="descriptor-cards-grid">
@@ -297,7 +344,7 @@
         <!-- قائمة الشواهد الحالية للمؤشر -->
         <div style="margin-bottom: 1.5rem;">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
-            <h4 style="font-size: 0.95rem; margin: 0; color: #1e293b;">الشواهد والوثائق المعتمدة لهذا المؤشر:</h4>
+            <h4 style="font-size: 0.95rem; margin: 0; color: #1e293b;">الشواهد والوثائق الرسمية لهذا المؤشر:</h4>
             <span style="font-size: 0.8rem; color: var(--text-muted);">(يمكن إضافة أكثر من شاهد نشط لكل مؤشر)</span>
           </div>
           <div id="evidences-list-container">
@@ -333,7 +380,7 @@
               <select id="ev-type" class="form-control">
                 <option value="other">أخرى (غير محدد)</option>
                 <option value="minutes">محضر اجتماع / زيارة (Minutes)</option>
-                <option value="plan">خطة معتمدة (Plan)</option>
+                <option value="plan">خطة موثقة ورسمية (Plan)</option>
                 <option value="record">سجل رسمي / كشف (Record)</option>
                 <option value="report">تقرير دوري / ختامي (Report)</option>
                 <option value="board">لوحة إعلانية / إرشادية (Board)</option>
@@ -353,35 +400,79 @@
       </div>
     </div>
 
-    <!-- نافذة منسدلة لاختيار المؤشر المستهدف عند نقل/ربط الشاهد -->
+    <!-- نافذة منسدلة لاختيار المؤشر المستهدف عند نقل/ربط الشاهد (Slice 2 Overhaul) -->
     <div id="modal-link-evidence" class="modal-overlay hidden">
-      <div class="modal-content" style="max-width: 550px;">
+      <div class="modal-content" style="max-width: 580px;">
         <div class="modal-header">
           <div>
-            <h3 style="font-size: 1.1rem; color: var(--primary); margin: 0;">🔗 نقل وربط الشاهد بمؤشر آخر</h3>
-            <span style="font-size: 0.78rem; color: var(--text-muted);">نقل الشاهد لمؤشر في نفس دورة التقييم مع تنظيف النتيجة القديمة إذا كانت معلقة</span>
+            <h3 style="font-size: 1.15rem; color: var(--primary); margin: 0;">🔗 ربط وإدارة علاقات الشاهد بالمؤشرات</h3>
+            <span style="font-size: 0.78rem; color: var(--text-muted);">نقل الشاهد، أو ربطه بعدة مؤشرات (Multi-link)، أو فك الارتباط</span>
           </div>
           <button class="modal-close" onclick="App.closeLinkEvidenceModal()">&times;</button>
         </div>
 
-        <div id="link-ev-alert" class="alert alert-error hidden" style="margin-top: 0.75rem;"></div>
+        <!-- تبويبات نمط الربط -->
+        <div class="tabs-nav" style="margin-top: 0.5rem; margin-bottom: 0.75rem;">
+          <button type="button" id="tab-link-single-btn" class="tab-btn active" onclick="App.switchLinkEvidenceMode('single')">
+            نقل لمؤشر آخر
+          </button>
+          <button type="button" id="tab-link-multi-btn" class="tab-btn" onclick="App.switchLinkEvidenceMode('multi')">
+            ربط متعدد (Multi-link)
+          </button>
+          <button type="button" id="tab-link-unlink-btn" class="tab-btn" onclick="App.switchLinkEvidenceMode('unlink')">
+            فك الارتباط
+          </button>
+        </div>
 
-        <div style="margin-top: 0.75rem; font-size: 0.85rem; background: #f8fafc; padding: 0.75rem; border-radius: 6px; border: 1px solid var(--border);">
+        <div id="link-ev-alert" class="alert alert-error hidden" style="margin-top: 0.5rem;"></div>
+
+        <div style="font-size: 0.85rem; background: #f8fafc; padding: 0.65rem 0.75rem; border-radius: 6px; border: 1px solid var(--border); margin-bottom: 0.75rem;">
           <div>الشاهد المختار: <strong id="link-ev-title" style="color: var(--primary);">-</strong></div>
           <div style="margin-top: 0.25rem;">المؤشر الحالي: <strong id="link-ev-current-indicator" style="color: #475569;">-</strong></div>
         </div>
 
-        <div class="form-group" style="margin-top: 1rem;">
-          <label class="form-label" for="link-ev-target-select">اختر المؤشر المستهدف للنقل والربط به:</label>
-          <input type="text" id="link-ev-search" class="form-control" placeholder="ابحث برمز أو اسم المؤشر..." oninput="App.filterLinkIndicatorOptions(this.value)" style="margin-bottom: 0.5rem; font-size: 0.85rem;">
-          <select id="link-ev-target-select" class="form-control" size="8" style="height: 180px; font-size: 0.82rem;">
-            <!-- يتم الملء ديناميكياً من شجرة المؤشرات -->
-          </select>
+        <!-- الوضع 1: نقل الشاهد لمؤشر فردي -->
+        <div id="link-mode-single">
+          <div class="form-group">
+            <label class="form-label" for="link-ev-target-select">اختر المؤشر المستهدف لنقل الشاهد إليه:</label>
+            <input type="text" id="link-ev-search" class="form-control" placeholder="ابحث برمز أو اسم المؤشر..." oninput="App.filterLinkIndicatorOptions(this.value)" style="margin-bottom: 0.5rem; font-size: 0.85rem;">
+            <select id="link-ev-target-select" class="form-control" size="8" style="height: 180px; font-size: 0.82rem;">
+              <!-- يتم الملء ديناميكياً من شجرة المؤشرات -->
+            </select>
+          </div>
+          <div style="display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem;">
+            <button type="button" class="btn btn-sm btn-secondary" onclick="App.closeLinkEvidenceModal()">إلغاء</button>
+            <button type="button" class="btn btn-sm btn-primary" onclick="App.submitLinkEvidence()">تأكيد نقل الشاهد</button>
+          </div>
         </div>
 
-        <div style="display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem;">
-          <button type="button" class="btn btn-sm btn-secondary" onclick="App.closeLinkEvidenceModal()">إلغاء</button>
-          <button type="button" class="btn btn-sm btn-primary" onclick="App.submitLinkEvidence()">تأكيد نقل وربط الشاهد</button>
+        <!-- الوضع 2: ربط الشاهد بعدة مؤشرات (Multi-link) -->
+        <div id="link-mode-multi" class="hidden">
+          <div class="form-group">
+            <label class="form-label">حدد المؤشرات الإضافية التي ترغب في ربط هذا الشاهد بها:</label>
+            <input type="text" id="link-ev-multi-search" class="form-control" placeholder="ابحث برمز أو اسم المؤشر..." oninput="App.filterMultiLinkCheckboxes(this.value)" style="margin-bottom: 0.5rem; font-size: 0.85rem;">
+            <div id="link-ev-multi-container" class="multi-indicator-list">
+              <!-- تُحقن مربعات الاختيار ديناميكياً بواسطة JS -->
+            </div>
+          </div>
+          <div style="display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem;">
+            <button type="button" class="btn btn-sm btn-secondary" onclick="App.closeLinkEvidenceModal()">إلغاء</button>
+            <button type="button" class="btn btn-sm btn-primary" onclick="App.submitLinkEvidence()">حفظ الربط المتعدد</button>
+          </div>
+        </div>
+
+        <!-- الوضع 3: فك الارتباط -->
+        <div id="link-mode-unlink" class="hidden">
+          <div class="alert alert-warning" style="font-size: 0.85rem; line-height: 1.5;">
+            ⚠️ <strong>فك ارتباط الشاهد:</strong>
+            <p style="margin: 0.25rem 0 0 0;">
+              يتطلب نظام الجودة أن يكون كل شاهد مرتبطاً بمؤشر واحد على الأقل ليتم احتسابه ضمن متطلبات التقييم. إذا كان الشاهد مرتبطاً بالخطأ بهذا المؤشر، يرجى نقله للمؤشر الصحيح عبر تبويب "نقل لمؤشر آخر".
+            </p>
+          </div>
+          <div style="display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem;">
+            <button type="button" class="btn btn-sm btn-secondary" onclick="App.closeLinkEvidenceModal()">إغلاق</button>
+            <button type="button" class="btn btn-sm btn-outline-danger" onclick="App.handleUnlinkEvidence()">فك ارتباط الشاهد</button>
+          </div>
         </div>
       </div>
     </div>
@@ -486,6 +577,20 @@
             </tbody>
           </table>
         </div>
+
+        <!-- قسم المجالات المتبناة (Slice 3 Chain) -->
+        <div id="sugg-adopted-section" style="margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--border);">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; flex-wrap: wrap; gap: 0.5rem;">
+            <div>
+              <h4 style="margin: 0; font-size: 1rem; color: #166534;">✅ مجالات التحسين المتبناة (جاهزة للتحويل إلى خطة تحسين):</h4>
+              <span style="font-size: 0.8rem; color: var(--text-muted);">المجالات التي تم تبنيها من المقترحات ويمكنك إنشاء خطة تحسين فورية منها بضغطة زر.</span>
+            </div>
+            <button type="button" class="btn btn-sm btn-outline-primary" onclick="App.loadImprovementAreas()">🔄 تحديث المجالات</button>
+          </div>
+          <div id="adopted-areas-cards-container" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 0.75rem;">
+            <!-- تُحقن كروت المجالات المتبناة ديناميكياً بواسطة JS -->
+          </div>
+        </div>
       </div>
 
       <!-- نافذة تبني اقتراح مجال التحسين (Modal) -->
@@ -563,7 +668,7 @@
 
           <!-- اختيار مجالات التحسين (يجب اختيار مجال واحد على الأقل) -->
           <div class="form-group">
-            <label class="form-label">اختيار مجالات التحسين المعتمدة للخطة (مجال واحد على الأقل):</label>
+            <label class="form-label">اختيار مجالات التحسين المحددة للخطة (مجال واحد على الأقل):</label>
             <div id="plan-create-areas-checklist" style="display: flex; flex-direction: column; gap: 0.35rem; max-height: 150px; overflow-y: auto; padding: 0.5rem; border: 1px solid var(--border); border-radius: 4px; background: #fff;">
               <!-- تُحقن بواسطة JS -->
             </div>
@@ -720,7 +825,7 @@
         <div id="modal-action-alert" class="alert alert-error hidden"></div>
 
         <form id="form-action" onsubmit="App.handleSaveAction(event)">
-          <!-- حقل اختيار المجال (مقيد بالمجالات المعتمدة في الخطة لفرض المفتاح المركب) -->
+          <!-- حقل اختيار المجال (مقيد بالمجالات المحددة في الخطة لفرض المفتاح المركب) -->
           <div class="form-group">
             <label class="form-label" for="action-area-id">مجال التحسين المستهدف (المفتاح المركب):</label>
             <select id="action-area-id" class="form-control" required>
@@ -849,13 +954,13 @@
         <div class="kpi-card kpi-success">
           <div class="kpi-label">مستوى الأداء العام</div>
           <div id="dash-kpi-level" class="kpi-value">-</div>
-          <div id="dash-kpi-level-sub" class="kpi-sub">تصنيف الأداء المعتمد</div>
+          <div id="dash-kpi-level-sub" class="kpi-sub">تصنيف الأداء الإجمالي</div>
         </div>
 
         <div class="kpi-card kpi-warning">
           <div class="kpi-label">نسبة اكتمال الشواهد</div>
           <div id="dash-kpi-evidence" class="kpi-value">-</div>
-          <div id="dash-kpi-evidence-sub" class="kpi-sub">من أصل 278 متطلباً معتمداً</div>
+          <div id="dash-kpi-evidence-sub" class="kpi-sub">من أصل 278 متطلباً رسمياً</div>
         </div>
 
         <div class="kpi-card kpi-danger">
@@ -868,7 +973,7 @@
       <!-- بطاقة المعايير السبعة -->
       <div class="card">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem;">
-          <h3 class="card-title" style="margin-bottom: 0;">الأداء وفق المعايير الوطنية السبعة (الأوزان المعتمدة 100%)</h3>
+          <h3 class="card-title" style="margin-bottom: 0;">الأداء وفق المعايير الوطنية السبعة (الأوزان النسبية 100%)</h3>
           <span style="font-size: 0.8rem; color: var(--text-muted);">انقر على أي معيار لاستعراض مؤشراته ودرجاته</span>
         </div>
         <div id="dash-standards-grid" class="standards-grid">
@@ -979,7 +1084,7 @@
           <div>
             <h2 style="font-size: 1.25rem; color: var(--primary);">ملخص ونسب اكتمال الشواهد والوثائق</h2>
             <p style="font-size: 0.85rem; color: var(--text-muted);">
-              مقارنة الشواهد المرفوعة بمتطلبات الشواهد الإلزامية المعتمدة لكل مؤشر ومعيار.
+              مقارنة الشواهد المرفوعة بمتطلبات الشواهد الإلزامية الرسمية لكل مؤشر ومعيار.
             </p>
           </div>
           <div>
@@ -1002,7 +1107,7 @@
           <div class="kpi-card kpi-warning">
             <div class="kpi-label">إجمالي المتطلبات الإلزامية</div>
             <div id="evsum-kpi-required" class="kpi-value">0</div>
-            <div id="evsum-kpi-required-sub" class="kpi-sub">متطلب رسمي معتمد</div>
+            <div id="evsum-kpi-required-sub" class="kpi-sub">متطلب رسمي محدد</div>
           </div>
           <div class="kpi-card kpi-danger">
             <div class="kpi-label">مؤشرات بحاجة لاستكمال الشواهد</div>
@@ -1134,7 +1239,7 @@
           <div>
             <h2 style="font-size: 1.25rem; color: var(--primary);">ملخص وحالات خطط وإجراءات التحسين المدرسي</h2>
             <p style="font-size: 0.85rem; color: var(--text-muted);">
-              متابعة الخطط المعتمدة ونسب إنجاز إجراءاتها وتحديد الخطط والإجراءات المتأخرة ديناميكياً.
+              متابعة الخطط الجارية ونسب إنجاز إجراءاتها وتحديد الخطط والإجراءات المتأخرة ديناميكياً.
             </p>
           </div>
           <div style="display: flex; gap: 0.5rem;">
@@ -1524,7 +1629,7 @@
             <div class="card" style="padding: 0.75rem; text-align: center; margin-bottom: 0; background: #f8fafc; border: 1px solid var(--border);">
               <div style="font-size: 0.75rem; color: var(--text-muted);">إجمالي الفصول / الشعب</div>
               <div id="live-enrollment-total-classes" style="font-size: 1.3rem; font-weight: 700; color: #0284c7; margin: 0.25rem 0;">0</div>
-              <div style="font-size: 0.72rem; color: var(--text-muted);">شعبة دراسية معتمدة</div>
+              <div style="font-size: 0.72rem; color: var(--text-muted);">شعبة دراسية رسمية</div>
             </div>
 
             <div class="card" style="padding: 0.75rem; text-align: center; margin-bottom: 0; background: #f8fafc; border: 1px solid var(--border);">
@@ -1658,6 +1763,9 @@
         <button type="button" id="tab-btn-admin-users" class="tab-btn" onclick="App.switchAdminTab('users')">
           👥 إدارة الحسابات والمستخدمين (Users)
         </button>
+        <button type="button" id="tab-btn-admin-roles" class="tab-btn" onclick="App.switchAdminTab('roles')">
+          🛡️ الأدوار والصلاحيات (Roles & Permissions)
+        </button>
       </div>
 
       <!-- تبويب إدارة المدارس -->
@@ -1692,7 +1800,7 @@
       <div id="admin-tab-users">
         <div class="card">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem;">
-            <h3 class="card-title" style="margin-bottom: 0;">حسابات المستخدمين والأدوار المعتمدة</h3>
+            <h3 class="card-title" style="margin-bottom: 0;">حسابات المستخدمين والأدوار المحددة</h3>
             <button type="button" class="btn btn-sm btn-primary" onclick="App.openAddUserModal()">+ إضافة حساب جديد</button>
           </div>
           <div class="table-responsive">
@@ -1704,7 +1812,7 @@
                   <th>البريد الإلكتروني</th>
                   <th>نوع الحساب</th>
                   <th>المؤسسة التابعة</th>
-                  <th>الدور المعتمد</th>
+                  <th>الدور المحدد</th>
                   <th>الحالة</th>
                   <th>الإجراء</th>
                 </tr>
@@ -1714,6 +1822,170 @@
               </tbody>
             </table>
           </div>
+        </div>
+      </div>
+
+      <!-- تبويب مصفوفة الأدوار والصلاحيات -->
+      <div id="admin-tab-roles" class="hidden">
+        <div class="card">
+          <h3 class="card-title">مصفوفة الأدوار والصلاحيات المؤسسية (RBAC Matrix)</h3>
+          <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem;">
+            الأدوار الخمسة المحددة في النظام ونطاق الصلاحيات الممنوحة لكل دور وفق المتطلبات الأمنية.
+          </p>
+
+          <div class="table-responsive">
+            <table>
+              <thead>
+                <tr>
+                  <th>رمز الدور</th>
+                  <th>المسمى الوظيفي</th>
+                  <th>نطاق الحساب</th>
+                  <th>الصلاحيات الممنوحة</th>
+                </tr>
+              </thead>
+              <tbody id="admin-roles-table-body">
+                <tr><td colspan="4" style="text-align: center;">جارِ جلب بيانات الأدوار والصلاحيات...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================================================================= -->
+    <!-- الشاشة 18: لوحة المتابعة الإشرافية (Supervision Hub) للمشرف الوزاري        -->
+    <!-- ========================================================================= -->
+    <section id="screen-supervision" class="hidden">
+      <div class="card" style="margin-bottom: 1rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem;">
+          <div>
+            <h2 style="font-size: 1.3rem; color: #7c3aed; margin: 0;">👁️ لوحة المتابعة الإشرافية (مشرف الوزارة)</h2>
+            <p style="font-size: 0.85rem; color: var(--text-muted); margin-top: 0.25rem;">
+              متابعة وتقييم أداء مدارس المحافظة، والاطلاع على نتائج التقييم الذاتي، وتدوين الملاحظات التوجيهية الخارجية.
+            </p>
+          </div>
+          <div>
+            <button class="btn btn-sm btn-secondary" onclick="App.loadSupervisionData()">🔄 تحديث البيانات</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="supervision-stats-grid">
+        <div class="supervision-stat-card">
+          <span style="font-size: 0.82rem; color: var(--text-muted);">إجمالي المدارس الخاضعة للإشراف</span>
+          <div class="val" id="sup-stat-total-schools" style="color: #4f46e5;">0</div>
+          <span style="font-size: 0.78rem; color: #64748b;">مدارس نطاق المحافظة</span>
+        </div>
+        <div class="supervision-stat-card">
+          <span style="font-size: 0.82rem; color: var(--text-muted);">تقييمات مكتملة ومقفلة</span>
+          <div class="val" id="sup-stat-locked" style="color: #16a34a;">0</div>
+          <span style="font-size: 0.78rem; color: #16a34a;">جاهزة للمراجعة والتدقيق</span>
+        </div>
+        <div class="supervision-stat-card">
+          <span style="font-size: 0.82rem; color: var(--text-muted);">تقييمات قيد الإنجاز (مسودة)</span>
+          <div class="val" id="sup-stat-draft" style="color: #d97706;">0</div>
+          <span style="font-size: 0.78rem; color: #d97706;">قيد الرصد وجمع الشواهد</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="card-title">قائمة المدارس والتقييمات الذاتية</h3>
+        <div class="table-responsive">
+          <table>
+            <thead>
+              <tr>
+                <th>المدرسة</th>
+                <th>الكود الوزاري</th>
+                <th>المرحلة</th>
+                <th>المحافظة والمديرية</th>
+                <th>حالة التقييم</th>
+                <th>العام الدراسي</th>
+                <th>الإجراءات الإشرافية</th>
+              </tr>
+            </thead>
+            <tbody id="supervision-schools-tbody">
+              <tr><td colspan="7" style="text-align: center;">جارِ جلب قائمة المدارس والتقييمات...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================================================================= -->
+    <!-- الشاشة 19: مركز إدارة المعايير (Standards Hub) لمسؤول المعايير بالوزارة   -->
+    <!-- ========================================================================= -->
+    <section id="screen-standards-manager" class="hidden">
+      <div class="card" style="margin-bottom: 1rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem;">
+          <div>
+            <h2 style="font-size: 1.3rem; color: #ea580c; margin: 0;">📑 مركز معايير الاعتماد المدرسي (مسؤول المعايير)</h2>
+            <p style="font-size: 0.85rem; color: var(--text-muted); margin-top: 0.25rem;">
+              استعراض ومتابعة هيكل ومصفوفة معايير الاعتماد المدرسي الوطنية ومؤشراتها وأدوات التحقق.
+            </p>
+          </div>
+          <div style="display: flex; gap: 0.5rem;">
+            <button class="btn btn-sm btn-secondary" onclick="App.navTo('standards-review')">📖 دليل المعايير</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="alert alert-info" style="display: flex; align-items: flex-start; gap: 0.75rem;">
+        <span style="font-size: 1.4rem;">ℹ️</span>
+        <div>
+          <strong>إشعار الشريحة 7 القادمة:</strong>
+          <p style="margin: 0.25rem 0 0 0; font-size: 0.85rem;">
+            إدارة وثائق معايير الاعتماد المدرسي، وإنشاء نسخ معيارية جديدة، وتعديل صياغة المؤشرات ومستويات التقدير مفصولة عن تقييمات المدارس وهي قيد التطوير المتقدم في الشريحة 7.
+          </p>
+        </div>
+      </div>
+
+      <div class="kpi-grid" style="margin-top: 1rem; margin-bottom: 1rem;">
+        <div class="kpi-card kpi-primary">
+          <div class="kpi-label">المجالات المحددة</div>
+          <div class="kpi-value">4</div>
+          <div class="kpi-sub">مجالات تقييم رئيسية</div>
+        </div>
+        <div class="kpi-card kpi-primary">
+          <div class="kpi-label">المعايير المحددة</div>
+          <div class="kpi-value">7</div>
+          <div class="kpi-sub">معايير الاعتماد المدرسي</div>
+        </div>
+        <div class="kpi-card kpi-success">
+          <div class="kpi-label">إجمالي المؤشرات</div>
+          <div class="kpi-value">109</div>
+          <div class="kpi-sub">مؤشر أداء محدد</div>
+        </div>
+        <div class="kpi-card kpi-warning">
+          <div class="kpi-label">الإصدار المعياري الحالي</div>
+          <div class="kpi-value" style="font-size: 1.2rem;">2024 V1</div>
+          <div class="kpi-sub">النسخة الرسمية الحالية</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">
+          <span>استعراض هيكل المعايير المفصل</span>
+          <button class="btn btn-sm btn-primary" onclick="App.navTo('standards-review')">الانتقال إلى دليل المعايير والمؤشرات</button>
+        </div>
+        <p style="font-size: 0.85rem; color: var(--text-muted);">
+          يمكنك استعراض شجرة المجالات والمعايير الـ 7 وقوائم المؤشرات وأدوات التحقق ومستويات الأداء الـ 4 لكل مؤشر.
+        </p>
+      </div>
+    </section>
+
+    <!-- ========================================================================= -->
+    <!-- الشاشة الاحتياطية: لوحة قيد التطوير                                       -->
+    <!-- ========================================================================= -->
+    <section id="screen-under-development" class="hidden">
+      <div class="card" style="max-width: 600px; margin: 3rem auto; text-align: center; padding: 2.5rem 1.5rem;">
+        <div style="font-size: 3rem; margin-bottom: 0.75rem;">🚧</div>
+        <h2 style="color: var(--primary); margin-bottom: 0.5rem;">هذه اللوحة قيد التطوير في شريحة لاحقة</h2>
+        <p style="color: var(--text-muted); font-size: 0.95rem; margin-bottom: 1.5rem;" id="under-dev-msg">
+          تم تسجيل دخولك بنجاح، ولكن الواجهات الخاصة بهذا الدور قيد التطوير والتكامل في الشريحة القادمة.
+        </p>
+        <div style="display: flex; justify-content: center; gap: 0.75rem;">
+          <button class="btn btn-secondary" onclick="App.navTo('cycles')">لوحة التقييمات</button>
+          <button class="btn btn-primary" onclick="App.handleLogout()">تسجيل الخروج</button>
         </div>
       </div>
     </section>
@@ -1924,7 +2196,7 @@
         </div>
 
         <div class="form-group">
-          <label class="form-label" for="admusr-role">الدور المعتمد (Role):</label>
+          <label class="form-label" for="admusr-role">الدور الوظيفي (Role):</label>
           <select id="admusr-role" class="form-control" required>
             <option value="school_evaluator">مقيّم ومسؤول جودة بالمدرسة (school_evaluator)</option>
             <option value="school_principal">مدير مدرسة / مراجع داخلي (school_principal)</option>
