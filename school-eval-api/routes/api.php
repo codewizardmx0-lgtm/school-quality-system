@@ -43,6 +43,18 @@ Route::prefix('v1')->group(function () {
             Route::get('/{id}', [SchoolController::class, 'show'])->name('api.v1.schools.show');
             Route::put('/{id}', [SchoolController::class, 'update'])->name('api.v1.schools.update');
             Route::patch('/{id}/toggle-status', [SchoolController::class, 'toggleStatus'])->name('api.v1.schools.toggle-status');
+
+            // الملف التعريفي وإحصاءات ومرافق المدرسة (الشريحة 6)
+            Route::get('/{id}/profile', [\App\Http\Controllers\Api\V1\SchoolManagementController::class, 'getProfile'])->name('api.v1.schools.profile.get');
+            Route::put('/{id}/profile', [\App\Http\Controllers\Api\V1\SchoolManagementController::class, 'updateProfile'])->name('api.v1.schools.profile.update');
+            Route::get('/{id}/staff-metrics', [\App\Http\Controllers\Api\V1\SchoolManagementController::class, 'getStaffMetrics'])->name('api.v1.schools.staff-metrics.get');
+            Route::put('/{id}/staff-metrics', [\App\Http\Controllers\Api\V1\SchoolManagementController::class, 'saveStaffMetrics'])->name('api.v1.schools.staff-metrics.save');
+            Route::get('/{id}/enrollment-metrics', [\App\Http\Controllers\Api\V1\SchoolManagementController::class, 'getEnrollmentMetrics'])->name('api.v1.schools.enrollment-metrics.get');
+            Route::post('/{id}/enrollment-metrics', [\App\Http\Controllers\Api\V1\SchoolManagementController::class, 'saveEnrollmentMetrics'])->name('api.v1.schools.enrollment-metrics.save');
+            Route::get('/{id}/facilities', [\App\Http\Controllers\Api\V1\SchoolManagementController::class, 'getFacilities'])->name('api.v1.schools.facilities.index');
+            Route::post('/{id}/facilities', [\App\Http\Controllers\Api\V1\SchoolManagementController::class, 'storeFacility'])->name('api.v1.schools.facilities.store');
+            Route::put('/{id}/facilities/{facilityId}', [\App\Http\Controllers\Api\V1\SchoolManagementController::class, 'updateFacility'])->name('api.v1.schools.facilities.update');
+            Route::delete('/{id}/facilities/{facilityId}', [\App\Http\Controllers\Api\V1\SchoolManagementController::class, 'deleteFacility'])->name('api.v1.schools.facilities.delete');
         });
 
         // إدارة المستخدمين والحسابات لمسؤول النظام (Users Management)
@@ -67,6 +79,12 @@ Route::prefix('v1')->group(function () {
             Route::get('/{id}/standards-tree', [\App\Http\Controllers\Api\V1\EvaluationController::class, 'standardsTree'])->name('api.v1.evaluations.standards-tree');
             Route::get('/{id}/improvement-suggestions', [\App\Http\Controllers\Api\V1\ImprovementSuggestionController::class, 'index'])->name('api.v1.evaluations.improvement-suggestions');
             Route::put('/{evaluationId}/indicators/{indicatorId}/score', [\App\Http\Controllers\Api\V1\EvaluationController::class, 'scoreIndicator'])->name('api.v1.evaluations.indicators.score');
+            Route::post('/{id}/submit', [\App\Http\Controllers\Api\V1\EvaluationController::class, 'submit'])->name('api.v1.evaluations.submit');
+            Route::post('/{id}/dev-reset', [\App\Http\Controllers\Api\V1\EvaluationController::class, 'devReset'])->name('api.v1.evaluations.dev-reset');
+            Route::get('/{id}/indicators-context', [\App\Http\Controllers\Api\V1\EvaluationController::class, 'indicatorsContext'])->name('api.v1.evaluations.indicators-context');
+            Route::get('/{id}/evidence-inventory', [\App\Http\Controllers\Api\V1\EvidenceController::class, 'inventory'])->name('api.v1.evaluations.evidence-inventory');
+            Route::get('/{id}/indicators/{indicatorId}/evidences', [\App\Http\Controllers\Api\V1\EvidenceController::class, 'indexByIndicator'])->name('api.v1.evaluations.indicators.evidences.index');
+            Route::post('/{id}/indicators/{indicatorId}/evidences', [\App\Http\Controllers\Api\V1\EvidenceController::class, 'storeByIndicator'])->name('api.v1.evaluations.indicators.evidences.store');
         });
 
         // نتائج التقييم: الملاحظات وإدارة الشواهد (Evaluation Results)
@@ -76,8 +94,12 @@ Route::prefix('v1')->group(function () {
             Route::post('/{id}/evidences', [\App\Http\Controllers\Api\V1\EvidenceController::class, 'store'])->name('api.v1.evaluation-results.evidences.store');
         });
 
-        // النسخ التاريخية للشواهد وتنزيل المرفقات الرقمية (Evidence Versions & Download)
+        // الشواهد: التنظيم والتصنيف والربط والنسخ التاريخية والمرفقات (Evidence Organization & Versions)
         Route::prefix('evidences')->group(function () {
+            Route::patch('/{id}/classify', [\App\Http\Controllers\Api\V1\EvidenceController::class, 'classify'])->name('api.v1.evidences.classify');
+            Route::match(['post', 'patch'], '/{id}/link-indicator', [\App\Http\Controllers\Api\V1\EvidenceController::class, 'linkIndicator'])->name('api.v1.evidences.link-indicator');
+            Route::patch('/{id}/status', [\App\Http\Controllers\Api\V1\EvidenceController::class, 'updateStatus'])->name('api.v1.evidences.status.update');
+            Route::match(['post', 'patch'], '/{id}/review-notes', [\App\Http\Controllers\Api\V1\EvidenceController::class, 'addReviewNote'])->name('api.v1.evidences.review-notes.store');
             Route::post('/{id}/versions', [\App\Http\Controllers\Api\V1\EvidenceController::class, 'addVersion'])->name('api.v1.evidences.versions.store');
             Route::get('/{id}/versions/{versionId}/download', [\App\Http\Controllers\Api\V1\EvidenceController::class, 'downloadVersion'])->name('api.v1.evidences.versions.download');
         });
@@ -114,8 +136,18 @@ Route::prefix('v1')->group(function () {
                 ->name('api.v1.schools.assessments.standards.results');
             Route::get('/assessments/{assessment}/evidence-summary', [\App\Http\Controllers\Api\V1\ReportsAnalyticsController::class, 'evidenceSummary'])
                 ->name('api.v1.schools.assessments.evidence-summary');
+            Route::get('/assessments/{assessment}/evidence-inventory', [\App\Http\Controllers\Api\V1\EvidenceController::class, 'inventory'])
+                ->name('api.v1.schools.assessments.evidence-inventory');
+            Route::get('/assessments/{assessment}/indicators/{indicatorId}/evidences', [\App\Http\Controllers\Api\V1\EvidenceController::class, 'indexByIndicator'])
+                ->name('api.v1.schools.assessments.indicators.evidences.index');
+            Route::post('/assessments/{assessment}/indicators/{indicatorId}/evidences', [\App\Http\Controllers\Api\V1\EvidenceController::class, 'storeByIndicator'])
+                ->name('api.v1.schools.assessments.indicators.evidences.store');
+            Route::get('/assessments/{assessment}/indicators-context', [\App\Http\Controllers\Api\V1\EvaluationController::class, 'indicatorsContextBySchool'])
+                ->name('api.v1.schools.assessments.indicators-context');
             Route::get('/assessments/{assessment}/export', [\App\Http\Controllers\Api\V1\ReportsAnalyticsController::class, 'exportAssessment'])
                 ->name('api.v1.schools.assessments.export');
+            Route::post('/assessments/{assessment}/submit', [\App\Http\Controllers\Api\V1\EvaluationController::class, 'submitBySchool'])
+                ->name('api.v1.schools.assessments.submit');
         });
     });
 });
@@ -128,7 +160,12 @@ Route::middleware(['auth:sanctum', 'session.timeout'])->group(function () {
         Route::get('/assessments/{assessment}/results', [\App\Http\Controllers\Api\V1\ReportsAnalyticsController::class, 'assessmentResults'])->name('api.schools.assessments.results');
         Route::get('/assessments/{assessment}/standards/{standard}/results', [\App\Http\Controllers\Api\V1\ReportsAnalyticsController::class, 'standardResults'])->name('api.schools.assessments.standards.results');
         Route::get('/assessments/{assessment}/evidence-summary', [\App\Http\Controllers\Api\V1\ReportsAnalyticsController::class, 'evidenceSummary'])->name('api.schools.assessments.evidence-summary');
+        Route::get('/assessments/{assessment}/evidence-inventory', [\App\Http\Controllers\Api\V1\EvidenceController::class, 'inventory'])->name('api.schools.assessments.evidence-inventory');
+        Route::get('/assessments/{assessment}/indicators/{indicatorId}/evidences', [\App\Http\Controllers\Api\V1\EvidenceController::class, 'indexByIndicator'])->name('api.schools.assessments.indicators.evidences.index');
+        Route::post('/assessments/{assessment}/indicators/{indicatorId}/evidences', [\App\Http\Controllers\Api\V1\EvidenceController::class, 'storeByIndicator'])->name('api.schools.assessments.indicators.evidences.store');
+        Route::get('/assessments/{assessment}/indicators-context', [\App\Http\Controllers\Api\V1\EvaluationController::class, 'indicatorsContextBySchool'])->name('api.schools.assessments.indicators-context');
         Route::get('/assessments/{assessment}/export', [\App\Http\Controllers\Api\V1\ReportsAnalyticsController::class, 'exportAssessment'])->name('api.schools.assessments.export');
+        Route::post('/assessments/{assessment}/submit', [\App\Http\Controllers\Api\V1\EvaluationController::class, 'submitBySchool'])->name('api.schools.assessments.submit');
     });
 });
 

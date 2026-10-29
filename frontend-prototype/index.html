@@ -3,22 +3,34 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>نموذج الواجهات التفاعلي — نظام الجودة المدرسية (الشرائح 1-3)</title>
+  <title>نموذج الواجهات التفاعلي — نظام الجودة المدرسية (الشرائح 1-6)</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
+
+  <!-- مؤشر تحميل الشبكة الموحد (Global Network Loading Spinner) -->
+  <div id="global-spinner" class="global-spinner hidden">
+    <div class="spinner-box">
+      <div class="spinner"></div>
+      <span id="global-spinner-text">جارٍ معالجة الطلب...</span>
+    </div>
+  </div>
 
   <!-- شريط التنقل العلوي -->
   <header>
     <div class="header-container">
       <div class="brand">
         <h1>منصة الجودة المدرسية</h1>
-        <span>نموذج الشرائح 1-3 التفاعلي</span>
+        <span>نموذج الشرائح 1-6 التفاعلي</span>
       </div>
 
       <div class="api-config">
         <label for="api-url-input">عنوان الـ API:</label>
         <input type="text" id="api-url-input" value="http://127.0.0.1:8000/api/v1">
+      </div>
+
+      <div style="display: flex; align-items: center; gap: 0.5rem;">
+        <button id="btn-toggle-dev" class="pill-btn" onclick="App.toggleDevMode()" title="تبديل إظهار أدوات الاختبار السريع">⚡ وضع المطور: مفعل</button>
       </div>
 
       <div class="user-nav">
@@ -32,31 +44,30 @@
     </div>
   </header>
 
+  <!-- شريط التنقل المبني على الأدوار (Role-Based Navigation) -->
+  <nav id="role-nav" class="role-nav hidden">
+    <div class="role-nav-container" id="role-nav-items">
+      <!-- تُحقن الأزرار ديناميكياً حسب دور وصلاحيات المستخدم -->
+    </div>
+  </nav>
+
   <!-- الحاوية الرئيسية -->
   <main>
     <!-- شريط الإشعارات والتنبيهات العامة -->
     <div id="global-alert" class="alert hidden"></div>
 
-    <!-- شريط المسار (Breadcrumbs) للتنقل السريع بين الشاشات -->
+    <!-- مسار الشاشة الحالية (Breadcrumb Trail) -->
     <div id="breadcrumbs" class="breadcrumbs hidden">
-      <a onclick="App.navTo('cycles')">لوحة التقييمات</a>
-      <span id="bc-sep1">/</span>
-      <a id="bc-tree" onclick="App.navTo('tree')">شجرة المعايير</a>
-      <span id="bc-sep2">/</span>
-      <a id="bc-standards-review" onclick="App.navTo('standards-review')">مراجعة المعايير 📖</a>
-      <span id="bc-sep3">/</span>
-      <a id="bc-suggestions" onclick="App.navTo('suggestions')">اقتراحات التحسين</a>
-      <span id="bc-sep4">/</span>
-      <a id="bc-plans" onclick="App.navTo('plans')">خطط التحسين</a>
+      <span id="bc-trail">الرئيسية</span>
     </div>
 
     <!-- ========================================================================= -->
     <!-- الشاشة 1: تسجيل الدخول -->
     <!-- ========================================================================= -->
-    <section id="screen-login" class="card" style="max-width: 520px; margin: 2rem auto;">
+    <section id="screen-login" class="card" style="max-width: 540px; margin: 2rem auto;">
       <h2 class="card-title">تسجيل الدخول للمنصة</h2>
       <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem;">
-        يدعم تسجيل الدخول مصادقة Bearer Token عبر Sanctum وتحديد الصلاحيات ونطاق المدرسة (الشرائح 1-3).
+        يدعم تسجيل الدخول مصادقة Bearer Token عبر Sanctum وتحديد الصلاحيات ونطاق المدرسة (الشرائح 1-6).
       </p>
 
       <form id="form-login" onsubmit="App.handleLogin(event)">
@@ -77,22 +88,42 @@
         </button>
       </form>
 
-      <hr style="margin: 1.25rem 0; border: 0; border-top: 1px solid var(--border);">
+      <!-- قسم تسجيل الدخول السريع (يظهر تلقائياً في وضع المطور Dev Mode) -->
+      <div id="quick-login-section">
+        <hr style="margin: 1.25rem 0; border: 0; border-top: 1px solid var(--border);">
 
-      <label class="form-label">حسابات تجريبية سريعة للمراجعة والتحقق:</label>
-      <div class="quick-login-pills">
-        <button class="pill-btn" onclick="App.quickLogin('quality_belqees')">
-          👤 مقيّم مدرسة بلقيس (مدرسة 1)
-        </button>
-        <button class="pill-btn" onclick="App.quickLogin('principal_belqees')">
-          🎓 مدير مدرسة بلقيس (مدرسة 1)
-        </button>
-        <button class="pill-btn" onclick="App.quickLogin('quality_farouq')">
-          🚫 مقيّم مدرسة الفاروق (مدرسة 2 - فحص العزل)
-        </button>
-        <button class="pill-btn" onclick="App.quickLogin('principal_farouq')">
-          🚫 مدير مدرسة الفاروق (مدرسة 2 - فحص العزل)
-        </button>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+          <label class="form-label" style="margin: 0; font-weight: 700; color: #4338ca;">⚡ دخول سريع للأدوار الخمسة (Dev Mode):</label>
+          <span class="badge badge-purple" style="font-size: 0.72rem;">تجريبي</span>
+        </div>
+
+        <div class="quick-login-pills" style="margin-bottom: 0.75rem;">
+          <button type="button" class="pill-btn" onclick="App.quickLogin('admin')" title="مدير النظام (Admin) — إدارة المدارس والمستخدمين">
+            👑 مدير النظام (Admin)
+          </button>
+          <button type="button" class="pill-btn" onclick="App.quickLogin('principal_belqees')" title="مدير مدرسة بلقيس — مراجع داخلي">
+            🎓 مدير مدرسة بلقيس (Principal)
+          </button>
+          <button type="button" class="pill-btn" onclick="App.quickLogin('quality_belqees')" title="مقيّم مدرسة بلقيس — رصد الدرجات والشواهد">
+            👤 مقيّم مدرسة بلقيس (Evaluator)
+          </button>
+          <button type="button" class="pill-btn" onclick="App.quickLogin('supervisor_ministry')" title="مشرف الوزارة — متابعة المدارس وإبداء الملاحظات">
+            👁️ مشرف الوزارة (Supervisor)
+          </button>
+          <button type="button" class="pill-btn" onclick="App.quickLogin('standards_manager_ministry')" title="مسؤول المعايير بالوزارة — هيكل معايير الاعتماد المدرسي">
+            📑 مسؤول المعايير (Standards)
+          </button>
+        </div>
+
+        <div style="font-size: 0.78rem; color: var(--text-muted); margin-bottom: 0.35rem;">فحص العزل المؤسسي لمدرسة أخرى (404):</div>
+        <div class="quick-login-pills">
+          <button type="button" class="pill-btn" onclick="App.quickLogin('quality_farouq')" title="مقيّم مدرسة الفاروق (مدرسة 2) لفحص العزل">
+            🚫 مقيّم مدرسة الفاروق (مدرسة 2)
+          </button>
+          <button type="button" class="pill-btn" onclick="App.quickLogin('principal_farouq')" title="مدير مدرسة الفاروق (مدرسة 2) لفحص العزل">
+            🚫 مدير مدرسة الفاروق (مدرسة 2)
+          </button>
+        </div>
       </div>
     </section>
 
@@ -106,7 +137,7 @@
           <button class="btn btn-sm btn-secondary" onclick="App.loadEvaluations()">تحديث القائمة</button>
         </div>
         <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem;">
-          تُعرض ملفات التقييم المرتبطة بدورات التقييم المعتمدة للمدرسة مع حالة الملف (مسودة / مكتمل / مقفل).
+          تُعرض ملفات التقييم المرتبطة بدورات التقييم الرسمية للمدرسة مع حالة الملف (مسودة / مكتمل / مقفل).
         </p>
         <div class="table-responsive">
           <table>
@@ -139,12 +170,23 @@
             <h2 id="tree-school-title" style="font-size: 1.2rem; color: var(--primary);">استمارة التقييم الذاتي</h2>
             <p id="tree-cycle-info" style="font-size: 0.85rem; color: var(--text-muted);"></p>
           </div>
-          <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+          <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center;">
+            <div class="dev-only-tools" style="display: none; gap: 0.35rem; align-items: center; background: #f5f3ff; border: 1px dashed #8b5cf6; padding: 0.25rem 0.5rem; border-radius: 6px;">
+              <button id="btn-dev-fill" class="btn btn-sm" style="background: #8b5cf6; color: white;" onclick="App.handleDevFillEvaluation()" title="تعبئة 109 مؤشراً بدرجات وشواهد صالحة للاختبار">
+                ⚡ تعبئة إلزامية للاختبار (Dev Only)
+              </button>
+              <button id="btn-dev-reset" class="btn btn-sm" style="background: #ef4444; color: white;" onclick="App.handleDevResetEvaluation()" title="إفراغ الدرجات والشواهد وتركه فارغاً">
+                🧹 إفراغ التقييم التجريبي
+              </button>
+            </div>
             <button class="btn btn-secondary btn-sm" onclick="App.navTo('suggestions')">
               💡 اقتراحات التحسين (FR-SCH-16)
             </button>
             <button class="btn btn-secondary btn-sm" onclick="App.navTo('plans')">
               📋 خطط التحسين المدرسية
+            </button>
+            <button id="btn-submit-eval" class="btn btn-sm btn-success" onclick="App.handleEvaluationSubmit()">
+              🔒 إنهاء وتقديم التقييم
             </button>
           </div>
         </div>
@@ -189,10 +231,19 @@
         <!-- تنبيه خطأ رصد خاص بالدورة أو التقييم (422) -->
         <div id="score-modal-alert" class="alert alert-error hidden"></div>
 
+        <!-- بطاقة الدعم الاسترشادي من واقع إحصاءات المدرسة (الشريحة 6) -->
+        <div id="indicator-context-card" class="hidden" style="margin-bottom: 1.25rem; padding: 0.75rem 1rem; border-radius: 6px; background: #f0fdf4; border: 1px solid #bbf7d0;">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.35rem;">
+            <span style="font-weight: 700; color: #166534; font-size: 0.85rem;">📊 سياق المدرسة الاسترشادي (دعم القرار):</span>
+            <span id="indicator-context-badge" class="badge badge-green" style="font-size: 0.75rem;">المستوى المقترح</span>
+          </div>
+          <div id="indicator-context-message" style="font-size: 0.8rem; color: #15803d; line-height: 1.4;"></div>
+        </div>
+
         <form id="form-score-indicator" onsubmit="App.handleSaveScore(event)">
           <!-- اختيار التقدير من البطاقات الأربع المتجاورة للواصفات (Score Descriptors Cards) -->
           <div class="form-group">
-            <label class="form-label" style="font-weight: 700;">واصفات الأداء المعتمدة لسلم التقدير (انقر على البطاقة المناسبة لاختيار الدرجة):</label>
+            <label class="form-label" style="font-weight: 700;">واصفات الأداء الرسمية لسلم التقدير (انقر على البطاقة المناسبة لاختيار الدرجة):</label>
             <input type="hidden" id="selected-score-value" name="score">
             <input type="hidden" id="selected-descriptor-id" name="scoreDescriptorId">
             <div id="score-descriptor-cards" class="descriptor-cards-grid">
@@ -268,7 +319,10 @@
 
         <!-- قائمة الشواهد الحالية للمؤشر -->
         <div style="margin-bottom: 1.5rem;">
-          <h4 style="font-size: 0.95rem; margin-bottom: 0.5rem;">الشواهد والوثائق المرفقة:</h4>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+            <h4 style="font-size: 0.95rem; margin: 0; color: #1e293b;">الشواهد والوثائق الرسمية لهذا المؤشر:</h4>
+            <span style="font-size: 0.8rem; color: var(--text-muted);">(يمكن إضافة أكثر من شاهد نشط لكل مؤشر)</span>
+          </div>
           <div id="evidences-list-container">
             <!-- قائمة الشواهد ونسخها -->
           </div>
@@ -276,7 +330,10 @@
 
         <!-- نموذج رفع شاهد جديد (خاص بمن يملك صلاحية evidence.manage) -->
         <div id="card-upload-evidence" class="card" style="background: #f8fafc; border-style: dashed;">
-          <h4 style="font-size: 0.9rem; margin-bottom: 0.75rem; color: var(--primary);">+ رفع شاهد جديد للمؤشر (v1)</h4>
+          <h4 style="font-size: 0.9rem; margin-bottom: 0.35rem; color: var(--primary);">+ إضافة شاهد جديد لهذا المؤشر</h4>
+          <p style="font-size: 0.78rem; color: var(--text-muted); margin-top: 0; margin-bottom: 0.75rem;">
+            يمكنك رفع شواهد إضافية متعددة لنفس المؤشر دون استبدال أو حذف الشواهد السابقة. كل شاهد مستقل بنسخته النشطة.
+          </p>
           <form id="form-upload-evidence" onsubmit="App.handleUploadEvidence(event)">
             <div class="form-group">
               <label class="form-label" for="ev-title">عنوان الشاهد:</label>
@@ -295,6 +352,19 @@
             </div>
 
             <div class="form-group">
+              <label class="form-label" for="ev-type">نوع وتصنيف الشاهد (الشريحة 5):</label>
+              <select id="ev-type" class="form-control">
+                <option value="other">أخرى (غير محدد)</option>
+                <option value="minutes">محضر اجتماع / زيارة (Minutes)</option>
+                <option value="plan">خطة موثقة ورسمية (Plan)</option>
+                <option value="record">سجل رسمي / كشف (Record)</option>
+                <option value="report">تقرير دوري / ختامي (Report)</option>
+                <option value="board">لوحة إعلانية / إرشادية (Board)</option>
+                <option value="image">صورة ميدانية توثيقية (Image)</option>
+              </select>
+            </div>
+
+            <div class="form-group">
               <label class="form-label" for="ev-file">الملف المرفق (PDF, PNG, JPG, DOCX, XLSX بحد أقصى 10MB):</label>
               <input type="file" id="ev-file" class="form-control" required accept=".pdf,.png,.jpg,.jpeg,.docx,.xlsx">
               <div id="err-ev-file" class="field-error"></div>
@@ -302,6 +372,126 @@
 
             <button type="submit" id="btn-upload-ev" class="btn btn-primary btn-sm">رفع الشاهد وملفه</button>
           </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- نافذة منسدلة لاختيار المؤشر المستهدف عند نقل/ربط الشاهد (Slice 2 Overhaul) -->
+    <div id="modal-link-evidence" class="modal-overlay hidden">
+      <div class="modal-content" style="max-width: 580px;">
+        <div class="modal-header">
+          <div>
+            <h3 style="font-size: 1.15rem; color: var(--primary); margin: 0;">🔗 ربط وإدارة علاقات الشاهد بالمؤشرات</h3>
+            <span style="font-size: 0.78rem; color: var(--text-muted);">نقل الشاهد، أو ربطه بعدة مؤشرات (Multi-link)، أو فك الارتباط</span>
+          </div>
+          <button class="modal-close" onclick="App.closeLinkEvidenceModal()">&times;</button>
+        </div>
+
+        <!-- تبويبات نمط الربط -->
+        <div class="tabs-nav" style="margin-top: 0.5rem; margin-bottom: 0.75rem;">
+          <button type="button" id="tab-link-single-btn" class="tab-btn active" onclick="App.switchLinkEvidenceMode('single')">
+            نقل لمؤشر آخر
+          </button>
+          <button type="button" id="tab-link-multi-btn" class="tab-btn" onclick="App.switchLinkEvidenceMode('multi')">
+            ربط متعدد (Multi-link)
+          </button>
+          <button type="button" id="tab-link-unlink-btn" class="tab-btn" onclick="App.switchLinkEvidenceMode('unlink')">
+            فك الارتباط
+          </button>
+        </div>
+
+        <div id="link-ev-alert" class="alert alert-error hidden" style="margin-top: 0.5rem;"></div>
+
+        <div style="font-size: 0.85rem; background: #f8fafc; padding: 0.65rem 0.75rem; border-radius: 6px; border: 1px solid var(--border); margin-bottom: 0.75rem;">
+          <div>الشاهد المختار: <strong id="link-ev-title" style="color: var(--primary);">-</strong></div>
+          <div style="margin-top: 0.25rem;">المؤشر الحالي: <strong id="link-ev-current-indicator" style="color: #475569;">-</strong></div>
+        </div>
+
+        <!-- الوضع 1: نقل الشاهد لمؤشر فردي -->
+        <div id="link-mode-single">
+          <div class="form-group">
+            <label class="form-label" for="link-ev-target-select">اختر المؤشر المستهدف لنقل الشاهد إليه:</label>
+            <input type="text" id="link-ev-search" class="form-control" placeholder="ابحث برمز أو اسم المؤشر..." oninput="App.filterLinkIndicatorOptions(this.value)" style="margin-bottom: 0.5rem; font-size: 0.85rem;">
+            <select id="link-ev-target-select" class="form-control" size="8" style="height: 180px; font-size: 0.82rem;">
+              <!-- يتم الملء ديناميكياً من شجرة المؤشرات -->
+            </select>
+          </div>
+          <div style="display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem;">
+            <button type="button" class="btn btn-sm btn-secondary" onclick="App.closeLinkEvidenceModal()">إلغاء</button>
+            <button type="button" class="btn btn-sm btn-primary" onclick="App.submitLinkEvidence()">تأكيد نقل الشاهد</button>
+          </div>
+        </div>
+
+        <!-- الوضع 2: ربط الشاهد بعدة مؤشرات (Multi-link) -->
+        <div id="link-mode-multi" class="hidden">
+          <div class="form-group">
+            <label class="form-label">حدد المؤشرات الإضافية التي ترغب في ربط هذا الشاهد بها:</label>
+            <input type="text" id="link-ev-multi-search" class="form-control" placeholder="ابحث برمز أو اسم المؤشر..." oninput="App.filterMultiLinkCheckboxes(this.value)" style="margin-bottom: 0.5rem; font-size: 0.85rem;">
+            <div id="link-ev-multi-container" class="multi-indicator-list">
+              <!-- تُحقن مربعات الاختيار ديناميكياً بواسطة JS -->
+            </div>
+          </div>
+          <div style="display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem;">
+            <button type="button" class="btn btn-sm btn-secondary" onclick="App.closeLinkEvidenceModal()">إلغاء</button>
+            <button type="button" class="btn btn-sm btn-primary" onclick="App.submitLinkEvidence()">حفظ الربط المتعدد</button>
+          </div>
+        </div>
+
+        <!-- الوضع 3: فك الارتباط -->
+        <div id="link-mode-unlink" class="hidden">
+          <div class="alert alert-warning" style="font-size: 0.85rem; line-height: 1.5;">
+            ⚠️ <strong>فك ارتباط الشاهد:</strong>
+            <p style="margin: 0.25rem 0 0 0;">
+              يتطلب نظام الجودة أن يكون كل شاهد مرتبطاً بمؤشر واحد على الأقل ليتم احتسابه ضمن متطلبات التقييم. إذا كان الشاهد مرتبطاً بالخطأ بهذا المؤشر، يرجى نقله للمؤشر الصحيح عبر تبويب "نقل لمؤشر آخر".
+            </p>
+          </div>
+          <div style="display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem;">
+            <button type="button" class="btn btn-sm btn-secondary" onclick="App.closeLinkEvidenceModal()">إغلاق</button>
+            <button type="button" class="btn btn-sm btn-outline-danger" onclick="App.handleUnlinkEvidence()">فك ارتباط الشاهد</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- نافذة تفصيل نواقص وموانع إغلاق التقييم (استجابة 422) -->
+    <div id="modal-submit-errors" class="modal-overlay hidden">
+      <div class="modal-content" style="max-width: 650px; max-height: 85vh; display: flex; flex-direction: column;">
+        <div class="modal-header" style="border-bottom: 1px solid #fecaca; background: #fef2f2; border-radius: 8px 8px 0 0;">
+          <div>
+            <h3 style="font-size: 1.15rem; color: #dc2626; margin: 0;">⚠️ متطلبات إنهاء وتقديم التقييم غير مكتملة</h3>
+            <span style="font-size: 0.8rem; color: #991b1b;">لا يمكن إنهاء التقييم الذاتي وتقديمه قبل استيفاء رصد كافة المؤشرات والحد الأدنى من الشواهد</span>
+          </div>
+          <button class="modal-close" onclick="App.closeSubmitErrorsModal()">&times;</button>
+        </div>
+
+        <div style="padding: 1rem; overflow-y: auto; flex: 1;">
+          <div id="submit-error-banner" class="alert alert-error" style="margin-bottom: 1rem;">-</div>
+
+          <!-- قائمة المؤشرات غير المرصودة -->
+          <div id="submit-unscored-section" style="margin-bottom: 1.25rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem;">
+              <h4 style="font-size: 0.95rem; color: #b91c1c; margin: 0;">❌ مؤشرات غير مرصودة بحاجة لرصد الدرجة:</h4>
+              <span id="submit-unscored-count-badge" class="badge badge-red">0 مؤشر</span>
+            </div>
+            <div id="submit-unscored-list" style="display: flex; flex-direction: column; gap: 0.4rem; max-height: 180px; overflow-y: auto; border: 1px solid #fee2e2; border-radius: 6px; padding: 0.5rem; background: #fffaf0;">
+              <!-- تُحقن بواسطة JS -->
+            </div>
+          </div>
+
+          <!-- قائمة المؤشرات الناقصة الشواهد -->
+          <div id="submit-missing-ev-section" style="margin-bottom: 0.5rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem;">
+              <h4 style="font-size: 0.95rem; color: #c2410c; margin: 0;">📂 مؤشرات لم تستوفِ الحد الأدنى من الشواهد الإلزامية:</h4>
+              <span id="submit-missing-ev-count-badge" class="badge badge-orange">0 مؤشر</span>
+            </div>
+            <div id="submit-missing-ev-list" style="display: flex; flex-direction: column; gap: 0.4rem; max-height: 180px; overflow-y: auto; border: 1px solid #ffedd5; border-radius: 6px; padding: 0.5rem; background: #fffaf0;">
+              <!-- تُحقن بواسطة JS -->
+            </div>
+          </div>
+        </div>
+
+        <div style="padding: 0.75rem 1rem; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 0.5rem; background: #f8fafc; border-radius: 0 0 8px 8px;">
+          <button class="btn btn-sm btn-secondary" onclick="App.closeSubmitErrorsModal()">إغلاق</button>
         </div>
       </div>
     </div>
@@ -362,6 +552,20 @@
               <tr><td colspan="8" style="text-align: center;">جارِ جلب الاقتراحات...</td></tr>
             </tbody>
           </table>
+        </div>
+
+        <!-- قسم المجالات المتبناة (Slice 3 Chain) -->
+        <div id="sugg-adopted-section" style="margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--border);">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; flex-wrap: wrap; gap: 0.5rem;">
+            <div>
+              <h4 style="margin: 0; font-size: 1rem; color: #166534;">✅ مجالات التحسين المتبناة (جاهزة للتحويل إلى خطة تحسين):</h4>
+              <span style="font-size: 0.8rem; color: var(--text-muted);">المجالات التي تم تبنيها من المقترحات ويمكنك إنشاء خطة تحسين فورية منها بضغطة زر.</span>
+            </div>
+            <button type="button" class="btn btn-sm btn-outline-primary" onclick="App.loadImprovementAreas()">🔄 تحديث المجالات</button>
+          </div>
+          <div id="adopted-areas-cards-container" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 0.75rem;">
+            <!-- تُحقن كروت المجالات المتبناة ديناميكياً بواسطة JS -->
+          </div>
         </div>
       </div>
 
@@ -440,7 +644,7 @@
 
           <!-- اختيار مجالات التحسين (يجب اختيار مجال واحد على الأقل) -->
           <div class="form-group">
-            <label class="form-label">اختيار مجالات التحسين المعتمدة للخطة (مجال واحد على الأقل):</label>
+            <label class="form-label">اختيار مجالات التحسين المحددة للخطة (مجال واحد على الأقل):</label>
             <div id="plan-create-areas-checklist" style="display: flex; flex-direction: column; gap: 0.35rem; max-height: 150px; overflow-y: auto; padding: 0.5rem; border: 1px solid var(--border); border-radius: 4px; background: #fff;">
               <!-- تُحقن بواسطة JS -->
             </div>
@@ -597,7 +801,7 @@
         <div id="modal-action-alert" class="alert alert-error hidden"></div>
 
         <form id="form-action" onsubmit="App.handleSaveAction(event)">
-          <!-- حقل اختيار المجال (مقيد بالمجالات المعتمدة في الخطة لفرض المفتاح المركب) -->
+          <!-- حقل اختيار المجال (مقيد بالمجالات المحددة في الخطة لفرض المفتاح المركب) -->
           <div class="form-group">
             <label class="form-label" for="action-area-id">مجال التحسين المستهدف (المفتاح المركب):</label>
             <select id="action-area-id" class="form-control" required>
@@ -694,7 +898,1303 @@
       </div>
     </section>
 
+
+    <!-- ========================================================================= -->
+    <!-- الشاشة 10 (الشريحة 4): لوحة معلومات المدرسة الموحدة (Dashboard)           -->
+    <!-- ========================================================================= -->
+    <section id="screen-dashboard" class="hidden">
+      <!-- بطاقة معلومات المدرسة ومفتاح التحديث -->
+      <div class="card">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem;">
+          <div>
+            <h2 id="dash-school-name" style="font-size: 1.3rem; color: var(--primary);">مدرسة ...</h2>
+            <div id="dash-school-meta" style="font-size: 0.85rem; color: var(--text-muted); margin-top: 0.25rem;">
+              المرحلة التعليمية: - | المديرية: - | المحافظة: -
+            </div>
+          </div>
+          <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+            <button class="btn btn-sm btn-secondary" onclick="App.loadDashboard()">🔄 تحديث اللوحة</button>
+            <button class="btn btn-sm btn-primary" onclick="App.navTo('assessment-results')">🎯 تفاصيل النتائج</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- شبكة المؤشرات التنفيذية (KPIs Grid) -->
+      <div class="kpi-grid">
+        <div class="kpi-card kpi-primary">
+          <div class="kpi-label">نتيجة أحدث تقييم ذاتي</div>
+          <div id="dash-kpi-score" class="kpi-value">-</div>
+          <div id="dash-kpi-score-sub" class="kpi-sub">جاري جلب البيانات...</div>
+        </div>
+
+        <div class="kpi-card kpi-success">
+          <div class="kpi-label">مستوى الأداء العام</div>
+          <div id="dash-kpi-level" class="kpi-value">-</div>
+          <div id="dash-kpi-level-sub" class="kpi-sub">تصنيف الأداء الإجمالي</div>
+        </div>
+
+        <div class="kpi-card kpi-warning">
+          <div class="kpi-label">نسبة اكتمال الشواهد</div>
+          <div id="dash-kpi-evidence" class="kpi-value">-</div>
+          <div id="dash-kpi-evidence-sub" class="kpi-sub">من أصل 278 متطلباً رسمياً</div>
+        </div>
+
+        <div class="kpi-card kpi-danger">
+          <div class="kpi-label">خطط التحسين المدرسية</div>
+          <div id="dash-kpi-plans" class="kpi-value">-</div>
+          <div id="dash-kpi-plans-sub" class="kpi-sub">إجمالي الخطط والأنشطة</div>
+        </div>
+      </div>
+
+      <!-- بطاقة المعايير السبعة -->
+      <div class="card">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem;">
+          <h3 class="card-title" style="margin-bottom: 0;">الأداء وفق المعايير الوطنية السبعة (الأوزان النسبية 100%)</h3>
+          <span style="font-size: 0.8rem; color: var(--text-muted);">انقر على أي معيار لاستعراض مؤشراته ودرجاته</span>
+        </div>
+        <div id="dash-standards-grid" class="standards-grid">
+          <!-- يتم الحقن بواسطة JavaScript -->
+        </div>
+      </div>
+
+      <!-- أزرار الإجراءات السريعة في اللوحة -->
+      <div class="quick-nav-bar">
+        <button class="nav-pill-btn" onclick="App.navTo('assessment-results')">🎯 نتائج التقييم التفصيلية</button>
+        <button class="nav-pill-btn" onclick="App.navTo('evidence-summary')">📁 ملخص الشواهد والمتطلبات</button>
+        <button class="nav-pill-btn" onclick="App.navTo('evidence-inventory')">📑 جرد الشواهد (الشريحة 5)</button>
+        <button class="nav-pill-btn" onclick="App.navTo('plans-summary')">📈 ملخص خطط وإجراءات التحسين</button>
+        <button class="nav-pill-btn" onclick="App.navTo('export-report')">📥 تصدير تقرير التقييم (JSON)</button>
+        <button class="nav-pill-btn" onclick="App.navTo('standards-tree')">📝 استمارة رصد المؤشرات</button>
+      </div>
+    </section>
+
+    <!-- ========================================================================= -->
+    <!-- الشاشة 11 (الشريحة 4): نتائج التقييم الشاملة (Assessment Results)          -->
+    <!-- ========================================================================= -->
+    <section id="screen-assessment-results" class="hidden">
+      <div class="card">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem;">
+          <div>
+            <h2 id="res-school-title" style="font-size: 1.25rem; color: var(--primary);">نتائج التقييم الذاتي المدرسي</h2>
+            <div id="res-eval-meta" style="font-size: 0.85rem; color: var(--text-muted);"></div>
+          </div>
+          <div style="display: flex; gap: 0.5rem;">
+            <button class="btn btn-sm btn-secondary" onclick="App.loadAssessmentResults()">🔄 إعادة الحساب والتحديث</button>
+            <button class="btn btn-sm btn-primary" onclick="App.navTo('export-report')">📥 تصدير التقرير كـ JSON</button>
+          </div>
+        </div>
+
+        <!-- بطاقة النتيجة الإجمالية -->
+        <div id="res-summary-banner" style="margin-top: 1rem; padding: 1rem; background: #f8fafc; border: 1px solid var(--border); border-radius: 8px;">
+          <!-- يتم تعبئتها بواسطة JS -->
+        </div>
+      </div>
+
+      <!-- تنبيه إذا كان التقييم غير مكتمل أو به نقص -->
+      <div id="res-incomplete-alert" class="alert alert-warning hidden"></div>
+
+      <!-- قائمة المعايير ونتائجها -->
+      <div class="card">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+          <h3 class="card-title" style="margin-bottom: 0;">تفاصيل نتائج المعايير والمؤشرات</h3>
+          <div style="display: flex; gap: 0.5rem;">
+            <button class="btn btn-sm btn-secondary" onclick="App.toggleAllResultsStandards(true)">توسيع الكل</button>
+            <button class="btn btn-sm btn-secondary" onclick="App.toggleAllResultsStandards(false)">طي الكل</button>
+          </div>
+        </div>
+        <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem;">
+          يتم احتساب درجات المعايير كمتوسط مرجح لدرجات المؤشرات الفعلية من قاعدة البيانات، وتُحسب النتيجة النهائية بحاصل جمع المساهمات الموزونة للمعايير السبعة.
+        </p>
+
+        <div id="res-standards-container">
+          <!-- يتم حقن بطاقات المعايير وجداول المؤشرات بواسطة JS -->
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================================================================= -->
+    <!-- الشاشة 12 (الشريحة 4): نتيجة معيار محدد (Standard Result Inspector)      -->
+    <!-- ========================================================================= -->
+    <section id="screen-standard-result" class="hidden">
+      <div class="card">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem;">
+          <div>
+            <button class="btn btn-sm btn-secondary" onclick="App.navTo('assessment-results')" style="margin-bottom: 0.5rem;">
+              ⬅️ العودة لنتائج كافة المعايير
+            </button>
+            <h2 id="stdres-title" style="font-size: 1.25rem; color: var(--primary);">نتيجة المعيار: ...</h2>
+            <div id="stdres-meta" style="font-size: 0.85rem; color: var(--text-muted);"></div>
+          </div>
+          <div id="stdres-score-badge" style="text-align: center;">
+            <!-- شارة الدرجة والنسبة والمستوى -->
+          </div>
+        </div>
+
+        <!-- شريط التقدم للمعيار -->
+        <div style="margin-top: 1rem;">
+          <div style="display: flex; justify-content: space-between; font-size: 0.8rem; margin-bottom: 0.25rem;">
+            <span>النسبة المئوية المحققة:</span>
+            <span id="stdres-pct-text" style="font-weight: 700;">0%</span>
+          </div>
+          <div class="progress-container">
+            <div id="stdres-progress-bar" class="progress-bar-fill bg-green" style="width: 0%;"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- تنبيه إن كان المعيار غير مكتمل -->
+      <div id="stdres-alert" class="alert alert-warning hidden"></div>
+
+      <!-- المجالات الفرعية والمؤشرات -->
+      <div id="stdres-content">
+        <!-- يتم الحقن بواسطة JS -->
+      </div>
+    </section>
+
+    <!-- ========================================================================= -->
+    <!-- الشاشة 13 (الشريحة 4): ملخص ونسب اكتمال الشواهد (Evidence Summary)        -->
+    <!-- ========================================================================= -->
+    <section id="screen-evidence-summary" class="hidden">
+      <div class="card">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem;">
+          <div>
+            <h2 style="font-size: 1.25rem; color: var(--primary);">ملخص ونسب اكتمال الشواهد والوثائق</h2>
+            <p style="font-size: 0.85rem; color: var(--text-muted);">
+              مقارنة الشواهد المرفوعة بمتطلبات الشواهد الإلزامية الرسمية لكل مؤشر ومعيار.
+            </p>
+          </div>
+          <div>
+            <button class="btn btn-sm btn-secondary" onclick="App.loadEvidenceSummary()">🔄 تحديث ملخص الشواهد</button>
+          </div>
+        </div>
+
+        <!-- مؤشرات الإنجاز للشواهد -->
+        <div class="kpi-grid" style="margin-top: 1rem; margin-bottom: 0.5rem;">
+          <div class="kpi-card kpi-primary">
+            <div class="kpi-label">نسبة اكتمال الشواهد الإجمالية</div>
+            <div id="evsum-kpi-rate" class="kpi-value">0%</div>
+            <div id="evsum-kpi-rate-sub" class="kpi-sub">-</div>
+          </div>
+          <div class="kpi-card kpi-success">
+            <div class="kpi-label">إجمالي الشواهد المرفوعة</div>
+            <div id="evsum-kpi-uploaded" class="kpi-value">0</div>
+            <div id="evsum-kpi-uploaded-sub" class="kpi-sub">وثيقة مرفقة بالتقييم</div>
+          </div>
+          <div class="kpi-card kpi-warning">
+            <div class="kpi-label">إجمالي المتطلبات الإلزامية</div>
+            <div id="evsum-kpi-required" class="kpi-value">0</div>
+            <div id="evsum-kpi-required-sub" class="kpi-sub">متطلب رسمي محدد</div>
+          </div>
+          <div class="kpi-card kpi-danger">
+            <div class="kpi-label">مؤشرات بحاجة لاستكمال الشواهد</div>
+            <div id="evsum-kpi-missing" class="kpi-value">0</div>
+            <div id="evsum-kpi-missing-sub" class="kpi-sub">مؤشر ينقصه شواهد</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- تبويبات التصفية -->
+      <div style="display: flex; gap: 0.5rem; margin-bottom: 1rem;">
+        <button id="btn-evfilter-all" class="btn btn-sm btn-primary" onclick="App.filterEvidenceSummary('all')">
+          كافة المعايير والمؤشرات (109)
+        </button>
+        <button id="btn-evfilter-missing" class="btn btn-sm btn-secondary" onclick="App.filterEvidenceSummary('missing')">
+          المؤشرات الناقصة الشواهد فقط ⚠️
+        </button>
+      </div>
+
+      <div id="evsum-standards-container">
+        <!-- يتم الحقن بواسطة JS -->
+      </div>
+    </section>
+
+    <!-- ========================================================================= -->
+    <!-- الشاشة 15 (الشريحة 5): جرد وتنظيم وتدقيق الشواهد (Evidence Inventory)       -->
+    <!-- ========================================================================= -->
+    <section id="screen-evidence-inventory" class="hidden">
+      <div class="card">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem;">
+          <div>
+            <h2 style="font-size: 1.25rem; color: var(--primary);">📑 جرد وتنظيم وتدقيق الشواهد (الشريحة 5)</h2>
+            <p style="font-size: 0.85rem; color: var(--text-muted);">
+              فحص وحصر الشواهد لكل مؤشر، وإبراز النواقص والمكتمل، وتصنيف الوثائق يدوياً وإدارتها وتدقيقها بدون أي ذكاء اصطناعي.
+            </p>
+          </div>
+          <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+            <div class="dev-only-tools" style="display: none; gap: 0.35rem; align-items: center; background: #f5f3ff; border: 1px dashed #8b5cf6; padding: 0.25rem 0.5rem; border-radius: 6px;">
+              <button class="btn btn-sm" style="background: #8b5cf6; color: white;" onclick="App.handleDevFillEvaluation()" title="تعبئة 109 مؤشراً بدرجات وشواهد صالحة للاختبار">
+                ⚡ تعبئة إلزامية للاختبار (Dev Only)
+              </button>
+              <button class="btn btn-sm" style="background: #ef4444; color: white;" onclick="App.handleDevResetEvaluation()" title="إفراغ الدرجات والشواهد وتركه فارغاً">
+                🧹 إفراغ التقييم التجريبي
+              </button>
+            </div>
+            <button id="btn-evinv-submit" class="btn btn-sm btn-success" onclick="App.handleEvaluationSubmit()" style="display: none;">🔒 إنهاء وتقديم التقييم</button>
+            <button class="btn btn-sm btn-secondary" onclick="App.loadEvidenceInventory()">🔄 تحديث الجرد</button>
+            <button class="btn btn-sm btn-primary" onclick="App.navTo('evidence-summary')">📁 ملخص النسب</button>
+          </div>
+        </div>
+
+        <!-- كروت مؤشرات الجرد الأساسية -->
+        <div class="kpi-grid" style="margin-top: 1rem; margin-bottom: 0.5rem;">
+          <div class="kpi-card" id="evinv-card-status">
+            <div class="kpi-label">حالة الجرد الإجمالية للتقييم</div>
+            <div id="evinv-kpi-status" class="kpi-value">-</div>
+            <div id="evinv-kpi-status-sub" class="kpi-sub">-</div>
+          </div>
+
+          <div class="kpi-card kpi-primary">
+            <div class="kpi-label">مؤشرات مستوفية الشواهد الإلزامية</div>
+            <div id="evinv-kpi-sufficient" class="kpi-value">0</div>
+            <div id="evinv-kpi-sufficient-sub" class="kpi-sub">من أصل 109 مؤشرات</div>
+          </div>
+
+          <div class="kpi-card" style="border-right-color: #ef4444;">
+            <div class="kpi-label">مؤشرات بحاجة لاستكمال الشواهد</div>
+            <div id="evinv-kpi-missing" class="kpi-value" style="color: #ef4444;">0</div>
+            <div id="evinv-kpi-missing-sub" class="kpi-sub">مؤشر ناقص</div>
+          </div>
+
+          <div class="kpi-card" style="border-right-color: #3b82f6;">
+            <div class="kpi-label">إجمالي الشواهد المرفوعة</div>
+            <div id="evinv-kpi-total-docs" class="kpi-value" style="color: #3b82f6;">0</div>
+            <div id="evinv-kpi-total-docs-sub" class="kpi-sub">وثيقة مسجلة</div>
+          </div>
+
+          <div class="kpi-card" style="border-right-color: #94a3b8;">
+            <div class="kpi-label">شواهد قيد المسودة (Draft)</div>
+            <div id="evinv-kpi-draft-docs" class="kpi-value" style="color: #64748b;">0</div>
+            <div id="evinv-kpi-draft-docs-sub" class="kpi-sub">بحاجة لاستكمال وتدقيق</div>
+          </div>
+        </div>
+
+        <!-- بطاقات توزيع الأنواع وحالات التدقيق -->
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1rem; margin-top: 1rem; margin-bottom: 1rem;">
+          <!-- توزيع أنواع الشواهد -->
+          <div class="card" style="margin-bottom: 0; background: #f8fafc; border: 1px solid var(--border);">
+            <h4 style="font-size: 0.95rem; margin-bottom: 0.75rem; color: var(--primary);">🏷️ تصنيفات الشواهد اليدوية:</h4>
+            <div id="evinv-types-breakdown" style="display: flex; flex-wrap: wrap; gap: 0.5rem;">
+              <!-- يتم الحقن بواسطة JS -->
+            </div>
+          </div>
+
+          <!-- توزيع حالات تدقيق الشواهد -->
+          <div class="card" style="margin-bottom: 0; background: #f8fafc; border: 1px solid var(--border);">
+            <h4 style="font-size: 0.95rem; margin-bottom: 0.75rem; color: var(--primary);">🔍 حالات تدقيق الشواهد:</h4>
+            <div id="evinv-statuses-breakdown" style="display: flex; flex-wrap: wrap; gap: 0.5rem;">
+              <!-- يتم الحقن بواسطة JS -->
+            </div>
+          </div>
+        </div>
+
+        <!-- أزرار الفلترة السريعة -->
+        <div style="display: flex; gap: 0.5rem; margin-bottom: 1rem; flex-wrap: wrap;">
+          <button id="btn-evinv-filter-all" class="btn btn-sm btn-primary" onclick="App.filterEvidenceInventory('all')">
+            كافة المؤشرات (109)
+          </button>
+          <button id="btn-evinv-filter-missing" class="btn btn-sm btn-secondary" onclick="App.filterEvidenceInventory('missing')">
+            المؤشرات الناقصة الشواهد فقط ⚠️
+          </button>
+          <button id="btn-evinv-filter-sufficient" class="btn btn-sm btn-secondary" onclick="App.filterEvidenceInventory('sufficient')">
+            المؤشرات المستوفية فقط ✅
+          </button>
+        </div>
+
+        <div id="evinv-standards-container">
+          <!-- يتم الحقن بواسطة JavaScript -->
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================================================================= -->
+    <!-- الشاشة 14 (الشريحة 4): ملخص وإحصاءات خطط التحسين (Plans Summary)         -->
+    <!-- ========================================================================= -->
+    <section id="screen-plans-summary" class="hidden">
+      <div class="card">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem;">
+          <div>
+            <h2 style="font-size: 1.25rem; color: var(--primary);">ملخص وحالات خطط وإجراءات التحسين المدرسي</h2>
+            <p style="font-size: 0.85rem; color: var(--text-muted);">
+              متابعة الخطط الجارية ونسب إنجاز إجراءاتها وتحديد الخطط والإجراءات المتأخرة ديناميكياً.
+            </p>
+          </div>
+          <div style="display: flex; gap: 0.5rem;">
+            <button class="btn btn-sm btn-secondary" onclick="App.loadPlansSummary()">🔄 تحديث الملخص</button>
+            <button class="btn btn-sm btn-primary" onclick="App.navTo('plans')">📋 إدارة خطط التحسين</button>
+          </div>
+        </div>
+
+        <div class="kpi-grid" style="margin-top: 1rem; margin-bottom: 0.5rem;">
+          <div class="kpi-card kpi-primary">
+            <div class="kpi-label">إجمالي الخطط</div>
+            <div id="plansum-kpi-total" class="kpi-value">0</div>
+            <div id="plansum-kpi-total-sub" class="kpi-sub">خطة مسجلة بالمدرسة</div>
+          </div>
+          <div class="kpi-card kpi-warning">
+            <div class="kpi-label">خطط قيد التنفيذ</div>
+            <div id="plansum-kpi-active" class="kpi-value">0</div>
+            <div id="plansum-kpi-active-sub" class="kpi-sub">نشطة وتخضع للمتابعة</div>
+          </div>
+          <div class="kpi-card kpi-success">
+            <div class="kpi-label">خطط مكتملة</div>
+            <div id="plansum-kpi-completed" class="kpi-value">0</div>
+            <div id="plansum-kpi-completed-sub" class="kpi-sub">تم إنجازها بنجاح</div>
+          </div>
+          <div class="kpi-card kpi-danger">
+            <div class="kpi-label">خطط أو إجراءات متأخرة ⚠️</div>
+            <div id="plansum-kpi-delayed" class="kpi-value">0</div>
+            <div id="plansum-kpi-delayed-sub" class="kpi-sub">تجاوزت الموعد النهائي</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ملخص الإجراءات التنفيذية والخطط -->
+      <div class="card">
+        <h3 class="card-title">قائمة الخطط والتقدم الإجمالي</h3>
+        <div class="table-responsive">
+          <table>
+            <thead>
+              <tr>
+                <th>معرف الخطة</th>
+                <th>عنوان الخطة</th>
+                <th>الفترة الزمنية</th>
+                <th>الحالة</th>
+                <th>التأخر</th>
+                <th>إجمالي الإجراءات</th>
+                <th>المنجزة</th>
+                <th>المتأخرة</th>
+                <th>نسبة الإنجاز</th>
+                <th>الإجراء</th>
+              </tr>
+            </thead>
+            <tbody id="plansum-table-body">
+              <tr><td colspan="10" style="text-align: center;">جارِ جلب ملخص الخطط...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================================================================= -->
+    <!-- الشاشة 15 (الشريحة 4): تصدير تقرير التقييم الكامل (Export Assessment Report)-->
+    <!-- ========================================================================= -->
+    <section id="screen-export-report" class="hidden">
+      <div class="card">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem;">
+          <div>
+            <h2 style="font-size: 1.25rem; color: var(--primary);">تصدير تقرير التقييم الذاتي المدرسي الشامل</h2>
+            <p style="font-size: 0.85rem; color: var(--text-muted);">
+              تصدير نتائج التقييم والشواهد وخلاصة خطط التحسين بصيغة JSON مهيكلة للفرونت إند والمستوى الوزاري.
+            </p>
+          </div>
+          <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+            <button id="btn-download-json" class="btn btn-sm btn-success" onclick="App.downloadExportJson()">
+              📥 تنزيل ملف التقرير (JSON)
+            </button>
+            <button id="btn-copy-json" class="btn btn-sm btn-secondary" onclick="App.copyExportJson()">
+              📋 نسخ محتوى JSON
+            </button>
+            <button class="btn btn-sm btn-secondary" onclick="App.loadExportReport()">🔄 تحديث</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- تنبيه الرفض إن كان التقييم غير مكتمل (422) -->
+      <div id="export-error-alert" class="alert alert-error hidden"></div>
+
+      <!-- حاوية المعاينة عند اكتمال التقرير -->
+      <div id="export-content-container" class="hidden">
+        <!-- الملخص التنفيذي وأبرز نقاط القوة وفرص التحسين -->
+        <div class="card">
+          <h3 class="card-title">الملخص التنفيذي للتقرير</h3>
+          <div id="export-executive-summary" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1.25rem;">
+            <!-- كروت الملخص -->
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 1rem;">
+            <div>
+              <h4 style="font-size: 0.95rem; color: #166534; margin-bottom: 0.5rem;">🌟 أبرز نقاط القوة (الدرجة الكاملة 3):</h4>
+              <div id="export-strengths-list" style="display: flex; flex-direction: column; gap: 0.4rem; max-height: 220px; overflow-y: auto;"></div>
+            </div>
+            <div>
+              <h4 style="font-size: 0.95rem; color: #854d0e; margin-bottom: 0.5rem;">⚠️ أولويات ومجالات التحسين (الدرجة 0 أو 1):</h4>
+              <div id="export-opportunities-list" style="display: flex; flex-direction: column; gap: 0.4rem; max-height: 220px; overflow-y: auto;"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- عارض JSON الخام -->
+        <div class="card">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+            <h3 class="card-title" style="margin-bottom: 0;">معاينة وثيقة JSON الناتجة</h3>
+            <span style="font-size: 0.8rem; color: var(--text-muted);">JSON Data Structure</span>
+          </div>
+          <div class="json-viewer-container">
+            <pre id="export-json-code">جارِ تجهيز الوثيقة...</pre>
+          </div>
+        </div>
+      </div>
+    </section>
+
+      <!-- ========================================================================= -->
+    <!-- الشاشة 16 (الشريحة 6): مركز إدارة المدرسة الموحد (School Management Hub)   -->
+    <!-- الملف التعريفي، الإحصاءات التجميعية، بيانات الطلاب، وسجل المرافق والسلامة -->
+    <!-- ========================================================================= -->
+    <section id="screen-school-management" class="hidden">
+      <!-- شريط العنوان والبيانات المرجعية -->
+      <div class="card" style="margin-bottom: 1rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem;">
+          <div>
+            <div style="display: flex; align-items: center; gap: 0.5rem;">
+              <h2 id="schmgmt-school-name" style="font-size: 1.3rem; color: var(--primary); margin: 0;">إدارة المدرسة</h2>
+              <span id="schmgmt-school-code" class="badge badge-blue">مدرسة #</span>
+            </div>
+            <div id="schmgmt-school-meta" style="font-size: 0.85rem; color: var(--text-muted); margin-top: 0.25rem;">
+              المرحلة: - | الإدارة التعليمية: - | المحافظة: -
+            </div>
+          </div>
+          <div style="display: flex; gap: 0.5rem; align-items: center;">
+            <label for="schmgmt-year-select" style="font-size: 0.85rem; font-weight: 600; color: #334155;">العام الدراسي:</label>
+            <select id="schmgmt-year-select" class="form-control" style="width: auto; padding: 0.35rem 0.6rem; font-size: 0.85rem;" onchange="App.handleSchoolYearChange(this.value)">
+              <option value="2025/2026">2025/2026 (العام الحالي)</option>
+              <option value="2024/2025">2024/2025</option>
+              <option value="2023/2024">2023/2024</option>
+            </select>
+            <button class="btn btn-sm btn-secondary" onclick="App.loadSchoolManagementData()">🔄 تحديث</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- تبويبات إدارة المدرسة -->
+      <div class="tabs-nav" id="schmgmt-tabs">
+        <button type="button" id="tab-btn-profile" class="tab-btn active" onclick="App.switchSchoolTab('profile')">
+          🏢 الملف التعريفي
+        </button>
+        <button type="button" id="tab-btn-staff" class="tab-btn" onclick="App.switchSchoolTab('staff')">
+          👥 إحصاءات الكادر
+        </button>
+        <button type="button" id="tab-btn-enrollment" class="tab-btn" onclick="App.switchSchoolTab('enrollment')">
+          🎒 الطلاب والشعب
+        </button>
+        <button type="button" id="tab-btn-facilities" class="tab-btn" onclick="App.switchSchoolTab('facilities')">
+          🏫 المرافق وتجهيزات السلامة
+        </button>
+      </div>
+
+      <!-- تبويب 1: الملف التعريفي للمدرسة (Profile) -->
+      <div id="schmgmt-tab-profile">
+        <div class="card">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+            <div>
+              <h3 class="card-title" style="margin-bottom: 0.25rem;">الملف التعريفي والبيانات الأساسية</h3>
+              <p style="font-size: 0.85rem; color: var(--text-muted); margin: 0;">
+                بيانات الموقع، الاتصال، الإدارة التعليمية، وطبيعة المبنى والمساحة (GET/PUT /api/v1/schools/{id}/profile).
+              </p>
+            </div>
+            <div id="profile-save-status"></div>
+          </div>
+
+          <div id="schmgmt-profile-alert" class="alert hidden"></div>
+
+          <form id="form-school-profile" onsubmit="App.handleSaveSchoolProfile(event)">
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem;">
+              <div class="form-group">
+                <label class="form-label" for="prof-educational-admin">الإدارة / المديرية التعليمية:</label>
+                <input type="text" id="prof-educational-admin" class="form-control" placeholder="مثال: إدارة التربية والتعليم - مديرية التحرير">
+              </div>
+
+              <div class="form-group">
+                <label class="form-label" for="prof-phone">رقم الهاتف الرسمي:</label>
+                <input type="text" id="prof-phone" class="form-control" placeholder="مثال: 01-234567 أو 770000000">
+                <div id="err-prof-phone" class="field-error"></div>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label" for="prof-email">البريد الإلكتروني الرسمي:</label>
+                <input type="email" id="prof-email" class="form-control" placeholder="مثال: info@school.edu.ye">
+                <div id="err-prof-email" class="field-error"></div>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label" for="prof-building-type">نوع ملكية المبنى المدرسي:</label>
+                <select id="prof-building-type" class="form-control">
+                  <option value="">-- غير محدد --</option>
+                  <option value="owned">حكومي / مملوك (Owned)</option>
+                  <option value="rented">مستأجر (Rented)</option>
+                  <option value="donated">تبرع / وقفي (Donated)</option>
+                  <option value="other">أخرى (Other)</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label" for="prof-shift-type">فترة الدوام المدرسي:</label>
+                <select id="prof-shift-type" class="form-control">
+                  <option value="">-- غير محدد --</option>
+                  <option value="morning">صباحية فقط (Morning)</option>
+                  <option value="evening">مسائية فقط (Evening)</option>
+                  <option value="both">فترتان (صباحية ومسائية) (Both)</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label" for="prof-total-area">المساحة الإجمالية للأرض (م²):</label>
+                <input type="number" step="0.01" min="0" id="prof-total-area" class="form-control" placeholder="مثال: 3500.00">
+                <div id="err-prof-totalArea" class="field-error"></div>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label" for="prof-built-up-area">مساحة المباني والإنشاءات (م²):</label>
+                <input type="number" step="0.01" min="0" id="prof-built-up-area" class="form-control" placeholder="مثال: 1800.00">
+                <div id="err-prof-builtUpArea" class="field-error"></div>
+              </div>
+            </div>
+
+            <div class="form-group" style="margin-top: 0.5rem;">
+              <label class="form-label" for="prof-address">العنوان التفصيلي للمدرسة:</label>
+              <textarea id="prof-address" class="form-control" rows="2" placeholder="أدخل العنوان التفصيلي، الشارع، الحي، المعالم القريبة..."></textarea>
+            </div>
+
+            <div style="display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1.25rem;">
+              <button type="button" class="btn btn-secondary" onclick="App.resetSchoolProfileForm()">إلغاء التعديل</button>
+              <button type="submit" id="btn-save-profile" class="btn btn-primary">💾 حفظ بيانات الملف التعريفي</button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <!-- تبويب 2: إحصاءات الكادر التعليمي والإداري (Staff Metrics) -->
+      <div id="schmgmt-tab-staff" class="hidden">
+        <div class="card">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem;">
+            <div>
+              <h3 class="card-title" style="margin-bottom: 0.25rem;">إحصاءات الكادر التعليمي والإداري للعام الدراسي</h3>
+              <p style="font-size: 0.85rem; color: var(--text-muted); margin: 0;">
+                أرقام سنوية تجميعية تخدم المؤشرات الكمية دون كشف سجلات الأفراد (GET/POST /api/v1/schools/{id}/staff-metrics).
+              </p>
+            </div>
+            <div id="staff-save-status"></div>
+          </div>
+
+          <div id="schmgmt-staff-alert" class="alert hidden"></div>
+
+          <!-- بطاقات النسب الاسترشادية المحسوبة لحظياً -->
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.75rem; margin-bottom: 1.25rem;">
+            <div class="card" style="padding: 0.75rem; text-align: center; margin-bottom: 0; background: #f8fafc; border: 1px solid var(--border);">
+              <div style="font-size: 0.75rem; color: var(--text-muted);">نسبة المعلمين المؤهلين (مؤشر 1-1-2)</div>
+              <div id="live-staff-qualified-pct" style="font-size: 1.3rem; font-weight: 700; color: #166534; margin: 0.25rem 0;">0%</div>
+              <span id="live-staff-qualified-badge" class="badge badge-gray" style="font-size: 0.72rem;">-</span>
+            </div>
+
+            <div class="card" style="padding: 0.75rem; text-align: center; margin-bottom: 0; background: #f8fafc; border: 1px solid var(--border);">
+              <div style="font-size: 0.75rem; color: var(--text-muted);">نسبة المعلمين المثبتين (مؤشر 13-1-5)</div>
+              <div id="live-staff-permanent-pct" style="font-size: 1.3rem; font-weight: 700; color: #0284c7; margin: 0.25rem 0;">0%</div>
+              <span id="live-staff-permanent-badge" class="badge badge-gray" style="font-size: 0.72rem;">-</span>
+            </div>
+
+            <div class="card" style="padding: 0.75rem; text-align: center; margin-bottom: 0; background: #f8fafc; border: 1px solid var(--border);">
+              <div style="font-size: 0.75rem; color: var(--text-muted);">نسبة مطابقة التخصص (مؤشر 4-1-5)</div>
+              <div id="live-staff-matched-pct" style="font-size: 1.3rem; font-weight: 700; color: #7c3aed; margin: 0.25rem 0;">0%</div>
+              <span id="live-staff-matched-badge" class="badge badge-gray" style="font-size: 0.72rem;">-</span>
+            </div>
+
+            <div class="card" style="padding: 0.75rem; text-align: center; margin-bottom: 0; background: #f8fafc; border: 1px solid var(--border);">
+              <div style="font-size: 0.75rem; color: var(--text-muted);">إجمالي الكادر الإداري والخدمي</div>
+              <div id="live-staff-support-total" style="font-size: 1.3rem; font-weight: 700; color: #334155; margin: 0.25rem 0;">0</div>
+              <span style="font-size: 0.72rem; color: var(--text-muted);">إداري + خدمات + مرشدين</span>
+            </div>
+          </div>
+
+          <form id="form-school-staff" onsubmit="App.handleSaveStaffMetrics(event)">
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1rem;">
+              <div class="form-group">
+                <label class="form-label" for="staff-total-teachers" style="font-weight: 700; color: var(--primary);">
+                  إجمالي عدد المعلمين والمعلمات (الأساس):
+                </label>
+                <input type="number" min="0" id="staff-total-teachers" class="form-control" required value="0" oninput="App.recalcStaffLiveMetrics()">
+                <div id="err-staff-totalTeachers" class="field-error"></div>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label" for="staff-qualified-teachers">
+                  المعلمون المؤهلون تربوياً (بكالوريوس تربية فأعلى):
+                </label>
+                <input type="number" min="0" id="staff-qualified-teachers" class="form-control" required value="0" oninput="App.recalcStaffLiveMetrics()">
+                <div class="live-calc-box" id="calc-box-qualified">
+                  <span>النسبة من الإجمالي: <strong id="lbl-qualified-ratio">0%</strong></span>
+                  <span id="warn-qualified" style="color: red; display: none;">⚠️ يتجاوز الإجمالي!</span>
+                </div>
+                <div id="err-staff-qualifiedTeachers" class="field-error"></div>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label" for="staff-permanent-teachers">
+                  المعلمون المثبتون رسمياً (كادر دائم):
+                </label>
+                <input type="number" min="0" id="staff-permanent-teachers" class="form-control" required value="0" oninput="App.recalcStaffLiveMetrics()">
+                <div class="live-calc-box" id="calc-box-permanent">
+                  <span>النسبة من الإجمالي: <strong id="lbl-permanent-ratio">0%</strong></span>
+                  <span id="warn-permanent" style="color: red; display: none;">⚠️ يتجاوز الإجمالي!</span>
+                </div>
+                <div id="err-staff-permanentTeachers" class="field-error"></div>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label" for="staff-matched-teachers">
+                  المعلمون المتطابقة تخصصاتهم مع المواد المسندة:
+                </label>
+                <input type="number" min="0" id="staff-matched-teachers" class="form-control" required value="0" oninput="App.recalcStaffLiveMetrics()">
+                <div class="live-calc-box" id="calc-box-matched">
+                  <span>النسبة من الإجمالي: <strong id="lbl-matched-ratio">0%</strong></span>
+                  <span id="warn-matched" style="color: red; display: none;">⚠️ يتجاوز الإجمالي!</span>
+                </div>
+                <div id="err-staff-specializationMatchedTeachers" class="field-error"></div>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label" for="staff-admin-count">عدد الكادر الإداري:</label>
+                <input type="number" min="0" id="staff-admin-count" class="form-control" value="0" oninput="App.recalcStaffLiveMetrics()">
+                <div id="err-staff-administrativeStaff" class="field-error"></div>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label" for="staff-service-count">عدد موظفي الخدمات والمساندة:</label>
+                <input type="number" min="0" id="staff-service-count" class="form-control" value="0" oninput="App.recalcStaffLiveMetrics()">
+                <div id="err-staff-serviceStaff" class="field-error"></div>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label" for="staff-counselors-count">عدد المرشدين النفسيين والاجتماعيين:</label>
+                <input type="number" min="0" id="staff-counselors-count" class="form-control" value="0" oninput="App.recalcStaffLiveMetrics()">
+                <div id="err-staff-counselorsCount" class="field-error"></div>
+              </div>
+            </div>
+
+            <div style="display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1.25rem;">
+              <button type="submit" id="btn-save-staff" class="btn btn-primary">💾 حفظ إحصاءات الكادر</button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <!-- تبويب 3: إحصاءات الطلاب والشعب (Enrollment Metrics) -->
+      <div id="schmgmt-tab-enrollment" class="hidden">
+        <div class="card">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem;">
+            <div>
+              <h3 class="card-title" style="margin-bottom: 0.25rem;">إحصاءات الطلاب والشعب والكثافة الصفية</h3>
+              <p style="font-size: 0.85rem; color: var(--text-muted); margin: 0;">
+                بيانات التسجيل والشعب حسب الصفوف لحساب كثافة الفصول ونسب الفئات الخاصة (GET/POST /api/v1/schools/{id}/enrollment-metrics).
+              </p>
+            </div>
+            <div style="display: flex; gap: 0.5rem;">
+              <button type="button" class="btn btn-sm btn-secondary" onclick="App.addEnrollmentRow()">+ إضافة صف دراسي</button>
+              <button type="button" class="btn btn-sm btn-primary" onclick="App.handleSaveEnrollmentMetrics()">💾 حفظ بيانات الطلاب</button>
+            </div>
+          </div>
+
+          <div id="schmgmt-enrollment-alert" class="alert hidden"></div>
+
+          <!-- ملخص إجمالي الطلاب والشعب والكثافة العامة -->
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.75rem; margin-bottom: 1.25rem;">
+            <div class="card" style="padding: 0.75rem; text-align: center; margin-bottom: 0; background: #f8fafc; border: 1px solid var(--border);">
+              <div style="font-size: 0.75rem; color: var(--text-muted);">إجمالي الطلاب بالمدرسة</div>
+              <div id="live-enrollment-total-students" style="font-size: 1.3rem; font-weight: 700; color: var(--primary); margin: 0.25rem 0;">0</div>
+              <div style="font-size: 0.72rem; color: var(--text-muted);"><span id="lbl-male-total">0</span> ذكور | <span id="lbl-female-total">0</span> إناث</div>
+            </div>
+
+            <div class="card" style="padding: 0.75rem; text-align: center; margin-bottom: 0; background: #f8fafc; border: 1px solid var(--border);">
+              <div style="font-size: 0.75rem; color: var(--text-muted);">إجمالي الفصول / الشعب</div>
+              <div id="live-enrollment-total-classes" style="font-size: 1.3rem; font-weight: 700; color: #0284c7; margin: 0.25rem 0;">0</div>
+              <div style="font-size: 0.72rem; color: var(--text-muted);">شعبة دراسية رسمية</div>
+            </div>
+
+            <div class="card" style="padding: 0.75rem; text-align: center; margin-bottom: 0; background: #f8fafc; border: 1px solid var(--border);">
+              <div style="font-size: 0.75rem; color: var(--text-muted);">متوسط الكثافة الصفية (مؤشر 2-1-2)</div>
+              <div id="live-enrollment-avg-density" style="font-size: 1.3rem; font-weight: 700; color: #166534; margin: 0.25rem 0;">0</div>
+              <span id="live-enrollment-density-badge" class="badge badge-green" style="font-size: 0.72rem;">معيار وطني</span>
+            </div>
+
+            <div class="card" style="padding: 0.75rem; text-align: center; margin-bottom: 0; background: #f8fafc; border: 1px solid var(--border);">
+              <div style="font-size: 0.75rem; color: var(--text-muted);">ذوو الاحتياجات والموهوبون</div>
+              <div id="live-enrollment-special-total" style="font-size: 1.3rem; font-weight: 700; color: #d97706; margin: 0.25rem 0;">0</div>
+              <div style="font-size: 0.72rem; color: var(--text-muted);"><span id="lbl-special-needs-total">0</span> احتياجات | <span id="lbl-gifted-total">0</span> موهوبين</div>
+            </div>
+          </div>
+
+          <div class="table-responsive">
+            <table>
+              <thead>
+                <tr>
+                  <th style="min-width: 140px;">الصف الدراسي</th>
+                  <th>إجمالي الطلاب</th>
+                  <th>ذكور</th>
+                  <th>إناث</th>
+                  <th>عدد الشعب (≥1)</th>
+                  <th>ذوو احتياجات</th>
+                  <th>موهوبون</th>
+                  <th>الكثافة المحسوبة</th>
+                  <th>إجراء</th>
+                </tr>
+              </thead>
+              <tbody id="enrollment-rows-body">
+                <!-- صفوف الصفوف الدراسية تُحقن بواسطة JS -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- تبويب 4: مرافق المدرسة وتجهيزات السلامة (School Facilities) -->
+      <div id="schmgmt-tab-facilities" class="hidden">
+        <div class="card">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem;">
+            <div>
+              <h3 class="card-title" style="margin-bottom: 0.25rem;">سجل المرافق وتجهيزات السلامة (School Facilities)</h3>
+              <p style="font-size: 0.85rem; color: var(--text-muted); margin: 0;">
+                حصر الفصول والمعامل والمكتبات والعيادات وتجهيزات السلامة مع الحالة الفنية (CRUD /api/v1/schools/{id}/facilities).
+              </p>
+            </div>
+            <div>
+              <button type="button" class="btn btn-sm btn-primary" onclick="App.openAddFacilityModal()">
+                + إضافة مرفق جديد
+              </button>
+            </div>
+          </div>
+
+          <div id="schmgmt-facilities-alert" class="alert hidden"></div>
+
+          <!-- بطاقات حصر توفر المعامل والمكتبة والسلامة -->
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 0.75rem; margin-bottom: 1.25rem;">
+            <div class="card" style="padding: 0.75rem; text-align: center; margin-bottom: 0; background: #f8fafc; border: 1px solid var(--border);">
+              <div style="font-size: 0.75rem; color: var(--text-muted);">معامل العلوم (مؤشر 7-1-5)</div>
+              <div id="kpi-science-labs-count" style="font-size: 1.3rem; font-weight: 700; color: #0284c7; margin: 0.25rem 0;">0</div>
+              <span id="kpi-science-labs-badge" class="badge badge-gray" style="font-size: 0.72rem;">غير متوفر</span>
+            </div>
+
+            <div class="card" style="padding: 0.75rem; text-align: center; margin-bottom: 0; background: #f8fafc; border: 1px solid var(--border);">
+              <div style="font-size: 0.75rem; color: var(--text-muted);">معامل الحاسوب (مؤشر 7-3)</div>
+              <div id="kpi-comp-labs-count" style="font-size: 1.3rem; font-weight: 700; color: #7c3aed; margin: 0.25rem 0;">0</div>
+              <span id="kpi-comp-labs-badge" class="badge badge-gray" style="font-size: 0.72rem;">غير متوفر</span>
+            </div>
+
+            <div class="card" style="padding: 0.75rem; text-align: center; margin-bottom: 0; background: #f8fafc; border: 1px solid var(--border);">
+              <div style="font-size: 0.75rem; color: var(--text-muted);">المكتبة المدرسية</div>
+              <div id="kpi-library-status" style="font-size: 1.3rem; font-weight: 700; color: #166534; margin: 0.25rem 0;">-</div>
+              <span id="kpi-library-badge" class="badge badge-gray" style="font-size: 0.72rem;">غير متوفر</span>
+            </div>
+
+            <div class="card" style="padding: 0.75rem; text-align: center; margin-bottom: 0; background: #f8fafc; border: 1px solid var(--border);">
+              <div style="font-size: 0.75rem; color: var(--text-muted);">اشتراطات ومعدات السلامة (16-1-5)</div>
+              <div id="kpi-safety-status" style="font-size: 1.3rem; font-weight: 700; color: #166534; margin: 0.25rem 0;">-</div>
+              <span id="kpi-safety-badge" class="badge badge-gray" style="font-size: 0.72rem;">فحص</span>
+            </div>
+          </div>
+
+          <div class="table-responsive">
+            <table>
+              <thead>
+                <tr>
+                  <th>اسم المرفق</th>
+                  <th>النوع</th>
+                  <th>العدد</th>
+                  <th>السعة الاستيعابية</th>
+                  <th>الحالة الفنية</th>
+                  <th>معدات السلامة</th>
+                  <th>ملاحظات</th>
+                  <th>الإجراء</th>
+                </tr>
+              </thead>
+              <tbody id="facilities-table-body">
+                <tr><td colspan="8" style="text-align: center;">جارِ جلب قائمة المرافق...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================================================================= -->
+    <!-- الشاشة 17 (الشريحة 1): لوحة الإدارة لمسؤول النظام (Admin Hub)              -->
+    <!-- إدارة المدارس، الحسابات، والأدوار المؤسسية وفق سياسة «تعطيل لا حذف»        -->
+    <!-- ========================================================================= -->
+    <section id="screen-admin" class="hidden">
+      <div class="card" style="margin-bottom: 1rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem;">
+          <div>
+            <h2 style="font-size: 1.3rem; color: #dc2626; margin: 0;">⚙️ لوحة إدارة النظام (خاصة بمسؤول النظام admin)</h2>
+            <p style="font-size: 0.85rem; color: var(--text-muted); margin-top: 0.25rem;">
+              إدارة المدارس الخاضعة للتقويم، وحسابات المستخدمين والأدوار المؤسسية (تعطيل لا حذف BR-GEN-04).
+            </p>
+          </div>
+          <div>
+            <button class="btn btn-sm btn-secondary" onclick="App.loadAdminData()">🔄 تحديث البيانات</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="tabs-nav" id="admin-tabs">
+        <button type="button" id="tab-btn-admin-schools" class="tab-btn active" onclick="App.switchAdminTab('schools')">
+          🏫 إدارة المدارس (Schools)
+        </button>
+        <button type="button" id="tab-btn-admin-users" class="tab-btn" onclick="App.switchAdminTab('users')">
+          👥 إدارة الحسابات والمستخدمين (Users)
+        </button>
+        <button type="button" id="tab-btn-admin-roles" class="tab-btn" onclick="App.switchAdminTab('roles')">
+          🛡️ الأدوار والصلاحيات (Roles & Permissions)
+        </button>
+      </div>
+
+      <!-- تبويب إدارة المدارس -->
+      <div id="admin-tab-schools">
+        <div class="card">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem;">
+            <h3 class="card-title" style="margin-bottom: 0;">قائمة المدارس المسجلة في النظام</h3>
+            <button type="button" class="btn btn-sm btn-primary" onclick="App.openAddSchoolModal()">+ إضافة مدرسة جديدة</button>
+          </div>
+          <div class="table-responsive">
+            <table>
+              <thead>
+                <tr>
+                  <th>معرف المدرسة</th>
+                  <th>كود الهوية</th>
+                  <th>اسم المدرسة</th>
+                  <th>المرحلة التعليمية</th>
+                  <th>المحافظة / المديرية</th>
+                  <th>الحالة</th>
+                  <th>الإجراء</th>
+                </tr>
+              </thead>
+              <tbody id="admin-schools-table-body">
+                <tr><td colspan="7" style="text-align: center;">جارِ جلب قائمة المدارس...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- تبويب إدارة المستخدمين -->
+      <div id="admin-tab-users">
+        <div class="card">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem;">
+            <h3 class="card-title" style="margin-bottom: 0;">حسابات المستخدمين والأدوار المحددة</h3>
+            <button type="button" class="btn btn-sm btn-primary" onclick="App.openAddUserModal()">+ إضافة حساب جديد</button>
+          </div>
+          <div class="table-responsive">
+            <table>
+              <thead>
+                <tr>
+                  <th>الاسم الكامل</th>
+                  <th>اسم المستخدم</th>
+                  <th>البريد الإلكتروني</th>
+                  <th>نوع الحساب</th>
+                  <th>المؤسسة التابعة</th>
+                  <th>الدور المحدد</th>
+                  <th>الحالة</th>
+                  <th>الإجراء</th>
+                </tr>
+              </thead>
+              <tbody id="admin-users-table-body">
+                <tr><td colspan="8" style="text-align: center;">جارِ جلب قائمة المستخدمين...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- تبويب مصفوفة الأدوار والصلاحيات -->
+      <div id="admin-tab-roles" class="hidden">
+        <div class="card">
+          <h3 class="card-title">مصفوفة الأدوار والصلاحيات المؤسسية (RBAC Matrix)</h3>
+          <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem;">
+            الأدوار الخمسة المحددة في النظام ونطاق الصلاحيات الممنوحة لكل دور وفق المتطلبات الأمنية.
+          </p>
+
+          <div class="table-responsive">
+            <table>
+              <thead>
+                <tr>
+                  <th>رمز الدور</th>
+                  <th>المسمى الوظيفي</th>
+                  <th>نطاق الحساب</th>
+                  <th>الصلاحيات الممنوحة</th>
+                </tr>
+              </thead>
+              <tbody id="admin-roles-table-body">
+                <tr><td colspan="4" style="text-align: center;">جارِ جلب بيانات الأدوار والصلاحيات...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================================================================= -->
+    <!-- الشاشة 18: لوحة المتابعة الإشرافية (Supervision Hub) للمشرف الوزاري        -->
+    <!-- ========================================================================= -->
+    <section id="screen-supervision" class="hidden">
+      <div class="card" style="margin-bottom: 1rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem;">
+          <div>
+            <h2 style="font-size: 1.3rem; color: #7c3aed; margin: 0;">👁️ لوحة المتابعة الإشرافية (مشرف الوزارة)</h2>
+            <p style="font-size: 0.85rem; color: var(--text-muted); margin-top: 0.25rem;">
+              متابعة وتقييم أداء مدارس المحافظة، والاطلاع على نتائج التقييم الذاتي، وتدوين الملاحظات التوجيهية الخارجية.
+            </p>
+          </div>
+          <div>
+            <button class="btn btn-sm btn-secondary" onclick="App.loadSupervisionData()">🔄 تحديث البيانات</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="supervision-stats-grid">
+        <div class="supervision-stat-card">
+          <span style="font-size: 0.82rem; color: var(--text-muted);">إجمالي المدارس الخاضعة للإشراف</span>
+          <div class="val" id="sup-stat-total-schools" style="color: #4f46e5;">0</div>
+          <span style="font-size: 0.78rem; color: #64748b;">مدارس نطاق المحافظة</span>
+        </div>
+        <div class="supervision-stat-card">
+          <span style="font-size: 0.82rem; color: var(--text-muted);">تقييمات مكتملة ومقفلة</span>
+          <div class="val" id="sup-stat-locked" style="color: #16a34a;">0</div>
+          <span style="font-size: 0.78rem; color: #16a34a;">جاهزة للمراجعة والتدقيق</span>
+        </div>
+        <div class="supervision-stat-card">
+          <span style="font-size: 0.82rem; color: var(--text-muted);">تقييمات قيد الإنجاز (مسودة)</span>
+          <div class="val" id="sup-stat-draft" style="color: #d97706;">0</div>
+          <span style="font-size: 0.78rem; color: #d97706;">قيد الرصد وجمع الشواهد</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="card-title">قائمة المدارس والتقييمات الذاتية</h3>
+        <div class="table-responsive">
+          <table>
+            <thead>
+              <tr>
+                <th>المدرسة</th>
+                <th>الكود الوزاري</th>
+                <th>المرحلة</th>
+                <th>المحافظة والمديرية</th>
+                <th>حالة التقييم</th>
+                <th>العام الدراسي</th>
+                <th>الإجراءات الإشرافية</th>
+              </tr>
+            </thead>
+            <tbody id="supervision-schools-tbody">
+              <tr><td colspan="7" style="text-align: center;">جارِ جلب قائمة المدارس والتقييمات...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================================================================= -->
+    <!-- الشاشة 19: مركز إدارة المعايير (Standards Hub) لمسؤول المعايير بالوزارة   -->
+    <!-- ========================================================================= -->
+    <section id="screen-standards-manager" class="hidden">
+      <div class="card" style="margin-bottom: 1rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem;">
+          <div>
+            <h2 style="font-size: 1.3rem; color: #ea580c; margin: 0;">📑 مركز معايير الاعتماد المدرسي (مسؤول المعايير)</h2>
+            <p style="font-size: 0.85rem; color: var(--text-muted); margin-top: 0.25rem;">
+              استعراض ومتابعة هيكل ومصفوفة معايير الاعتماد المدرسي الوطنية ومؤشراتها وأدوات التحقق.
+            </p>
+          </div>
+          <div style="display: flex; gap: 0.5rem;">
+            <button class="btn btn-sm btn-secondary" onclick="App.navTo('standards-review')">📖 دليل المعايير</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="alert alert-info" style="display: flex; align-items: flex-start; gap: 0.75rem;">
+        <span style="font-size: 1.4rem;">ℹ️</span>
+        <div>
+          <strong>إشعار الشريحة 7 القادمة:</strong>
+          <p style="margin: 0.25rem 0 0 0; font-size: 0.85rem;">
+            إدارة وثائق معايير الاعتماد المدرسي، وإنشاء نسخ معيارية جديدة، وتعديل صياغة المؤشرات ومستويات التقدير مفصولة عن تقييمات المدارس وهي قيد التطوير المتقدم في الشريحة 7.
+          </p>
+        </div>
+      </div>
+
+      <div class="kpi-grid" style="margin-top: 1rem; margin-bottom: 1rem;">
+        <div class="kpi-card kpi-primary">
+          <div class="kpi-label">المجالات المحددة</div>
+          <div class="kpi-value">4</div>
+          <div class="kpi-sub">مجالات تقييم رئيسية</div>
+        </div>
+        <div class="kpi-card kpi-primary">
+          <div class="kpi-label">المعايير المحددة</div>
+          <div class="kpi-value">7</div>
+          <div class="kpi-sub">معايير الاعتماد المدرسي</div>
+        </div>
+        <div class="kpi-card kpi-success">
+          <div class="kpi-label">إجمالي المؤشرات</div>
+          <div class="kpi-value">109</div>
+          <div class="kpi-sub">مؤشر أداء محدد</div>
+        </div>
+        <div class="kpi-card kpi-warning">
+          <div class="kpi-label">الإصدار المعياري الحالي</div>
+          <div class="kpi-value" style="font-size: 1.2rem;">2024 V1</div>
+          <div class="kpi-sub">النسخة الرسمية الحالية</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">
+          <span>استعراض هيكل المعايير المفصل</span>
+          <button class="btn btn-sm btn-primary" onclick="App.navTo('standards-review')">الانتقال إلى دليل المعايير والمؤشرات</button>
+        </div>
+        <p style="font-size: 0.85rem; color: var(--text-muted);">
+          يمكنك استعراض شجرة المجالات والمعايير الـ 7 وقوائم المؤشرات وأدوات التحقق ومستويات الأداء الـ 4 لكل مؤشر.
+        </p>
+      </div>
+    </section>
+
+    <!-- ========================================================================= -->
+    <!-- الشاشة الاحتياطية: لوحة قيد التطوير                                       -->
+    <!-- ========================================================================= -->
+    <section id="screen-under-development" class="hidden">
+      <div class="card" style="max-width: 600px; margin: 3rem auto; text-align: center; padding: 2.5rem 1.5rem;">
+        <div style="font-size: 3rem; margin-bottom: 0.75rem;">🚧</div>
+        <h2 style="color: var(--primary); margin-bottom: 0.5rem;">هذه اللوحة قيد التطوير في شريحة لاحقة</h2>
+        <p style="color: var(--text-muted); font-size: 0.95rem; margin-bottom: 1.5rem;" id="under-dev-msg">
+          تم تسجيل دخولك بنجاح، ولكن الواجهات الخاصة بهذا الدور قيد التطوير والتكامل في الشريحة القادمة.
+        </p>
+        <div style="display: flex; justify-content: center; gap: 0.75rem;">
+          <button class="btn btn-secondary" onclick="App.navTo('cycles')">لوحة التقييمات</button>
+          <button class="btn btn-primary" onclick="App.handleLogout()">تسجيل الخروج</button>
+        </div>
+      </div>
+    </section>
+
   </main>
+
+  <!-- نافذة تقدم التعبئة الإلزامية التجريبية (Dev Only) -->
+  <div id="modal-dev-progress" class="modal-overlay hidden" style="z-index: 9999; display: none;">
+    <div class="modal-card" style="max-width: 480px; text-align: center; padding: 2rem;">
+      <h3 style="color: var(--primary); margin-bottom: 0.5rem;">⚡ جاري التعبئة الإلزامية للاختبار...</h3>
+      <p id="dev-progress-status" style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 1.5rem;">
+        يتم الآن رصد الدرجات ورفع الشواهد للمؤشرات الـ 109 تلقائياً.
+      </p>
+      <div style="background: #e2e8f0; border-radius: 9999px; height: 16px; width: 100%; overflow: hidden; margin-bottom: 1rem;">
+        <div id="dev-progress-bar" style="background: #8b5cf6; height: 100%; width: 0%; transition: width 0.15s ease;"></div>
+      </div>
+      <div id="dev-progress-percent" style="font-weight: bold; font-size: 1.1rem; color: #8b5cf6; margin-bottom: 1rem;">0%</div>
+      <small style="color: #64748b;">يرجى الانتظار حتى اكتمال التعبئة التلقائية...</small>
+    </div>
+  </div>
+
+  
+  <!-- نافذة إضافة / تعديل مرفق مدرسي (Modal) -->
+  <div id="modal-facility" class="modal-overlay hidden">
+    <div class="modal-content" style="max-width: 580px;">
+      <div class="modal-header">
+        <h3 id="facility-modal-title" style="font-size: 1.15rem; color: var(--primary); margin: 0;">إضافة مرفق مدرسي</h3>
+        <button class="modal-close" onclick="App.closeFacilityModal()">&times;</button>
+      </div>
+
+      <div id="facility-modal-alert" class="alert alert-error hidden" style="margin-top: 0.75rem;"></div>
+
+      <form id="form-facility" onsubmit="App.handleSaveFacility(event)" style="margin-top: 1rem;">
+        <input type="hidden" id="fac-id">
+
+        <div class="form-group">
+          <label class="form-label" for="fac-name">اسم المرفق:</label>
+          <input type="text" id="fac-name" class="form-control" required placeholder="مثال: معمل الأحياء والفيزياء الرئيسي">
+          <div id="err-fac-facilityName" class="field-error"></div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+          <div class="form-group">
+            <label class="form-label" for="fac-type">نوع المرفق:</label>
+            <select id="fac-type" class="form-control" required>
+              <option value="classroom">فصل دراسي (Classroom)</option>
+              <option value="science_lab">معمل علوم / مختبر (Science Lab)</option>
+              <option value="computer_lab">معمل حاسوب (Computer Lab)</option>
+              <option value="library">مكتبة مدرسية (Library)</option>
+              <option value="sports_field">ملعب / ساحة رياضية (Sports Field)</option>
+              <option value="clinic">عيادة / صحة مدرسية (Clinic)</option>
+              <option value="activity_room">قاعة أنشطة ومصادر (Activity Room)</option>
+              <option value="admin_office">مكتب إداري (Admin Office)</option>
+              <option value="other">أخرى (Other)</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="fac-count">العدد المتوفر:</label>
+            <input type="number" min="1" id="fac-count" class="form-control" required value="1">
+            <div id="err-fac-count" class="field-error"></div>
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+          <div class="form-group">
+            <label class="form-label" for="fac-capacity">السعة الاستيعابية (طالب/شخص):</label>
+            <input type="number" min="0" id="fac-capacity" class="form-control" placeholder="مثال: 35">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="fac-condition">الحالة الفنية والجاهزية:</label>
+            <select id="fac-condition" class="form-control" required>
+              <option value="excellent">ممتاز (جاهزية تامة)</option>
+              <option value="good">جيد (صالح للاستخدام)</option>
+              <option value="fair">متوسط (يحتاج صيانة طفيفة)</option>
+              <option value="poor">ضعيف (يحتاج تأهيل)</option>
+              <option value="out_of_service">خارج الخدمة</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group" style="margin-top: 0.25rem;">
+          <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.88rem; cursor: pointer;">
+            <input type="checkbox" id="fac-safety">
+            <span><strong>متوفر به اشتراطات ومعدات السلامة</strong> (طفايات حريق، مخارج طوارئ، إسعافات أولية)</span>
+          </label>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="fac-notes">ملاحظات إضافية وتجهيزات خاصة:</label>
+          <textarea id="fac-notes" class="form-control" rows="2" placeholder="ملاحظات حول التجهيزات، الأجهزة العاملة، إلخ..."></textarea>
+        </div>
+
+        <div style="display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem;">
+          <button type="button" class="btn btn-secondary" onclick="App.closeFacilityModal()">إلغاء</button>
+          <button type="submit" id="btn-submit-facility" class="btn btn-primary">حفظ بيانات المرفق</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- نافذة إضافة / تعديل مدرسة لمسؤول النظام (Modal) -->
+  <div id="modal-admin-school" class="modal-overlay hidden">
+    <div class="modal-content" style="max-width: 580px;">
+      <div class="modal-header">
+        <h3 id="admin-school-modal-title" style="font-size: 1.15rem; color: var(--primary); margin: 0;">إضافة مدرسة جديدة</h3>
+        <button class="modal-close" onclick="App.closeAdminSchoolModal()">&times;</button>
+      </div>
+
+      <div id="admin-school-modal-alert" class="alert alert-error hidden" style="margin-top: 0.75rem;"></div>
+
+      <form id="form-admin-school" onsubmit="App.handleSaveAdminSchool(event)" style="margin-top: 1rem;">
+        <input type="hidden" id="admsch-id">
+
+        <div class="form-group">
+          <label class="form-label" for="admsch-name">اسم المدرسة:</label>
+          <input type="text" id="admsch-name" class="form-control" required placeholder="مثال: مدرسة بلقيس النموذجية للبنات">
+          <div id="err-admsch-schoolName" class="field-error"></div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+          <div class="form-group">
+            <label class="form-label" for="admsch-code">كود الهوية الوزاري:</label>
+            <input type="text" id="admsch-code" class="form-control" required placeholder="مثال: SCH-SANAA-2026-003">
+            <div id="err-admsch-identificationData" class="field-error"></div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="admsch-stage">المرحلة التعليمية:</label>
+            <select id="admsch-stage" class="form-control" required>
+              <option value="أساسي">أساسي</option>
+              <option value="ثانوي">ثانوي</option>
+              <option value="أساسي وثانوي">أساسي وثانوي</option>
+            </select>
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+          <div class="form-group">
+            <label class="form-label" for="admsch-governorate">المحافظة:</label>
+            <input type="text" id="admsch-governorate" class="form-control" required placeholder="مثال: أمانة العاصمة">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="admsch-district">المديرية:</label>
+            <input type="text" id="admsch-district" class="form-control" required placeholder="مثال: مديرية التحرير">
+          </div>
+        </div>
+
+        <div style="display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem;">
+          <button type="button" class="btn btn-secondary" onclick="App.closeAdminSchoolModal()">إلغاء</button>
+          <button type="submit" id="btn-submit-admsch" class="btn btn-primary">حفظ بيانات المدرسة</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- نافذة إضافة / تعديل مستخدم لمسؤول النظام (Modal) -->
+  <div id="modal-admin-user" class="modal-overlay hidden">
+    <div class="modal-content" style="max-width: 580px;">
+      <div class="modal-header">
+        <h3 id="admin-user-modal-title" style="font-size: 1.15rem; color: var(--primary); margin: 0;">إضافة حساب مستخدم جديد</h3>
+        <button class="modal-close" onclick="App.closeAdminUserModal()">&times;</button>
+      </div>
+
+      <div id="admin-user-modal-alert" class="alert alert-error hidden" style="margin-top: 0.75rem;"></div>
+
+      <form id="form-admin-user" onsubmit="App.handleSaveAdminUser(event)" style="margin-top: 1rem;">
+        <input type="hidden" id="admusr-id">
+
+        <div class="form-group">
+          <label class="form-label" for="admusr-fullname">الاسم الكامل:</label>
+          <input type="text" id="admusr-fullname" class="form-control" required placeholder="مثال: د. أحمد محمد المقطري">
+          <div id="err-admusr-fullName" class="field-error"></div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+          <div class="form-group">
+            <label class="form-label" for="admusr-username">اسم المستخدم (Username):</label>
+            <input type="text" id="admusr-username" class="form-control" required placeholder="مثال: quality_coordinator1">
+            <div id="err-admusr-username" class="field-error"></div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="admusr-email">البريد الإلكتروني:</label>
+            <input type="email" id="admusr-email" class="form-control" required placeholder="مثال: coordinator@school.edu.ye">
+            <div id="err-admusr-email" class="field-error"></div>
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+          <div class="form-group">
+            <label class="form-label" for="admusr-type">نوع الحساب المؤسسي:</label>
+            <select id="admusr-type" class="form-control" required onchange="App.handleAdminUserTypeChange(this.value)">
+              <option value="school">مستخدم مدرسة (School)</option>
+              <option value="ministry">مستخدم وزارة (Ministry)</option>
+              <option value="system">مستخدم نظام (System/Admin)</option>
+            </select>
+          </div>
+
+          <div class="form-group" id="admusr-school-group">
+            <label class="form-label" for="admusr-school-id">المدرسة التابعة:</label>
+            <select id="admusr-school-id" class="form-control">
+              <!-- تُحقن بالمدارس المتاحة -->
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="admusr-role">الدور الوظيفي (Role):</label>
+          <select id="admusr-role" class="form-control" required>
+            <option value="school_evaluator">مقيّم ومسؤول جودة بالمدرسة (school_evaluator)</option>
+            <option value="school_principal">مدير مدرسة / مراجع داخلي (school_principal)</option>
+            <option value="admin">مدير النظام (admin)</option>
+            <option value="ministry_supervisor">مشرف ومراجع وزاري (ministry_supervisor)</option>
+            <option value="ministry_standards_manager">مسؤول المعايير بالوزارة (ministry_standards_manager)</option>
+          </select>
+        </div>
+
+        <div class="form-group" id="admusr-password-group">
+          <label class="form-label" for="admusr-password">كلمة المرور (اتركها فارغة عند التعديل للإبقاء على الحالية):</label>
+          <input type="password" id="admusr-password" class="form-control" placeholder="ChangeMeDevPassword@2026">
+          <div id="err-admusr-password" class="field-error"></div>
+        </div>
+
+        <div style="display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem;">
+          <button type="button" class="btn btn-secondary" onclick="App.closeAdminUserModal()">إلغاء</button>
+          <button type="submit" id="btn-submit-admusr" class="btn btn-primary">حفظ بيانات المستخدم</button>
+        </div>
+      </form>
+    </div>
+  </div>
 
   <script src="app.js"></script>
 </body>

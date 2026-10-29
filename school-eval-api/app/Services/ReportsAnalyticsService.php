@@ -61,9 +61,10 @@ class ReportsAnalyticsService
         $allActiveIndicators = $indicatorsQuery->pluck('indicator_id')->toArray();
         $totalCount = count($allActiveIndicators);
 
-        // جلب المؤشرات التي تم رصد درجاتها فعلياً (score != null) في هذا التقييم
+        // جلب المؤشرات التي تم رصد درجاتها فعلياً (score != null و completion_status = Completed) في هذا التقييم
         $scoredIndicatorIds = EvaluationResult::query()
             ->where('evaluation_id', $evaluation->evaluation_id)
+            ->where('completion_status', 'Completed')
             ->whereNotNull('score')
             ->pluck('indicator_id')
             ->toArray();
@@ -105,6 +106,7 @@ class ReportsAnalyticsService
         $scoredIndicatorIds = EvaluationResult::query()
             ->where('evaluation_id', $evaluation->evaluation_id)
             ->whereIn('indicator_id', $standardIndicatorIds)
+            ->where('completion_status', 'Completed')
             ->whereNotNull('score')
             ->pluck('indicator_id')
             ->toArray();
@@ -164,7 +166,7 @@ class ReportsAnalyticsService
 
                 /** @var EvaluationResult|null $result */
                 $result = $resultsMap->get($ind->indicator_id);
-                $hasScore = ($result !== null && $result->score !== null);
+                $hasScore = ($result !== null && $result->completion_status === 'Completed' && $result->score !== null);
                 $rawScore = $hasScore ? (int) $result->score : null;
                 $scorePercentage = $hasScore ? round(($rawScore / 3.0) * 100, 2) : null;
 
@@ -299,130 +301,62 @@ class ReportsAnalyticsService
      */
     public function calculateEvidenceSummary(Evaluation $evaluation): array
     {
-        $versionId = $evaluation->cycle?->version_id;
-
-        $standardsQuery = Standard::query()->orderBy('standard_id');
-        if ($versionId) {
-            $standardsQuery->where('version_id', $versionId);
-        }
-        $standards = $standardsQuery->with(['subStandards.indicators' => function ($q) {
-            $q->where('status', 'Active')->orderBy('code');
-        }])->get();
-
-        // متطلبات الشواهد المفروضة على المؤشرات
-        $requirementsMap = IndicatorEvidenceRequirement::query()
-            ->where('required', true)
-            ->get()
-            ->groupBy('indicator_id');
-
-        // نتائج التقييم مع شواهدها المرفوعة
-        $resultsMap = EvaluationResult::query()
-            ->where('evaluation_id', $evaluation->evaluation_id)
-            ->with('evidences')
-            ->get()
-            ->keyBy('indicator_id');
-
-        $overallTotalIndicators = 0;
-        $overallIndicatorsWithEvidence = 0;
-        $overallIndicatorsCompleteEvidence = 0;
-        $overallIndicatorsZeroEvidence = 0;
-        $overallTotalRequiredEvidences = 0;
-        $overallTotalUploadedEvidences = 0;
+        /** @var EvidenceSufficiencyService $sufficiencyService */
+        $sufficiencyService = app(EvidenceSufficiencyService::class);
+        $data = $sufficiencyService->evaluateEvaluation($evaluation);
 
         $standardsSummary = [];
-
-        foreach ($standards as $standard) {
-            $stdTotalIndicators = 0;
-            $stdWithEvidence = 0;
-            $stdCompleteEvidence = 0;
-            $stdZeroEvidence = 0;
-            $stdRequiredEvidences = 0;
-            $stdUploadedEvidences = 0;
+        foreach ($data['standards'] as $std) {
             $indicatorsEvidenceList = [];
-
-            foreach ($standard->subStandards as $sub) {
-                foreach ($sub->indicators as $ind) {
-                    $stdTotalIndicators++;
-                    $overallTotalIndicators++;
-
-                    $reqCount = isset($requirementsMap[$ind->indicator_id])
-                        ? $requirementsMap[$ind->indicator_id]->count()
-                        : 0;
-
-                    /** @var EvaluationResult|null $result */
-                    $result = $resultsMap->get($ind->indicator_id);
-                    $uploadedCount = $result ? $result->evidences->count() : 0;
-
-                    $stdRequiredEvidences += $reqCount;
-                    $stdUploadedEvidences += $uploadedCount;
-                    $overallTotalRequiredEvidences += $reqCount;
-                    $overallTotalUploadedEvidences += $uploadedCount;
-
-                    $isComplete = ($reqCount > 0) ? ($uploadedCount >= $reqCount) : ($uploadedCount > 0);
-                    $rate = ($reqCount > 0) ? min(100.0, round(($uploadedCount / $reqCount) * 100, 2)) : ($uploadedCount > 0 ? 100.0 : 0.0);
-
-                    if ($uploadedCount > 0) {
-                        $stdWithEvidence++;
-                        $overallIndicatorsWithEvidence++;
-                    } else {
-                        $stdZeroEvidence++;
-                        $overallIndicatorsZeroEvidence++;
-                    }
-
-                    if ($isComplete) {
-                        $stdCompleteEvidence++;
-                        $overallIndicatorsCompleteEvidence++;
-                    }
-
-                    $indicatorsEvidenceList[] = [
-                        'indicator_id' => $ind->indicator_id,
-                        'code' => $ind->code,
-                        'name' => $ind->name,
-                        'sub_standard_code' => $sub->code,
-                        'required_count' => $reqCount,
-                        'uploaded_count' => $uploadedCount,
-                        'missing_count' => max(0, $reqCount - $uploadedCount),
-                        'completion_rate' => $rate,
-                        'is_satisfied' => $isComplete,
-                    ];
-                }
+            foreach ($std['indicators'] as $ind) {
+                $indicatorsEvidenceList[] = [
+                    'indicator_id'      => $ind['indicator_id'],
+                    'code'              => $ind['code'],
+                    'name'              => $ind['name'],
+                    'sub_standard_code' => $ind['sub_standard_code'],
+                    'required_count'    => $ind['mandatory_required_count'],
+                    'uploaded_count'    => $ind['uploaded_evidence_count'],
+                    'valid_count'       => $ind['valid_evidence_count'],
+                    'draft_count'       => $ind['draft_evidence_count'],
+                    'missing_count'     => $ind['missing_count'],
+                    'completion_rate'   => $ind['completion_rate'],
+                    'is_satisfied'      => $ind['is_sufficient'],
+                    'status'            => $ind['status'],
+                ];
             }
 
-            $stdCompletionRate = $stdRequiredEvidences > 0
-                ? min(100.0, round(($stdUploadedEvidences / $stdRequiredEvidences) * 100, 2))
-                : ($stdTotalIndicators > 0 && $stdWithEvidence === $stdTotalIndicators ? 100.0 : 0.0);
-
             $standardsSummary[] = [
-                'standard_id' => $standard->standard_id,
-                'code' => $standard->code,
-                'name' => $standard->name,
-                'total_indicators' => $stdTotalIndicators,
-                'indicators_with_evidence' => $stdWithEvidence,
-                'indicators_complete_evidence' => $stdCompleteEvidence,
-                'indicators_missing_evidence' => $stdZeroEvidence,
-                'total_required_evidences' => $stdRequiredEvidences,
-                'total_uploaded_evidences' => $stdUploadedEvidences,
-                'completion_rate' => $stdCompletionRate,
-                'indicators' => $indicatorsEvidenceList,
+                'standard_id'                  => $std['standard_id'],
+                'code'                         => $std['standard_code'],
+                'name'                         => $std['standard_name'],
+                'total_indicators'             => $std['total_indicators'],
+                'indicators_with_evidence'     => $std['indicators_with_evidence'],
+                'indicators_complete_evidence' => $std['sufficient_indicators'],
+                'indicators_missing_evidence'  => $std['missing_indicators'],
+                'total_required_evidences'     => $std['mandatory_required_count'],
+                'total_uploaded_evidences'     => $std['uploaded_evidence_count'],
+                'total_valid_evidences'        => $std['valid_evidence_count'],
+                'total_draft_evidences'        => $std['draft_evidence_count'],
+                'completion_rate'              => $std['completion_rate'],
+                'indicators'                   => $indicatorsEvidenceList,
             ];
         }
 
-        $overallCompletionRate = $overallTotalRequiredEvidences > 0
-            ? min(100.0, round(($overallTotalUploadedEvidences / $overallTotalRequiredEvidences) * 100, 2))
-            : ($overallTotalIndicators > 0 && $overallIndicatorsWithEvidence === $overallTotalIndicators ? 100.0 : 0.0);
-
         return [
-            'evaluation_id' => $evaluation->evaluation_id,
-            'school_id' => $evaluation->school_id,
-            'school_name' => $evaluation->school?->school_name,
-            'total_indicators' => $overallTotalIndicators,
-            'indicators_with_evidence' => $overallIndicatorsWithEvidence,
-            'indicators_complete_evidence' => $overallIndicatorsCompleteEvidence,
-            'indicators_missing_evidence' => $overallIndicatorsZeroEvidence,
-            'total_required_evidences' => $overallTotalRequiredEvidences,
-            'total_uploaded_evidences' => $overallTotalUploadedEvidences,
-            'overall_evidence_completion_rate' => $overallCompletionRate,
-            'standards' => $standardsSummary,
+            'evaluation_id'                    => $evaluation->evaluation_id,
+            'school_id'                        => $evaluation->school_id,
+            'school_name'                      => $data['school_name'],
+            'total_indicators'                 => $data['total_indicators'],
+            'indicators_with_evidence'         => $data['indicators_with_valid_evidence'],
+            'indicators_complete_evidence'     => $data['indicators_with_sufficient_evidence'],
+            'indicators_missing_evidence'      => $data['indicators_missing_evidence'],
+            'total_required_evidences'         => $data['total_mandatory_required'],
+            'total_uploaded_evidences'         => $data['total_uploaded_evidences'],
+            'total_valid_evidences'            => $data['total_valid_evidences'],
+            'total_draft_evidences'            => $data['total_draft_evidences'],
+            'overall_evidence_completion_rate' => $data['overall_evidence_completion_rate'],
+            'completion_rate'                  => $data['overall_evidence_completion_rate'],
+            'standards'                        => $standardsSummary,
         ];
     }
 
