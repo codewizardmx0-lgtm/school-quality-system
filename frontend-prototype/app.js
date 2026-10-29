@@ -2538,40 +2538,593 @@ const App = {
   // ---------------------------------------------------------------------------
   // شاشة مراجعة المعايير والمؤشرات والواصفات (Standards Review Screen - Read Only)
   // ---------------------------------------------------------------------------
+  // الشريحة 7: إدارة معايير الاعتماد المدرسي وإصداراتها ودورة حياتها الرسمية
+  // ---------------------------------------------------------------------------
   async loadStandardsReview() {
     const container = document.getElementById('standards-review-content');
     if (!container) return;
 
-    if (!this.state.standardsTree) {
-      container.innerHTML = '<div class="card" style="text-align: center;">جارِ جلب شجرة المعايير والمؤشرات والواصفات...</div>';
-      
-      const ev = await this.ensureCurrentEvaluation();
-      if (ev && (ev.evaluationId || ev.evaluation_id)) {
-        const evalId = ev.evaluationId || ev.evaluation_id;
-        const treeRes = await this.request(`/evaluations/${evalId}/standards-tree`);
-        if (treeRes.ok && treeRes.data) {
-          this.state.standardsTree = treeRes.data;
-          this.renderStandardsReview();
-          return;
-        }
-      }
+    const user = this.state.currentUser;
+    const isStandardsManager = this.hasPermission('standards.manage') || (user && user.primaryRole === 'ministry_standards_manager');
 
-      // في حال لم يتوفر تقييم (مثل مسؤول المعايير أو النظام)، جلب الإصدار المرجعي الوطني مباشرة
-      const verRes = await this.request('/standard-versions/1');
-      if (verRes.ok && verRes.data) {
-        this.state.standardsTree = verRes.data;
-        this.renderStandardsReview();
-        return;
-      }
+    // 1. جلب قائمة الإصدارات المعيارية
+    const verListRes = await this.request('/standard-versions');
+    let versions = [];
+    if (verListRes.ok && verListRes.data) {
+      versions = verListRes.data;
+      this.state.standardsVersions = versions;
+    }
 
-      container.innerHTML = '<div class="card" style="color: red; text-align: center;">تعذر جلب وثيقة المعايير والمؤشرات. يرجى التحقق من اتصال الخادم والصلاحيات.</div>';
+    // تحديد الإصدار المختار افتراضياً
+    if (!this.state.selectedVersionId) {
+      const approvedVer = versions.find(v => v.status === 'Approved' || v.status === 'Active');
+      this.state.selectedVersionId = approvedVer ? approvedVer.version_id : (versions[0]?.version_id || 1);
+    }
+
+    this.renderStandardsVersionBar(versions, isStandardsManager);
+    await this.fetchAndRenderSelectedVersion();
+  },
+
+  async handleVersionChange(versionId) {
+    this.state.selectedVersionId = parseInt(versionId);
+    await this.fetchAndRenderSelectedVersion();
+  },
+
+  renderStandardsVersionBar(versions, isStandardsManager) {
+    const select = document.getElementById('standards-version-select');
+    if (select) {
+      select.innerHTML = (versions || []).map(v => {
+        const statusLabel = (v.status === 'Draft') ? 'مسودة (Draft)' : ((v.status === 'Archived' || v.status === 'Retired') ? 'مؤرشف (Archived)' : 'مُقرّ (Approved)');
+        const selected = (v.version_id === this.state.selectedVersionId) ? 'selected' : '';
+        return `<option value="${v.version_id}" ${selected}>${v.version_no} — [${statusLabel}]</option>`;
+      }).join('');
+    }
+
+    const currentVer = (versions || []).find(v => v.version_id === this.state.selectedVersionId);
+    const badge = document.getElementById('standards-version-badge');
+    const notice = document.getElementById('standards-version-notice');
+    const actions = document.getElementById('standards-version-actions');
+    const controlCard = document.getElementById('standards-version-control-card');
+
+    if (!isStandardsManager) {
+      if (actions) actions.style.display = 'none';
+      if (controlCard) controlCard.style.display = 'none';
+      return;
+    } else {
+      if (actions) actions.style.display = 'flex';
+      if (controlCard) controlCard.style.display = 'block';
+    }
+
+    const isDraft = currentVer && currentVer.status === 'Draft';
+    const isApproved = currentVer && (currentVer.status === 'Approved' || currentVer.status === 'Active');
+    const isArchived = currentVer && (currentVer.status === 'Archived' || currentVer.status === 'Retired');
+
+    if (badge) {
+      if (isDraft) {
+        badge.className = 'badge badge-yellow';
+        badge.textContent = 'مسودة (Draft)';
+      } else if (isArchived) {
+        badge.className = 'badge badge-gray';
+        badge.textContent = 'مؤرشف (Archived)';
+      } else {
+        badge.className = 'badge badge-green';
+        badge.textContent = 'مُقرّ (Approved)';
+      }
+    }
+
+    if (notice) {
+      if (isDraft) {
+        notice.className = 'alert alert-info';
+        notice.style.background = '#fef3c7';
+        notice.style.color = '#92400e';
+        notice.innerHTML = '⚠️ <strong>مسودة قيد التطوير:</strong> يحق لك تعديل نصوص المعايير والمؤشرات والواصفات ومتطلبات الشواهد وضبط الأوزان. شرط الإقرار: مجموع الأوزان = 100.00%.';
+      } else if (isArchived) {
+        notice.className = 'alert alert-info';
+        notice.style.background = '#f1f5f9';
+        notice.style.color = '#475569';
+        notice.innerHTML = '📁 <strong>إصدار مؤرشف ومنتهي السريان:</strong> للقراءة والاطلاع التاريخي فقط ولا يمكن تعديله أو ربط دورات تقييم جديدة به.';
+      } else {
+        notice.className = 'alert alert-info';
+        notice.style.background = '#ecfdf5';
+        notice.style.color = '#065f46';
+        notice.innerHTML = '🔒 <strong>إصدار مُقرّ وساري المفعول:</strong> محمي ومحصن ضد أي تعديل لضمان نزاهة التقييمات السابقة. يمكنك استنساخه كمسودة جديدة.';
+      }
+    }
+
+    const btnClone = document.getElementById('btn-clone-version');
+    const btnApprove = document.getElementById('btn-approve-version');
+    const btnArchive = document.getElementById('btn-archive-version');
+
+    if (btnClone) btnClone.style.display = isApproved ? 'inline-block' : 'none';
+    if (btnApprove) btnApprove.style.display = isDraft ? 'inline-block' : 'none';
+    if (btnArchive) btnArchive.style.display = isApproved ? 'inline-block' : 'none';
+  },
+
+  async fetchAndRenderSelectedVersion() {
+    const vId = this.state.selectedVersionId;
+    const container = document.getElementById('standards-review-content');
+    if (!container) return;
+
+    container.innerHTML = '<div class="card" style="text-align: center;">جارِ تحميل شجرة المعايير والمؤشرات...</div>';
+
+    const res = await this.request(`/standard-versions/${vId}`);
+    if (!res.ok || !res.data) {
+      container.innerHTML = '<div class="card alert alert-error">تعذر تحميل بيانات الإصدار المعياري.</div>';
       return;
     }
 
-    this.renderStandardsReview();
+    this.state.standardsTree = res.data;
+    const versions = this.state.standardsVersions || [];
+    const currentVer = versions.find(v => v.version_id === vId) || { status: res.data.status || 'Approved' };
+    const user = this.state.currentUser;
+    const isStandardsManager = this.hasPermission('standards.manage') || (user && user.primaryRole === 'ministry_standards_manager');
+
+    this.renderStandardsVersionBar(versions, isStandardsManager);
+    this.renderWeightsMatrix(res.data.standards || [], currentVer.status === 'Draft', isStandardsManager);
+    this.renderStandardsReview(currentVer.status === 'Draft', isStandardsManager);
   },
 
-  renderStandardsReview() {
+  renderWeightsMatrix(standards, isDraft, isStandardsManager) {
+    const tbody = document.getElementById('standards-weights-tbody');
+    const weightsCard = document.getElementById('standards-weights-card');
+    const btnSave = document.getElementById('btn-save-weights');
+    if (!tbody) return;
+
+    if (!isStandardsManager) {
+      if (weightsCard) weightsCard.style.display = 'none';
+      return;
+    } else {
+      if (weightsCard) weightsCard.style.display = 'block';
+    }
+
+    this.state.weightsDraft = {};
+    let totalSum = 0;
+
+    standards.forEach(std => {
+      const w = parseFloat(std.weight) || 0;
+      this.state.weightsDraft[std.standardId] = w;
+      totalSum += w;
+    });
+
+    totalSum = Math.round(totalSum * 100) / 100;
+    this.updateWeightsTotalDisplay(totalSum, isDraft);
+
+    if (btnSave) btnSave.style.display = (isDraft && isStandardsManager) ? 'inline-block' : 'none';
+
+    tbody.innerHTML = standards.map(std => {
+      const w = parseFloat(std.weight) || 0;
+      return `
+        <tr>
+          <td style="padding: 0.5rem; font-weight: 700; color: var(--primary);">${std.code}</td>
+          <td style="padding: 0.5rem; font-weight: 600;">${std.name}</td>
+          <td style="padding: 0.5rem;">
+            ${(isDraft && isStandardsManager)
+              ? `<input type="number" step="0.5" min="0" max="100" class="form-control" style="width: 100px; padding: 0.25rem 0.5rem; font-weight: 700;" value="${w}" oninput="App.handleWeightInputChange(${std.standardId}, this.value)">`
+              : `<span class="badge badge-blue" style="font-size: 0.9rem; font-weight: 700;">${w}%</span>`
+            }
+          </td>
+          <td style="padding: 0.5rem; color: var(--text-muted); font-size: 0.8rem;">${std.description || 'لا يوجد وصف محدد'}</td>
+        </tr>
+      `;
+    }).join('');
+  },
+
+  handleWeightInputChange(standardId, val) {
+    const num = parseFloat(val) || 0;
+    this.state.weightsDraft[standardId] = num;
+
+    let sum = 0;
+    for (const sid in this.state.weightsDraft) {
+      sum += this.state.weightsDraft[sid];
+    }
+    sum = Math.round(sum * 100) / 100;
+    this.updateWeightsTotalDisplay(sum, true);
+  },
+
+  updateWeightsTotalDisplay(sum, isDraft) {
+    const totalDisplay = document.getElementById('weights-total-display');
+    const btnApprove = document.getElementById('btn-approve-version');
+    const btnSave = document.getElementById('btn-save-weights');
+    if (!totalDisplay) return;
+
+    const isExact100 = Math.abs(sum - 100.0) < 0.01;
+    totalDisplay.textContent = `${sum.toFixed(2)}% ${isExact100 ? '✅ متزن' : '⚠️ غير متزن'}`;
+    totalDisplay.className = isExact100 ? 'badge badge-green' : 'badge badge-red';
+
+    if (btnApprove && isDraft) {
+      btnApprove.disabled = !isExact100;
+      btnApprove.title = isExact100 ? 'إقرار الإصدار وتجميده' : 'يجب أن يساوي مجموع الأوزان 100.00% للإقرار';
+    }
+    if (btnSave && isDraft) {
+      btnSave.disabled = !isExact100;
+      btnSave.title = isExact100 ? 'حفظ الأوزان' : 'يجب أن يساوي مجموع الأوزان 100.00% لحفظ الأوزان';
+    }
+  },
+
+  async handleSaveWeights() {
+    const vId = this.state.selectedVersionId;
+    const weightsArr = [];
+    for (const sid in this.state.weightsDraft) {
+      weightsArr.push({
+        standard_id: parseInt(sid),
+        weight: this.state.weightsDraft[sid],
+      });
+    }
+
+    const res = await this.request(`/standard-versions/${vId}/weights`, 'PUT', {
+      standards_weights: weightsArr,
+    });
+
+    if (res.ok) {
+      alert('تم حفظ أوزان المعايير بنجاح واستيفاء شرط المجموع 100%!');
+      await this.fetchAndRenderSelectedVersion();
+    } else {
+      alert('فشل حفظ الأوزان: ' + (res.message || 'يجب أن يساوي المجموع 100.00%'));
+    }
+  },
+
+  // نوافذ دورة حياة الإصدار
+  openCreateVersionModal() {
+    const modal = document.getElementById('modal-create-version');
+    if (!modal) return;
+    document.getElementById('newver-number').value = '';
+    document.getElementById('newver-date').value = new Date().toISOString().split('T')[0];
+    document.getElementById('newver-desc').value = '';
+    document.getElementById('create-version-alert').classList.add('hidden');
+    modal.classList.remove('hidden');
+  },
+
+  closeCreateVersionModal() {
+    const modal = document.getElementById('modal-create-version');
+    if (modal) modal.classList.add('hidden');
+  },
+
+  async handleSaveCreateVersion(event) {
+    event.preventDefault();
+    const versionNo = document.getElementById('newver-number').value.trim();
+    const issueDate = document.getElementById('newver-date').value;
+    const org = document.getElementById('newver-org').value.trim();
+    const desc = document.getElementById('newver-desc').value.trim();
+    const alertEl = document.getElementById('create-version-alert');
+
+    const res = await this.request('/standard-versions', 'POST', {
+      version_no: versionNo,
+      issue_date: issueDate || null,
+      source_organization: org || null,
+      source_description: desc || null,
+    });
+
+    if (res.ok && res.data) {
+      this.closeCreateVersionModal();
+      this.state.selectedVersionId = res.data.version_id;
+      await this.loadStandardsReview();
+    } else {
+      alertEl.textContent = res.message || 'فشل إنشاء المسودة.';
+      alertEl.classList.remove('hidden');
+    }
+  },
+
+  openCloneVersionModal() {
+    const modal = document.getElementById('modal-clone-version');
+    if (!modal) return;
+    document.getElementById('clonever-number').value = '';
+    document.getElementById('clone-version-alert').classList.add('hidden');
+    modal.classList.remove('hidden');
+  },
+
+  closeCloneVersionModal() {
+    const modal = document.getElementById('modal-clone-version');
+    if (modal) modal.classList.add('hidden');
+  },
+
+  async handleSaveCloneVersion(event) {
+    event.preventDefault();
+    const versionNo = document.getElementById('clonever-number').value.trim();
+    const alertEl = document.getElementById('clone-version-alert');
+    const vId = this.state.selectedVersionId;
+
+    const res = await this.request(`/standard-versions/${vId}/clone`, 'POST', {
+      version_no: versionNo,
+    });
+
+    if (res.ok && res.data) {
+      this.closeCloneVersionModal();
+      this.state.selectedVersionId = res.data.version_id;
+      await this.loadStandardsReview();
+    } else {
+      alertEl.textContent = res.message || 'فشل استنساخ الإصدار.';
+      alertEl.classList.remove('hidden');
+    }
+  },
+
+  async handleApproveVersion() {
+    const vId = this.state.selectedVersionId;
+    if (!confirm('هل أنت متأكد من إقرار هذا الإصدار المعياري رسميًا؟ سيتم تجميده ضد أي تعديل لاحق وأرشفة الإصدار السابق تلقائيًا.')) {
+      return;
+    }
+
+    const res = await this.request(`/standard-versions/${vId}/approve`, 'POST');
+    if (res.ok) {
+      alert('تم إقرار الإصدار بنجاح وأصبح ساري المفعول!');
+      await this.loadStandardsReview();
+    } else {
+      alert('فشل إقرار الإصدار: ' + (res.message || 'يرجى مراجعة الأوزان'));
+    }
+  },
+
+  async handleArchiveVersion() {
+    const vId = this.state.selectedVersionId;
+    if (!confirm('هل أنت متأكد من أرشفة هذا الإصدار المعياري؟')) return;
+
+    const res = await this.request(`/standard-versions/${vId}/archive`, 'POST');
+    if (res.ok) {
+      alert('تمت أرشفة الإصدار بنجاح.');
+      await this.loadStandardsReview();
+    } else {
+      alert('فشل أرشفة الإصدار: ' + res.message);
+    }
+  },
+
+  // تعديل المعيار
+  openEditStandardModal(stdId) {
+    const std = (this.state.standardsTree?.standards || []).find(s => s.standardId === stdId);
+    if (!std) return;
+    document.getElementById('edit-std-id').value = stdId;
+    document.getElementById('edit-std-name').value = std.name;
+    document.getElementById('edit-std-desc').value = std.description || '';
+    document.getElementById('edit-std-alert').classList.add('hidden');
+    document.getElementById('modal-edit-standard').classList.remove('hidden');
+  },
+
+  closeEditStandardModal() {
+    const modal = document.getElementById('modal-edit-standard');
+    if (modal) modal.classList.add('hidden');
+  },
+
+  async handleSaveEditStandard(event) {
+    event.preventDefault();
+    const id = document.getElementById('edit-std-id').value;
+    const name = document.getElementById('edit-std-name').value.trim();
+    const desc = document.getElementById('edit-std-desc').value.trim();
+    const alertEl = document.getElementById('edit-std-alert');
+
+    const res = await this.request(`/standards/${id}`, 'PUT', { name, description: desc });
+    if (res.ok) {
+      this.closeEditStandardModal();
+      await this.fetchAndRenderSelectedVersion();
+    } else {
+      alertEl.textContent = res.message || 'فشل التعديل.';
+      alertEl.classList.remove('hidden');
+    }
+  },
+
+  // تعديل المعيار الفرعي
+  openEditSubStandardModal(subId) {
+    let targetSub = null;
+    for (const std of (this.state.standardsTree?.standards || [])) {
+      const found = (std.subStandards || []).find(s => s.subStandardId === subId);
+      if (found) { targetSub = found; break; }
+    }
+    if (!targetSub) return;
+
+    document.getElementById('edit-sub-id').value = subId;
+    document.getElementById('edit-sub-name').value = targetSub.name;
+    document.getElementById('edit-sub-desc').value = targetSub.description || '';
+    document.getElementById('edit-sub-alert').classList.add('hidden');
+    document.getElementById('modal-edit-substandard').classList.remove('hidden');
+  },
+
+  closeEditSubStandardModal() {
+    const modal = document.getElementById('modal-edit-substandard');
+    if (modal) modal.classList.add('hidden');
+  },
+
+  async handleSaveEditSubStandard(event) {
+    event.preventDefault();
+    const id = document.getElementById('edit-sub-id').value;
+    const name = document.getElementById('edit-sub-name').value.trim();
+    const desc = document.getElementById('edit-sub-desc').value.trim();
+    const alertEl = document.getElementById('edit-sub-alert');
+
+    const res = await this.request(`/sub-standards/${id}`, 'PUT', { name, description: desc });
+    if (res.ok) {
+      this.closeEditSubStandardModal();
+      await this.fetchAndRenderSelectedVersion();
+    } else {
+      alertEl.textContent = res.message || 'فشل التعديل.';
+      alertEl.classList.remove('hidden');
+    }
+  },
+
+  // تعديل المؤشر
+  openEditIndicatorModal(indId) {
+    let targetInd = null;
+    for (const std of (this.state.standardsTree?.standards || [])) {
+      for (const sub of (std.subStandards || [])) {
+        const found = (sub.indicators || []).find(i => i.indicatorId === indId);
+        if (found) { targetInd = found; break; }
+      }
+      if (targetInd) break;
+    }
+    if (!targetInd) return;
+
+    document.getElementById('edit-ind-id').value = indId;
+    document.getElementById('edit-ind-name').value = targetInd.name;
+    document.getElementById('edit-ind-desc').value = targetInd.description || '';
+    document.getElementById('edit-ind-weight').value = targetInd.weight || 1;
+    document.getElementById('edit-ind-status').value = targetInd.status || 'Active';
+    document.getElementById('edit-ind-alert').classList.add('hidden');
+    document.getElementById('modal-edit-indicator').classList.remove('hidden');
+  },
+
+  closeEditIndicatorModal() {
+    const modal = document.getElementById('modal-edit-indicator');
+    if (modal) modal.classList.add('hidden');
+  },
+
+  async handleSaveEditIndicator(event) {
+    event.preventDefault();
+    const id = document.getElementById('edit-ind-id').value;
+    const name = document.getElementById('edit-ind-name').value.trim();
+    const desc = document.getElementById('edit-ind-desc').value.trim();
+    const weight = parseFloat(document.getElementById('edit-ind-weight').value) || 1;
+    const status = document.getElementById('edit-ind-status').value;
+    const alertEl = document.getElementById('edit-ind-alert');
+
+    const res = await this.request(`/indicators/${id}`, 'PUT', { name, description: desc, weight, status });
+    if (res.ok) {
+      this.closeEditIndicatorModal();
+      await this.fetchAndRenderSelectedVersion();
+    } else {
+      alertEl.textContent = res.message || 'فشل التعديل.';
+      alertEl.classList.remove('hidden');
+    }
+  },
+
+  // تعديل الواصفات
+  openEditDescriptorsModal(indId) {
+    let targetInd = null;
+    for (const std of (this.state.standardsTree?.standards || [])) {
+      for (const sub of (std.subStandards || [])) {
+        const found = (sub.indicators || []).find(i => i.indicatorId === indId);
+        if (found) { targetInd = found; break; }
+      }
+      if (targetInd) break;
+    }
+    if (!targetInd) return;
+
+    document.getElementById('edit-desc-ind-id').value = indId;
+    const container = document.getElementById('descriptors-form-container');
+    const descriptors = (targetInd.scoreDescriptors || []).sort((a,b) => (a.scoreValue??a.displayOrder) - (b.scoreValue??b.displayOrder));
+
+    container.innerHTML = descriptors.map((d, idx) => `
+      <div style="background: var(--bg-card-header); padding: 0.5rem 0.75rem; border-radius: 4px; border: 1px solid var(--border);">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">
+          <strong style="color: var(--primary);">المستوى ${d.scoreValue}: ${d.label}</strong>
+          <input type="hidden" class="desc-item-id" value="${d.descriptorId || ''}">
+          <input type="hidden" class="desc-item-level" value="${d.scoreLevelId || ''}">
+        </div>
+        <textarea class="form-control desc-item-text" rows="2" required placeholder="نص الواصفة...">${d.description || ''}</textarea>
+      </div>
+    `).join('');
+
+    document.getElementById('edit-desc-alert').classList.add('hidden');
+    document.getElementById('modal-edit-descriptors').classList.remove('hidden');
+  },
+
+  closeEditDescriptorsModal() {
+    const modal = document.getElementById('modal-edit-descriptors');
+    if (modal) modal.classList.add('hidden');
+  },
+
+  async handleSaveEditDescriptors(event) {
+    event.preventDefault();
+    const indId = document.getElementById('edit-desc-ind-id').value;
+    const items = [];
+    const rows = document.querySelectorAll('#descriptors-form-container > div');
+
+    rows.forEach(r => {
+      const id = r.querySelector('.desc-item-id')?.value;
+      const levelId = r.querySelector('.desc-item-level')?.value;
+      const text = r.querySelector('.desc-item-text')?.value.trim();
+      items.push({
+        descriptor_id: id ? parseInt(id) : null,
+        score_level_id: levelId ? parseInt(levelId) : null,
+        description: text,
+      });
+    });
+
+    const alertEl = document.getElementById('edit-desc-alert');
+    const res = await this.request(`/indicators/${indId}/descriptors`, 'PUT', { descriptors: items });
+
+    if (res.ok) {
+      this.closeEditDescriptorsModal();
+      await this.fetchAndRenderSelectedVersion();
+    } else {
+      alertEl.textContent = res.message || 'فشل التعديل.';
+      alertEl.classList.remove('hidden');
+    }
+  },
+
+  // متطلبات الشواهد
+  openAddRequirementModal(indId) {
+    document.getElementById('edit-req-ind-id').value = indId;
+    document.getElementById('edit-req-id').value = '';
+    document.getElementById('edit-req-modal-title').textContent = '➕ إضافة متطلب شاهد جديد';
+    document.getElementById('edit-req-title').value = '';
+    document.getElementById('edit-req-desc').value = '';
+    document.getElementById('edit-req-required').checked = true;
+    document.getElementById('edit-req-alert').classList.add('hidden');
+    document.getElementById('modal-edit-requirement').classList.remove('hidden');
+  },
+
+  openEditRequirementModal(indId, reqId) {
+    let targetReq = null;
+    for (const std of (this.state.standardsTree?.standards || [])) {
+      for (const sub of (std.subStandards || [])) {
+        for (const ind of (sub.indicators || [])) {
+          if (ind.indicatorId === indId) {
+            const found = (ind.evidenceRequirements || []).find(r => (r.requirementId === reqId || r.id === reqId));
+            if (found) { targetReq = found; break; }
+          }
+        }
+        if (targetReq) break;
+      }
+      if (targetReq) break;
+    }
+    if (!targetReq) return;
+
+    document.getElementById('edit-req-ind-id').value = indId;
+    document.getElementById('edit-req-id').value = reqId;
+    document.getElementById('edit-req-modal-title').textContent = '✏️ تعديل متطلب الشاهد';
+    document.getElementById('edit-req-title').value = targetReq.title;
+    document.getElementById('edit-req-desc').value = targetReq.description || '';
+    document.getElementById('edit-req-required').checked = targetReq.required !== false;
+    document.getElementById('edit-req-alert').classList.add('hidden');
+    document.getElementById('modal-edit-requirement').classList.remove('hidden');
+  },
+
+  closeEditRequirementModal() {
+    const modal = document.getElementById('modal-edit-requirement');
+    if (modal) modal.classList.add('hidden');
+  },
+
+  async handleSaveEditRequirement(event) {
+    event.preventDefault();
+    const indId = document.getElementById('edit-req-ind-id').value;
+    const reqId = document.getElementById('edit-req-id').value;
+    const title = document.getElementById('edit-req-title').value.trim();
+    const desc = document.getElementById('edit-req-desc').value.trim();
+    const required = document.getElementById('edit-req-required').checked;
+    const alertEl = document.getElementById('edit-req-alert');
+
+    let res;
+    if (reqId) {
+      res = await this.request(`/indicators/${indId}/requirements/${reqId}`, 'PUT', { title, description: desc, required });
+    } else {
+      res = await this.request(`/indicators/${indId}/requirements`, 'POST', { title, description: desc, required });
+    }
+
+    if (res.ok) {
+      this.closeEditRequirementModal();
+      await this.fetchAndRenderSelectedVersion();
+    } else {
+      alertEl.textContent = res.message || 'فشل حفظ متطلب الشاهد.';
+      alertEl.classList.remove('hidden');
+    }
+  },
+
+  async handleDeleteRequirement(indId, reqId) {
+    if (!confirm('هل أنت متأكد من حذف هذا المتطلب الإثباتي؟')) return;
+    const res = await this.request(`/indicators/${indId}/requirements/${reqId}`, 'DELETE');
+    if (res.ok) {
+      await this.fetchAndRenderSelectedVersion();
+    } else {
+      alert('فشل حذف المتطلب: ' + res.message);
+    }
+  },
+
+  renderStandardsReview(isDraft, isStandardsManager) {
     const container = document.getElementById('standards-review-content');
     if (!container || !this.state.standardsTree) return;
 
@@ -2586,11 +3139,16 @@ const App = {
     container.innerHTML = standards.map((std, sIdx) => `
       <div class="review-standard-card" id="rev-std-card-${sIdx}">
         <div class="review-standard-header" onclick="App.toggleAccordion('rev-std-body-${sIdx}')">
-          <div>
-            <span>${std.code} — ${std.name}</span>
+          <div style="flex: 1;">
+            <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+              <span>${std.code} — ${std.name}</span>
+              ${(isDraft && isStandardsManager) 
+                ? `<button class="btn btn-sm btn-outline-primary" style="padding: 0.15rem 0.5rem; font-size: 0.75rem;" onclick="event.stopPropagation(); App.openEditStandardModal(${std.standardId})">✏️ تعديل المعيار</button>` 
+                : ''}
+            </div>
             ${std.description ? `<div style="font-size: 0.8rem; font-weight: normal; color: var(--text-muted); margin-top: 0.2rem;">${std.description}</div>` : ''}
           </div>
-          <div style="font-size: 0.8rem; color: var(--text-muted);">
+          <div style="font-size: 0.8rem; color: var(--text-muted); white-space: nowrap;">
             الوزن: ${std.weight}% | ${std.subStandards?.length || 0} مجالات فرعية ▾
           </div>
         </div>
@@ -2599,11 +3157,16 @@ const App = {
           ${(std.subStandards || []).map((sub, subIdx) => `
             <div style="border-bottom: 1px solid var(--border);" id="rev-sub-card-${sIdx}-${subIdx}">
               <div class="review-substandard-header" onclick="App.toggleAccordion('rev-sub-body-${sIdx}-${subIdx}')">
-                <div>
-                  <span>${sub.code} — ${sub.name}</span>
+                <div style="flex: 1;">
+                  <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+                    <span>${sub.code} — ${sub.name}</span>
+                    ${(isDraft && isStandardsManager)
+                      ? `<button class="btn btn-sm btn-outline-secondary" style="padding: 0.15rem 0.45rem; font-size: 0.7rem;" onclick="event.stopPropagation(); App.openEditSubStandardModal(${sub.subStandardId})">✏️ تعديل المجال</button>`
+                      : ''}
+                  </div>
                   ${sub.description ? `<div style="font-size: 0.75rem; font-weight: normal; color: var(--text-muted);">${sub.description}</div>` : ''}
                 </div>
-                <div style="font-size: 0.75rem; color: var(--text-muted);">
+                <div style="font-size: 0.75rem; color: var(--text-muted); white-space: nowrap;">
                   ${sub.indicators?.length || 0} مؤشرات ▾
                 </div>
               </div>
@@ -2616,22 +3179,30 @@ const App = {
                        data-name="${ind.name}" 
                        data-desc="${ind.description || ''}">
                     <!-- رأس المؤشر -->
-                    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.5rem;">
-                      <div>
-                        <strong style="color: var(--primary); font-size: 0.95rem;">${ind.code} — ${ind.name}</strong>
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.5rem; flex-wrap: wrap; gap: 0.5rem;">
+                      <div style="flex: 1;">
+                        <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+                          <strong style="color: var(--primary); font-size: 0.95rem;">${ind.code} — ${ind.name}</strong>
+                          ${(isDraft && isStandardsManager)
+                            ? `<button class="btn btn-sm btn-outline-primary" style="padding: 0.1rem 0.4rem; font-size: 0.7rem;" onclick="App.openEditIndicatorModal(${ind.indicatorId})">✏️ تعديل المؤشر</button>`
+                            : ''}
+                        </div>
                         <div style="font-size: 0.85rem; color: #475569; margin-top: 0.25rem; line-height: 1.4;">
                           ${ind.description || 'لا يوجد وصف للمؤشر'}
                         </div>
                       </div>
                       <div style="text-align: left; font-size: 0.75rem; color: var(--text-muted); white-space: nowrap;">
-                        الوزن: ${ind.weight || 1} | الحالة: <span class="badge badge-green">${ind.status}</span>
+                        الوزن: ${ind.weight || 1} | الحالة: <span class="badge ${ind.status === 'Active' ? 'badge-green' : 'badge-gray'}">${ind.status}</span>
                       </div>
                     </div>
 
                     <!-- الواصفات الأربع كاملة -->
                     <div style="margin-top: 0.75rem;">
-                      <div style="font-size: 0.8rem; font-weight: 700; color: #334155; margin-bottom: 0.35rem;">
-                        سلم الواصفات المعيارية الأربع (0 - 3):
+                      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">
+                        <span style="font-size: 0.8rem; font-weight: 700; color: #334155;">سلم الواصفات المعيارية الأربع (0 - 3):</span>
+                        ${(isDraft && isStandardsManager)
+                          ? `<button class="btn btn-sm btn-outline-secondary" style="padding: 0.1rem 0.4rem; font-size: 0.7rem;" onclick="App.openEditDescriptorsModal(${ind.indicatorId})">📝 تعديل الواصفات</button>`
+                          : ''}
                       </div>
                       <div class="descriptor-cards-grid">
                         ${(ind.scoreDescriptors || []).sort((a,b)=>(a.scoreValue??a.displayOrder)-(b.scoreValue??b.displayOrder)).map(d => `
@@ -2646,46 +3217,33 @@ const App = {
                       </div>
                     </div>
 
-                    <!-- أدوات التحقق ومتطلبات الشواهد -->
-                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 0.75rem; margin-top: 0.75rem; padding-top: 0.6rem; border-top: 1px dashed var(--border);">
-                      <!-- أدوات التحقق -->
-                      <div>
-                        <div style="font-size: 0.8rem; font-weight: 700; color: #334155; margin-bottom: 0.35rem;">
-                          أدوات التحقق الرسمية:
-                        </div>
-                        <div style="display: flex; flex-direction: column; gap: 0.35rem;">
-                          ${(ind.verificationTools || []).length > 0 
-                            ? (ind.verificationTools || []).map(t => `
-                              <div class="tool-item-row" style="font-size: 0.8rem;">
-                                <div style="display: flex; justify-content: space-between;">
-                                  <strong>${t.name} (${t.toolType})</strong>
-                                  <span class="badge ${t.required ? 'badge-red' : 'badge-gray'}" style="font-size: 0.65rem;">${t.required ? 'إلزامية *' : 'اختيارية'}</span>
-                                </div>
-                                ${t.usageGuidance ? `<div class="tool-item-guidance">💡 ${t.usageGuidance}</div>` : ''}
-                              </div>
-                            `).join('')
-                            : '<span style="font-size: 0.75rem; color: var(--text-muted);">لا توجد أدوات تحقق مقررة.</span>'}
-                        </div>
+                    <!-- متطلبات الشواهد -->
+                    <div style="margin-top: 0.75rem; padding-top: 0.6rem; border-top: 1px dashed var(--border);">
+                      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">
+                        <span style="font-size: 0.8rem; font-weight: 700; color: #334155;">متطلبات الشواهد والأدلة الرسمية:</span>
+                        ${(isDraft && isStandardsManager)
+                          ? `<button class="btn btn-sm btn-outline-primary" style="padding: 0.1rem 0.4rem; font-size: 0.7rem;" onclick="App.openAddRequirementModal(${ind.indicatorId})">➕ إضافة متطلب شاهد</button>`
+                          : ''}
                       </div>
-
-                      <!-- متطلبات الشواهد -->
-                      <div>
-                        <div style="font-size: 0.8rem; font-weight: 700; color: #334155; margin-bottom: 0.35rem;">
-                          متطلبات الشواهد والأدلة الرسمية:
-                        </div>
-                        <div style="display: flex; flex-direction: column; gap: 0.35rem;">
-                          ${(ind.evidenceRequirements || []).length > 0
-                            ? (ind.evidenceRequirements || []).map(r => `
-                              <div class="evidence-req-item" style="font-size: 0.8rem;">
-                                <div>
-                                  <strong>${r.title}</strong>
-                                  ${r.description ? `<div style="font-size: 0.7rem; color: var(--text-muted);">${r.description}</div>` : ''}
-                                </div>
-                                <span class="badge ${r.required ? 'badge-yellow' : 'badge-gray'}" style="font-size: 0.65rem;">${r.required ? 'إلزامي' : 'اختياري'}</span>
+                      <div style="display: flex; flex-direction: column; gap: 0.35rem;">
+                        ${(ind.evidenceRequirements || []).length > 0
+                          ? (ind.evidenceRequirements || []).map(r => `
+                            <div class="evidence-req-item" style="font-size: 0.8rem; display: flex; justify-content: space-between; align-items: center; gap: 0.5rem;">
+                              <div style="flex: 1;">
+                                <strong>${r.title}</strong>
+                                ${r.description ? `<div style="font-size: 0.7rem; color: var(--text-muted);">${r.description}</div>` : ''}
                               </div>
-                            `).join('')
-                            : '<span style="font-size: 0.75rem; color: var(--text-muted);">لا توجد متطلبات شواهد مسجلة.</span>'}
-                        </div>
+                              <div style="display: flex; align-items: center; gap: 0.35rem;">
+                                <span class="badge ${r.required ? 'badge-yellow' : 'badge-gray'}" style="font-size: 0.65rem;">${r.required ? 'إلزامي' : 'اختياري'}</span>
+                                ${(isDraft && isStandardsManager)
+                                  ? `
+                                    <button class="btn btn-sm btn-outline-secondary" style="padding: 0.1rem 0.35rem; font-size: 0.7rem;" onclick="App.openEditRequirementModal(${ind.indicatorId}, ${r.requirementId || r.id})">✏️</button>
+                                    <button class="btn btn-sm btn-outline-danger" style="padding: 0.1rem 0.35rem; font-size: 0.7rem;" onclick="App.handleDeleteRequirement(${ind.indicatorId}, ${r.requirementId || r.id})">🗑️</button>
+                                  ` : ''}
+                              </div>
+                            </div>
+                          `).join('')
+                          : '<span style="font-size: 0.75rem; color: var(--text-muted);">لا توجد متطلبات شواهد مسجلة.</span>'}
                       </div>
                     </div>
 

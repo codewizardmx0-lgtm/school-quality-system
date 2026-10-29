@@ -865,19 +865,78 @@
     </div>
 
     <!-- ========================================================================= -->
-    <!-- شاشة مراجعة المعايير الوطنية (قراءة فقط) -->
+    <!-- شاشة إدارة ومراجعة معايير الاعتماد المدرسي (الشريحة 7)                      -->
     <!-- ========================================================================= -->
     <section id="screen-standards-review" class="hidden">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem;">
         <div>
-          <h2 style="font-size: 1.25rem; color: var(--primary); margin-bottom: 0.25rem;">دليل مراجعة المعايير والمؤشرات الوطنية (قراءة فقط)</h2>
+          <h2 style="font-size: 1.25rem; color: var(--primary); margin-bottom: 0.25rem;">إدارة ومراجعة معايير الاعتماد المدرسي</h2>
           <span style="font-size: 0.85rem; color: var(--text-muted);">
-            استعراض شامل للقراءة فقط: المعايير السبعة، والمجالات الفرعية الـ 14، والمؤشرات الـ 109 كاملة مع واصفاتها الأربع وأدوات التحقق ومتطلبات الشواهد.
+            الإطار المرجعي الوطني لمعايير الاعتماد المدرسي: دورة حياة الإصدارات، ضبط الأوزان النسبية، وإدارة متطلبات الشواهد والواصفات.
           </span>
         </div>
-        <div style="display: flex; gap: 0.5rem;">
+        <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
           <button class="btn btn-sm btn-secondary" onclick="App.toggleAllReviewStandards(true)">توسيع الكل</button>
           <button class="btn btn-sm btn-secondary" onclick="App.toggleAllReviewStandards(false)">طي الكل</button>
+        </div>
+      </div>
+
+      <!-- شريط الإصدارات ودورة الحياة -->
+      <div id="standards-version-control-card" class="card" style="padding: 1rem; margin-bottom: 1rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem;">
+          <div style="display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
+            <label for="standards-version-select" style="font-weight: 700; font-size: 0.9rem;">الإصدار المعياري:</label>
+            <select id="standards-version-select" class="form-control" style="width: auto; min-width: 220px;" onchange="App.handleVersionChange(this.value)">
+              <!-- تُحقن الإصدارات عبر JS -->
+            </select>
+            <span id="standards-version-badge" class="badge badge-green">مُقرّ</span>
+          </div>
+
+          <!-- أزرار الإجراءات على الإصدار لمدير المعايير -->
+          <div id="standards-version-actions" style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+            <button id="btn-create-version-draft" class="btn btn-sm btn-outline-primary" onclick="App.openCreateVersionModal()">➕ إنشاء مسودة جديدة</button>
+            <button id="btn-clone-version" class="btn btn-sm btn-outline-secondary" onclick="App.openCloneVersionModal()">📋 استنساخ مسودة</button>
+            <button id="btn-approve-version" class="btn btn-sm btn-success" onclick="App.handleApproveVersion()">✅ إقرار الإصدار</button>
+            <button id="btn-archive-version" class="btn btn-sm btn-outline-danger" onclick="App.handleArchiveVersion()">📁 أرشفة</button>
+          </div>
+        </div>
+
+        <div id="standards-version-notice" style="margin-top: 0.75rem; font-size: 0.85rem; padding: 0.5rem 0.75rem; border-radius: 4px;" class="alert alert-info">
+          جارِ تحميل بيانات الإصدار...
+        </div>
+      </div>
+
+      <!-- بطاقة إدارة الأوزان النسبية للمعايير الرئيسة -->
+      <div id="standards-weights-card" class="card" style="padding: 1rem; margin-bottom: 1rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; flex-wrap: wrap; gap: 0.5rem;">
+          <div>
+            <strong style="font-size: 0.95rem; color: var(--primary);">مصفوفة الأوزان النسبية للمعايير الرئيسة السبعة</strong>
+            <div style="font-size: 0.8rem; color: var(--text-muted);">
+              شرط حتمي: يجب أن يساوي مجموع أوزان المعايير 100.00% تمامًا لحفظ الأوزان أو إقرار الإصدار.
+            </div>
+          </div>
+          <div style="display: flex; align-items: center; gap: 1rem;">
+            <div style="font-size: 0.9rem; font-weight: 700;">
+              المجموع الحالي: <span id="weights-total-display" class="badge badge-green">100.00%</span>
+            </div>
+            <button id="btn-save-weights" class="btn btn-sm btn-primary" onclick="App.handleSaveWeights()">💾 حفظ الأوزان</button>
+          </div>
+        </div>
+
+        <div style="overflow-x: auto;">
+          <table class="table" style="width: 100%; font-size: 0.85rem; margin: 0;">
+            <thead>
+              <tr style="background: var(--bg-card-header);">
+                <th style="padding: 0.5rem;">الكود</th>
+                <th style="padding: 0.5rem;">المعيار الرئيس</th>
+                <th style="padding: 0.5rem; width: 140px;">الوزن النسبي (%)</th>
+                <th style="padding: 0.5rem;">الوصف والتوجيهات</th>
+              </tr>
+            </thead>
+            <tbody id="standards-weights-tbody">
+              <!-- تُحقن أوزان المعايير عبر JS -->
+            </tbody>
+          </table>
         </div>
       </div>
 
@@ -2191,6 +2250,199 @@
         <div style="display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem;">
           <button type="button" class="btn btn-secondary" onclick="App.closeAdminUserModal()">إلغاء</button>
           <button type="submit" id="btn-submit-admusr" class="btn btn-primary">حفظ بيانات المستخدم</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ========================================================================= -->
+  <!-- نوافذ الشريحة 7: إدارة المعايير وإصداراتها الرسمية                         -->
+  <!-- ========================================================================= -->
+
+  <!-- نافذة إنشاء مسودة إصدار جديدة -->
+  <div id="modal-create-version" class="modal-overlay hidden">
+    <div class="modal-content" style="max-width: 500px;">
+      <h3 style="font-size: 1.15rem; color: var(--primary);">➕ إنشاء مسودة إصدار جديدة</h3>
+      <div id="create-version-alert" class="alert alert-error hidden" style="margin-top: 0.5rem;"></div>
+
+      <form onsubmit="App.handleSaveCreateVersion(event)" style="margin-top: 1rem;">
+        <div class="form-group">
+          <label class="form-label" for="newver-number">رقم الإصدار المعياري:</label>
+          <input type="text" id="newver-number" class="form-control" required placeholder="مثال: 2027.1">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="newver-date">تاريخ الإصدار المقترح:</label>
+          <input type="date" id="newver-date" class="form-control">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="newver-org">الجهة المصدرة:</label>
+          <input type="text" id="newver-org" class="form-control" value="وزارة التربية والتعليم والبحث العلمي">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="newver-desc">الوصف التوثيقي:</label>
+          <textarea id="newver-desc" class="form-control" rows="2" placeholder="وصف موجز للمسودة..."></textarea>
+        </div>
+        <div style="display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem;">
+          <button type="button" class="btn btn-secondary" onclick="App.closeCreateVersionModal()">إلغاء</button>
+          <button type="submit" class="btn btn-primary">إنشاء المسودة</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- نافذة استنساخ إصدار مُقرّ -->
+  <div id="modal-clone-version" class="modal-overlay hidden">
+    <div class="modal-content" style="max-width: 500px;">
+      <h3 style="font-size: 1.15rem; color: var(--primary);">📋 استنساخ إصدار كمسودة جديدة</h3>
+      <div id="clone-version-alert" class="alert alert-error hidden" style="margin-top: 0.5rem;"></div>
+
+      <p style="font-size: 0.85rem; color: var(--text-muted); margin-top: 0.5rem;">
+        سيتم استنساخ كافة المعايير والمجالات والمؤشرات والواصفات ومتطلبات الشواهد طبق الأصل كمسودة جديدة مستقلة قابلة للتطوير دون المساس بالإصدار الأصلي.
+      </p>
+
+      <form onsubmit="App.handleSaveCloneVersion(event)" style="margin-top: 1rem;">
+        <div class="form-group">
+          <label class="form-label" for="clonever-number">رقم الإصدار الجديد المستنسخ:</label>
+          <input type="text" id="clonever-number" class="form-control" required placeholder="مثال: 2026.2">
+        </div>
+        <div style="display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem;">
+          <button type="button" class="btn btn-secondary" onclick="App.closeCloneVersionModal()">إلغاء</button>
+          <button type="submit" class="btn btn-primary">بدء الاستنساخ الشامل</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- نافذة تعديل معيار رئيسي -->
+  <div id="modal-edit-standard" class="modal-overlay hidden">
+    <div class="modal-content" style="max-width: 500px;">
+      <h3 id="edit-std-modal-title" style="font-size: 1.15rem; color: var(--primary);">✏️ تعديل المعيار الرئيس</h3>
+      <div id="edit-std-alert" class="alert alert-error hidden" style="margin-top: 0.5rem;"></div>
+
+      <form onsubmit="App.handleSaveEditStandard(event)" style="margin-top: 1rem;">
+        <input type="hidden" id="edit-std-id">
+        <div class="form-group">
+          <label class="form-label" for="edit-std-name">اسم المعيار الرئيس:</label>
+          <input type="text" id="edit-std-name" class="form-control" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="edit-std-desc">الوصف والتوجيهات:</label>
+          <textarea id="edit-std-desc" class="form-control" rows="3"></textarea>
+        </div>
+        <div style="display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem;">
+          <button type="button" class="btn btn-secondary" onclick="App.closeEditStandardModal()">إلغاء</button>
+          <button type="submit" class="btn btn-primary">حفظ التعديلات</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- نافذة تعديل معيار فرعي / مجال -->
+  <div id="modal-edit-substandard" class="modal-overlay hidden">
+    <div class="modal-content" style="max-width: 500px;">
+      <h3 id="edit-sub-modal-title" style="font-size: 1.15rem; color: var(--primary);">✏️ تعديل المجال الفرعي</h3>
+      <div id="edit-sub-alert" class="alert alert-error hidden" style="margin-top: 0.5rem;"></div>
+
+      <form onsubmit="App.handleSaveEditSubStandard(event)" style="margin-top: 1rem;">
+        <input type="hidden" id="edit-sub-id">
+        <div class="form-group">
+          <label class="form-label" for="edit-sub-name">اسم المجال الفرعي:</label>
+          <input type="text" id="edit-sub-name" class="form-control" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="edit-sub-desc">الوصف:</label>
+          <textarea id="edit-sub-desc" class="form-control" rows="2"></textarea>
+        </div>
+        <div style="display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem;">
+          <button type="button" class="btn btn-secondary" onclick="App.closeEditSubStandardModal()">إلغاء</button>
+          <button type="submit" class="btn btn-primary">حفظ التعديلات</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- نافذة تعديل مؤشر -->
+  <div id="modal-edit-indicator" class="modal-overlay hidden">
+    <div class="modal-content" style="max-width: 500px;">
+      <h3 id="edit-ind-modal-title" style="font-size: 1.15rem; color: var(--primary);">✏️ تعديل المؤشر التفصيلي</h3>
+      <div id="edit-ind-alert" class="alert alert-error hidden" style="margin-top: 0.5rem;"></div>
+
+      <form onsubmit="App.handleSaveEditIndicator(event)" style="margin-top: 1rem;">
+        <input type="hidden" id="edit-ind-id">
+        <div class="form-group">
+          <label class="form-label" for="edit-ind-name">نص المؤشر:</label>
+          <input type="text" id="edit-ind-name" class="form-control" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="edit-ind-desc">شرح وتوجيهات المؤشر:</label>
+          <textarea id="edit-ind-desc" class="form-control" rows="3"></textarea>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+          <div class="form-group">
+            <label class="form-label" for="edit-ind-weight">الوزن النسبي:</label>
+            <input type="number" step="0.1" min="0" id="edit-ind-weight" class="form-control" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="edit-ind-status">الحالة:</label>
+            <select id="edit-ind-status" class="form-control">
+              <option value="Active">نشط (Active)</option>
+              <option value="Inactive">معطل (Inactive)</option>
+            </select>
+          </div>
+        </div>
+        <div style="display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem;">
+          <button type="button" class="btn btn-secondary" onclick="App.closeEditIndicatorModal()">إلغاء</button>
+          <button type="submit" class="btn btn-primary">حفظ المؤشر</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- نافذة تعديل الواصفات الأربع للمؤشر -->
+  <div id="modal-edit-descriptors" class="modal-overlay hidden">
+    <div class="modal-content" style="max-width: 600px;">
+      <h3 id="edit-desc-modal-title" style="font-size: 1.15rem; color: var(--primary);">📝 تعديل واصفات الأداء (0 - 3)</h3>
+      <div id="edit-desc-alert" class="alert alert-error hidden" style="margin-top: 0.5rem;"></div>
+
+      <form onsubmit="App.handleSaveEditDescriptors(event)" style="margin-top: 1rem;">
+        <input type="hidden" id="edit-desc-ind-id">
+        <div id="descriptors-form-container" style="display: flex; flex-direction: column; gap: 0.75rem;">
+          <!-- تُحقن واصفات 0 و 1 و 2 و 3 عبر JS -->
+        </div>
+        <div style="display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem;">
+          <button type="button" class="btn btn-secondary" onclick="App.closeEditDescriptorsModal()">إلغاء</button>
+          <button type="submit" class="btn btn-primary">حفظ الواصفات</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- نافذة إضافة / تعديل متطلب شاهد -->
+  <div id="modal-edit-requirement" class="modal-overlay hidden">
+    <div class="modal-content" style="max-width: 500px;">
+      <h3 id="edit-req-modal-title" style="font-size: 1.15rem; color: var(--primary);">📑 متطلب شاهد للمؤشر</h3>
+      <div id="edit-req-alert" class="alert alert-error hidden" style="margin-top: 0.5rem;"></div>
+
+      <form onsubmit="App.handleSaveEditRequirement(event)" style="margin-top: 1rem;">
+        <input type="hidden" id="edit-req-ind-id">
+        <input type="hidden" id="edit-req-id">
+        <div class="form-group">
+          <label class="form-label" for="edit-req-title">عنوان المتطلب الإثباتي:</label>
+          <input type="text" id="edit-req-title" class="form-control" required placeholder="مثال: الخطة التشغيلية للمدرسة المعتمدة">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="edit-req-desc">الوصف والمواصفات الإضافية:</label>
+          <textarea id="edit-req-desc" class="form-control" rows="2" placeholder="ملاحظات حول طريقة التوثيق..."></textarea>
+        </div>
+        <div class="form-group">
+          <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; font-size: 0.9rem;">
+            <input type="checkbox" id="edit-req-required" value="1" checked>
+            <span>متطلب إلزامي (Mandatory Evidence)</span>
+          </label>
+        </div>
+        <div style="display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem;">
+          <button type="button" class="btn btn-secondary" onclick="App.closeEditRequirementModal()">إلغاء</button>
+          <button type="submit" class="btn btn-primary">حفظ متطلب الشاهد</button>
         </div>
       </form>
     </div>
