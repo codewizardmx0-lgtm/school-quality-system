@@ -1,6 +1,6 @@
 # نظام إدارة وتقويم الجودة المدرسية (School Quality System)
 
-نظام وطني متكامل لإدارة وتقويم جودة المدارس، يغطي دورات التقييم الذاتي، رصد درجات المؤشرات والمعايير، إدارة الشواهد والوثائق، إعداد ومتابعة خطط التحسين المدرسي، وإنتاج التقارير والتحليلات وحساب النتائج، وتنظيم وتدقيق الشواهد.
+نظام وطني متكامل لإدارة وتقويم جودة المدارس، يغطي دورات التقييم الذاتي، رصد درجات المؤشرات والمعايير، إدارة الشواهد والوثائق، إعداد ومتابعة خطط التحسين المدرسي، وإنتاج التقارير والتحليلات وحساب النتائج، وتنظيم وتدقيق الشواهد، وإدارة الملف التعريفي والإحصاءات والمرافق المدرسية وسياق المؤشرات.
 
 ---
 
@@ -25,8 +25,26 @@ school-quality-system/
 | **الشريحة 2** | التقييم الذاتي، رصد درجات المؤشرات، وإدارة الشواهد والنسخ التاريخية | مكتملة 100% | [`docs/slices/slice2_evaluation_evidence.md`](docs/slices/slice2_evaluation_evidence.md) |
 | **الشريحة 3** | خطط التحسين المدرسي، الإجراءات التنفيذية، وملاحظات المراجعة | مكتملة 100% | [`docs/slices/slice3_improvement_plans.md`](docs/slices/slice3_improvement_plans.md) |
 | **الشريحة 4** | التقارير والتحليلات وحساب النتائج (لوحة المعلومات، حساب الدرجات، الشواهد، تصدير JSON) | مكتملة 100% | [`docs/slices/slice4_reports_analytics.md`](docs/slices/slice4_reports_analytics.md) |
-| **الشريحة 4.1** | إغلاق واعتماد التقييم وقفل التعديل النهائي (G-01 / BR-SCH-03) | مكتملة 100% | [`gaps.md`](gaps.md) |
-| **الشريحة 5** | **تنظيم الشواهد وتصنيفها وربطها بالمؤشرات وحصرها (بدون ذكاء اصطناعي)** | **مكتملة 100%** | [`docs/slices/slice5_evidence_organization.md`](docs/slices/slice5_evidence_organization.md) |
+| **الشريحة 4.1** | إنهاء وتقديم التقييم وقفل التعديل النهائي (G-01 / BR-SCH-03) | مكتملة 100% | [`gaps.md`](gaps.md) |
+| **الشريحة 5** | تنظيم الشواهد وتصنيفها وربطها بالمؤشرات وحصرها (بدون ذكاء اصطناعي) | مكتملة 100% | [`docs/slices/slice5_evidence_organization.md`](docs/slices/slice5_evidence_organization.md) |
+| **الشريحة 6** | **إدارة المدرسة: الملف التعريفي، الإحصاءات التجميعية، المرافق، وسياق المؤشرات** | **مكتملة 100%** | [`docs/slices/slice6_school_profile.md`](docs/slices/slice6_school_profile.md) |
+
+---
+
+## الشريحة السادسة: إدارة المدرسة (الملف التعريفي، الإحصاءات التجميعية، المرافق، وسياق المؤشرات)
+
+### نقاط النهاية المتاحة (Endpoints)
+- `GET /api/v1/schools/{id}/profile` — استعراض الملف التعريفي الممتد للمدرسة.
+- `PUT /api/v1/schools/{id}/profile` — تحديث بيانات الملف التعريفي للمدرسة.
+- `GET /api/v1/schools/{id}/staff-metrics` — استعراض إحصاءات الكادر التعليمي والإداري التجميعية للعام الدراسي.
+- `POST /api/v1/schools/{id}/staff-metrics` — حفظ أو تحديث إحصاءات الكادر التعليمي والإداري التجميعية.
+- `GET /api/v1/schools/{id}/enrollment-metrics` — استعراض إحصاءات الطلاب والشعب التجميعية للعام الدراسي.
+- `POST /api/v1/schools/{id}/enrollment-metrics` — حفظ مجمّع لإحصاءات الطلاب والشعب حسب الصفوف الدراسية.
+- `GET /api/v1/schools/{id}/facilities` — استعراض سجل مرافق المدرسة وتجهيزاتها وتوفر متطلبات السلامة.
+- `POST /api/v1/schools/{id}/facilities` — إضافة مرفق مدرسي جديد.
+- `PUT /api/v1/schools/{id}/facilities/{facilityId}` — تحديث بيانات أو حالة مرفق مدرسي.
+- `DELETE /api/v1/schools/{id}/facilities/{facilityId}` — حذف سجل مرفق مدرسي.
+- `GET /api/v1/evaluations/{id}/indicators-context` (المسار البديل: `/api/v1/schools/{school}/assessments/{assessment}/indicators-context`) — استخراج السياق الإحصائي الاسترشادي للمؤشرات مع المستويات المقترحة (مع حماية القسمة على صفر وقراءة مباشرة من Snapshot المجمدة في التقييمات المنتهية `Completed`).
 
 ---
 
@@ -41,7 +59,8 @@ school-quality-system/
 - `POST|PATCH /api/v1/evidences/{id}/review-notes` — إضافة ملاحظات المراجع وهوية وتاريخ المراجعة.
 - `GET /api/v1/evaluations/{id}/evidence-inventory` (المسار البديل: `/api/v1/schools/{school}/assessments/{assessment}/evidence-inventory`) — جرد وحصر الشواهد التفصيلي للتقييم وبيان النواقص والمكتمل وفق حالة الشاهد (Completed / Audited).
 
-* التفاصيل الكاملة للشريحة: [`docs/slices/slice5_evidence_organization.md`](docs/slices/slice5_evidence_organization.md)
+* التفاصيل الكاملة للشريحة 6: [`docs/slices/slice6_school_profile.md`](docs/slices/slice6_school_profile.md)
+* التفاصيل الكاملة للشريحة 5: [`docs/slices/slice5_evidence_organization.md`](docs/slices/slice5_evidence_organization.md)
 * خارطة الطريق للشرائح المستقبلية (12 شريحة): [`docs/slices_roadmap.md`](docs/slices_roadmap.md)
 * سجل حصر الفجوات والقرارات التقنية: [`gaps.md`](gaps.md)
 * دليل التحقق اليدوي للواجهات المؤقتة (مُعاد بناؤه ومبوّب بالشرائح): [`frontend-prototype/verification-guide.md`](frontend-prototype/verification-guide.md)
@@ -57,6 +76,6 @@ php artisan test
 ```
 
 **نتيجة الاختبارات الإجمالية:**
-- **141 اختباراً ناجحاً بنسبة 100%**
-- **7,675 تأكيداً (Assertions)**
+- **155 اختباراً ناجحاً بنسبة 100%**
+- **7,768 تأكيداً (Assertions)**
 - **0 إخفاقات / 0 أخطاء**

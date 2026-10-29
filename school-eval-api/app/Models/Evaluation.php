@@ -43,6 +43,7 @@ class Evaluation extends Model
         'school_id',
         'created_by_user_id',
         'status',
+        'school_context_snapshot',
     ];
 
     /**
@@ -56,6 +57,7 @@ class Evaluation extends Model
             'cycle_id' => 'integer',
             'school_id' => 'integer',
             'created_by_user_id' => 'integer',
+            'school_context_snapshot' => 'array',
             'created_at' => 'datetime',
             'updated_at' => 'datetime',
         ];

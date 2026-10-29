@@ -26,6 +26,14 @@ class SchoolResource extends JsonResource
             'educationalDistrict' => $this->educational_district,
             'governorate'         => $this->governorate,
             'status'              => $this->status,
+            'address'             => $this->address,
+            'phone'               => $this->phone,
+            'email'               => $this->email,
+            'educationalAdmin'    => $this->educational_admin,
+            'buildingType'        => $this->building_type,
+            'shiftType'           => $this->shift_type,
+            'totalArea'           => $this->total_area !== null ? (float) $this->total_area : null,
+            'builtUpArea'         => $this->built_up_area !== null ? (float) $this->built_up_area : null,
         ];
     }
 }

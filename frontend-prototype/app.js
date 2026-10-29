@@ -421,6 +421,16 @@ const App = {
     const data = res.data;
     this.updateDevToolsVisibility();
 
+    // جلب السياق الاسترشادي لمؤشرات التقييم من واقع بيانات المدرسة (الشريحة 6)
+    try {
+      const ctxRes = await this.request(`/evaluations/${evalId}/indicators-context`);
+      if (ctxRes.ok && ctxRes.data) {
+        this.state.indicatorsContext = ctxRes.data.indicators || {};
+      }
+    } catch (e) {
+      this.state.indicatorsContext = {};
+    }
+
     // تحديث ترويسة الشجرة والإنجاز الإجمالي من بيانات الـ API (قراءة schoolName و academicYear مباشرة من الاستجابة)
     const schoolName = data.schoolName || this.state.currentEvaluation?.school?.schoolName || this.state.user?.school?.schoolName || 'المدرسة';
     const cycleAcademicYear = data.academicYear || this.state.currentEvaluation?.cycle?.academicYear || '';
@@ -660,6 +670,20 @@ const App = {
       }
     } else {
       notesSec.classList.add('hidden');
+    }
+
+    // عرض بطاقة السياق الاسترشادي إن توفرت لهذا المؤشر (الشريحة 6)
+    const ctxCard = document.getElementById('indicator-context-card');
+    const ctxBadge = document.getElementById('indicator-context-badge');
+    const ctxMsg = document.getElementById('indicator-context-message');
+    const indCtx = this.state.indicatorsContext ? this.state.indicatorsContext[indicator.code] : null;
+
+    if (ctxCard && indCtx && indCtx.suggested_level !== null) {
+      ctxCard.classList.remove('hidden');
+      ctxBadge.textContent = indCtx.badge || `المستوى المقترح: ${indCtx.suggested_level}`;
+      ctxMsg.textContent = indCtx.message || '';
+    } else if (ctxCard) {
+      ctxCard.classList.add('hidden');
     }
 
     modal.classList.remove('hidden');
