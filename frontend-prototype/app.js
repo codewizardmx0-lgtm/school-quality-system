@@ -2714,6 +2714,7 @@ const App = {
     const tbody = document.getElementById('standards-weights-tbody');
     const weightsCard = document.getElementById('standards-weights-card');
     const btnSave = document.getElementById('btn-save-weights');
+    const btnAddStd = document.getElementById('btn-add-standard-weights');
     if (!tbody) return;
 
     if (!isStandardsManager) {
@@ -2721,6 +2722,10 @@ const App = {
       return;
     } else {
       if (weightsCard) weightsCard.style.display = 'block';
+    }
+
+    if (btnAddStd) {
+      btnAddStd.style.display = (isDraft && isStandardsManager) ? 'inline-block' : 'none';
     }
 
     this.state.weightsDraft = {};
@@ -2935,6 +2940,162 @@ const App = {
       }
     } else {
       alert('فشل أرشفة الإصدار: ' + (res.message || 'خطأ في عملية الأرشفة'));
+    }
+  },
+
+  // تعديل المعيار
+  // إنشاء معيار جديد (معيار 8 فأكثر)
+  openCreateStandardModal() {
+    document.getElementById('create-std-code').value = '';
+    document.getElementById('create-std-name').value = '';
+    document.getElementById('create-std-weight').value = '0';
+    document.getElementById('create-std-desc').value = '';
+    document.getElementById('create-std-alert').classList.add('hidden');
+    document.getElementById('modal-create-standard').classList.remove('hidden');
+  },
+
+  closeCreateStandardModal() {
+    const modal = document.getElementById('modal-create-standard');
+    if (modal) modal.classList.add('hidden');
+  },
+
+  async handleSaveCreateStandard(event) {
+    event.preventDefault();
+    const vId = this.state.selectedStandardVersionId;
+    if (!vId) {
+      alert('لم يتم تحديد إصدار معياري.');
+      return;
+    }
+
+    const code = document.getElementById('create-std-code').value.trim();
+    const name = document.getElementById('create-std-name').value.trim();
+    const weight = parseFloat(document.getElementById('create-std-weight').value) || 0;
+    const desc = document.getElementById('create-std-desc').value.trim();
+    const alertEl = document.getElementById('create-std-alert');
+
+    const res = await this.request(`/standard-versions/${vId}/standards`, 'POST', {
+      code,
+      name,
+      weight,
+      description: desc,
+    });
+
+    if (res.ok) {
+      this.closeCreateStandardModal();
+      await this.fetchAndRenderSelectedVersion();
+    } else {
+      alertEl.textContent = res.message || 'فشل إنشاء المعيار.';
+      alertEl.classList.remove('hidden');
+    }
+  },
+
+  async handleDeleteStandard(stdId) {
+    if (!confirm('هل أنت متأكد من حذف هذا المعيار وكافة المجالات والمؤشرات التابعة له في هذه المسودة؟\n\nتنبيه: سيطلب منك النظام إعادة موازنة الأوزان ليصبح المجموع 100%.')) return;
+    const res = await this.request(`/standards/${stdId}`, 'DELETE');
+    if (res.ok) {
+      await this.fetchAndRenderSelectedVersion();
+    } else {
+      alert('فشل حذف المعيار: ' + (res.message || 'خطأ غير متوقع'));
+    }
+  },
+
+  // إنشاء مجال فرعي جديد
+  openCreateSubStandardModal(parentStandardId) {
+    document.getElementById('create-sub-parent-id').value = parentStandardId;
+    document.getElementById('create-sub-code').value = '';
+    document.getElementById('create-sub-name').value = '';
+    document.getElementById('create-sub-desc').value = '';
+    document.getElementById('create-sub-alert').classList.add('hidden');
+    document.getElementById('modal-create-substandard').classList.remove('hidden');
+  },
+
+  closeCreateSubStandardModal() {
+    const modal = document.getElementById('modal-create-substandard');
+    if (modal) modal.classList.add('hidden');
+  },
+
+  async handleSaveCreateSubStandard(event) {
+    event.preventDefault();
+    const stdId = document.getElementById('create-sub-parent-id').value;
+    const code = document.getElementById('create-sub-code').value.trim();
+    const name = document.getElementById('create-sub-name').value.trim();
+    const desc = document.getElementById('create-sub-desc').value.trim();
+    const alertEl = document.getElementById('create-sub-alert');
+
+    const res = await this.request(`/standards/${stdId}/sub-standards`, 'POST', {
+      code,
+      name,
+      description: desc,
+    });
+
+    if (res.ok) {
+      this.closeCreateSubStandardModal();
+      await this.fetchAndRenderSelectedVersion();
+    } else {
+      alertEl.textContent = res.message || 'فشل إنشاء المجال الفرعي.';
+      alertEl.classList.remove('hidden');
+    }
+  },
+
+  async handleDeleteSubStandard(subId) {
+    if (!confirm('هل أنت متأكد من حذف هذا المجال الفرعي وكافة المؤشرات ومتطلبات الشواهد التابعة له؟')) return;
+    const res = await this.request(`/sub-standards/${subId}`, 'DELETE');
+    if (res.ok) {
+      await this.fetchAndRenderSelectedVersion();
+    } else {
+      alert('فشل حذف المجال الفرعي: ' + (res.message || 'خطأ غير متوقع'));
+    }
+  },
+
+  // إنشاء مؤشر تفصيلي جديد
+  openCreateIndicatorModal(parentSubStandardId) {
+    document.getElementById('create-ind-parent-id').value = parentSubStandardId;
+    document.getElementById('create-ind-code').value = '';
+    document.getElementById('create-ind-name').value = '';
+    document.getElementById('create-ind-weight').value = '1.0';
+    document.getElementById('create-ind-desc').value = '';
+    document.getElementById('create-ind-alert').classList.add('hidden');
+    document.getElementById('modal-create-indicator').classList.remove('hidden');
+  },
+
+  closeCreateIndicatorModal() {
+    const modal = document.getElementById('modal-create-indicator');
+    if (modal) modal.classList.add('hidden');
+  },
+
+  async handleSaveCreateIndicator(event) {
+    event.preventDefault();
+    const subId = document.getElementById('create-ind-parent-id').value;
+    const code = document.getElementById('create-ind-code').value.trim();
+    const name = document.getElementById('create-ind-name').value.trim();
+    const weight = parseFloat(document.getElementById('create-ind-weight').value) || 1.0;
+    const desc = document.getElementById('create-ind-desc').value.trim();
+    const alertEl = document.getElementById('create-ind-alert');
+
+    const res = await this.request(`/sub-standards/${subId}/indicators`, 'POST', {
+      code,
+      name,
+      weight,
+      description: desc,
+      status: 'Active',
+    });
+
+    if (res.ok) {
+      this.closeCreateIndicatorModal();
+      await this.fetchAndRenderSelectedVersion();
+    } else {
+      alertEl.textContent = res.message || 'فشل إنشاء المؤشر.';
+      alertEl.classList.remove('hidden');
+    }
+  },
+
+  async handleDeleteIndicator(indId) {
+    if (!confirm('هل أنت متأكد من حذف هذا المؤشر وواصفاته وشواهده؟')) return;
+    const res = await this.request(`/indicators/${indId}`, 'DELETE');
+    if (res.ok) {
+      await this.fetchAndRenderSelectedVersion();
+    } else {
+      alert('فشل حذف المؤشر: ' + (res.message || 'خطأ غير متوقع'));
     }
   },
 
@@ -3209,14 +3370,28 @@ const App = {
       return;
     }
 
-    container.innerHTML = standards.map((std, sIdx) => `
+    container.innerHTML = `
+      ${(isDraft && isStandardsManager) ? `
+        <div style="display: flex; justify-content: space-between; align-items: center; background: #ecfdf5; border: 1px solid #a7f3d0; padding: 0.75rem 1rem; border-radius: 6px; margin-bottom: 1rem;">
+          <div>
+            <strong style="color: #065f46;">المسودة مفتوحة للتطوير والتوسع الهيكلي</strong>
+            <div style="font-size: 0.8rem; color: #047857;">يمكنك إضافة معيار ثامن أو أكثر، مجالات فرعية، مؤشرات جديدة، أو طبقات ممارسات ذرية تحت المؤشرات.</div>
+          </div>
+          <button class="btn btn-sm btn-success" onclick="App.openCreateStandardModal()">➕ إضافة معيار جديد (8 فأكثر)</button>
+        </div>
+      ` : ''}
+      ${standards.map((std, sIdx) => `
       <div class="review-standard-card" id="rev-std-card-${sIdx}">
         <div class="review-standard-header" onclick="App.toggleAccordion('rev-std-body-${sIdx}')">
           <div style="flex: 1;">
             <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
               <span>${std.code} — ${std.name}</span>
               ${(isDraft && isStandardsManager) 
-                ? `<button class="btn btn-sm btn-outline-primary" style="padding: 0.15rem 0.5rem; font-size: 0.75rem;" onclick="event.stopPropagation(); App.openEditStandardModal(${std.standardId})">✏️ تعديل المعيار</button>` 
+                ? `
+                  <button class="btn btn-sm btn-outline-primary" style="padding: 0.15rem 0.5rem; font-size: 0.75rem;" onclick="event.stopPropagation(); App.openEditStandardModal(${std.standardId})">✏️ تعديل</button>
+                  <button class="btn btn-sm btn-outline-success" style="padding: 0.15rem 0.5rem; font-size: 0.75rem;" onclick="event.stopPropagation(); App.openCreateSubStandardModal(${std.standardId})">➕ إضافة مجال فرعي</button>
+                  <button class="btn btn-sm btn-outline-danger" style="padding: 0.15rem 0.5rem; font-size: 0.75rem;" onclick="event.stopPropagation(); App.handleDeleteStandard(${std.standardId})">🗑️ حذف</button>
+                ` 
                 : (isStandardsManager ? `<span class="badge badge-gray" style="font-size: 0.72rem; padding: 2px 6px;" title="محمي ضد التعديل لأنه إصدار مُقرّ. استنسخ كمسودة للتعديل.">🔒 محمي (مُقرّ)</span>` : '')}
             </div>
             ${std.description ? `<div style="font-size: 0.8rem; font-weight: normal; color: var(--text-muted); margin-top: 0.2rem;">${std.description}</div>` : ''}
@@ -3234,7 +3409,11 @@ const App = {
                   <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
                     <span>${sub.code} — ${sub.name}</span>
                     ${(isDraft && isStandardsManager)
-                      ? `<button class="btn btn-sm btn-outline-secondary" style="padding: 0.15rem 0.45rem; font-size: 0.7rem;" onclick="event.stopPropagation(); App.openEditSubStandardModal(${sub.subStandardId})">✏️ تعديل المجال</button>`
+                      ? `
+                        <button class="btn btn-sm btn-outline-secondary" style="padding: 0.15rem 0.45rem; font-size: 0.7rem;" onclick="event.stopPropagation(); App.openEditSubStandardModal(${sub.subStandardId})">✏️ تعديل</button>
+                        <button class="btn btn-sm btn-outline-success" style="padding: 0.15rem 0.45rem; font-size: 0.7rem;" onclick="event.stopPropagation(); App.openCreateIndicatorModal(${sub.subStandardId})">➕ إضافة مؤشر</button>
+                        <button class="btn btn-sm btn-outline-danger" style="padding: 0.15rem 0.45rem; font-size: 0.7rem;" onclick="event.stopPropagation(); App.handleDeleteSubStandard(${sub.subStandardId})">🗑️ حذف</button>
+                      `
                       : (isStandardsManager ? `<span class="badge badge-gray" style="font-size: 0.7rem; padding: 2px 6px;" title="المجال محمي ضد التعديل في الإصدار المُقرّ.">🔒 محمي</span>` : '')}
                   </div>
                   ${sub.description ? `<div style="font-size: 0.75rem; font-weight: normal; color: var(--text-muted);">${sub.description}</div>` : ''}
@@ -3257,7 +3436,10 @@ const App = {
                         <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
                           <strong style="color: var(--primary); font-size: 0.95rem;">${ind.code} — ${ind.name}</strong>
                           ${(isDraft && isStandardsManager)
-                            ? `<button class="btn btn-sm btn-outline-primary" style="padding: 0.1rem 0.4rem; font-size: 0.7rem;" onclick="App.openEditIndicatorModal(${ind.indicatorId})">✏️ تعديل المؤشر</button>`
+                            ? `
+                              <button class="btn btn-sm btn-outline-primary" style="padding: 0.1rem 0.4rem; font-size: 0.7rem;" onclick="App.openEditIndicatorModal(${ind.indicatorId})">✏️ تعديل المؤشر</button>
+                              <button class="btn btn-sm btn-outline-danger" style="padding: 0.1rem 0.4rem; font-size: 0.7rem;" onclick="App.handleDeleteIndicator(${ind.indicatorId})">🗑️ حذف المؤشر</button>
+                            `
                             : (isStandardsManager ? `<button class="btn btn-sm btn-outline-secondary" style="padding: 0.1rem 0.45rem; font-size: 0.72rem;" onclick="App.openCloneVersionModal()" title="لا يمكن تعديل مؤشر في إصدار مُقرّ. انقر هنا لاستنساخ هذا الإصدار كمسودة وتعديل المؤشرات فوراً!">🔒 تعديل (يتطلب مسودة)</button>` : '')}
                         </div>
                         <div style="font-size: 0.85rem; color: #475569; margin-top: 0.25rem; line-height: 1.4;">
@@ -3290,12 +3472,12 @@ const App = {
                       </div>
                     </div>
 
-                    <!-- متطلبات الشواهد -->
+                    <!-- متطلبات الشواهد (الطبقة الذرية للمؤشر) -->
                     <div style="margin-top: 0.75rem; padding-top: 0.6rem; border-top: 1px dashed var(--border);">
                       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">
-                        <span style="font-size: 0.8rem; font-weight: 700; color: #334155;">متطلبات الشواهد والأدلة الرسمية:</span>
+                        <span style="font-size: 0.8rem; font-weight: 700; color: #334155;">متطلبات الشواهد والممارسات الذرية:</span>
                         ${(isDraft && isStandardsManager)
-                          ? `<button class="btn btn-sm btn-outline-primary" style="padding: 0.1rem 0.4rem; font-size: 0.7rem;" onclick="App.openAddRequirementModal(${ind.indicatorId})">➕ إضافة متطلب شاهد</button>`
+                          ? `<button class="btn btn-sm btn-outline-primary" style="padding: 0.1rem 0.4rem; font-size: 0.7rem;" onclick="App.openAddRequirementModal(${ind.indicatorId})">➕ إضافة متطلب شاهد / ممارسة ذرية</button>`
                           : (isStandardsManager ? `<button class="btn btn-sm btn-outline-secondary" style="padding: 0.1rem 0.45rem; font-size: 0.7rem;" onclick="App.openCloneVersionModal()" title="المتطلبات محصنة في الإصدار المُقرّ. انقر للاستنساخ كمسودة">🔒 الشواهد مجمدة</button>` : '')}
                       </div>
                       <div style="display: flex; flex-direction: column; gap: 0.35rem;">
@@ -3327,7 +3509,7 @@ const App = {
           `).join('')}
         </div>
       </div>
-    `).join('');
+    `).join('')}`;
   },
 
   filterStandardsReview(query) {

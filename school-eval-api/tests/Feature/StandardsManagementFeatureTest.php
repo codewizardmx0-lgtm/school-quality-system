@@ -499,4 +499,134 @@ class StandardsManagementFeatureTest extends TestCase
         $this->assertEquals($originalTotalScore, $aftermathResults['final_score']);
         $this->assertEquals($originalResults['standards_total_weight'], $aftermathResults['standards_total_weight']);
     }
+
+    /**
+     * اختبار إضافة معيار ثامن (أو أكثر) ومجال فرعي ومؤشر داخل مسودة.
+     */
+    public function test_can_create_8th_standard_and_substandard_and_indicator_in_draft(): void
+    {
+        // 1. استنساخ مسودة
+        $cloned = $this->actingAs($this->standardsManager, 'sanctum')
+            ->postJson("/api/v1/standard-versions/{$this->seededVersion->version_id}/clone", [
+                'version_no' => '2029.DRAFT-8TH',
+            ])->assertCreated();
+
+        $versionId = $cloned->json('data.version_id');
+
+        // 2. إضافة معيار ثامن جديد (ST-08)
+        $stdResponse = $this->actingAs($this->standardsManager, 'sanctum')
+            ->postJson("/api/v1/standard-versions/{$versionId}/standards", [
+                'code'        => 'ST-08',
+                'name'        => 'المعيار الثامن: الابتكار والتحول الرقمي',
+                'description' => 'معيار تقييم كفاءة التقنيات والتحول الرقمي المدرسي',
+                'weight'      => 10.00,
+            ]);
+
+        $stdResponse->assertCreated()
+            ->assertJsonPath('data.code', 'ST-08');
+
+        $standardId = $stdResponse->json('data.standard_id');
+
+        // 3. إضافة مجال فرعي تابع للمعيار الثامن
+        $subResponse = $this->actingAs($this->standardsManager, 'sanctum')
+            ->postJson("/api/v1/standards/{$standardId}/sub-standards", [
+                'code'        => 'SUB-08-01',
+                'name'        => 'البنية التحتية والمنصات الذكية',
+                'description' => 'جاهزية المنصات والتجهيزات الرقمية',
+            ]);
+
+        $subResponse->assertCreated()
+            ->assertJsonPath('data.code', 'SUB-08-01');
+
+        $subStandardId = $subResponse->json('data.sub_standard_id');
+
+        // 4. إضافة مؤشر تابع للمجال الفرعي
+        $indResponse = $this->actingAs($this->standardsManager, 'sanctum')
+            ->postJson("/api/v1/sub-standards/{$subStandardId}/indicators", [
+                'code'        => 'IND-08-01-01',
+                'name'        => 'توفر المدرسة منصة رقمية لإدارة التعلم ومتابعة الطلاب',
+                'description' => 'تستخدم المدرسة نظاماً إلكترونياً تفاعلياً',
+                'weight'      => 1.00,
+            ]);
+
+        $indResponse->assertCreated()
+            ->assertJsonPath('data.code', 'IND-08-01-01');
+
+        $indicatorId = $indResponse->json('data.indicator_id');
+
+        // التحقق من توليد 4 واصفات درجات أداء تلقائياً للمؤشر الجديد
+        $descriptorsCount = IndicatorScoreDescriptor::where('indicator_id', $indicatorId)
+            ->where('standard_version_id', $versionId)
+            ->count();
+
+        $this->assertEquals(4, $descriptorsCount);
+
+        // 5. إضافة متطلب شاهد (الطبقة الذرية للمؤشر)
+        $reqResponse = $this->actingAs($this->standardsManager, 'sanctum')
+            ->postJson("/api/v1/indicators/{$indicatorId}/requirements", [
+                'title'       => 'تقرير تفعيل بوابة التعلم الرقمية',
+                'description' => 'إحصائيات دخول المعلمين والطلاب وسجلات الدروس الافتراضية',
+                'required'    => true,
+            ]);
+
+        $reqResponse->assertCreated()
+            ->assertJsonPath('data.title', 'تقرير تفعيل بوابة التعلم الرقمية');
+
+        // 6. التحقق من ظهور المعيار الثامن ومجاله ومؤشره ومتطلباته في استعراض الشجرة show
+        $treeResponse = $this->actingAs($this->standardsManager, 'sanctum')
+            ->getJson("/api/v1/standard-versions/{$versionId}");
+
+        $treeResponse->assertOk();
+        $standards = collect($treeResponse->json('data.standards'));
+        $eighthStandard = $standards->firstWhere('code', 'ST-08');
+        $this->assertNotNull($eighthStandard);
+        $this->assertCount(1, $eighthStandard['subStandards']);
+        $this->assertCount(1, $eighthStandard['subStandards'][0]['indicators']);
+        $this->assertCount(1, $eighthStandard['subStandards'][0]['indicators'][0]['evidenceRequirements']);
+    }
+
+    /**
+     * اختبار منع إنشاء أو حذف معايير في إصدار مُقرّ (Approved Immutability).
+     */
+    public function test_cannot_create_or_delete_standard_in_approved_version(): void
+    {
+        // محاولة إضافة معيار في الإصدار المُقرّ الأصلي
+        $this->actingAs($this->standardsManager, 'sanctum')
+            ->postJson("/api/v1/standard-versions/{$this->seededVersion->version_id}/standards", [
+                'code' => 'ST-ILLEGAL',
+                'name' => 'معيار غير قانوني',
+            ])->assertUnprocessable();
+
+        // محاولة حذف أول معيار في الإصدار المُقرّ
+        $firstStandard = $this->seededVersion->standards()->firstOrFail();
+        $this->actingAs($this->standardsManager, 'sanctum')
+            ->deleteJson("/api/v1/standards/{$firstStandard->standard_id}")
+            ->assertUnprocessable();
+    }
+
+    /**
+     * اختبار حذف معيار ومجال ومؤشر داخل مسودة.
+     */
+    public function test_can_delete_standard_hierarchy_in_draft(): void
+    {
+        // إنشاء مسودة
+        $cloned = $this->actingAs($this->standardsManager, 'sanctum')
+            ->postJson("/api/v1/standard-versions/{$this->seededVersion->version_id}/clone", [
+                'version_no' => '2030.DRAFT-DEL',
+            ])->assertCreated();
+
+        $versionId = $cloned->json('data.version_id');
+
+        // أخذ آخر معيار تم استنساخه
+        $lastStandard = Standard::where('version_id', $versionId)->orderBy('standard_id', 'desc')->firstOrFail();
+        $stdId = $lastStandard->standard_id;
+
+        // حذف المعيار
+        $this->actingAs($this->standardsManager, 'sanctum')
+            ->deleteJson("/api/v1/standards/{$stdId}")
+            ->assertOk();
+
+        // التأكد من حذفه من قاعدة البيانات
+        $this->assertDatabaseMissing('standards', ['standard_id' => $stdId]);
+    }
 }

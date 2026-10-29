@@ -77,13 +77,25 @@ Route::prefix('v1')->group(function () {
             Route::put('/{id}/weights', [\App\Http\Controllers\Api\V1\StandardManagementController::class, 'updateWeights'])->name('api.v1.standard-versions.weights.update');
             Route::post('/{id}/approve', [\App\Http\Controllers\Api\V1\StandardManagementController::class, 'approve'])->name('api.v1.standard-versions.approve');
             Route::post('/{id}/archive', [\App\Http\Controllers\Api\V1\StandardManagementController::class, 'archive'])->name('api.v1.standard-versions.archive');
+            Route::post('/{id}/standards', [\App\Http\Controllers\Api\V1\StandardManagementController::class, 'storeStandard'])->name('api.v1.standard-versions.standards.store');
         });
 
         // إدارة نصوص وأوزان المعايير والمجالات والمؤشرات ومتطلبات الشواهد في المسودة (الشريحة 7)
-        Route::put('standards/{id}', [\App\Http\Controllers\Api\V1\StandardManagementController::class, 'updateStandard'])->name('api.v1.standards.update');
-        Route::put('sub-standards/{id}', [\App\Http\Controllers\Api\V1\StandardManagementController::class, 'updateSubStandard'])->name('api.v1.sub-standards.update');
+        Route::prefix('standards')->group(function () {
+            Route::put('/{id}', [\App\Http\Controllers\Api\V1\StandardManagementController::class, 'updateStandard'])->name('api.v1.standards.update');
+            Route::delete('/{id}', [\App\Http\Controllers\Api\V1\StandardManagementController::class, 'deleteStandard'])->name('api.v1.standards.delete');
+            Route::post('/{id}/sub-standards', [\App\Http\Controllers\Api\V1\StandardManagementController::class, 'storeSubStandard'])->name('api.v1.standards.sub-standards.store');
+        });
+
+        Route::prefix('sub-standards')->group(function () {
+            Route::put('/{id}', [\App\Http\Controllers\Api\V1\StandardManagementController::class, 'updateSubStandard'])->name('api.v1.sub-standards.update');
+            Route::delete('/{id}', [\App\Http\Controllers\Api\V1\StandardManagementController::class, 'deleteSubStandard'])->name('api.v1.sub-standards.delete');
+            Route::post('/{id}/indicators', [\App\Http\Controllers\Api\V1\StandardManagementController::class, 'storeIndicator'])->name('api.v1.sub-standards.indicators.store');
+        });
+
         Route::prefix('indicators')->group(function () {
             Route::put('/{id}', [\App\Http\Controllers\Api\V1\StandardManagementController::class, 'updateIndicator'])->name('api.v1.indicators.update');
+            Route::delete('/{id}', [\App\Http\Controllers\Api\V1\StandardManagementController::class, 'deleteIndicator'])->name('api.v1.indicators.delete');
             Route::put('/{id}/descriptors', [\App\Http\Controllers\Api\V1\StandardManagementController::class, 'updateIndicatorDescriptors'])->name('api.v1.indicators.descriptors.update');
             Route::post('/{id}/requirements', [\App\Http\Controllers\Api\V1\StandardManagementController::class, 'storeRequirement'])->name('api.v1.indicators.requirements.store');
             Route::put('/{indicatorId}/requirements/{requirementId}', [\App\Http\Controllers\Api\V1\StandardManagementController::class, 'updateRequirement'])->name('api.v1.indicators.requirements.update');

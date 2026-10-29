@@ -6,6 +6,9 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Standards\CloneStandardVersionRequest;
 use App\Http\Requests\Standards\CreateStandardVersionRequest;
 use App\Http\Requests\Standards\SaveEvidenceRequirementRequest;
+use App\Http\Requests\Standards\StoreIndicatorRequest;
+use App\Http\Requests\Standards\StoreStandardRequest;
+use App\Http\Requests\Standards\StoreSubStandardRequest;
 use App\Http\Requests\Standards\UpdateIndicatorDescriptorsRequest;
 use App\Http\Requests\Standards\UpdateIndicatorRequest;
 use App\Http\Requests\Standards\UpdateStandardRequest;
@@ -165,6 +168,25 @@ class StandardManagementController extends Controller
     }
 
     /**
+     * إضافة معيار رئيسي جديد لمسودة الإصدار.
+     * الصلاحية المطلوبة: standards.manage
+     */
+    public function storeStandard(StoreStandardRequest $request, int $versionId): JsonResponse
+    {
+        $version = StandardVersion::find($versionId);
+        if (!$version) {
+            return ApiResponse::notFound('الإصدار المعياري غير موجود.');
+        }
+
+        try {
+            $standard = $this->service->storeStandard($version, $request->validated());
+            return ApiResponse::success(data: $standard, message: 'تمت إضافة المعيار الرئيسي بنجاح.', status: 201);
+        } catch (ValidationException $e) {
+            return ApiResponse::validationError($e->errors(), $e->getMessage());
+        }
+    }
+
+    /**
      * تحديث معيار رئيسي داخل مسودة.
      * الصلاحية المطلوبة: standards.manage
      */
@@ -178,6 +200,49 @@ class StandardManagementController extends Controller
         try {
             $updated = $this->service->updateStandard($standard, $request->validated());
             return ApiResponse::success(data: $updated, message: 'تم تحديث بيانات المعيار بنجاح.');
+        } catch (ValidationException $e) {
+            return ApiResponse::validationError($e->errors(), $e->getMessage());
+        }
+    }
+
+    /**
+     * حذف معيار رئيسي من مسودة الإصدار.
+     * الصلاحية المطلوبة: standards.manage
+     */
+    public function deleteStandard(Request $request, int $id): JsonResponse
+    {
+        $user = $request->user();
+        if (!$user || !$user->hasPermission('standards.manage')) {
+            return ApiResponse::forbidden('غير مصرح لك بحذف المعايير.');
+        }
+
+        $standard = Standard::find($id);
+        if (!$standard) {
+            return ApiResponse::notFound('المعيار المطلوب غير موجود.');
+        }
+
+        try {
+            $this->service->deleteStandard($standard);
+            return ApiResponse::success(message: 'تم حذف المعيار وما يتبعه بنجاح.');
+        } catch (ValidationException $e) {
+            return ApiResponse::validationError($e->errors(), $e->getMessage());
+        }
+    }
+
+    /**
+     * إضافة معيار فرعي / مجال لمسودة الإصدار.
+     * الصلاحية المطلوبة: standards.manage
+     */
+    public function storeSubStandard(StoreSubStandardRequest $request, int $standardId): JsonResponse
+    {
+        $standard = Standard::find($standardId);
+        if (!$standard) {
+            return ApiResponse::notFound('المعيار المطلوب غير موجود.');
+        }
+
+        try {
+            $subStandard = $this->service->storeSubStandard($standard, $request->validated());
+            return ApiResponse::success(data: $subStandard, message: 'تمت إضافة المعيار الفرعي بنجاح.', status: 201);
         } catch (ValidationException $e) {
             return ApiResponse::validationError($e->errors(), $e->getMessage());
         }
@@ -203,6 +268,49 @@ class StandardManagementController extends Controller
     }
 
     /**
+     * حذف معيار فرعي من مسودة الإصدار.
+     * الصلاحية المطلوبة: standards.manage
+     */
+    public function deleteSubStandard(Request $request, int $id): JsonResponse
+    {
+        $user = $request->user();
+        if (!$user || !$user->hasPermission('standards.manage')) {
+            return ApiResponse::forbidden('غير مصرح لك بحذف المعايير الفرعية.');
+        }
+
+        $subStandard = SubStandard::find($id);
+        if (!$subStandard) {
+            return ApiResponse::notFound('المعيار الفرعي المطلوب غير موجود.');
+        }
+
+        try {
+            $this->service->deleteSubStandard($subStandard);
+            return ApiResponse::success(message: 'تم حذف المعيار الفرعي وما يتبعه بنجاح.');
+        } catch (ValidationException $e) {
+            return ApiResponse::validationError($e->errors(), $e->getMessage());
+        }
+    }
+
+    /**
+     * إضافة مؤشر لمسودة الإصدار.
+     * الصلاحية المطلوبة: standards.manage
+     */
+    public function storeIndicator(StoreIndicatorRequest $request, int $subStandardId): JsonResponse
+    {
+        $subStandard = SubStandard::find($subStandardId);
+        if (!$subStandard) {
+            return ApiResponse::notFound('المعيار الفرعي المطلوب غير موجود.');
+        }
+
+        try {
+            $indicator = $this->service->storeIndicator($subStandard, $request->validated());
+            return ApiResponse::success(data: $indicator, message: 'تمت إضافة المؤشر وتوليد واصفات درجاته بنجاح.', status: 201);
+        } catch (ValidationException $e) {
+            return ApiResponse::validationError($e->errors(), $e->getMessage());
+        }
+    }
+
+    /**
      * تحديث مؤشر داخل مسودة.
      * الصلاحية المطلوبة: standards.manage
      */
@@ -216,6 +324,30 @@ class StandardManagementController extends Controller
         try {
             $updated = $this->service->updateIndicator($indicator, $request->validated());
             return ApiResponse::success(data: $updated, message: 'تم تحديث بيانات المؤشر بنجاح.');
+        } catch (ValidationException $e) {
+            return ApiResponse::validationError($e->errors(), $e->getMessage());
+        }
+    }
+
+    /**
+     * حذف مؤشر من مسودة الإصدار.
+     * الصلاحية المطلوبة: standards.manage
+     */
+    public function deleteIndicator(Request $request, int $id): JsonResponse
+    {
+        $user = $request->user();
+        if (!$user || !$user->hasPermission('standards.manage')) {
+            return ApiResponse::forbidden('غير مصرح لك بحذف المؤشرات.');
+        }
+
+        $indicator = Indicator::find($id);
+        if (!$indicator) {
+            return ApiResponse::notFound('المؤشر المطلوب غير موجود.');
+        }
+
+        try {
+            $this->service->deleteIndicator($indicator);
+            return ApiResponse::success(message: 'تم حذف المؤشر بنجاح.');
         } catch (ValidationException $e) {
             return ApiResponse::validationError($e->errors(), $e->getMessage());
         }

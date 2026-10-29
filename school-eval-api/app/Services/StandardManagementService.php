@@ -330,6 +330,27 @@ class StandardManagementService
     }
 
     /**
+     * إنشاء معيار رئيسي جديد في مسودة الإصدار.
+     *
+     * @param StandardVersion $version
+     * @param array<string, mixed> $data
+     * @return Standard
+     * @throws ValidationException
+     */
+    public function storeStandard(StandardVersion $version, array $data): Standard
+    {
+        $this->ensureIsDraft($version);
+
+        return Standard::create([
+            'version_id'  => $version->version_id,
+            'code'        => $data['code'],
+            'name'        => $data['name'],
+            'description' => $data['description'] ?? null,
+            'weight'      => $data['weight'] ?? 0.00,
+        ]);
+    }
+
+    /**
      * تحديث معيار رئيسي.
      *
      * @param Standard $standard
@@ -348,6 +369,45 @@ class StandardManagementService
         ]);
 
         return $standard;
+    }
+
+    /**
+     * حذف معيار رئيسي من مسودة الإصدار وما يتبعه هرمياً.
+     *
+     * @param Standard $standard
+     * @return bool
+     * @throws ValidationException
+     */
+    public function deleteStandard(Standard $standard): bool
+    {
+        $this->ensureIsDraft($standard->version);
+
+        return DB::transaction(function () use ($standard) {
+            foreach ($standard->subStandards as $subStandard) {
+                $this->deleteSubStandard($subStandard);
+            }
+            return (bool) $standard->delete();
+        });
+    }
+
+    /**
+     * إنشاء معيار فرعي / مجال جديد في مسودة الإصدار.
+     *
+     * @param Standard $standard
+     * @param array<string, mixed> $data
+     * @return SubStandard
+     * @throws ValidationException
+     */
+    public function storeSubStandard(Standard $standard, array $data): SubStandard
+    {
+        $this->ensureIsDraft($standard->version);
+
+        return SubStandard::create([
+            'standard_id' => $standard->standard_id,
+            'code'        => $data['code'],
+            'name'        => $data['name'],
+            'description' => $data['description'] ?? null,
+        ]);
     }
 
     /**
@@ -370,6 +430,101 @@ class StandardManagementService
         ]);
 
         return $subStandard;
+    }
+
+    /**
+     * حذف معيار فرعي وما يتبعه من مؤشرات في مسودة الإصدار.
+     *
+     * @param SubStandard $subStandard
+     * @return bool
+     * @throws ValidationException
+     */
+    public function deleteSubStandard(SubStandard $subStandard): bool
+    {
+        $version = $subStandard->standard?->version;
+        $this->ensureIsDraft($version);
+
+        return DB::transaction(function () use ($subStandard) {
+            foreach ($subStandard->indicators as $indicator) {
+                $this->deleteIndicator($indicator);
+            }
+            return (bool) $subStandard->delete();
+        });
+    }
+
+    /**
+     * إنشاء مؤشر جديد في مسودة الإصدار وتوليد واصفات درجاته الافتراضية.
+     *
+     * @param SubStandard $subStandard
+     * @param array<string, mixed> $data
+     * @return Indicator
+     * @throws ValidationException
+     */
+    public function storeIndicator(SubStandard $subStandard, array $data): Indicator
+    {
+        $version = $subStandard->standard?->version;
+        $this->ensureIsDraft($version);
+
+        return DB::transaction(function () use ($subStandard, $version, $data) {
+            $indicator = Indicator::create([
+                'sub_standard_id' => $subStandard->sub_standard_id,
+                'code'            => $data['code'],
+                'name'            => $data['name'],
+                'description'     => $data['description'] ?? null,
+                'weight'          => $data['weight'] ?? 1.00,
+                'status'          => $data['status'] ?? 'Active',
+            ]);
+
+            // استرجاع مستويات الدرجات (0-3) للإصدار أو الإصدار الافتراضي
+            $scoreLevels = ScoreLevel::where('standard_version_id', $version->version_id)
+                ->orderBy('display_order')
+                ->get();
+
+            if ($scoreLevels->isEmpty()) {
+                $scoreLevels = ScoreLevel::where('standard_version_id', 1)
+                    ->orderBy('display_order')
+                    ->get();
+            }
+
+            foreach ($scoreLevels as $level) {
+                IndicatorScoreDescriptor::create([
+                    'indicator_id'        => $indicator->indicator_id,
+                    'score_level_id'      => $level->score_level_id,
+                    'standard_version_id' => $version->version_id,
+                    'label'               => $level->label,
+                    'description'         => 'وصف مستوى ' . $level->label . ' للمؤشر ' . $indicator->name,
+                    'display_order'       => $level->display_order,
+                    'is_active'           => true,
+                ]);
+            }
+
+            return $indicator;
+        });
+    }
+
+    /**
+     * حذف مؤشر من مسودة الإصدار مع واصفاته ومتطلبات شواهده.
+     *
+     * @param Indicator $indicator
+     * @return bool
+     * @throws ValidationException
+     */
+    public function deleteIndicator(Indicator $indicator): bool
+    {
+        $version = $indicator->subStandard?->standard?->version;
+        $this->ensureIsDraft($version);
+
+        return DB::transaction(function () use ($indicator, $version) {
+            IndicatorScoreDescriptor::where('indicator_id', $indicator->indicator_id)
+                ->where('standard_version_id', $version->version_id)
+                ->delete();
+
+            IndicatorEvidenceRequirement::where('indicator_id', $indicator->indicator_id)
+                ->where('standard_version_id', $version->version_id)
+                ->delete();
+
+            return (bool) $indicator->delete();
+        });
     }
 
     /**
