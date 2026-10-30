@@ -49,6 +49,7 @@ class ImprovementAction extends Model
         'start_date',
         'due_date',
         'status',
+        'completion_percentage',
         'progress_description',
     ];
 
@@ -60,11 +61,26 @@ class ImprovementAction extends Model
     protected function casts(): array
     {
         return [
-            'start_date' => 'date',
-            'due_date' => 'date',
-            'created_at' => 'datetime',
-            'updated_at' => 'datetime',
+            'start_date'            => 'date',
+            'due_date'              => 'date',
+            'completion_percentage' => 'integer',
+            'created_at'            => 'datetime',
+            'updated_at'            => 'datetime',
         ];
+    }
+
+    /**
+     * مزامنة نسبة الإنجاز مع حالة الإجراء تلقائياً.
+     */
+    protected static function booted(): void
+    {
+        static::saving(function (ImprovementAction $action) {
+            if ($action->status === 'Done' && (int) ($action->completion_percentage ?? 0) < 100) {
+                $action->completion_percentage = 100;
+            } elseif ((int) ($action->completion_percentage ?? 0) === 100 && $action->status !== 'Done') {
+                $action->status = 'Done';
+            }
+        });
     }
 
     /**
@@ -106,5 +122,15 @@ class ImprovementAction extends Model
     public function aiRecommendations(): HasMany
     {
         return $this->hasMany(AiRecommendation::class, 'improvement_action_id', 'action_id');
+    }
+
+    /**
+     * شواهد وأدلة إثبات تنفيذ هذا الإجراء (الشريحة 8).
+     *
+     * @return HasMany
+     */
+    public function evidences(): HasMany
+    {
+        return $this->hasMany(Evidence::class, 'action_id', 'action_id');
     }
 }

@@ -6,11 +6,13 @@ use App\Enums\ProgressLevel;
 use App\Http\Controllers\Controller;
 use App\Http\Responses\ApiResponse;
 use App\Models\EvaluationCycle;
+use App\Models\Evidence;
 use App\Models\ImprovementAction;
 use App\Models\ImprovementArea;
 use App\Models\ImprovementPlan;
 use App\Models\PlanImprovementArea;
 use App\Models\PlanReviewNote;
+use App\Services\ActionCatalogService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -31,7 +33,32 @@ use Illuminate\Support\Facades\Validator;
 class ImprovementPlanController extends Controller
 {
     /**
-     * استعراض قائمة خطط التحسين الخاصة بالمدرسة مع الإحصائيات العامة.
+     * استعراض بنك الإجراءات النموذجية المقترحة حسب المعيار الفرعي أو نوع الخطة (الشريحة 8).
+     *
+     * GET /api/v1/improvement-plans/action-catalog
+     * الصلاحية: plans.view أو plans.manage
+     */
+    public function actionCatalog(Request $request, ActionCatalogService $catalogService): JsonResponse
+    {
+        $user = $request->user();
+
+        if (!$user->hasPermission('plans.view') && !$user->hasPermission('plans.manage')) {
+            return ApiResponse::forbidden('غير مصرح لك باستعراض بنك الإجراءات النموذجية.');
+        }
+
+        $subStandardCode = $request->query('sub_standard_code') ?? $request->query('subStandardCode');
+        $planType = $request->query('plan_type') ?? $request->query('planType');
+
+        $items = $catalogService->filter($subStandardCode, $planType);
+
+        return ApiResponse::success(
+            data: $items,
+            message: null
+        );
+    }
+
+    /**
+     * استعراض قائمة خطط التحسين والتطوير الخاصة بالمدرسة مع الإحصائيات العامة والفلترة.
      *
      * GET /api/v1/improvement-plans
      * الصلاحية: plans.view أو plans.manage
@@ -52,6 +79,18 @@ class ImprovementPlanController extends Controller
             $query->where('school_id', $user->school_id);
         }
 
+        // فلترة نوع الخطة (QualityImprovement, StaffProfessionalDevelopment, AnnualOperational)
+        $planType = $request->query('plan_type') ?? $request->query('planType');
+        if (!empty($planType)) {
+            $query->where('plan_type', $planType);
+        }
+
+        // فلترة دورة التقييم
+        $cycleId = $request->query('cycle_id') ?? $request->query('cycleId');
+        if (!empty($cycleId)) {
+            $query->where('cycle_id', (int) $cycleId);
+        }
+
         $plans = $query->get()->map(function ($plan) {
             return $this->formatPlanSummary($plan);
         });
@@ -63,7 +102,7 @@ class ImprovementPlanController extends Controller
     }
 
     /**
-     * إنشاء خطة تحسين جديدة وربطها بمجال تحسين واحد على الأقل.
+     * إنشاء خطة تحسين أو تطوير جديدة وربطها بمجال تحسين واحد على الأقل مع التحقق من العزل الزمني والمؤسسي.
      *
      * POST /api/v1/improvement-plans
      * الصلاحية: plans.manage
@@ -81,6 +120,8 @@ class ImprovementPlanController extends Controller
             'title'     => ['required', 'string', 'max:200'],
             'startDate' => ['required', 'date'],
             'endDate'   => ['required', 'date', 'after_or_equal:startDate'],
+            'planType'  => ['nullable', 'string', 'in:QualityImprovement,StaffProfessionalDevelopment,AnnualOperational'],
+            'plan_type' => ['nullable', 'string', 'in:QualityImprovement,StaffProfessionalDevelopment,AnnualOperational'],
             'areaIds'   => ['required', 'array', 'min:1'],
             'areaIds.*' => ['required', 'integer'],
         ], [
@@ -91,6 +132,8 @@ class ImprovementPlanController extends Controller
             'startDate.required'      => 'تاريخ بداية الخطة إلزامي.',
             'endDate.required'        => 'تاريخ نهاية الخطة إلزامي.',
             'endDate.after_or_equal'  => 'تاريخ نهاية الخطة يجب أن يكون مساوياً أو لاحقاً لتاريخ البداية.',
+            'planType.in'             => 'نوع الخطة غير صالح.',
+            'plan_type.in'            => 'نوع الخطة غير صالح.',
             'areaIds.required'        => 'يجب ربط مجال تحسين واحد على الأقل بالخطة.',
             'areaIds.min'             => 'يجب ربط مجال تحسين واحد على الأقل بالخطة.',
         ]);
@@ -99,7 +142,7 @@ class ImprovementPlanController extends Controller
             return ApiResponse::validationError($validator->errors()->toArray());
         }
 
-        // التحقق من أن جميع مجالات التحسين تابعة لمدرسة المستخدم (العزل المؤسسي 404)
+        // التحقق من أن جميع مجالات التحسين تابعة لمدرسة المستخدم ونفس دورة التقييم (العزل المؤسسي 404 والعزل الزمني 422)
         $areaIds = array_unique($request->areaIds);
         $areas = ImprovementArea::with('result.evaluation')
             ->whereIn('area_id', $areaIds)
@@ -109,20 +152,33 @@ class ImprovementPlanController extends Controller
             return ApiResponse::notFound('أحد مجالات التحسين المطلوبة غير موجود.');
         }
 
-        if ($user->user_type === 'school') {
-            foreach ($areas as $area) {
-                if ($area->result && (int) $area->result->evaluation->school_id !== (int) $user->school_id) {
-                    return ApiResponse::notFound('أحد مجالات التحسين المطلوبة غير موجود.');
-                }
+        $targetSchoolId = $user->user_type === 'school' ? $user->school_id : null;
+        $targetCycleId = (int) $request->cycleId;
+
+        foreach ($areas as $area) {
+            $eval = $area->result?->evaluation;
+            if (!$eval) {
+                return ApiResponse::notFound('مجال التحسين غير مرتبط بتقييم صحيح.');
+            }
+            if ($targetSchoolId !== null && (int) $eval->school_id !== (int) $targetSchoolId) {
+                return ApiResponse::notFound('أحد مجالات التحسين المطلوبة غير موجود.');
+            }
+            if ((int) $eval->cycle_id !== $targetCycleId) {
+                return ApiResponse::validationError([
+                    'areaIds' => ['مجال التحسين لا ينتمي لنفس دورة التقييم المحددة للخطة (العزل الزمني والمؤسسي).'],
+                ]);
             }
         }
 
-        $plan = DB::transaction(function () use ($request, $user, $areaIds) {
+        $planType = $request->input('planType') ?? $request->input('plan_type', ImprovementPlan::TYPE_QUALITY_IMPROVEMENT);
+
+        $plan = DB::transaction(function () use ($request, $user, $areaIds, $planType) {
             $created = ImprovementPlan::create([
                 'cycle_id'             => $request->cycleId,
                 'school_id'            => $user->school_id,
                 'created_by_user_id'   => $user->user_id,
                 'title'                => $request->title,
+                'plan_type'            => $planType,
                 'start_date'           => $request->startDate,
                 'end_date'             => $request->endDate,
                 'status'               => 'Draft',
@@ -140,7 +196,7 @@ class ImprovementPlanController extends Controller
             return $created;
         });
 
-        $plan->load(['cycle', 'school', 'creator', 'areas.indicator', 'actions.area', 'reviewNotes.author']);
+        $plan->load(['cycle', 'school', 'creator', 'areas.indicator', 'actions.area', 'actions.evidences', 'reviewNotes.author']);
 
         return ApiResponse::success(
             data: $this->formatPlanDetails($plan),
@@ -169,6 +225,7 @@ class ImprovementPlanController extends Controller
             'creator',
             'areas.indicator',
             'actions.area',
+            'actions.evidences',
             'reviewNotes.author',
         ])->find($id);
 
@@ -215,14 +272,18 @@ class ImprovementPlanController extends Controller
             'title'     => ['sometimes', 'required', 'string', 'max:200'],
             'startDate' => ['sometimes', 'required', 'date'],
             'endDate'   => ['sometimes', 'required', 'date'],
+            'planType'  => ['sometimes', 'required', 'string', 'in:QualityImprovement,StaffProfessionalDevelopment,AnnualOperational'],
+            'plan_type' => ['sometimes', 'required', 'string', 'in:QualityImprovement,StaffProfessionalDevelopment,AnnualOperational'],
             'status'    => ['sometimes', 'required', 'string', 'in:Draft,Active,Completed,Cancelled'],
             'areaIds'   => ['sometimes', 'required', 'array', 'min:1'],
             'areaIds.*' => ['required', 'integer'],
         ], [
-            'title.required'     => 'عنوان خطة التحسين إلزامي.',
-            'title.max'          => 'لا يمكن أن يتجاوز عنوان الخطة 200 حرف.',
-            'status.in'          => 'حالة الخطة غير صالحة. الحالات المسموحة: Draft, Active, Completed, Cancelled.',
-            'areaIds.min'        => 'يجب أن تحتوي الخطة على مجال تحسين واحد على الأقل.',
+            'title.required' => 'عنوان خطة التحسين إلزامي.',
+            'title.max'      => 'لا يمكن أن يتجاوز عنوان الخطة 200 حرف.',
+            'planType.in'    => 'نوع الخطة غير صالح.',
+            'plan_type.in'   => 'نوع الخطة غير صالح.',
+            'status.in'      => 'حالة الخطة غير صالحة. الحالات المسموحة: Draft, Active, Completed, Cancelled.',
+            'areaIds.min'    => 'يجب أن تحتوي الخطة على مجال تحسين واحد على الأقل.',
         ]);
 
         if ($validator->fails()) {
@@ -255,15 +316,19 @@ class ImprovementPlanController extends Controller
                 }
             }
 
-            // 2. الإكمال (Completed): يشترط أن تكون جميع الإجراءات إما Done أو Cancelled
+            // 2. الإكمال (Completed): يشترط أن تكون جميع الإجراءات إما منجزة بنسبة 100% أو Cancelled
             if ($newStatus === 'Completed') {
-                $pendingOrInProgress = $plan->actions()
-                    ->whereNotIn('status', ['Done', 'Cancelled'])
+                $incompleteActions = $plan->actions()
+                    ->where('status', '!=', 'Cancelled')
+                    ->where(function ($query) {
+                        $query->where('status', '!=', 'Done')
+                              ->orWhere('completion_percentage', '<', 100);
+                    })
                     ->count();
 
-                if ($pendingOrInProgress > 0) {
+                if ($incompleteActions > 0) {
                     return ApiResponse::validationError([
-                        'status' => ['لا يمكن إكمال الخطة طالما توجد إجراءات معلقة أو قيد التنفيذ.'],
+                        'status' => ['لا يمكن إكمال الخطة طالما توجد إجراءات غير ملغاة لم تكتمل بنسبة 100% (أو غير منجزة).'],
                     ]);
                 }
             }
@@ -273,6 +338,9 @@ class ImprovementPlanController extends Controller
 
         if ($request->has('title')) {
             $plan->title = $request->title;
+        }
+        if ($request->has('planType') || $request->has('plan_type')) {
+            $plan->plan_type = $request->input('planType') ?? $request->input('plan_type');
         }
         if ($request->has('startDate')) {
             $plan->start_date = $request->startDate;
@@ -292,11 +360,21 @@ class ImprovementPlanController extends Controller
                 return ApiResponse::notFound('أحد مجالات التحسين المطلوبة غير موجود.');
             }
 
-            if ($user->user_type === 'school') {
-                foreach ($areas as $area) {
-                    if ($area->result && (int) $area->result->evaluation->school_id !== (int) $user->school_id) {
-                        return ApiResponse::notFound('أحد مجالات التحسين المطلوبة غير موجود.');
-                    }
+            $targetSchoolId = $user->user_type === 'school' ? $user->school_id : null;
+            $targetCycleId = (int) $plan->cycle_id;
+
+            foreach ($areas as $area) {
+                $eval = $area->result?->evaluation;
+                if (!$eval) {
+                    return ApiResponse::notFound('مجال التحسين غير مرتبط بتقييم صحيح.');
+                }
+                if ($targetSchoolId !== null && (int) $eval->school_id !== (int) $targetSchoolId) {
+                    return ApiResponse::notFound('أحد مجالات التحسين المطلوبة غير موجود.');
+                }
+                if ((int) $eval->cycle_id !== $targetCycleId) {
+                    return ApiResponse::validationError([
+                        'areaIds' => ['مجال التحسين لا ينتمي لنفس دورة التقييم المحددة للخطة (العزل الزمني والمؤسسي).'],
+                    ]);
                 }
             }
 
@@ -339,7 +417,7 @@ class ImprovementPlanController extends Controller
         $plan->progress_description = $overallProgress['code'];
         $plan->save();
 
-        $plan->load(['cycle', 'school', 'creator', 'areas.indicator', 'actions.area', 'reviewNotes.author']);
+        $plan->load(['cycle', 'school', 'creator', 'areas.indicator', 'actions.area', 'actions.evidences', 'reviewNotes.author']);
 
         return ApiResponse::success(
             data: $this->formatPlanDetails($plan),
@@ -348,7 +426,7 @@ class ImprovementPlanController extends Controller
     }
 
     /**
-     * إضافة إجراء تنفيذي جديد للخطة مع التحقق من المفتاح الأجنبي المركب (plan_id, area_id).
+     * إضافة إجراء تنفيذي جديد للخطة مع التحقق من المفتاح الأجنبي المركب (plan_id, area_id) ونسبة الإنجاز (الشريحة 8).
      *
      * POST /api/v1/improvement-plans/{id}/actions
      * الصلاحية: plans.manage
@@ -379,6 +457,8 @@ class ImprovementPlanController extends Controller
             'dueDate'                      => ['required', 'date', 'after_or_equal:startDate'],
             'status'                       => ['nullable', 'string', 'in:Pending,InProgress,Done,Cancelled'],
             'progress'                     => ['nullable', 'string', 'in:' . implode(',', ProgressLevel::values())],
+            'completionPercentage'         => ['nullable', 'integer', 'min:0', 'max:100'],
+            'completion_percentage'        => ['nullable', 'integer', 'min:0', 'max:100'],
         ], [
             'areaId.required'                       => 'مجال التحسين إلزامي لربط الإجراء التنفيذي.',
             'title.required'                        => 'عنوان الإجراء التنفيذي إلزامي.',
@@ -390,6 +470,10 @@ class ImprovementPlanController extends Controller
             'dueDate.after_or_equal'                => 'تاريخ الاستحقاق يجب أن يكون مساوياً أو لاحقاً لتاريخ البدء.',
             'status.in'                             => 'حالة الإجراء غير صالحة. الحالات المسموحة: Pending, InProgress, Done, Cancelled.',
             'progress.in'                           => 'مستوى التقدم غير صالح.',
+            'completionPercentage.min'              => 'نسبة الإنجاز يجب ألا تقل عن 0%.',
+            'completionPercentage.max'              => 'نسبة الإنجاز يجب ألا تزيد عن 100%.',
+            'completion_percentage.min'             => 'نسبة الإنجاز يجب ألا تقل عن 0%.',
+            'completion_percentage.max'             => 'نسبة الإنجاز يجب ألا تزيد عن 100%.',
         ]);
 
         if ($validator->fails()) {
@@ -407,11 +491,19 @@ class ImprovementPlanController extends Controller
             ]);
         }
 
+        $completionPercentage = (int) ($request->input('completionPercentage') ?? $request->input('completion_percentage', 0));
         $status = $request->input('status', 'Pending');
         $progress = $request->input('progress', ProgressLevel::NotStarted->value);
 
-        if ($status === 'Done') {
+        if ($completionPercentage === 100 || $status === 'Done') {
+            $status = 'Done';
             $progress = ProgressLevel::Complete->value;
+            $completionPercentage = 100;
+        } elseif ($completionPercentage > 0 && $status === 'Pending') {
+            $status = 'InProgress';
+            if ($progress === ProgressLevel::NotStarted->value) {
+                $progress = ProgressLevel::Moderate->value;
+            }
         }
 
         $action = ImprovementAction::create([
@@ -422,6 +514,7 @@ class ImprovementPlanController extends Controller
             'start_date'                     => $request->startDate,
             'due_date'                       => $request->dueDate,
             'status'                         => $status,
+            'completion_percentage'          => $completionPercentage,
             'progress_description'           => $progress,
         ]);
 
@@ -431,7 +524,7 @@ class ImprovementPlanController extends Controller
         $plan->progress_description = $overallProgress['code'];
         $plan->save();
 
-        $action->load('area');
+        $action->load(['area', 'evidences']);
 
         return ApiResponse::success(
             data: $this->formatAction($action),
@@ -441,7 +534,7 @@ class ImprovementPlanController extends Controller
     }
 
     /**
-     * تحديث إجراء تنفيذي في الخطة (الحالة، مستوى التقدم، التواريخ).
+     * تحديث إجراء تنفيذي في الخطة (الحالة، نسبة الإنجاز 0-100%، مستوى التقدم، التواريخ).
      *
      * PATCH /api/v1/improvement-plans/{id}/actions/{actionId}
      * الصلاحية: plans.manage
@@ -479,11 +572,17 @@ class ImprovementPlanController extends Controller
             'dueDate'                      => ['sometimes', 'required', 'date'],
             'status'                       => ['sometimes', 'required', 'string', 'in:Pending,InProgress,Done,Cancelled'],
             'progress'                     => ['sometimes', 'required', 'string', 'in:' . implode(',', ProgressLevel::values())],
+            'completionPercentage'         => ['sometimes', 'required', 'integer', 'min:0', 'max:100'],
+            'completion_percentage'        => ['sometimes', 'required', 'integer', 'min:0', 'max:100'],
         ], [
             'title.required'                        => 'عنوان الإجراء التنفيذي إلزامي.',
             'responsiblePersonDescription.required' => 'وصف المسؤول عن التنفيذ إلزامي.',
             'status.in'                             => 'حالة الإجراء غير صالحة. الحالات المسموحة: Pending, InProgress, Done, Cancelled.',
             'progress.in'                           => 'مستوى التقدم غير صالح.',
+            'completionPercentage.min'              => 'نسبة الإنجاز يجب ألا تقل عن 0%.',
+            'completionPercentage.max'              => 'نسبة الإنجاز يجب ألا تزيد عن 100%.',
+            'completion_percentage.min'             => 'نسبة الإنجاز يجب ألا تقل عن 0%.',
+            'completion_percentage.max'             => 'نسبة الإنجاز يجب ألا تزيد عن 100%.',
         ]);
 
         if ($validator->fails()) {
@@ -511,9 +610,30 @@ class ImprovementPlanController extends Controller
         if ($request->has('dueDate')) {
             $action->due_date = $request->dueDate;
         }
+
+        // تحديث نسبة الإنجاز والتحول التلقائي للحالة (100% -> Done)
+        $hasPercentage = $request->has('completionPercentage') || $request->has('completion_percentage');
+        if ($hasPercentage) {
+            $percentage = (int) ($request->input('completionPercentage') ?? $request->input('completion_percentage'));
+            $action->completion_percentage = $percentage;
+
+            if ($percentage === 100) {
+                $action->status = 'Done';
+                $action->progress_description = ProgressLevel::Complete->value;
+            } elseif ($percentage < 100 && $action->status === 'Done') {
+                $action->status = $request->input('status', 'InProgress');
+                if ($action->progress_description === ProgressLevel::Complete->value) {
+                    $action->progress_description = ProgressLevel::Moderate->value;
+                }
+            } elseif ($percentage > 0 && $action->status === 'Pending') {
+                $action->status = 'InProgress';
+            }
+        }
+
         if ($request->has('status')) {
             $action->status = $request->status;
-            if ($action->status === 'Done' && !$request->has('progress')) {
+            if ($action->status === 'Done') {
+                $action->completion_percentage = 100;
                 $action->progress_description = ProgressLevel::Complete->value;
             }
         }
@@ -529,7 +649,7 @@ class ImprovementPlanController extends Controller
         $plan->progress_description = $overallProgress['code'];
         $plan->save();
 
-        $action->load('area');
+        $action->load(['area', 'evidences']);
 
         return ApiResponse::success(
             data: $this->formatAction($action),
@@ -538,16 +658,144 @@ class ImprovementPlanController extends Controller
     }
 
     /**
-     * تدوين ملاحظة مراجعة من قِبل مدير المدرسة (reviews.write).
+     * حذف إجراء تنفيذي من الخطة (مسموح فقط في مسودة الخطة Draft - الشريحة 8).
+     *
+     * DELETE /api/v1/improvement-plans/{id}/actions/{actionId}
+     * الصلاحية: plans.manage
+     */
+    public function deleteAction(Request $request, int $id, int $actionId): JsonResponse
+    {
+        $user = $request->user();
+
+        if (!$user->hasPermission('plans.manage')) {
+            return ApiResponse::forbidden('غير مصرح لك بحذف إجراءات الخطة.');
+        }
+
+        $plan = ImprovementPlan::find($id);
+        if (!$plan) {
+            return ApiResponse::notFound('خطة التحسين المطلوبة غير موجودة.');
+        }
+
+        // عزل المدارس
+        if ($user->user_type === 'school' && (int) $user->school_id !== (int) $plan->school_id) {
+            return ApiResponse::notFound('خطة التحسين المطلوبة غير موجودة.');
+        }
+
+        // قيد الحذف: مسموح فقط أثناء حالة المسودة Draft
+        if ($plan->status !== 'Draft') {
+            return ApiResponse::validationError([
+                'status' => ['لا يمكن حذف إجراء في خطة نشطة أو مكتملة؛ البديل المعتمد هو إلغاء الإجراء بتغيير حالته إلى Cancelled.'],
+            ]);
+        }
+
+        $action = ImprovementAction::where('plan_id', $plan->plan_id)
+            ->where('action_id', $actionId)
+            ->first();
+
+        if (!$action) {
+            return ApiResponse::notFound('الإجراء التنفيذي المطلوب غير موجود ضمن هذه الخطة.');
+        }
+
+        // فك ربط أي شواهد مرتبطة بهذا الإجراء
+        Evidence::where('action_id', $action->action_id)->update(['action_id' => null]);
+
+        $action->delete();
+
+        // إعادة احتساب تقدم الخطة الإجمالي
+        $allActions = ImprovementAction::where('plan_id', $plan->plan_id)->get();
+        $overallProgress = self::calculateOverallProgress($allActions);
+        $plan->progress_description = $overallProgress['code'];
+        $plan->save();
+
+        return ApiResponse::success(
+            data: null,
+            message: 'تم حذف الإجراء التنفيذي بنجاح من مسودة الخطة.'
+        );
+    }
+
+    /**
+     * ربط شاهد/دليل إثبات بإجراء تنفيذي لتوثيق الإنجاز ميدانياً (الشريحة 8).
+     *
+     * POST /api/v1/improvement-plans/{id}/actions/{actionId}/evidences
+     * الصلاحية: plans.manage
+     */
+    public function attachActionEvidence(Request $request, int $id, int $actionId): JsonResponse
+    {
+        $user = $request->user();
+
+        if (!$user->hasPermission('plans.manage')) {
+            return ApiResponse::forbidden('غير مصرح لك بربط شواهد التنفيذ بالإجراء.');
+        }
+
+        $plan = ImprovementPlan::find($id);
+        if (!$plan) {
+            return ApiResponse::notFound('خطة التحسين المطلوبة غير موجودة.');
+        }
+
+        if ($user->user_type === 'school' && (int) $user->school_id !== (int) $plan->school_id) {
+            return ApiResponse::notFound('خطة التحسين المطلوبة غير موجودة.');
+        }
+
+        $action = ImprovementAction::where('plan_id', $plan->plan_id)
+            ->where('action_id', $actionId)
+            ->first();
+
+        if (!$action) {
+            return ApiResponse::notFound('الإجراء التنفيذي المطلوب غير موجود ضمن هذه الخطة.');
+        }
+
+        $validator = Validator::make($request->all(), [
+            'evidenceId'  => ['required_without:evidence_id', 'integer'],
+            'evidence_id' => ['required_without:evidenceId', 'integer'],
+        ], [
+            'evidenceId.required_without'  => 'معرف الشاهد التنفيذي إلزامي.',
+            'evidence_id.required_without' => 'معرف الشاهد التنفيذي إلزامي.',
+        ]);
+
+        if ($validator->fails()) {
+            return ApiResponse::validationError($validator->errors()->toArray());
+        }
+
+        $evidenceId = (int) ($request->input('evidenceId') ?? $request->input('evidence_id'));
+        $evidence = Evidence::with('result.evaluation')->find($evidenceId);
+
+        if (!$evidence) {
+            return ApiResponse::notFound('الشاهد المطلوب غير موجود.');
+        }
+
+        // عزل المدارس: التأكد من تبعية الشاهد للمدرسة
+        if ($user->user_type === 'school') {
+            $evSchoolId = $evidence->result?->evaluation?->school_id;
+            if ($evSchoolId && (int) $evSchoolId !== (int) $user->school_id) {
+                return ApiResponse::notFound('الشاهد المطلوب غير موجود.');
+            }
+        }
+
+        $evidence->action_id = $action->action_id;
+        $evidence->save();
+
+        return ApiResponse::success(
+            data: [
+                'evidenceId' => (int) $evidence->evidence_id,
+                'actionId'   => (int) $evidence->action_id,
+                'title'      => $evidence->title,
+                'status'     => $evidence->status,
+            ],
+            message: 'تم ربط شاهد التنفيذ بالإجراء بنجاح.'
+        );
+    }
+
+    /**
+     * تدوين ملاحظة مراجعة داخلية (مدير المدرسة) أو مراجعة خارجية (مشرف وزاري) (الشريحة 8).
      *
      * POST /api/v1/improvement-plans/{id}/review-notes
-     * الصلاحية: reviews.write
+     * الصلاحية: reviews.write أو supervision.review
      */
     public function storeReviewNote(Request $request, int $id): JsonResponse
     {
         $user = $request->user();
 
-        if (!$user->hasPermission('reviews.write')) {
+        if (!$user->hasPermission('reviews.write') && !$user->hasPermission('supervision.review')) {
             return ApiResponse::forbidden('غير مصرح لك بتدوين ملاحظات المراجعة على الخطة.');
         }
 
@@ -562,7 +810,9 @@ class ImprovementPlanController extends Controller
         }
 
         $validator = Validator::make($request->all(), [
-            'text' => ['required', 'string', 'max:2000'],
+            'text'          => ['required', 'string', 'max:2000'],
+            'reviewerRole'  => ['nullable', 'string', 'in:school_principal,ministry_supervisor'],
+            'reviewer_role' => ['nullable', 'string', 'in:school_principal,ministry_supervisor'],
         ], [
             'text.required' => 'نص ملاحظة المراجعة إلزامي.',
             'text.max'      => 'لا يمكن أن تتجاوز الملاحظة 2000 حرف.',
@@ -572,9 +822,19 @@ class ImprovementPlanController extends Controller
             return ApiResponse::validationError($validator->errors()->toArray());
         }
 
+        $reviewerRole = $request->input('reviewerRole') ?? $request->input('reviewer_role');
+        if (!$reviewerRole) {
+            if ($user->hasRole('ministry_supervisor') || $user->hasPermission('supervision.review')) {
+                $reviewerRole = 'ministry_supervisor';
+            } else {
+                $reviewerRole = 'school_principal';
+            }
+        }
+
         $note = PlanReviewNote::create([
             'plan_id'        => $plan->plan_id,
             'author_user_id' => $user->user_id,
+            'reviewer_role'  => $reviewerRole,
             'text'           => $request->text,
         ]);
 
@@ -582,12 +842,13 @@ class ImprovementPlanController extends Controller
 
         return ApiResponse::success(
             data: [
-                'noteId'     => (int) $note->note_id,
-                'planId'     => (int) $note->plan_id,
-                'authorId'   => (int) $note->author_user_id,
-                'authorName' => $note->author?->full_name ?? '',
-                'text'       => $note->text,
-                'createdAt'  => $note->created_at?->toIso8601String(),
+                'noteId'       => (int) $note->note_id,
+                'planId'       => (int) $note->plan_id,
+                'authorId'     => (int) $note->author_user_id,
+                'authorName'   => $note->author?->full_name ?? '',
+                'reviewerRole' => $note->reviewer_role,
+                'text'         => $note->text,
+                'createdAt'    => $note->created_at?->toIso8601String(),
             ],
             message: 'تم تدوين ملاحظة المراجعة بنجاح.',
             status: 201
@@ -648,7 +909,7 @@ class ImprovementPlanController extends Controller
     }
 
     /**
-     * تنسيق ملخص الخطة لقائمة الخطط.
+     * تنسيق ملخص الخطة لقائمة الخطط (مع نسبة الإنجاز الرقمية ونوع الخطة).
      */
     private function formatPlanSummary(ImprovementPlan $plan): array
     {
@@ -668,29 +929,32 @@ class ImprovementPlanController extends Controller
         })->count();
 
         return [
-            'planId'               => (int) $plan->plan_id,
-            'cycleId'              => (int) $plan->cycle_id,
-            'cycleName'            => $plan->cycle?->academic_year ?? '',
-            'academicYear'         => $plan->cycle?->academic_year ?? '',
-            'schoolId'             => (int) $plan->school_id,
-            'schoolName'           => $plan->school?->school_name ?? '',
-            'title'                => $plan->title,
-            'startDate'            => $plan->start_date ? Carbon::parse($plan->start_date)->toDateString() : null,
-            'endDate'              => $plan->end_date ? Carbon::parse($plan->end_date)->toDateString() : null,
-            'status'               => $plan->status,
-            'statusLabel'          => $statusLabels[$plan->status] ?? $plan->status,
-            'overallProgress'      => $overallProgress['code'],
-            'overallProgressLabel' => $overallProgress['label'],
-            'areasCount'           => $plan->areas->count(),
-            'totalActions'         => $actions->count(),
-            'delayedActions'       => $delayedCount,
-            'reviewNotesCount'     => $plan->reviewNotes->count(),
-            'createdAt'            => $plan->created_at?->toIso8601String(),
+            'planId'                    => (int) $plan->plan_id,
+            'cycleId'                   => (int) $plan->cycle_id,
+            'cycleName'                 => $plan->cycle?->academic_year ?? '',
+            'academicYear'              => $plan->cycle?->academic_year ?? '',
+            'schoolId'                  => (int) $plan->school_id,
+            'schoolName'                => $plan->school?->school_name ?? '',
+            'title'                     => $plan->title,
+            'planType'                  => $plan->plan_type ?? ImprovementPlan::TYPE_QUALITY_IMPROVEMENT,
+            'planTypeLabel'             => $plan->plan_type_label,
+            'startDate'                 => $plan->start_date ? Carbon::parse($plan->start_date)->toDateString() : null,
+            'endDate'                   => $plan->end_date ? Carbon::parse($plan->end_date)->toDateString() : null,
+            'status'                    => $plan->status,
+            'statusLabel'               => $statusLabels[$plan->status] ?? $plan->status,
+            'overallProgress'           => $overallProgress['code'],
+            'overallProgressLabel'      => $overallProgress['label'],
+            'overallProgressPercentage' => $plan->overall_progress_percentage,
+            'areasCount'                => $plan->areas->count(),
+            'totalActions'              => $actions->count(),
+            'delayedActions'            => $delayedCount,
+            'reviewNotesCount'          => $plan->reviewNotes->count(),
+            'createdAt'                 => $plan->created_at?->toIso8601String(),
         ];
     }
 
     /**
-     * تنسيق التفاصيل الكاملة للخطة ونظرة التقدم (FR-SCH-25).
+     * تنسيق التفاصيل الكاملة للخطة مع الإجراءات والشواهد والمراجعات المصنفة (FR-SCH-25).
      */
     private function formatPlanDetails(ImprovementPlan $plan): array
     {
@@ -740,51 +1004,61 @@ class ImprovementPlanController extends Controller
 
         $formattedNotes = $plan->reviewNotes->map(function ($note) {
             return [
-                'noteId'     => (int) $note->note_id,
-                'authorId'   => (int) $note->author_user_id,
-                'authorName' => $note->author?->full_name ?? '',
-                'text'       => $note->text,
-                'createdAt'  => $note->created_at?->toIso8601String(),
+                'noteId'       => (int) $note->note_id,
+                'authorId'     => (int) $note->author_user_id,
+                'authorName'   => $note->author?->full_name ?? '',
+                'reviewerRole' => $note->reviewer_role,
+                'text'         => $note->text,
+                'createdAt'    => $note->created_at?->toIso8601String(),
             ];
         })->values();
 
+        $internalNotes = $formattedNotes->where('reviewerRole', 'school_principal')->values();
+        $externalNotes = $formattedNotes->where('reviewerRole', 'ministry_supervisor')->values();
+
         return [
-            'planId'               => (int) $plan->plan_id,
-            'cycleId'              => (int) $plan->cycle_id,
-            'cycleName'            => $plan->cycle?->academic_year ?? '',
-            'academicYear'         => $plan->cycle?->academic_year ?? '',
-            'schoolId'             => (int) $plan->school_id,
-            'schoolName'           => $plan->school?->school_name ?? '',
-            'createdById'          => (int) $plan->created_by_user_id,
-            'creatorName'          => $plan->creator?->full_name ?? '',
-            'title'                => $plan->title,
-            'startDate'            => $plan->start_date ? Carbon::parse($plan->start_date)->toDateString() : null,
-            'endDate'              => $plan->end_date ? Carbon::parse($plan->end_date)->toDateString() : null,
-            'status'               => $plan->status,
-            'statusLabel'          => $statusLabels[$plan->status] ?? $plan->status,
-            'overallProgress'      => $overallProgress['code'],
-            'overallProgressLabel' => $overallProgress['label'],
-            'areas'                => $formattedAreas,
-            'actions'              => $formattedActions,
-            'reviewNotes'          => $formattedNotes,
-            'overview'             => [
-                'totalAreas'           => $formattedAreas->count(),
-                'totalActions'         => $actions->count(),
-                'pendingActions'       => $pendingCount,
-                'inProgressActions'    => $inProgressCount,
-                'doneActions'          => $doneCount,
-                'cancelledActions'     => $cancelledCount,
-                'delayedActions'       => $delayedCount,
-                'overallProgress'      => $overallProgress['code'],
-                'overallProgressLabel' => $overallProgress['label'],
+            'planId'                    => (int) $plan->plan_id,
+            'cycleId'                   => (int) $plan->cycle_id,
+            'cycleName'                 => $plan->cycle?->academic_year ?? '',
+            'academicYear'              => $plan->cycle?->academic_year ?? '',
+            'schoolId'                  => (int) $plan->school_id,
+            'schoolName'                => $plan->school?->school_name ?? '',
+            'createdById'               => (int) $plan->created_by_user_id,
+            'creatorName'               => $plan->creator?->full_name ?? '',
+            'title'                     => $plan->title,
+            'planType'                  => $plan->plan_type ?? ImprovementPlan::TYPE_QUALITY_IMPROVEMENT,
+            'planTypeLabel'             => $plan->plan_type_label,
+            'startDate'                 => $plan->start_date ? Carbon::parse($plan->start_date)->toDateString() : null,
+            'endDate'                   => $plan->end_date ? Carbon::parse($plan->end_date)->toDateString() : null,
+            'status'                    => $plan->status,
+            'statusLabel'               => $statusLabels[$plan->status] ?? $plan->status,
+            'overallProgress'           => $overallProgress['code'],
+            'overallProgressLabel'      => $overallProgress['label'],
+            'overallProgressPercentage' => $plan->overall_progress_percentage,
+            'areas'                     => $formattedAreas,
+            'actions'                   => $formattedActions,
+            'reviewNotes'               => $formattedNotes,
+            'internalNotes'             => $internalNotes,
+            'externalNotes'             => $externalNotes,
+            'overview'                  => [
+                'totalAreas'                => $formattedAreas->count(),
+                'totalActions'              => $actions->count(),
+                'pendingActions'            => $pendingCount,
+                'inProgressActions'         => $inProgressCount,
+                'doneActions'               => $doneCount,
+                'cancelledActions'          => $cancelledCount,
+                'delayedActions'            => $delayedCount,
+                'overallProgress'           => $overallProgress['code'],
+                'overallProgressLabel'      => $overallProgress['label'],
+                'overallProgressPercentage' => $plan->overall_progress_percentage,
             ],
-            'createdAt'            => $plan->created_at?->toIso8601String(),
-            'updatedAt'            => $plan->updated_at?->toIso8601String(),
+            'createdAt'                 => $plan->created_at?->toIso8601String(),
+            'updatedAt'                 => $plan->updated_at?->toIso8601String(),
         ];
     }
 
     /**
-     * تنسيق بيانات إجراء التحسين التنفيذي.
+     * تنسيق بيانات إجراء التحسين التنفيذي مع نسبة الإنجاز والشواهد المرتبطة.
      */
     private function formatAction(ImprovementAction $action): array
     {
@@ -800,6 +1074,14 @@ class ImprovementPlanController extends Controller
 
         $progressLevel = ProgressLevel::tryFrom($action->progress_description) ?? ProgressLevel::NotStarted;
 
+        $evidences = $action->relationLoaded('evidences') ? $action->evidences->map(function ($ev) {
+            return [
+                'evidenceId' => (int) $ev->evidence_id,
+                'title'      => $ev->title,
+                'status'     => $ev->status,
+            ];
+        })->values() : [];
+
         return [
             'actionId'                     => (int) $action->action_id,
             'planId'                       => (int) $action->plan_id,
@@ -811,9 +1093,11 @@ class ImprovementPlanController extends Controller
             'dueDate'                      => $action->due_date ? Carbon::parse($action->due_date)->toDateString() : null,
             'status'                       => $action->status,
             'statusLabel'                  => $statusLabels[$action->status] ?? $action->status,
+            'completionPercentage'         => (int) ($action->completion_percentage ?? 0),
             'progress'                     => $progressLevel->value,
             'progressLabel'                => $progressLevel->label(),
             'isDelayed'                    => $isDelayed,
+            'evidences'                    => $evidences,
             'createdAt'                    => $action->created_at?->toIso8601String(),
             'updatedAt'                    => $action->updated_at?->toIso8601String(),
         ];

@@ -38,6 +38,7 @@ class PlanReviewNote extends Model
     protected $fillable = [
         'plan_id',
         'author_user_id',
+        'reviewer_role',
         'text',
     ];
 

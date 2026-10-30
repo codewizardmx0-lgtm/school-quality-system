@@ -42,6 +42,7 @@ class Evidence extends Model
     protected $fillable = [
         'result_id',
         'indicator_id',
+        'action_id',
         'title',
         'description',
         'justification',
@@ -128,5 +129,15 @@ class Evidence extends Model
     public function reviewer(): BelongsTo
     {
         return $this->belongsTo(User::class, 'reviewed_by_user_id', 'user_id');
+    }
+
+    /**
+     * إجراء التحسين الذي يثبت هذا الشاهد تنفيذه ميدانياً (الشريحة 8).
+     *
+     * @return BelongsTo
+     */
+    public function action(): BelongsTo
+    {
+        return $this->belongsTo(ImprovementAction::class, 'action_id', 'action_id');
     }
 }
