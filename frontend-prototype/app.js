@@ -2096,12 +2096,36 @@ const App = {
   },
 
   // ---------------------------------------------------------------------------
-  // 10. الشاشة 7: خطط التحسين المدرسي (Screen 7: Plans)
+  // 10. خطط التحسين المدرسي والتطوير المهني ومتابعة التنفيذ (الشريحة 8)
   // ---------------------------------------------------------------------------
+  filterPlansByType(type) {
+    this.state.plansFilterType = type;
+
+    // تحديث حالة أزرار التبويبات
+    const tabs = [
+      { id: 'btn-filter-plan-all', val: '' },
+      { id: 'btn-filter-plan-quality', val: 'QualityImprovement' },
+      { id: 'btn-filter-plan-staff', val: 'StaffProfessionalDevelopment' },
+      { id: 'btn-filter-plan-operational', val: 'AnnualOperational' },
+    ];
+    tabs.forEach(t => {
+      const btn = document.getElementById(t.id);
+      if (btn) {
+        if (t.val === type) {
+          btn.className = 'btn btn-sm btn-primary';
+        } else {
+          btn.className = 'btn btn-sm btn-outline-primary';
+        }
+      }
+    });
+
+    this.loadPlans();
+  },
+
   async loadPlans() {
     const tbody = document.getElementById('plans-table-body');
     if (!tbody) return;
-    tbody.innerHTML = '<tr><td colspan="10" style="text-align: center;">جارِ جلب الخطط...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="11" style="text-align: center;">جارِ جلب الخطط...</td></tr>';
 
     // ضبط ظهور زر إنشاء الخطة لمن يملك صلاحية plans.manage فقط
     const btnCreatePlan = document.getElementById('btn-show-create-plan');
@@ -2109,40 +2133,64 @@ const App = {
       btnCreatePlan.style.display = this.hasPermission('plans.manage') ? 'inline-flex' : 'none';
     }
 
-    const res = await this.request('/improvement-plans');
+    let url = '/improvement-plans';
+    if (this.state.plansFilterType) {
+      url += `?plan_type=${encodeURIComponent(this.state.plansFilterType)}`;
+    }
+
+    const res = await this.request(url);
     if (!res.ok) {
-      tbody.innerHTML = `<tr><td colspan="10" style="color: red; text-align: center;">${res.message}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="11" style="color: red; text-align: center;">${res.message}</td></tr>`;
       return;
     }
 
     this.state.plans = res.data || [];
     if (this.state.plans.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="10" style="text-align: center;">لا توجد خطط تحسين منشأة لهذه المدرسة بعد.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="11" style="text-align: center; color: var(--text-muted);">لا توجد خطط منشأة مطابقة لهذا التصنيف بعد.</td></tr>';
       return;
     }
 
-    tbody.innerHTML = this.state.plans.map(p => `
-      <tr>
-        <td><strong>#${p.planId}</strong></td>
-        <td>${p.title}</td>
-        <td>${p.academicYear || p.cycleName || '-'}</td>
-        <td style="font-size: 0.8rem;">${p.startDate} إلى ${p.endDate}</td>
-        <td><span class="badge ${p.status === 'Active' ? 'badge-green' : (p.status === 'Draft' ? 'badge-yellow' : 'badge-blue')}">${p.statusLabel || p.status}</span></td>
-        <td><span class="badge badge-gray">${p.overallProgressLabel || p.overallProgress}</span></td>
-        <td><span class="badge badge-gray">${p.areasCount}</span></td>
-        <td><span class="badge badge-gray">${p.totalActions}</span></td>
-        <td>
-          ${p.delayedActions > 0 
-            ? `<span class="badge badge-red">${p.delayedActions} متأخر</span>` 
-            : '<span class="badge badge-green">0</span>'}
-        </td>
-        <td>
-          <button class="btn btn-sm btn-primary" onclick="App.showPlanDetails(${p.planId})">
-            عرض التفاصيل
-          </button>
-        </td>
-      </tr>
-    `).join('');
+    const typeBadges = {
+      'QualityImprovement': '<span class="badge badge-blue">📘 جودة مدرسية</span>',
+      'StaffProfessionalDevelopment': '<span class="badge badge-purple" style="background: #f3e8ff; color: #7e22ce;">🧑‍🏫 تطوير مهني</span>',
+      'AnnualOperational': '<span class="badge badge-green" style="background: #ecfdf5; color: #047857;">📋 خطة تشغيلية</span>',
+    };
+
+    tbody.innerHTML = this.state.plans.map(p => {
+      const progressPct = p.overallProgressPercentage || 0;
+      const pctColor = progressPct === 100 ? '#10b981' : (progressPct > 50 ? '#3b82f6' : '#f59e0b');
+
+      return `
+        <tr>
+          <td><strong>#${p.planId}</strong></td>
+          <td><strong>${p.title}</strong></td>
+          <td>${typeBadges[p.planType] || `<span class="badge badge-gray">${p.planTypeLabel || p.planType}</span>`}</td>
+          <td>${p.academicYear || p.cycleName || '-'}</td>
+          <td style="font-size: 0.8rem;">${p.startDate} إلى ${p.endDate}</td>
+          <td><span class="badge ${p.status === 'Active' ? 'badge-green' : (p.status === 'Draft' ? 'badge-yellow' : 'badge-blue')}">${p.statusLabel || p.status}</span></td>
+          <td>
+            <div style="display: flex; align-items: center; gap: 0.35rem;">
+              <div style="background: #e2e8f0; width: 60px; height: 8px; border-radius: 4px; overflow: hidden;">
+                <div style="background: ${pctColor}; width: ${progressPct}%; height: 100%;"></div>
+              </div>
+              <span style="font-weight: 700; font-size: 0.8rem;">${progressPct}%</span>
+            </div>
+          </td>
+          <td><span class="badge badge-gray">${p.areasCount}</span></td>
+          <td><span class="badge badge-gray">${p.totalActions}</span></td>
+          <td>
+            ${p.delayedActions > 0 
+              ? `<span class="badge badge-red">${p.delayedActions} متأخر</span>` 
+              : '<span class="badge badge-green">0</span>'}
+          </td>
+          <td>
+            <button class="btn btn-sm btn-primary" onclick="App.showPlanDetails(${p.planId})">
+              عرض التفاصيل
+            </button>
+          </td>
+        </tr>
+      `;
+    }).join('');
   },
 
   async toggleCreatePlanForm() {
@@ -2177,6 +2225,7 @@ const App = {
     this.clearErrors(['plan-title', 'plan-start-date', 'plan-end-date', 'plan-areaIds']);
 
     const title = document.getElementById('plan-title').value.trim();
+    const planType = document.getElementById('plan-type-select').value;
     const startDate = document.getElementById('plan-start-date').value;
     const endDate = document.getElementById('plan-end-date').value;
     const cycleId = this.state.currentEvaluation?.cycleId || 1;
@@ -2197,6 +2246,7 @@ const App = {
       body: {
         cycleId,
         title,
+        planType,
         startDate,
         endDate,
         areaIds,
@@ -2214,7 +2264,7 @@ const App = {
       return;
     }
 
-    this.showAlert('تم إنشاء مسودة خطة التحسين بنجاح.', 'success');
+    this.showAlert('تم إنشاء مسودة الخطة بنجاح.', 'success');
     document.getElementById('card-create-plan').classList.add('hidden');
     document.getElementById('form-create-plan').reset();
     this.loadPlans();
@@ -2236,7 +2286,35 @@ const App = {
     const p = res.data;
 
     document.getElementById('plan-det-title').textContent = `خطة: ${p.title}`;
+    
+    // شارة نوع الخطة
+    const typeBadge = document.getElementById('plan-det-type-badge');
+    if (typeBadge) {
+      typeBadge.textContent = p.planTypeLabel || p.planType || 'خطة تحسين';
+      if (p.planType === 'StaffProfessionalDevelopment') {
+        typeBadge.className = 'badge badge-purple';
+        typeBadge.style.background = '#f3e8ff';
+        typeBadge.style.color = '#7e22ce';
+      } else if (p.planType === 'AnnualOperational') {
+        typeBadge.className = 'badge badge-green';
+        typeBadge.style.background = '#ecfdf5';
+        typeBadge.style.color = '#047857';
+      } else {
+        typeBadge.className = 'badge badge-blue';
+      }
+    }
+
     document.getElementById('plan-det-meta').textContent = `العام الدراسي: ${p.academicYear || p.cycleName || '-'} | المدرسة: ${p.schoolName || '-'} | الفترة: من ${p.startDate} إلى ${p.endDate}`;
+
+    // شريط ونسبة التقدم التراكمي الإجمالية
+    const progressPct = p.overallProgressPercentage || 0;
+    const pctEl = document.getElementById('plan-det-progress-percent');
+    const barEl = document.getElementById('plan-det-progress-bar');
+    if (pctEl) pctEl.textContent = `${progressPct}%`;
+    if (barEl) {
+      barEl.style.width = `${progressPct}%`;
+      barEl.style.background = progressPct === 100 ? '#10b981' : (progressPct > 50 ? '#3b82f6' : '#f59e0b');
+    }
 
     // المؤشرات السريعة ونظرة التقدم
     document.getElementById('plan-det-status-badge').textContent = p.statusLabel || p.status;
@@ -2275,21 +2353,31 @@ const App = {
     `).join('');
 
     // الإجراءات
-    this.renderPlanActions(p.actions || []);
+    this.renderPlanActions(p.actions || [], p.status);
 
-    // زر إضافة إجراء تنفيذي لمن يملك plans.manage فقط
+    // زر إضافة إجراء تنفيذي وبنك الإجراءات
     const btnAddAct = document.getElementById('btn-open-add-action');
-    if (btnAddAct) {
-      btnAddAct.style.display = this.hasPermission('plans.manage') ? 'inline-flex' : 'none';
-    }
+    const btnCatalog = document.getElementById('btn-open-catalog-modal');
+    const canManagePlans = this.hasPermission('plans.manage');
+    if (btnAddAct) btnAddAct.style.display = canManagePlans ? 'inline-flex' : 'none';
+    if (btnCatalog) btnCatalog.style.display = canManagePlans ? 'inline-flex' : 'none';
 
-    // ملاحظات المراجعة
-    this.renderReviewNotes(p.reviewNotes || []);
+    // ملاحظات المراجعة المزدوجة (داخلية وخارجية)
+    this.renderReviewNotes(p.internalNotes || [], p.externalNotes || [], p.reviewNotes || []);
 
-    // إخفاء أو إظهار نموذج مراجعة المدير لمن يملك reviews.write فقط
-    const formReview = document.getElementById('principal-review-form-container');
+    // إظهار نموذج الملاحظة لمن يملك reviews.write أو supervision.review
+    const formReview = document.getElementById('review-form-container');
+    const reviewLabel = document.getElementById('review-note-label');
+    const canReview = this.hasPermission('reviews.write') || this.hasPermission('supervision.review');
     if (formReview) {
-      formReview.style.display = this.hasPermission('reviews.write') ? 'block' : 'none';
+      formReview.style.display = canReview ? 'block' : 'none';
+      if (reviewLabel) {
+        if (this.hasRole('ministry_supervisor') || this.hasPermission('supervision.review')) {
+          reviewLabel.textContent = 'تدوين ملاحظة مراجعة خارجية (إشراف وزاري):';
+        } else {
+          reviewLabel.textContent = 'تدوين ملاحظة مراجعة داخلية (مدير المدرسة):';
+        }
+      }
     }
 
     // التمرير للتفاصيل
@@ -2321,19 +2409,27 @@ const App = {
   },
 
   // ---------------------------------------------------------------------------
-  // 11. الشاشة 8: إدارة الإجراءات التنفيذية (Screen 8: Actions)
+  // 11. إدارة الإجراءات التنفيذية ونسب الإنجاز التراكمية (Actions & Completion)
   // ---------------------------------------------------------------------------
-  renderPlanActions(actions) {
+  renderPlanActions(actions, planStatus = 'Draft') {
     const tbody = document.getElementById('plan-det-actions-body');
     if (!tbody) return;
 
     if (!actions || actions.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="10" style="text-align: center; color: var(--text-muted);">لا توجد إجراءات تنفيذية مضافة للخطة بعد.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="11" style="text-align: center; color: var(--text-muted);">لا توجد إجراءات تنفيذية مضافة للخطة بعد.</td></tr>';
       return;
     }
 
     tbody.innerHTML = actions.map(act => {
       const statusCls = act.status === 'Done' ? 'badge-green' : (act.status === 'InProgress' ? 'badge-blue' : (act.status === 'Cancelled' ? 'badge-gray' : 'badge-yellow'));
+      const pct = act.completionPercentage ?? 0;
+      const barColor = pct === 100 ? '#10b981' : (pct > 0 ? '#3b82f6' : '#94a3b8');
+
+      // الشواهد المرتبطة
+      const evidencesHtml = (act.evidences && act.evidences.length > 0)
+        ? act.evidences.map(ev => `<span class="badge badge-green" style="font-size: 0.72rem; display: inline-block; margin: 1px;">📎 ${ev.title}</span>`).join('')
+        : '<span style="font-size: 0.75rem; color: var(--text-muted);">لا توجد شواهد</span>';
+
       return `
         <tr>
           <td><strong>#${act.actionId}</strong></td>
@@ -2342,8 +2438,27 @@ const App = {
           <td>${act.responsiblePersonDescription}</td>
           <td style="font-size: 0.8rem;">${act.startDate}</td>
           <td style="font-size: 0.8rem;">${act.dueDate}</td>
+          <td>
+            <div style="display: flex; align-items: center; gap: 0.35rem;">
+              <div style="background: #e2e8f0; width: 60px; height: 8px; border-radius: 4px; overflow: hidden;">
+                <div style="background: ${barColor}; width: ${pct}%; height: 100%;"></div>
+              </div>
+              <span style="font-weight: 700; font-size: 0.82rem; color: ${barColor};">${pct}%</span>
+            </div>
+          </td>
           <td><span class="badge ${statusCls}">${act.statusLabel || act.status}</span></td>
-          <td><span class="badge badge-gray">${act.progressLabel || act.progress}</span></td>
+          <td>
+            <div style="max-width: 140px;">
+              ${evidencesHtml}
+              ${this.hasPermission('plans.manage') ? `
+                <div style="margin-top: 2px;">
+                  <button class="btn btn-sm btn-outline-primary" style="font-size: 0.7rem; padding: 1px 4px;" onclick="App.openAttachEvidenceModal(${act.actionId}, '${encodeURIComponent(act.title)}')">
+                    + ربط شاهد
+                  </button>
+                </div>
+              ` : ''}
+            </div>
+          </td>
           <td>
             ${act.isDelayed 
               ? '<span class="badge badge-red">⚠️ متأخر</span>' 
@@ -2351,9 +2466,22 @@ const App = {
           </td>
           <td>
             ${this.hasPermission('plans.manage') ? `
-              <button class="btn btn-sm btn-secondary" onclick="App.quickUpdateAction(${act.actionId})">
-                تحديث الحالة
-              </button>
+              <div style="display: flex; gap: 0.25rem; flex-wrap: wrap;">
+                <button class="btn btn-sm btn-secondary" style="font-size: 0.75rem; padding: 2px 6px;" onclick="App.openQuickUpdateProgress(${act.actionId}, ${pct}, '${act.status}', '${encodeURIComponent(act.title)}')">
+                  تحديث الإنجاز %
+                </button>
+                ${planStatus === 'Draft' ? `
+                  <button class="btn btn-sm btn-outline-danger" style="font-size: 0.75rem; padding: 2px 6px;" onclick="App.handleDeleteAction(${act.actionId})">
+                    حذف
+                  </button>
+                ` : `
+                  ${act.status !== 'Cancelled' && act.status !== 'Done' ? `
+                    <button class="btn btn-sm btn-outline-secondary" style="font-size: 0.72rem; padding: 2px 5px;" onclick="App.handleCancelAction(${act.actionId})">
+                      إلغاء
+                    </button>
+                  ` : ''}
+                `}
+              </div>
             ` : '<span style="font-size: 0.75rem; color: var(--text-muted);">عرض فقط</span>'}
           </td>
         </tr>
@@ -2375,6 +2503,12 @@ const App = {
     selectArea.innerHTML = (p.areas || []).map(a => `
       <option value="${a.areaId}">${a.name} [${a.priorityLabel || a.priority}]</option>
     `).join('');
+
+    // ضبط القيم الافتراضية
+    document.getElementById('action-completion-percentage').value = 0;
+    document.getElementById('action-percentage-disp').textContent = '0%';
+    document.getElementById('action-status').value = 'Pending';
+    document.getElementById('action-progress').value = 'NotStarted';
 
     modal.classList.remove('hidden');
   },
@@ -2402,6 +2536,7 @@ const App = {
     const responsible = document.getElementById('action-responsible').value.trim();
     const startDate = document.getElementById('action-start-date').value;
     const dueDate = document.getElementById('action-due-date').value;
+    const completionPercentage = parseInt(document.getElementById('action-completion-percentage').value) || 0;
     const status = document.getElementById('action-status').value;
     const progress = document.getElementById('action-progress').value;
 
@@ -2413,6 +2548,7 @@ const App = {
         responsiblePersonDescription: responsible,
         startDate,
         dueDate,
+        completionPercentage,
         status,
         progress,
       },
@@ -2437,69 +2573,319 @@ const App = {
     this.loadPlans();
   },
 
-  async quickUpdateAction(actionId) {
-    if (!this.hasPermission('plans.manage')) {
-      this.showAlert('غير مصرح لك بتعديل الإجراء (تتطلب plans.manage).', 'error');
+  // بنك الإجراءات النموذجية (Action Catalog)
+  async openActionCatalogModal() {
+    const modal = document.getElementById('modal-action-catalog');
+    if (!modal) return;
+    modal.classList.remove('hidden');
+
+    // ضبط فلتر نوع الخطة تلقائياً ليطابق نوع الخطة الحالية إن وجد
+    const filterSelect = document.getElementById('catalog-plan-type-filter');
+    if (filterSelect && this.state.currentPlan?.planType) {
+      filterSelect.value = this.state.currentPlan.planType;
+    }
+
+    await this.loadActionCatalog();
+  },
+
+  closeActionCatalogModal() {
+    const modal = document.getElementById('modal-action-catalog');
+    if (modal) modal.classList.add('hidden');
+  },
+
+  async loadActionCatalog() {
+    const filterSelect = document.getElementById('catalog-plan-type-filter');
+    const planType = filterSelect ? filterSelect.value : '';
+
+    let url = '/improvement-plans/action-catalog';
+    if (planType) {
+      url += `?plan_type=${encodeURIComponent(planType)}`;
+    }
+
+    const res = await this.request(url);
+    if (res.ok && res.data) {
+      this.state.actionCatalog = res.data;
+      this.renderActionCatalogList();
+    }
+  },
+
+  filterCatalog() {
+    this.loadActionCatalog();
+  },
+
+  renderActionCatalogList() {
+    const container = document.getElementById('catalog-items-container');
+    if (!container) return;
+
+    const query = (document.getElementById('catalog-search')?.value || '').trim().toLowerCase();
+    let items = this.state.actionCatalog || [];
+
+    if (query) {
+      items = items.filter(i => 
+        i.title.toLowerCase().includes(query) || 
+        i.sub_standard_code.toLowerCase().includes(query) || 
+        i.suggested_responsible_description.toLowerCase().includes(query)
+      );
+    }
+
+    if (items.length === 0) {
+      container.innerHTML = '<span style="text-align: center; color: var(--text-muted); padding: 1.5rem;">لا توجد إجراءات مطابقة لبحثك.</span>';
       return;
     }
+
+    container.innerHTML = items.map(item => `
+      <div style="background: #fff; border: 1px solid var(--border); border-radius: 6px; padding: 0.75rem; display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; hover: border-color: var(--primary);">
+        <div style="flex: 1;">
+          <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.25rem;">
+            <span class="badge badge-gray" style="font-size: 0.75rem;">${item.sub_standard_code}</span>
+            <span class="badge badge-blue" style="font-size: 0.75rem;">${item.plan_type}</span>
+            <span style="font-size: 0.75rem; color: var(--text-muted);">⏱️ المدة المقترحة: ${item.suggested_duration_days} يوماً</span>
+          </div>
+          <strong style="color: #1e293b; font-size: 0.92rem;">${item.title}</strong>
+          <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.2rem;">
+            المسؤول المقترح: ${item.suggested_responsible_description}
+          </div>
+        </div>
+        <div>
+          <button class="btn btn-sm btn-primary" onclick="App.selectCatalogAction(${item.catalog_id})">
+            اختيار واعتماد ➕
+          </button>
+        </div>
+      </div>
+    `).join('');
+  },
+
+  selectCatalogAction(catalogId) {
+    const item = (this.state.actionCatalog || []).find(i => i.catalog_id === catalogId);
+    if (!item) return;
+
+    this.closeActionCatalogModal();
+
+    // فتح نافذة الإجراء إن لم تكن مفتوحة وتعبئة الحقول
+    const titleInput = document.getElementById('action-title');
+    const respInput = document.getElementById('action-responsible');
+    const startDateInput = document.getElementById('action-start-date');
+    const dueDateInput = document.getElementById('action-due-date');
+
+    if (titleInput) titleInput.value = item.title;
+    if (respInput) respInput.value = item.suggested_responsible_description;
+
+    // حساب تاريخ الاستحقاق المقترح
+    const today = new Date();
+    const dueDate = new Date();
+    dueDate.setDate(today.getDate() + (item.suggested_duration_days || 30));
+
+    if (startDateInput && !startDateInput.value) {
+      startDateInput.value = today.toISOString().split('T')[0];
+    }
+    if (dueDateInput) {
+      dueDateInput.value = dueDate.toISOString().split('T')[0];
+    }
+
+    this.openAddActionModal();
+    this.showAlert(`تم اختيار الإجراء النموذجي: "${item.title}". يرجى اختيار مجال التحسين وحفظ الإجراء.`, 'info');
+  },
+
+  // نافذة تحديث نسبة الإنجاز السريع
+  openQuickUpdateProgress(actionId, currentPct, currentStatus, encodedTitle) {
+    this.state.quickUpdateActionId = actionId;
+    const modal = document.getElementById('modal-quick-update-progress');
+    if (!modal) return;
+
+    const titleEl = document.getElementById('quick-update-action-title');
+    const pctInput = document.getElementById('quick-action-percentage');
+    const pctVal = document.getElementById('quick-percentage-val');
+    const statusSelect = document.getElementById('quick-action-status');
+
+    if (titleEl) titleEl.textContent = decodeURIComponent(encodedTitle || '');
+    if (pctInput) pctInput.value = currentPct;
+    if (pctVal) pctVal.textContent = `${currentPct}%`;
+    if (statusSelect) statusSelect.value = currentStatus;
+
+    modal.classList.remove('hidden');
+  },
+
+  closeQuickUpdateModal() {
+    const modal = document.getElementById('modal-quick-update-progress');
+    if (modal) modal.classList.add('hidden');
+  },
+
+  async handleSaveQuickProgress(event) {
+    event.preventDefault();
     const p = this.state.currentPlan;
-    if (!p) return;
+    const actionId = this.state.quickUpdateActionId;
+    if (!p || !actionId) return;
 
-    // نافذة اختيار سريعة للحالة والتقدم
-    const act = (p.actions || []).find(a => a.actionId === actionId);
-    if (!act) return;
-
-    const newStatus = prompt('اختر حالة الإجراء (Pending, InProgress, Done, Cancelled):', act.status);
-    if (!newStatus) return;
-
-    const newProgress = prompt('اختر مستوى التقدم (NotStarted, Limited, Moderate, Significant, Complete):', act.progress);
-    if (!newProgress) return;
+    const percentage = parseInt(document.getElementById('quick-action-percentage').value) || 0;
+    const status = document.getElementById('quick-action-status').value;
 
     const res = await this.request(`/improvement-plans/${p.planId}/actions/${actionId}`, {
       method: 'PATCH',
       body: {
-        status: newStatus.trim(),
-        progress: newProgress.trim(),
+        completionPercentage: percentage,
+        status: status,
       },
     });
 
     if (!res.ok) {
-      this.showAlert(res.message || 'فشل تحديث الإجراء.', 'error');
+      this.showAlert(res.message || 'فشل تحديث نسبة الإنجاز.', 'error');
       return;
     }
 
-    this.showAlert('تم تحديث حالة وتقدم الإجراء بنجاح.', 'success');
+    this.showAlert('تم تحديث نسبة الإنجاز وحالة الإجراء بنجاح.', 'success');
+    this.closeQuickUpdateModal();
+    this.showPlanDetails(p.planId);
+    this.loadPlans();
+  },
+
+  // نافذة ربط شاهد تنفيذ بالإجراء
+  async openAttachEvidenceModal(actionId, encodedTitle) {
+    this.state.attachEvidenceActionId = actionId;
+    const modal = document.getElementById('modal-attach-evidence');
+    if (!modal) return;
+
+    const titleEl = document.getElementById('attach-evidence-action-title');
+    if (titleEl) titleEl.textContent = `الإجراء: ${decodeURIComponent(encodedTitle || '')}`;
+
+    const selectEl = document.getElementById('attach-evidence-select');
+    selectEl.innerHTML = '<option value="">جارِ جلب شواهد المدرسة...</option>';
+
+    modal.classList.remove('hidden');
+
+    // جلب شواهد المدرسة
+    const evalId = this.state.currentPlan?.cycleId ? (this.state.currentEvaluation?.evaluationId || 1) : 1;
+    const res = await this.request(`/evaluations/${evalId}/evidence-inventory`);
+
+    if (res.ok && res.data) {
+      const evidences = res.data.evidences || res.data || [];
+      if (evidences.length === 0) {
+        selectEl.innerHTML = '<option value="">لا توجد شواهد مرفوعة للمدرسة بعد.</option>';
+      } else {
+        selectEl.innerHTML = '<option value="">-- اختر شاهداً للربط --</option>' + evidences.map(ev => `
+          <option value="${ev.evidenceId || ev.id}">[#${ev.evidenceId || ev.id}] ${ev.title} (${ev.statusLabel || ev.status})</option>
+        `).join('');
+      }
+    } else {
+      selectEl.innerHTML = '<option value="">تعذر جلب الشواهد.</option>';
+    }
+  },
+
+  closeAttachEvidenceModal() {
+    const modal = document.getElementById('modal-attach-evidence');
+    if (modal) modal.classList.add('hidden');
+  },
+
+  async handleSaveAttachEvidence(event) {
+    event.preventDefault();
+    const p = this.state.currentPlan;
+    const actionId = this.state.attachEvidenceActionId;
+    const evidenceId = parseInt(document.getElementById('attach-evidence-select').value);
+
+    if (!p || !actionId || !evidenceId) {
+      this.showAlert('يرجى اختيار شاهد لربطه بالإجراء.', 'error');
+      return;
+    }
+
+    const res = await this.request(`/improvement-plans/${p.planId}/actions/${actionId}/evidences`, {
+      method: 'POST',
+      body: { evidenceId },
+    });
+
+    if (!res.ok) {
+      this.showAlert(res.message || 'فشل ربط الشاهد بالإجراء.', 'error');
+      return;
+    }
+
+    this.showAlert('تم ربط شاهد التنفيذ بالإجراء بنجاح.', 'success');
+    this.closeAttachEvidenceModal();
+    this.showPlanDetails(p.planId);
+  },
+
+  async handleDeleteAction(actionId) {
+    if (!confirm('هل أنت متأكد من حذف هذا الإجراء من مسودة الخطة؟')) return;
+    const p = this.state.currentPlan;
+    if (!p) return;
+
+    const res = await this.request(`/improvement-plans/${p.planId}/actions/${actionId}`, {
+      method: 'DELETE',
+    });
+
+    if (!res.ok) {
+      this.showAlert(res.message || 'فشل حذف الإجراء.', 'error');
+      return;
+    }
+
+    this.showAlert('تم حذف الإجراء بنجاح.', 'success');
+    this.showPlanDetails(p.planId);
+    this.loadPlans();
+  },
+
+  async handleCancelAction(actionId) {
+    if (!confirm('هل تريد إلغاء هذا الإجراء وتحويل حالته إلى Cancelled؟')) return;
+    const p = this.state.currentPlan;
+    if (!p) return;
+
+    const res = await this.request(`/improvement-plans/${p.planId}/actions/${actionId}`, {
+      method: 'PATCH',
+      body: { status: 'Cancelled' },
+    });
+
+    if (!res.ok) {
+      this.showAlert(res.message || 'فشل إلغاء الإجراء.', 'error');
+      return;
+    }
+
+    this.showAlert('تم إلغاء الإجراء بنجاح.', 'success');
     this.showPlanDetails(p.planId);
     this.loadPlans();
   },
 
   // ---------------------------------------------------------------------------
-  // 12. الشاشة 9: ملاحظات مراجعة مدير المدرسة (Screen 9: Review Notes)
+  // 12. المراجعة المزدوجة: داخلية (مدير المدرسة) وخارجية (مشرف وزاري)
   // ---------------------------------------------------------------------------
-  renderReviewNotes(notes) {
-    const listEl = document.getElementById('plan-det-notes-list');
-    if (!listEl) return;
+  renderReviewNotes(internalNotes = [], externalNotes = [], allNotes = []) {
+    const internalList = document.getElementById('plan-det-internal-notes-list');
+    const externalList = document.getElementById('plan-det-external-notes-list');
 
-    if (!notes || notes.length === 0) {
-      listEl.innerHTML = '<span style="font-size: 0.85rem; color: var(--text-muted);">لا توجد ملاحظات مراجعة مسجلة على هذه الخطة بعد.</span>';
-      return;
+    // الملاحظات الداخلية
+    if (internalList) {
+      if (!internalNotes || internalNotes.length === 0) {
+        internalList.innerHTML = '<span style="font-size: 0.8rem; color: var(--text-muted);">لا توجد ملاحظات داخلية من مدير المدرسة بعد.</span>';
+      } else {
+        internalList.innerHTML = internalNotes.map(n => `
+          <div style="background: #fff; border: 1px solid #bbf7d0; border-right: 4px solid #16a34a; border-radius: 4px; padding: 0.5rem 0.75rem; margin-bottom: 0.5rem;">
+            <div style="display: flex; justify-content: space-between; font-size: 0.75rem; color: #166534; margin-bottom: 0.25rem;">
+              <strong>🎓 ${n.authorName || 'مدير المدرسة'}</strong>
+              <span>${n.createdAt ? new Date(n.createdAt).toLocaleString('ar') : ''}</span>
+            </div>
+            <div style="font-size: 0.85rem; color: #1e293b;">${n.text}</div>
+          </div>
+        `).join('');
+      }
     }
 
-    listEl.innerHTML = notes.map(n => `
-      <div style="background: #fff; border: 1px solid var(--border); border-right: 4px solid #16a34a; border-radius: 4px; padding: 0.5rem 0.75rem; margin-bottom: 0.5rem;">
-        <div style="display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.25rem;">
-          <strong>🎓 ${n.authorName || 'مدير المدرسة'}</strong>
-          <span>${n.createdAt ? new Date(n.createdAt).toLocaleString('ar') : ''}</span>
-        </div>
-        <div style="font-size: 0.85rem; color: #1e293b;">${n.text}</div>
-      </div>
-    `).join('');
+    // الملاحظات الخارجية
+    if (externalList) {
+      if (!externalNotes || externalNotes.length === 0) {
+        externalList.innerHTML = '<span style="font-size: 0.8rem; color: var(--text-muted);">لا توجد ملاحظات خارجية من الإشراف الوزاري بعد.</span>';
+      } else {
+        externalList.innerHTML = externalNotes.map(n => `
+          <div style="background: #fff; border: 1px solid #bfdbfe; border-right: 4px solid #2563eb; border-radius: 4px; padding: 0.5rem 0.75rem; margin-bottom: 0.5rem;">
+            <div style="display: flex; justify-content: space-between; font-size: 0.75rem; color: #1e40af; margin-bottom: 0.25rem;">
+              <strong>🏛️ ${n.authorName || 'المشرف الوزاري'}</strong>
+              <span>${n.createdAt ? new Date(n.createdAt).toLocaleString('ar') : ''}</span>
+            </div>
+            <div style="font-size: 0.85rem; color: #1e293b;">${n.text}</div>
+          </div>
+        `).join('');
+      }
+    }
   },
 
   async handleSaveReviewNote(event) {
     event.preventDefault();
-    if (!this.hasPermission('reviews.write')) {
-      this.showAlert('غير مصرح لك بتدوين ملاحظة مراجعة (تتطلب reviews.write).', 'error');
+    if (!this.hasPermission('reviews.write') && !this.hasPermission('supervision.review')) {
+      this.showAlert('غير مصرح لك بتدوين ملاحظات المراجعة.', 'error');
       return;
     }
     const p = this.state.currentPlan;
@@ -2509,9 +2895,16 @@ const App = {
     const text = input.value.trim();
     if (!text) return;
 
+    const reviewerRole = (this.hasRole('ministry_supervisor') || this.hasPermission('supervision.review')) 
+      ? 'ministry_supervisor' 
+      : 'school_principal';
+
     const res = await this.request(`/improvement-plans/${p.planId}/review-notes`, {
       method: 'POST',
-      body: { text },
+      body: { 
+        text,
+        reviewerRole,
+      },
     });
 
     if (!res.ok) {
