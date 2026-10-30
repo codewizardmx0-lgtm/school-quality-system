@@ -185,6 +185,12 @@
             <button class="btn btn-secondary btn-sm" onclick="App.navTo('plans')">
               📋 خطط التحسين المدرسية
             </button>
+            <button class="btn btn-sm" style="background: #fee2e2; color: #991b1b; border: 1px solid #f87171;" onclick="App.exportEvaluationPdf()" title="تصدير بطاقة التقويم الرسمية بصيغة PDF">
+              📄 بطاقة التقويم (PDF)
+            </button>
+            <button class="btn btn-sm" style="background: #dcfce7; color: #166534; border: 1px solid #4ade80;" onclick="App.exportEvaluationExcel()" title="تصدير بيانات التقييم الشاملة بصيغة Excel">
+              📊 تصدير Excel
+            </button>
             <button id="btn-submit-eval" class="btn btn-sm btn-success" onclick="App.handleEvaluationSubmit()">
               🔒 إنهاء وتقديم التقييم
             </button>
@@ -199,6 +205,11 @@
           <div style="background: #e2e8f0; height: 10px; border-radius: 9999px; overflow: hidden;">
             <div id="tree-progress-bar" style="background: #16a34a; width: 0%; height: 100%; transition: width 0.3s;"></div>
           </div>
+        </div>
+
+        <!-- بطاقة مقارنة الأداء مع الدورة السابقة (Trend) -->
+        <div id="tree-trend-card" class="card hidden" style="margin-top: 1rem; padding: 0.85rem 1rem; border-radius: 8px;">
+          <!-- يتم تعبئتها بواسطة JS من /evaluations/{id}/trend -->
         </div>
       </div>
 
@@ -238,6 +249,14 @@
             <span id="indicator-context-badge" class="badge badge-green" style="font-size: 0.75rem;">المستوى المقترح</span>
           </div>
           <div id="indicator-context-message" style="font-size: 0.8rem; color: #15803d; line-height: 1.4;"></div>
+        </div>
+        <!-- بطاقة الإجراءات الموصى بها من بنك التدخلات (عند الدرجة 0 أو 1) -->
+        <div id="indicator-action-recommendations-card" class="hidden" style="margin-bottom: 1.25rem; padding: 0.75rem 1rem; border-radius: 6px; background: #fff7ed; border: 1px solid #fed7aa;">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.35rem;">
+            <span style="font-weight: 700; color: #9a3412; font-size: 0.85rem;">💡 إجراءات موصى بها من بنك التدخلات (لمعالجة فجوة الأداء):</span>
+            <span class="badge badge-amber" style="font-size: 0.75rem; background: #ffedd5; color: #9a3412;">اقتراحات معتمدة</span>
+          </div>
+          <div id="indicator-action-recommendations-list" style="font-size: 0.82rem; color: #7c2d12; display: flex; flex-direction: column; gap: 0.5rem;"></div>
         </div>
 
         <form id="form-score-indicator" onsubmit="App.handleSaveScore(event)">
@@ -1230,12 +1249,18 @@
           </div>
           <div style="display: flex; gap: 0.5rem;">
             <button class="btn btn-sm btn-secondary" onclick="App.loadAssessmentResults()">🔄 إعادة الحساب والتحديث</button>
+            <button class="btn btn-sm" style="background: #fee2e2; color: #991b1b; border: 1px solid #f87171;" onclick="App.exportEvaluationPdf()">📄 بطاقة التقويم (PDF)</button>
+            <button class="btn btn-sm" style="background: #dcfce7; color: #166534; border: 1px solid #4ade80;" onclick="App.exportEvaluationExcel()">📊 تصدير Excel</button>
             <button class="btn btn-sm btn-primary" onclick="App.navTo('export-report')">📥 تصدير التقرير كـ JSON</button>
           </div>
         </div>
 
         <!-- بطاقة النتيجة الإجمالية -->
         <div id="res-summary-banner" style="margin-top: 1rem; padding: 1rem; background: #f8fafc; border: 1px solid var(--border); border-radius: 8px;">
+          <!-- يتم تعبئتها بواسطة JS -->
+        </div>
+        <!-- بطاقة اتجاه الأداء المقارن مع الدورة السابقة (Trend) -->
+        <div id="res-trend-card" class="card hidden" style="margin-top: 1rem; padding: 0.85rem 1rem; border-radius: 8px;">
           <!-- يتم تعبئتها بواسطة JS -->
         </div>
       </div>
