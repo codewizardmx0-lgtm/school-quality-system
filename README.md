@@ -29,6 +29,7 @@ school-quality-system/
 | **الشريحة 5** | تنظيم الشواهد وتصنيفها وربطها بالمؤشرات وحصرها (بدون ذكاء اصطناعي) | مكتملة 100% | [`docs/slices/slice5_evidence_organization.md`](docs/slices/slice5_evidence_organization.md) |
 | **الشريحة 6** | إدارة المدرسة: الملف التعريفي، الإحصاءات التجميعية، المرافق، وسياق المؤشرات | مكتملة 100% | [`docs/slices/slice6_school_profile.md`](docs/slices/slice6_school_profile.md) |
 | **الشريحة 7** | **إدارة المعايير وإصداراتها وأوزانها النسبية (Standards & Versions Management)** | **مكتملة 100%** | [`docs/slices/slice7_standards_management.md`](docs/slices/slice7_standards_management.md) |
+| **الشريحة 8** | **الخطط التربوية والتطوير المهني ومتابعة التنفيذ (Educational Plans & Execution Tracking)** | **مكتملة 100%** | [`docs/slices/slice8_educational_plans.md`](docs/slices/slice8_educational_plans.md) |
 
 ---
 
@@ -36,8 +37,40 @@ school-quality-system/
 
 > [!TIP]
 > **الوسم المرجعي للمرحلة السابقة (الشرائح 1 إلى 6):** `v0.6.0-slices-1-to-6-complete` (مدمج في main)  
-> **حالة فرع التطوير الرئيسي (`develop`):** مدمج به الشريحة السابعة بالكامل مع **175 اختباراً آلياً ناجحاً بنسبة 100% (7,879 تأكيداً)**.
-> **حالة الشرائح الميدانية:** الشرائح من 1 إلى 7 مكتملة ومحققة 100%، والشرائح من 8 إلى 12 قادمة وفق خارطة الطريق.
+> **حالة فرع التطوير الرئيسي (`develop`):** مدمج به الشرائح حتى السابعة بالكامل، وفرع الشريحة الثامنة `feature/slice8-educational-plans` مكتمل ومختبر بـ **185 اختباراً آلياً ناجحاً بنسبة 100% (8,053 تأكيداً)**.
+> **حالة الشرائح الميدانية:** الشرائح من 1 إلى 8 مكتملة ومحققة 100%، والشرائح من 9 إلى 12 قادمة وفق خارطة الطريق.
+
+---
+
+## الشريحة الثامنة: الخطط التربوية والتطوير المهني ومتابعة التنفيذ (Educational Plans & Execution Tracking)
+
+توسّع هذه الشريحة منظومة التخطيط لتشمل ثلاثة أنماط رئيسية من الخطط مع مؤشرات إنجاز متدرجة وبنك للإجراءات النموذجية ومراجعة مفصولة:
+- **3 أنماط من الخطط:** خطة تحسين الجودة (`QualityImprovement`)، خطة التطوير المهني والتربوي للكادر (`StaffDevelopment`)، والخطة التشغيلية السنوية (`AnnualOperational`).
+- **تتبع الإنجاز التدريجي:** نسبة إنجاز متدرجة من 0 إلى 100% لكل إجراء، مع التحول التلقائي للحالة (`Done` عند 100%، و`InProgress` إذا انخفضت).
+- **حساب الإنجاز الإجمالي التجميعي للخطة:** متوسط حسابي للإجراءات غير الملغاة (`overallProgressPercentage`).
+- **قواعد الحوكمة:** منع إغلاق الخطة (`Completed`) إلا إذا اكتملت جميع إجراءاتها (100% أو Cancelled)، ومنع حذف الإجراء إلا في مسودة الخطة (`Draft`).
+- **بنك الإجراءات النموذجية (Action Catalog):** 16 إجراءً قياسياً موزعة على مجالات المعايير وأنماط الخطط للاسترشاد والتبني بضغطة زر.
+- **الفصل بين المراجعات:** ملاحظات داخلية لمدير المدرسة (`school_principal`) وملاحظات خارجية للمشرف التربوي (`ministry_supervisor`) بدون مصطلح "اعتماد".
+- **ربط شواهد التنفيذ:** ربط الشاهد مباشرة بإجراء التنفيذ كدليل إنجاز ميداني عبر `action_id`.
+
+### نقاط النهاية المتاحة (Endpoints)
+- `GET /api/v1/improvement-plans/action-catalog` — استعراض بنك الإجراءات النموذجية مع إمكانية التصفية بالمجال أو نوع الخطة.
+- `GET /api/v1/improvement-plans` — استعراض الخطط مع التصفية بنوع الخطة (`?plan_type=...`) ودورة التقييم (`?cycle_id=...`).
+- `POST /api/v1/improvement-plans` — إنشاء خطة جديدة بنوع محدد مع التحقق الصارم من العزل المؤسسي والزمني.
+- `GET /api/v1/improvement-plans/{id}` — تفاصيل الخطة متضمنة نسبة الإنجاز الكلية والمراجعات الداخلية والخارجية وشواهد كل إجراء.
+- `PUT /api/v1/improvement-plans/{id}` — تعديل الخطة أو إغلاقها (مع حظر الإغلاق إذا كانت هناك إجراءات غير مكتملة).
+- `POST /api/v1/improvement-plans/{id}/actions` — إضافة إجراء تنفيذي جديد بنسبة إنجاز محددة وفئة وعدد مستهدف.
+- `PUT /api/v1/improvement-plans/{planId}/actions/{actionId}` — تحديث الإجراء ونسبة الإنجاز (0-100%).
+- `DELETE /api/v1/improvement-plans/{planId}/actions/{actionId}` — حذف إجراء تنفيذي (مسموح فقط في مسودة الخطة Draft).
+- `POST /api/v1/improvement-plans/{planId}/actions/{actionId}/evidences` — ربط شاهد كدليل تنفيذ للإجراء.
+- `POST /api/v1/improvement-plans/{id}/review-notes` — إضافة ملاحظة مراجعة مع توثيق دور المراجع التلقائي.
+
+### واجهات النموذج الأولي التفاعلي للشريحة 8
+- **تبويبات تصفية الخطط حسب النوع:** تصنيف الخطط فورياً (تحسين الجودة، تطوير مهني، خطط تشغيلية).
+- **كتالوج الإجراءات السريع:** نافذة مودال لاختيار الإجراء من البنك وتعبئة الحقول آلياً.
+- **شريط ومؤشر الإنجاز المتدرج:** سلايدر تفاعلي من 0 إلى 100% لكل إجراء مع شريط تقدم ملون وإجمالي تقدم الخطة.
+- **سجلا مراجعة منفصلان:** سجل الملاحظات الداخلية للمدير وسجل الملاحظات الخارجية للمشرف.
+- **ربط الشواهد:** نافذة لاختيار الشاهد وربطه بالإجراء مع رابط مباشر لمعاينة الشاهد.
 
 ---
 
@@ -107,12 +140,13 @@ school-quality-system/
 - `POST|PATCH /api/v1/evidences/{id}/review-notes` — إضافة ملاحظات المراجع وهوية وتاريخ المراجعة.
 - `GET /api/v1/evaluations/{id}/evidence-inventory` (المسار البديل: `/api/v1/schools/{school}/assessments/{assessment}/evidence-inventory`) — جرد وحصر الشواهد التفصيلي للتقييم وبيان النواقص والمكتمل وفق حالة الشاهد (Completed / Audited).
 
+* التفاصيل الكاملة للشريحة 8: [`docs/slices/slice8_educational_plans.md`](docs/slices/slice8_educational_plans.md)
 * التفاصيل الكاملة للشريحة 7: [`docs/slices/slice7_standards_management.md`](docs/slices/slice7_standards_management.md)
 * التفاصيل الكاملة للشريحة 6: [`docs/slices/slice6_school_profile.md`](docs/slices/slice6_school_profile.md)
 * التفاصيل الكاملة للشريحة 5: [`docs/slices/slice5_evidence_organization.md`](docs/slices/slice5_evidence_organization.md)
 * خارطة الطريق للشرائح المستقبلية (12 شريحة): [`docs/slices_roadmap.md`](docs/slices_roadmap.md)
 * سجل حصر الفجوات والقرارات التقنية: [`gaps.md`](gaps.md)
-* دليل التحقق اليدوي للواجهات المؤقتة (مُعاد بناؤه ومبوّب بالشرائح 1-7 مع أدلة الأدوار ومراكز الإشراف والمعايير): [`frontend-prototype/verification-guide.md`](frontend-prototype/verification-guide.md)
+* دليل التحقق اليدوي للواجهات المؤقتة (مُعاد بناؤه ومبوّب بالشرائح 1-8 مع أدلة الأدوار ومراكز الإشراف والمعايير): [`frontend-prototype/verification-guide.md`](frontend-prototype/verification-guide.md)
 * توثيق النموذج الأولي التفاعلي (21 شاشة مع شريط تنقل ديناميكي حسب الدور، مركز الإشراف، مركز المعايير وإدارتها، أداة التعبئة الإلزامية والدخول السريع): [`frontend-prototype/README.md`](frontend-prototype/README.md)
 
 ---
@@ -125,6 +159,6 @@ php artisan test
 ```
 
 **نتيجة الاختبارات الإجمالية:**
-- **172 اختباراً ناجحاً بنسبة 100%**
-- **7,859 تأكيداً (Assertions)**
+- **185 اختباراً ناجحاً بنسبة 100%**
+- **8,053 تأكيداً (Assertions)**
 - **0 إخفاقات / 0 أخطاء**
