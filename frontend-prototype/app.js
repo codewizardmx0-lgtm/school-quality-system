@@ -5,6 +5,9 @@
  */
 
 const App = {
+  get apiBaseUrl() {
+    return this.state.apiUrl;
+  },
   state: {
     apiUrl: 'http://127.0.0.1:8000/api/v1',
     token: localStorage.getItem('eval_token') || null,
@@ -4767,7 +4770,7 @@ const App = {
     this.showAlert('جارِ إنشاء وتحميل بطاقة التقويم الرسمية (PDF)...', 'info');
     try {
       const token = this.state.token;
-      const res = await fetch(`${this.apiBaseUrl}/evaluations/${evalId}/export-pdf`, {
+      const res = await fetch(`${this.state.apiUrl}/evaluations/${evalId}/export-pdf`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Accept': 'application/pdf, application/json',
@@ -4805,7 +4808,7 @@ const App = {
     this.showAlert('جارِ إنشاء وتحميل مصنف التقييم الشامل (Excel)...', 'info');
     try {
       const token = this.state.token;
-      const res = await fetch(`${this.apiBaseUrl}/evaluations/${evalId}/export-excel`, {
+      const res = await fetch(`${this.state.apiUrl}/evaluations/${evalId}/export-excel`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Accept': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/json',

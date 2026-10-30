@@ -962,8 +962,12 @@ class EvaluationController extends Controller
     /**
      * التحقق من أمن وصلاحيات الوصول للتقارير والتصدير (الشريحة 9).
      */
-    protected function authorizeReportOrExportAccess(User $user, Evaluation $evaluation): ?JsonResponse
+    protected function authorizeReportOrExportAccess(?User $user, Evaluation $evaluation): ?JsonResponse
     {
+        if (!$user) {
+            return ApiResponse::unauthorized('يجب تسجيل الدخول للمتابعة.');
+        }
+
         // 1. مسؤول المعايير ممنوع من شاشات المدارس وتقاريرها (BR-MIN-01)
         if ($user->hasRole('ministry_standards_manager')) {
             return ApiResponse::forbidden('غير مصرح لك بالاطلاع على تقارير المدارس أو تصديرها (BR-MIN-01).');
