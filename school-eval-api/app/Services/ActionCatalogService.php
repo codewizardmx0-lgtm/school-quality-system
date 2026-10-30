@@ -49,6 +49,87 @@ class ActionCatalogService
     }
 
     /**
+     * استرجاع توصيات بنك الإجراءات النموذجية لمؤشر محدد في ضوء درجته.
+     *
+     * يرجع الإجراءات المطابقة فقط للمؤشرات الضعيفة (الدرجة 0 أو 1)،
+     * بينما يرجع قائمة فارغة وتوضيحاً للمؤشرات المحققة (الدرجة 2 أو 3).
+     *
+     * @param string $indicatorCode
+     * @param int|null $score
+     * @return array<string, mixed>
+     */
+    public function getRecommendationsForIndicator(string $indicatorCode, ?int $score = null): array
+    {
+        if ($score !== null && $score > 1) {
+            return [
+                'is_weak' => false,
+                'indicator_code' => $indicatorCode,
+                'score' => $score,
+                'message' => 'المؤشر في مستوى مقبول أو متميز (الدرجة > 1) ولا يتطلب إجراءات تحسين عاجلة من البنك.',
+                'recommendations' => [],
+            ];
+        }
+
+        // تحديد المجال الفرعي للمؤشر
+        $subCode = null;
+        $indicatorName = null;
+        $indicator = \App\Models\Indicator::where('code', $indicatorCode)->with('subStandard')->first();
+        if ($indicator) {
+            $indicatorName = $indicator->name;
+            if ($indicator->subStandard) {
+                $subCode = $indicator->subStandard->code;
+            }
+        }
+
+        // استخراج الإجراءات المطابقة
+        $recommendations = [];
+        if ($subCode) {
+            $variants = $this->getSubStandardVariants($subCode);
+            $catalog = $this->allActions();
+            $recommendations = array_values(array_filter($catalog, function ($item) use ($variants) {
+                return in_array($item['sub_standard_code'], $variants, true);
+            }));
+        }
+
+        // في حال عدم وجود إجراءات مطابقة للمجال الفرعي بدقة، نقدم عينة استرشادية من أول 3 إجراءات
+        if (empty($recommendations)) {
+            $recommendations = array_slice($this->allActions(), 0, 3);
+        }
+
+        return [
+            'is_weak' => true,
+            'indicator_code' => $indicatorCode,
+            'indicator_name' => $indicatorName,
+            'sub_standard_code' => $subCode,
+            'score' => $score,
+            'recommendations_count' => count($recommendations),
+            'recommendations' => $recommendations,
+        ];
+    }
+
+    /**
+     * توليد صيغ الرموز المختلفة لنفس المجال الفرعي لضمان التوافق (مثال: SUB-1-1 و SUB-01-01).
+     *
+     * @param string $code
+     * @return array<string>
+     */
+    protected function getSubStandardVariants(string $code): array
+    {
+        $variants = [$code];
+        if (preg_match('/^SUB-(\d+)-(\d+)$/', $code, $matches)) {
+            $stdNum = str_pad($matches[1], 2, '0', STR_PAD_LEFT);
+            $subNum = str_pad($matches[2], 2, '0', STR_PAD_LEFT);
+            $variants[] = "SUB-{$stdNum}-{$subNum}";
+        } elseif (preg_match('/^SUB-(\d{2})-(\d{2})$/', $code, $matches)) {
+            $stdNum = (int) $matches[1];
+            $subNum = (int) $matches[2];
+            $variants[] = "SUB-{$stdNum}-{$subNum}";
+        }
+
+        return array_values(array_unique($variants));
+    }
+
+    /**
      * القائمة الشاملة للإجراءات النموذجية عبر المجالات الأربعة عشر والأنواع الثلاثة.
      *
      * @return array<int, array<string, mixed>>

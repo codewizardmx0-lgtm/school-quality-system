@@ -64,6 +64,16 @@ class SchoolMetricsService
         $hasLibrary = $facilities->where('facility_type', 'library')->where('is_usable', true)->isNotEmpty();
         $hasLearningResources = $facilities->where('facility_type', 'learning_resources')->where('is_usable', true)->isNotEmpty();
         $hasSafetyEquipment = $facilities->where('facility_type', 'safety_equipment')->where('is_usable', true)->isNotEmpty();
+        $hasClinic = $facilities->where('facility_type', 'clinic')->where('is_usable', true)->isNotEmpty();
+
+        $hasFirstAidKit = false;
+        foreach ($facilities as $fac) {
+            $d = $fac->details;
+            if (is_array($d) && (!empty($d['first_aid_kit']) || !empty($d['has_first_aid']) || !empty($d['clinic_available']))) {
+                $hasFirstAidKit = true;
+                break;
+            }
+        }
 
         return [
             'school_id' => $school->school_id,
@@ -105,6 +115,8 @@ class SchoolMetricsService
                 'has_library' => $hasLibrary,
                 'has_learning_resources' => $hasLearningResources,
                 'has_safety_equipment' => $hasSafetyEquipment,
+                'has_clinic' => $hasClinic,
+                'has_first_aid_kit' => $hasFirstAidKit,
             ],
         ];
     }
@@ -120,6 +132,12 @@ class SchoolMetricsService
         // 1. إذا كان التقييم مكتملاً ويحتوي على لقطة مجمدة، نرجع اللقطة فوراً (BR-SCH-03)
         if ($evaluation->status === 'Completed' && !empty($evaluation->school_context_snapshot)) {
             $snapshot = $evaluation->school_context_snapshot;
+
+            // ضمان اشتمال اللقطة على المؤشرات الجديدة للشريحة 9 حتى لو التقطت اللقطة في إصدار أقدم
+            if (!isset($snapshot['indicators']['1-1-5'])) {
+                $snapshot = $this->augmentSnapshotWithNewIndicators($snapshot, $evaluation->school);
+            }
+
             $snapshot['is_snapshot'] = true;
             $snapshot['is_legacy_completed_without_snapshot'] = false;
             $snapshot['notice'] = 'هذه البيانات مجمدة ومطابقة لواقع المدرسة عند إنهاء وتقديم التقييم (BR-SCH-03).';
@@ -378,6 +396,146 @@ class SchoolMetricsService
             ],
         ];
 
+        // --------------------------------------------------------------------------------------
+        // المؤشرات الخمسة الجديدة المعتمدة للشريحة 9 (المرافق والبيئة المدرسية)
+        // --------------------------------------------------------------------------------------
+
+        // 1-1-5: مبنى معد ليكون مؤسسة تعليمية
+        $bType = $school->building_type ?? $context['building_type'] ?? null;
+        if (empty($bType)) {
+            $indicatorsContext['1-1-5'] = [
+                'indicator_code' => '1-1-5',
+                'name' => 'امتلاك المدرسة مبنى معد ليكون مؤسسة تعليمية',
+                'calculated_value' => null,
+                'calculated_ratio' => null,
+                'suggested_level' => null,
+                'badge' => 'بيانات غير مكتملة',
+                'message' => 'لم يتم تحديد نوع المبنى في ملف المدرسة.',
+                'raw_data' => ['building_type' => null],
+            ];
+        } else {
+            $isGov = str_contains($bType, 'حكومي');
+            $isDonation = (str_contains($bType, 'تبرع') || str_contains($bType, 'خيري') || str_contains($bType, 'وقفي'));
+            $suggestedLevel = $isGov ? 3 : ($isDonation ? 2 : 1);
+            $badge = match ($suggestedLevel) {
+                3 => 'المستوى 3 (مبنى حكومي مخصص)',
+                2 => 'المستوى 2 (مبنى تبرع أو وقفي)',
+                1 => 'المستوى 1 (مبنى مستأجر)',
+            };
+            $indicatorsContext['1-1-5'] = [
+                'indicator_code' => '1-1-5',
+                'name' => 'امتلاك المدرسة مبنى معد ليكون مؤسسة تعليمية',
+                'calculated_value' => $bType,
+                'calculated_ratio' => null,
+                'suggested_level' => $suggestedLevel,
+                'badge' => $badge,
+                'message' => "نوع مبنى المدرسة المسجل: {$bType}.",
+                'raw_data' => ['building_type' => $bType],
+            ];
+        }
+
+        // 14-1-5: المساحة الكافية لإقامة الأنشطة الطلابية
+        $totalArea = $school->total_area ? (float) $school->total_area : ($context['total_area'] ?? null);
+        if ($totalArea === null || $totalArea <= 0 || $totalStudents <= 0) {
+            $indicatorsContext['14-1-5'] = [
+                'indicator_code' => '14-1-5',
+                'name' => 'المساحة الكافية لإقامة الأنشطة الطلابية',
+                'calculated_value' => null,
+                'calculated_ratio' => null,
+                'suggested_level' => null,
+                'badge' => 'بيانات غير مكتملة',
+                'message' => 'بيانات المساحة الإجمالية أو أعداد الطلاب غير مكتملة.',
+                'raw_data' => ['total_area' => $totalArea, 'total_students' => $totalStudents],
+            ];
+        } else {
+            $areaPerStudent = round($totalArea / $totalStudents, 2);
+            $suggestedLevel = $areaPerStudent >= 5.0 ? 3 : ($areaPerStudent >= 3.0 ? 2 : 1);
+            $badge = match ($suggestedLevel) {
+                3 => "المستوى 3 (مساحة رحبة: {$areaPerStudent} م²/طالب)",
+                2 => "المستوى 2 (مساحة مقبولة: {$areaPerStudent} م²/طالب)",
+                1 => "المستوى 1 (مساحة ضيقة: {$areaPerStudent} م²/طالب)",
+            };
+            $indicatorsContext['14-1-5'] = [
+                'indicator_code' => '14-1-5',
+                'name' => 'المساحة الكافية لإقامة الأنشطة الطلابية',
+                'calculated_value' => $areaPerStudent,
+                'calculated_ratio' => null,
+                'suggested_level' => $suggestedLevel,
+                'badge' => $badge,
+                'message' => "متوسط نصيب الطالب من المساحة الإجمالية: {$areaPerStudent} م² ({$totalArea} م² لـ {$totalStudents} طالباً).",
+                'raw_data' => [
+                    'total_area' => $totalArea,
+                    'total_students' => $totalStudents,
+                    'area_per_student' => $areaPerStudent,
+                ],
+            ];
+        }
+
+        // 5-1-5: معامل علوم مهيأة للعمل ومفعلة بمستلزمات التجارب وإرشادات السلامة
+        $scienceLabs = $facilities['science_labs_count'] ?? 0;
+        $indicatorsContext['5-1-5'] = [
+            'indicator_code' => '5-1-5',
+            'name' => 'معامل علوم مهيأة للعمل ومفعلة بمستلزمات التجارب وإرشادات السلامة',
+            'calculated_value' => $scienceLabs,
+            'calculated_ratio' => null,
+            'suggested_level' => $scienceLabs > 0 ? 3 : 1,
+            'badge' => $scienceLabs > 0 ? "المستوى 3 (يتوفر {$scienceLabs} معمل علوم صالح)" : 'المستوى 1 (لا يتوفر معمل علوم صالح)',
+            'message' => $scienceLabs > 0
+                ? "يتوفر بالمدرسة {$scienceLabs} معمل علوم مسجل وصالح للتشغيل والتجارب."
+                : 'لا يتوفر معمل علوم صالح ومجهز في سجل مرافق المدرسة.',
+            'raw_data' => ['science_labs_count' => $scienceLabs],
+        ];
+
+        // 6-1-5: معمل حاسوب مجهز ومفعل بالبرمجيات والأجهزة اللازمة
+        $compLabs = $facilities['computer_labs_count'] ?? 0;
+        $workingComps = $facilities['working_computers_count'] ?? 0;
+        $compLevel = ($compLabs > 0 && $workingComps >= 10) ? 3 : ($compLabs > 0 ? 2 : 1);
+        $indicatorsContext['6-1-5'] = [
+            'indicator_code' => '6-1-5',
+            'name' => 'معمل حاسوب مجهز ومفعل بالبرمجيات والأجهزة اللازمة',
+            'calculated_value' => $workingComps,
+            'calculated_ratio' => null,
+            'suggested_level' => $compLevel,
+            'badge' => match ($compLevel) {
+                3 => "المستوى 3 (معمل مجهز بـ {$workingComps} جهازاً)",
+                2 => "المستوى 2 (أجهزة محدودة: {$workingComps} جهازاً)",
+                1 => 'المستوى 1 (لا يتوفر معمل حاسوب صالح)',
+            },
+            'message' => $compLabs > 0
+                ? "يتوفر معمل حاسوب صالح بعدد {$workingComps} جهازاً متاحاً للتدريب."
+                : 'لا يتوفر معمل حاسوب صالح في سجل مرافق المدرسة.',
+            'raw_data' => [
+                'computer_labs_count' => $compLabs,
+                'working_computers_count' => $workingComps,
+            ],
+        ];
+
+        // 1-3: توفير الخدمات الصحية الأولية وتفعيلها
+        $hasClinic = !empty($facilities['has_clinic']);
+        $hasFirstAid = !empty($facilities['has_first_aid_kit']);
+        $healthLevel = $hasClinic ? 3 : ($hasFirstAid ? 2 : 1);
+        $indicatorsContext['1-3'] = [
+            'indicator_code' => '1-3',
+            'name' => 'توفير الخدمات الصحية الأولية وتفعيلها',
+            'calculated_value' => $hasClinic ? 'عيادة مدرسية' : ($hasFirstAid ? 'حقيبة إسعافات' : 'غير متوفر'),
+            'calculated_ratio' => null,
+            'suggested_level' => $healthLevel,
+            'badge' => match ($healthLevel) {
+                3 => 'المستوى 3 (عيادة صحية مجهزة)',
+                2 => 'المستوى 2 (حقيبة إسعافات أولية)',
+                1 => 'المستوى 1 (غياب الخدمات الصحية)',
+            },
+            'message' => $hasClinic
+                ? 'تتوفر عيادة / غرفة خدمات صحية مجهزة في مرافق المدرسة.'
+                : ($hasFirstAid
+                    ? 'تتوفر حقيبة ومستلزمات إسعافات أولية دون وجود عيادة مستقلة.'
+                    : 'لا تتوفر عيادة أو حقيبة إسعافات أولية مسجلة في المرافق.'),
+            'raw_data' => [
+                'has_clinic' => $hasClinic,
+                'has_first_aid_kit' => $hasFirstAid,
+            ],
+        ];
+
         $notice = null;
         if ($isLegacyCompletedWithoutSnapshot) {
             $notice = 'هذا التقييم مكتمل ومقفل سابقاً قبل تفعيل ميزة لقطة السياق (Snapshot). الأرقام المعروضة استرشادية مستمدة من السجلات الميدانية الحالية وقد لا تمثل واقع التقييم وقت قفله.';
@@ -400,5 +558,146 @@ class SchoolMetricsService
             ],
             'indicators' => $indicatorsContext,
         ];
+    }
+
+    /**
+     * تزويد لقطة السياق القديمة بحسابات المؤشرات الخمسة الجديدة في حال التقطت قبل الشريحة 9.
+     *
+     * @param array<string, mixed> $snapshot
+     * @param School|null $school
+     * @return array<string, mixed>
+     */
+    protected function augmentSnapshotWithNewIndicators(array $snapshot, ?School $school): array
+    {
+        $summary = $snapshot['summary'] ?? [];
+        $facilities = $summary['facilities'] ?? [];
+        $enrollment = $summary['enrollment'] ?? [];
+        $totalStudents = $enrollment['total_students'] ?? 0;
+        $totalArea = $school?->total_area ? (float) $school->total_area : ($snapshot['total_area'] ?? null);
+        $bType = $school?->building_type ?? $snapshot['building_type'] ?? null;
+
+        // 1-1-5
+        if (empty($bType)) {
+            $snapshot['indicators']['1-1-5'] = [
+                'indicator_code' => '1-1-5',
+                'name' => 'امتلاك المدرسة مبنى معد ليكون مؤسسة تعليمية',
+                'calculated_value' => null,
+                'calculated_ratio' => null,
+                'suggested_level' => null,
+                'badge' => 'بيانات غير مكتملة',
+                'message' => 'لم يتم تحديد نوع المبنى في ملف المدرسة.',
+                'raw_data' => ['building_type' => null],
+            ];
+        } else {
+            $isGov = str_contains($bType, 'حكومي');
+            $isDonation = (str_contains($bType, 'تبرع') || str_contains($bType, 'خيري') || str_contains($bType, 'وقفي'));
+            $suggestedLevel = $isGov ? 3 : ($isDonation ? 2 : 1);
+            $snapshot['indicators']['1-1-5'] = [
+                'indicator_code' => '1-1-5',
+                'name' => 'امتلاك المدرسة مبنى معد ليكون مؤسسة تعليمية',
+                'calculated_value' => $bType,
+                'calculated_ratio' => null,
+                'suggested_level' => $suggestedLevel,
+                'badge' => match ($suggestedLevel) {
+                    3 => 'المستوى 3 (مبنى حكومي مخصص)',
+                    2 => 'المستوى 2 (مبنى تبرع أو وقفي)',
+                    1 => 'المستوى 1 (مبنى مستأجر)',
+                },
+                'message' => "نوع مبنى المدرسة المسجل: {$bType}.",
+                'raw_data' => ['building_type' => $bType],
+            ];
+        }
+
+        // 14-1-5
+        if ($totalArea === null || $totalArea <= 0 || $totalStudents <= 0) {
+            $snapshot['indicators']['14-1-5'] = [
+                'indicator_code' => '14-1-5',
+                'name' => 'المساحة الكافية لإقامة الأنشطة الطلابية',
+                'calculated_value' => null,
+                'calculated_ratio' => null,
+                'suggested_level' => null,
+                'badge' => 'بيانات غير مكتملة',
+                'message' => 'بيانات المساحة الإجمالية أو أعداد الطلاب غير مكتملة.',
+                'raw_data' => ['total_area' => $totalArea, 'total_students' => $totalStudents],
+            ];
+        } else {
+            $areaPerStudent = round($totalArea / $totalStudents, 2);
+            $suggestedLevel = $areaPerStudent >= 5.0 ? 3 : ($areaPerStudent >= 3.0 ? 2 : 1);
+            $snapshot['indicators']['14-1-5'] = [
+                'indicator_code' => '14-1-5',
+                'name' => 'المساحة الكافية لإقامة الأنشطة الطلابية',
+                'calculated_value' => $areaPerStudent,
+                'calculated_ratio' => null,
+                'suggested_level' => $suggestedLevel,
+                'badge' => match ($suggestedLevel) {
+                    3 => "المستوى 3 (مساحة رحبة: {$areaPerStudent} م²/طالب)",
+                    2 => "المستوى 2 (مساحة مقبولة: {$areaPerStudent} م²/طالب)",
+                    1 => "المستوى 1 (مساحة ضيقة: {$areaPerStudent} م²/طالب)",
+                },
+                'message' => "متوسط نصيب الطالب من المساحة الإجمالية: {$areaPerStudent} م².",
+                'raw_data' => ['total_area' => $totalArea, 'total_students' => $totalStudents, 'area_per_student' => $areaPerStudent],
+            ];
+        }
+
+        // 5-1-5
+        $scienceLabs = $facilities['science_labs_count'] ?? 0;
+        $snapshot['indicators']['5-1-5'] = [
+            'indicator_code' => '5-1-5',
+            'name' => 'معامل علوم مهيأة للعمل ومفعلة بمستلزمات التجارب وإرشادات السلامة',
+            'calculated_value' => $scienceLabs,
+            'calculated_ratio' => null,
+            'suggested_level' => $scienceLabs > 0 ? 3 : 1,
+            'badge' => $scienceLabs > 0 ? "المستوى 3 (يتوفر {$scienceLabs} معمل علوم صالح)" : 'المستوى 1 (لا يتوفر معمل علوم صالح)',
+            'message' => $scienceLabs > 0
+                ? "يتوفر بالمدرسة {$scienceLabs} معمل علوم مسجل وصالح للتشغيل والتجارب."
+                : 'لا يتوفر معمل علوم صالح ومجهز في سجل مرافق المدرسة.',
+            'raw_data' => ['science_labs_count' => $scienceLabs],
+        ];
+
+        // 6-1-5
+        $compLabs = $facilities['computer_labs_count'] ?? 0;
+        $workingComps = $facilities['working_computers_count'] ?? 0;
+        $compLevel = ($compLabs > 0 && $workingComps >= 10) ? 3 : ($compLabs > 0 ? 2 : 1);
+        $snapshot['indicators']['6-1-5'] = [
+            'indicator_code' => '6-1-5',
+            'name' => 'معمل حاسوب مجهز ومفعل بالبرمجيات والأجهزة اللازمة',
+            'calculated_value' => $workingComps,
+            'calculated_ratio' => null,
+            'suggested_level' => $compLevel,
+            'badge' => match ($compLevel) {
+                3 => "المستوى 3 (معمل مجهز بـ {$workingComps} جهازاً)",
+                2 => "المستوى 2 (أجهزة محدودة: {$workingComps} جهازاً)",
+                1 => 'المستوى 1 (لا يتوفر معمل حاسوب صالح)',
+            },
+            'message' => $compLabs > 0
+                ? "يتوفر معمل حاسوب صالح بعدد {$workingComps} جهازاً متاحاً للتدريب."
+                : 'لا يتوفر معمل حاسوب صالح في سجل مرافق المدرسة.',
+            'raw_data' => ['computer_labs_count' => $compLabs, 'working_computers_count' => $workingComps],
+        ];
+
+        // 1-3
+        $hasClinic = !empty($facilities['has_clinic']);
+        $hasFirstAid = !empty($facilities['has_first_aid_kit']);
+        $healthLevel = $hasClinic ? 3 : ($hasFirstAid ? 2 : 1);
+        $snapshot['indicators']['1-3'] = [
+            'indicator_code' => '1-3',
+            'name' => 'توفير الخدمات الصحية الأولية وتفعيلها',
+            'calculated_value' => $hasClinic ? 'عيادة مدرسية' : ($hasFirstAid ? 'حقيبة إسعافات' : 'غير متوفر'),
+            'calculated_ratio' => null,
+            'suggested_level' => $healthLevel,
+            'badge' => match ($healthLevel) {
+                3 => 'المستوى 3 (عيادة صحية مجهزة)',
+                2 => 'المستوى 2 (حقيبة إسعافات أولية)',
+                1 => 'المستوى 1 (غياب الخدمات الصحية)',
+            },
+            'message' => $hasClinic
+                ? 'تتوفر عيادة / غرفة خدمات صحية مجهزة في مرافق المدرسة.'
+                : ($hasFirstAid
+                    ? 'تتوفر حقيبة ومستلزمات إسعافات أولية دون وجود عيادة مستقلة.'
+                    : 'لا تتوفر عيادة أو حقيبة إسعافات أولية مسجلة في المرافق.'),
+            'raw_data' => ['has_clinic' => $hasClinic, 'has_first_aid_kit' => $hasFirstAid],
+        ];
+
+        return $snapshot;
     }
 }
