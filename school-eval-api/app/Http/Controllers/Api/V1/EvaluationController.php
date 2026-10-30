@@ -11,6 +11,7 @@ use App\Models\Indicator;
 use App\Models\IndicatorScoreDescriptor;
 use App\Models\Note;
 use App\Models\StandardVersion;
+use App\Models\User;
 use App\Services\EvaluationLockChecker;
 use App\Events\EvaluationSubmitted;
 use Illuminate\Http\JsonResponse;

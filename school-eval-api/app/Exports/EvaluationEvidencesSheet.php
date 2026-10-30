@@ -77,11 +77,11 @@ class EvaluationEvidencesSheet implements FromCollection, WithHeadings, WithTitl
             if ($role === 'admin') {
                 $row['notes'] = $ev->reviewer_notes ?: '—';
             } elseif ($role === 'school_principal') {
-                $reviewerRole = $ev->reviewer?->roles->first()?->name;
-                $row['notes'] = ($reviewerRole === 'school_principal') ? ($ev->reviewer_notes ?: '—') : '—';
+                $isPrincipal = $ev->reviewer && $ev->reviewer->hasRole('school_principal');
+                $row['notes'] = $isPrincipal ? ($ev->reviewer_notes ?: '—') : '—';
             } elseif ($role === 'ministry_supervisor') {
-                $reviewerRole = $ev->reviewer?->roles->first()?->name;
-                $row['notes'] = ($reviewerRole === 'ministry_supervisor') ? ($ev->reviewer_notes ?: '—') : '—';
+                $isSupervisor = $ev->reviewer && $ev->reviewer->hasRole('ministry_supervisor');
+                $row['notes'] = $isSupervisor ? ($ev->reviewer_notes ?: '—') : '—';
             }
 
             $row['created_at'] = $ev->created_at ? $ev->created_at->format('Y-m-d') : '—';
@@ -98,15 +98,13 @@ class EvaluationEvidencesSheet implements FromCollection, WithHeadings, WithTitl
             return 'guest';
         }
 
-        $roleName = $this->user->roles->first()?->name ?? $this->user->role?->name ?? '';
-
-        if (in_array($roleName, ['admin', 'super_admin'])) {
+        if ($this->user->hasRole('admin') || $this->user->user_type === 'admin' || $this->user->user_type === 'system') {
             return 'admin';
         }
-        if ($roleName === 'ministry_supervisor') {
+        if ($this->user->hasRole('ministry_supervisor')) {
             return 'ministry_supervisor';
         }
-        if ($roleName === 'school_principal') {
+        if ($this->user->hasRole('school_principal')) {
             return 'school_principal';
         }
 

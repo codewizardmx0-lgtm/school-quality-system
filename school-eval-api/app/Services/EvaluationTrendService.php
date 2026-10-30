@@ -27,21 +27,23 @@ class EvaluationTrendService
     {
         $schoolId = $evaluation->school_id;
 
-        // البحث عن آخر تقييم مكتمل سابق لنفس المدرسة
+        // البحث عن آخر تقييم مكتمل سابق لنفس المدرسة في دورة أقدم
         $previousEvaluation = Evaluation::query()
             ->where('school_id', $schoolId)
             ->where('status', 'Completed')
             ->where('evaluation_id', '!=', $evaluation->evaluation_id)
             ->where(function ($q) use ($evaluation) {
-                if ($evaluation->cycle_id) {
-                    $q->where('cycle_id', '<', $evaluation->cycle_id);
+                if ($evaluation->cycle && $evaluation->cycle->start_date) {
+                    $q->whereHas('cycle', function ($cq) use ($evaluation) {
+                        $cq->where('start_date', '<', $evaluation->cycle->start_date);
+                    });
                 } else {
                     $q->where('created_at', '<', $evaluation->created_at);
                 }
             })
             ->with(['cycle', 'results.indicator'])
-            ->orderByDesc('cycle_id')
             ->orderByDesc('created_at')
+            ->orderByDesc('evaluation_id')
             ->first();
 
         if (!$previousEvaluation) {
