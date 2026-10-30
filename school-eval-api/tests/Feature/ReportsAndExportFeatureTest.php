@@ -20,6 +20,7 @@ use App\Services\ActionCatalogService;
 use App\Services\SchoolMetricsService;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
+use Illuminate\Support\Facades\DB;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
@@ -494,5 +495,78 @@ class ReportsAndExportFeatureTest extends TestCase
         $response = $this->getJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/trend");
 
         $response->assertStatus(404);
+    }
+
+    /**
+     * التحقق من الحصانة القطعية للقطة السياق (BR-SCH-03):
+     * حساب السياقات الجديدة يتم وقت القراءة فقط دون المساس ببيانات school_context_snapshot المخزنة في قاعدة البيانات.
+     */
+    public function test_snapshot_immutability_guaranteed_on_read_time_context_and_export(): void
+    {
+        Sanctum::actingAs($this->evaluatorBelqees);
+
+        // 1. تجهيز تقييم مكتمل مع لقطة سياق أصلية مجمدة لا تحتوي على 1-1-5
+        $initialSnapshot = [
+            'summary' => [
+                'enrollment' => ['total_students' => 450],
+                'facilities' => ['science_labs_count' => 2],
+            ],
+            'indicators' => [
+                '1-1-2' => ['suggested_level' => 3, 'badge' => 'مستوفٍ'],
+            ],
+            'is_snapshot' => true,
+            'snapshot_created_at' => '2026-09-01T10:00:00Z',
+        ];
+
+        $anotherCycle = EvaluationCycle::create([
+            'version_id' => $this->cycle->version_id,
+            'name' => 'دورة الحصانة 2024-2025',
+            'academic_year' => '2024-2025',
+            'start_date' => '2024-09-01',
+            'end_date' => '2025-06-30',
+            'status' => 'Archived',
+        ]);
+
+        $completedEval = Evaluation::create([
+            'school_id' => $this->schoolBelqees->school_id,
+            'cycle_id' => $anotherCycle->cycle_id,
+            'created_by_user_id' => $this->evaluatorBelqees->user_id,
+            'status' => 'Completed',
+            'school_context_snapshot' => $initialSnapshot,
+        ]);
+
+        // 2. تسجيل القيمة الحرفية الدقيقة للقطة المخزنة في قاعدة البيانات
+        $originalRawSnapshot = DB::table('evaluations')
+            ->where('evaluation_id', $completedEval->evaluation_id)
+            ->value('school_context_snapshot');
+
+        $this->assertNotNull($originalRawSnapshot);
+        $this->assertStringNotContainsString('1-1-5', $originalRawSnapshot);
+
+        // 3. استدعاء endpoint سياق المؤشرات (indicators-context)
+        $ctxResponse = $this->getJson("/api/v1/evaluations/{$completedEval->evaluation_id}/indicators-context");
+        $ctxResponse->assertStatus(200);
+        // التحقق من أن الاستجابة تحتوي على المؤشر الجديد عبر الحساب الآني أثناء القراءة فقط
+        $ctxResponse->assertJsonPath('data.is_snapshot', true);
+        $this->assertArrayHasKey('1-1-5', $ctxResponse->json('data.indicators'));
+
+        // 4. استدعاء تصدير PDF
+        $pdfResponse = $this->get("/api/v1/evaluations/{$completedEval->evaluation_id}/export-pdf");
+        $pdfResponse->assertStatus(200);
+
+        // 5. استدعاء تصدير Excel
+        $excelResponse = $this->get("/api/v1/evaluations/{$completedEval->evaluation_id}/export-excel");
+        $excelResponse->assertStatus(200);
+
+        // 6. التحقق الحرفي الصارم: قيمة school_context_snapshot في قاعدة البيانات لم تتغير بحرف واحد
+        $currentRawSnapshot = DB::table('evaluations')
+            ->where('evaluation_id', $completedEval->evaluation_id)
+            ->value('school_context_snapshot');
+
+        $this->assertSame(
+            $originalRawSnapshot,
+            $currentRawSnapshot,
+            'فشل اختبار الحصانة: تم تعديل school_context_snapshot في قاعدة البيانات بالمخالفة للقاعدة BR-SCH-03!'
+        );
     }
 }

@@ -6,6 +6,8 @@ use App\Models\Evaluation;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\View;
+use Mpdf\Config\ConfigVariables;
+use Mpdf\Config\FontVariables;
 use Mpdf\Mpdf;
 
 /**
@@ -80,23 +82,44 @@ class EvaluationReportService
 
         $html = View::make('reports.evaluation_card', $viewData)->render();
 
-        // 5. تهيئة محرك mPDF وضبط الاتجاه والعلامة المائية
-        $mpdf = new Mpdf([
+        // 5. تهيئة محرك mPDF وضبط الخط العربي المعتمد (Amiri) والاتجاه والعلامة المائية
+        $defaultConfig = (new ConfigVariables())->getDefaults();
+        $fontDirs = $defaultConfig['fontDir'];
+
+        $defaultFontConfig = (new FontVariables())->getDefaults();
+        $fontData = $defaultFontConfig['fontdata'];
+
+        $customFontsDir = resource_path('fonts');
+        $hasAmiri = file_exists($customFontsDir . '/Amiri-Regular.ttf');
+
+        $mpdfConfig = [
             'mode'             => 'utf-8',
             'format'           => 'A4',
             'orientation'      => 'P',
-            'margin_left'      => 12,
-            'margin_right'     => 12,
-            'margin_top'       => 15,
-            'margin_bottom'    => 15,
-            'margin_header'    => 8,
-            'margin_footer'    => 8,
+            'margin_left'      => 10,
+            'margin_right'     => 10,
+            'margin_top'       => 10,
+            'margin_bottom'    => 10,
+            'margin_header'    => 5,
+            'margin_footer'    => 5,
             'autoScriptToLang' => true,
             'autoArabic'       => true,
             'autoLangToFont'   => true,
-            'default_font'     => 'dejavusans',
+            'default_font'     => $hasAmiri ? 'amiri' : 'dejavusans',
             'tempDir'          => storage_path('app/temp-mpdf'),
-        ]);
+        ];
+
+        if ($hasAmiri) {
+            $mpdfConfig['fontDir'] = array_merge($fontDirs, [$customFontsDir]);
+            $mpdfConfig['fontdata'] = $fontData + [
+                'amiri' => [
+                    'R' => 'Amiri-Regular.ttf',
+                    'B' => 'Amiri-Bold.ttf',
+                ],
+            ];
+        }
+
+        $mpdf = new Mpdf($mpdfConfig);
 
         $mpdf->SetDirectionality('rtl');
         $mpdf->SetTitle('بطاقة تقويم المدرسة الرسمية - ' . $school->school_name);

@@ -5,15 +5,13 @@
     <title>بطاقة تقويم المدرسة الرسمية - {{ $school['school_name'] }}</title>
     <style>
         @page {
-            header: page-header;
-            footer: page-footer;
-            margin-top: 25mm;
-            margin-bottom: 25mm;
-            margin-left: 12mm;
-            margin-right: 12mm;
+            margin-top: 10mm;
+            margin-bottom: 8mm;
+            margin-left: 10mm;
+            margin-right: 10mm;
         }
         body {
-            font-family: 'dejavusans', sans-serif;
+            font-family: 'amiri', 'dejavusans', sans-serif;
             direction: rtl;
             text-align: right;
             color: #1e293b;
