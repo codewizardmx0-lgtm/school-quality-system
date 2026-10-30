@@ -322,8 +322,14 @@ const App = {
   },
 
   async ensureCurrentEvaluation() {
+    // التحقق من صلاحية التقييم المخزن وتطابقه مع مدرسة المستخدم الحالي (منع تداخل الجلسات والعزل المؤسسي)
     if (this.state.currentEvaluation && (this.state.currentEvaluation.evaluationId || this.state.currentEvaluation.evaluation_id)) {
-      return this.state.currentEvaluation;
+      const evalSchoolId = this.state.currentEvaluation.schoolId || this.state.currentEvaluation.school?.schoolId;
+      const userSchoolId = this.state.user?.schoolId || this.state.user?.school?.schoolId;
+      if (!userSchoolId || !evalSchoolId || String(evalSchoolId) === String(userSchoolId)) {
+        return this.state.currentEvaluation;
+      }
+      this.state.currentEvaluation = null;
     }
 
     if (this.state.user && this.state.user.userType !== 'system' && this.hasPermission('evaluations.view')) {
@@ -545,6 +551,9 @@ const App = {
 
     this.state.token = res.data.token;
     this.state.user = res.data.user;
+    this.state.currentEvaluation = null;
+    this.state.currentPlan = null;
+    this.state.evaluations = [];
     localStorage.setItem('eval_token', this.state.token);
     localStorage.setItem('eval_user', JSON.stringify(this.state.user));
 
@@ -651,10 +660,11 @@ const App = {
   },
 
   selectEvaluation(evalId) {
-    const ev = this.state.evaluations.find(e => e.evaluationId === evalId);
+    const ev = (this.state.evaluations || []).find(e => (e.evaluationId || e.evaluation_id) == evalId);
     if (!ev) return;
     this.state.currentEvaluation = ev;
     this.navTo('standards-tree');
+    this.loadStandardsTree(evalId);
   },
 
   // ---------------------------------------------------------------------------
@@ -2846,6 +2856,21 @@ const App = {
   renderReviewNotes(internalNotes = [], externalNotes = [], allNotes = []) {
     const internalList = document.getElementById('plan-det-internal-notes-list');
     const externalList = document.getElementById('plan-det-external-notes-list');
+    const boxInternal = document.getElementById('box-internal-reviews');
+    const boxExternal = document.getElementById('box-external-reviews');
+
+    // قاعدة الفصل المؤسسي (كل دور يرى ويكتب في قسمه فقط):
+    // مدير المدرسة يرى الملاحظات الداخلية فقط. المشرف الوزاري يرى الملاحظات الخارجية فقط.
+    // مقيّم المدرسة ومسؤول النظام يريان القسمين معاً للمتابعة الشاملة.
+    const isPrincipal = this.hasRole('school_principal');
+    const isSupervisor = this.hasRole('ministry_supervisor');
+
+    if (boxInternal) {
+      boxInternal.style.display = isSupervisor ? 'none' : 'block';
+    }
+    if (boxExternal) {
+      boxExternal.style.display = isPrincipal ? 'none' : 'block';
+    }
 
     // الملاحظات الداخلية
     if (internalList) {
@@ -5784,17 +5809,21 @@ const App = {
     const btnSchools = document.getElementById('tab-btn-admin-schools');
     const btnUsers = document.getElementById('tab-btn-admin-users');
     const btnRoles = document.getElementById('tab-btn-admin-roles');
+    const btnCycles = document.getElementById('tab-btn-admin-cycles');
     const paneSchools = document.getElementById('admin-tab-schools');
     const paneUsers = document.getElementById('admin-tab-users');
     const paneRoles = document.getElementById('admin-tab-roles');
+    const paneCycles = document.getElementById('admin-tab-cycles');
 
     if (btnSchools) btnSchools.classList.toggle('active', tabName === 'schools');
     if (btnUsers) btnUsers.classList.toggle('active', tabName === 'users');
     if (btnRoles) btnRoles.classList.toggle('active', tabName === 'roles');
+    if (btnCycles) btnCycles.classList.toggle('active', tabName === 'cycles');
 
     if (paneSchools) paneSchools.classList.toggle('hidden', tabName !== 'schools');
     if (paneUsers) paneUsers.classList.toggle('hidden', tabName !== 'users');
     if (paneRoles) paneRoles.classList.toggle('hidden', tabName !== 'roles');
+    if (paneCycles) paneCycles.classList.toggle('hidden', tabName !== 'cycles');
 
     if (tabName === 'schools') {
       this.loadAdminSchools();
@@ -5803,6 +5832,10 @@ const App = {
     } else if (tabName === 'roles') {
       this.loadAdminRoles();
     }
+  },
+
+  handleCreateEvaluationCycle() {
+    this.showAlert('تنبيه هندسي (فجوة معمارية مسجلة G-24): لا يوجد Endpoint في الـ API الخلفي لإنشاء دورات تقييم evaluation_cycles حالياً. يتم إنشاء الدورات مركزياً بالـ Seeder.', 'warning', 8000);
   },
 
   async loadAdminRoles() {

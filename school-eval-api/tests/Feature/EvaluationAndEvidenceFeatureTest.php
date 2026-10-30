@@ -969,4 +969,124 @@ class EvaluationAndEvidenceFeatureTest extends TestCase
         $response->assertStatus(200)
             ->assertJsonPath('data.evaluationId', $this->evaluationBelqees->evaluation_id);
     }
+
+    /**
+     * 24. اختبار انحدار: مقيّم المدرسة يستعرض ملف تقييم مدرسته فقط ولا يرى مدارس أخرى.
+     */
+    public function test_regression_evaluator_sees_own_school_evaluation_list(): void
+    {
+        Sanctum::actingAs($this->evaluatorBelqees);
+
+        $response = $this->getJson('/api/v1/evaluations');
+
+        $response->assertStatus(200)
+            ->assertJsonStructure([
+                'data' => [
+                    '*' => [
+                        'evaluationId',
+                        'schoolId',
+                        'cycleId',
+                        'status',
+                    ],
+                ],
+            ]);
+
+        $evaluations = $response->json('data');
+        $this->assertNotEmpty($evaluations, 'يجب أن يعود ملف تقييم واحد على الأقل لمدرسة بلقيس.');
+
+        foreach ($evaluations as $ev) {
+            $this->assertEquals(
+                $this->evaluatorBelqees->school_id,
+                $ev['schoolId'],
+                'يجب أن تكون جميع التقييمات المعادة تابعة لمدرسة المستخدم فقط (العزل المؤسسي).'
+            );
+        }
+    }
+
+    /**
+     * 25. اختبار انحدار: مقيّم المدرسة يفتح شاشة التقييم ويسترجع شجرة المعايير والمؤشرات كاملة.
+     */
+    public function test_regression_evaluator_can_load_full_standards_tree_for_active_evaluation(): void
+    {
+        Sanctum::actingAs($this->evaluatorBelqees);
+
+        $response = $this->getJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/standards-tree");
+
+        $response->assertStatus(200)
+            ->assertJsonStructure([
+                'data' => [
+                    'evaluationId',
+                    'schoolId',
+                    'cycleId',
+                    'versionId',
+                    'standards' => [
+                        '*' => [
+                            'standardId',
+                            'code',
+                            'name',
+                            'weight',
+                            'subStandards' => [
+                                '*' => [
+                                    'subStandardId',
+                                    'code',
+                                    'name',
+                                    'indicators' => [
+                                        '*' => [
+                                            'indicatorId',
+                                            'code',
+                                            'name',
+                                            'weight',
+                                            'scoreDescriptors',
+                                            'verificationTools',
+                                            'evidenceRequirements',
+                                        ],
+                                    ],
+                                ],
+                            ],
+                        ],
+                    ],
+                ],
+                'meta' => [
+                    'totalActiveIndicators',
+                    'completedResults',
+                    'completionPercentage',
+                ],
+            ]);
+
+        $standards = $response->json('data.standards');
+        $this->assertCount(7, $standards, 'يجب أن تحتوي شجرة المعايير على المعايير السبعة الرئيسية.');
+        $this->assertGreaterThan(0, $response->json('meta.totalActiveIndicators'));
+    }
+
+    /**
+     * 26. اختبار انحدار: شجرة المعايير تعمل بسلاسة سواء كانت حالة الإصدار Approved أو Active (توافق G-23).
+     */
+    public function test_regression_standards_tree_works_under_both_approved_and_active_version_statuses(): void
+    {
+        Sanctum::actingAs($this->evaluatorBelqees);
+
+        // 1. فحص بحالة Approved
+        $this->standardVersion->update(['status' => StandardVersion::STATUS_APPROVED]);
+        $resApproved = $this->getJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/standards-tree");
+        $resApproved->assertStatus(200);
+        $this->assertCount(7, $resApproved->json('data.standards'));
+
+        // 2. فحص بحالة Active القديمة
+        $this->standardVersion->update(['status' => StandardVersion::STATUS_ACTIVE]);
+        $resActive = $this->getJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/standards-tree");
+        $resActive->assertStatus(200);
+        $this->assertCount(7, $resActive->json('data.standards'));
+    }
+
+    /**
+     * 27. اختبار انحدار: محاولة المقيّم استعراض شجرة تقييم مدرسة أخرى يُرجع 404 (القرار المعماري 9).
+     */
+    public function test_regression_evaluator_cannot_access_other_school_standards_tree(): void
+    {
+        Sanctum::actingAs($this->evaluatorBelqees);
+
+        $response = $this->getJson("/api/v1/evaluations/{$this->evaluationFarouq->evaluation_id}/standards-tree");
+
+        $response->assertStatus(404);
+    }
 }

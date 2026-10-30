@@ -420,17 +420,14 @@ class StandardsManagementFeatureTest extends TestCase
     {
         $service = app(ReportsAnalyticsService::class);
 
-        // إنشاء دورة تقييم وتقييم مرتبط بالإصدار الأول إن لم يكن موجوداً
-        $cycle = EvaluationCycle::where('version_id', $this->seededVersion->version_id)->first();
-        if (!$cycle) {
-            $cycle = EvaluationCycle::create([
-                'version_id'    => $this->seededVersion->version_id,
-                'academic_year' => '2026/2027',
-                'start_date'    => '2026-09-01',
-                'end_date'      => '2027-06-30',
-                'status'        => 'Active',
-            ]);
-        }
+        // إنشاء دورة تقييم معزولة لهذا الاختبار لضمان عدم التعارض مع بيانات البذور
+        $cycle = EvaluationCycle::create([
+            'version_id'    => $this->seededVersion->version_id,
+            'academic_year' => '2028/2029-IMMUNITY',
+            'start_date'    => '2028-09-01',
+            'end_date'      => '2029-06-30',
+            'status'        => 'Active',
+        ]);
 
         $school = School::firstOrFail();
         $evaluation = Evaluation::create([

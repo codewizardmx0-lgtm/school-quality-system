@@ -820,7 +820,7 @@
           <!-- قائمة الملاحظات مصنفة -->
           <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; margin-bottom: 1rem;">
             <!-- ملاحظات مدير المدرسة الداخلية -->
-            <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 6px; padding: 0.75rem;">
+            <div id="box-internal-reviews" style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 6px; padding: 0.75rem;">
               <h5 style="font-size: 0.9rem; color: #166534; margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.35rem;">
                 🎓 المراجعة الداخلية (مدير المدرسة)
               </h5>
@@ -830,7 +830,7 @@
             </div>
 
             <!-- ملاحظات المشرف الوزاري الخارجية -->
-            <div style="background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 6px; padding: 0.75rem;">
+            <div id="box-external-reviews" style="background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 6px; padding: 0.75rem;">
               <h5 style="font-size: 0.9rem; color: #1e40af; margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.35rem;">
                 🏛️ المراجعة الخارجية (المشرف الوزاري)
               </h5>
@@ -1992,6 +1992,9 @@
         <button type="button" id="tab-btn-admin-roles" class="tab-btn" onclick="App.switchAdminTab('roles')">
           🛡️ الأدوار والصلاحيات (Roles & Permissions)
         </button>
+        <button type="button" id="tab-btn-admin-cycles" class="tab-btn" onclick="App.switchAdminTab('cycles')">
+          📋 دورات التقييم (Evaluation Cycles)
+        </button>
       </div>
 
       <!-- تبويب إدارة المدارس -->
@@ -2071,6 +2074,49 @@
               </thead>
               <tbody id="admin-roles-table-body">
                 <tr><td colspan="4" style="text-align: center;">جارِ جلب بيانات الأدوار والصلاحيات...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- تبويب دورات التقييم المركزية -->
+      <div id="admin-tab-cycles" class="hidden">
+        <div class="card">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem;">
+            <div>
+              <h3 class="card-title" style="margin-bottom: 0.25rem;">دورات التقييم المركزية (Evaluation Cycles)</h3>
+              <p style="font-size: 0.82rem; color: var(--text-muted); margin: 0;">الدورات السنوية المركزية الحاكمة لملفات تقييم المدارس والمرتبطة بالإصدارات المعيارية المُقرّة.</p>
+            </div>
+            <button type="button" class="btn btn-sm btn-primary" onclick="App.handleCreateEvaluationCycle()">+ إنشاء دورة تقييم جديدة</button>
+          </div>
+
+          <div class="alert alert-warning" style="margin-bottom: 1rem; font-size: 0.85rem; line-height: 1.6;">
+            ⚠️ <strong>ملاحظة توثيقية وهندسية (فجوة معمارية مسجلة G-24):</strong><br>
+            لا يوجد مسار برمجى (API Endpoint) لإنشاء أو إدارة دورات التقييم <code>evaluation_cycles</code> في الباك إند حالياً. تُدار الدورات الحالية عبر التهيئة المركزية بالـ Seeder (العام الدراسي 2025/2026م والإصدار المعياري 2026.1). لإنشاء دورات جديدة، يتم توفير مسار وزاري مستقبلاً وفق خارطة الطريق.
+          </div>
+
+          <div class="table-responsive">
+            <table>
+              <thead>
+                <tr>
+                  <th>معرف الدورة</th>
+                  <th>العام الدراسي</th>
+                  <th>الإصدار المعياري المعتمد</th>
+                  <th>تاريخ البدء</th>
+                  <th>تاريخ النهاية</th>
+                  <th>الحالة</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>#1</strong></td>
+                  <td>2025/2026</td>
+                  <td>الإصدار الوطني 2026.1 (مُقرّ)</td>
+                  <td>2025-09-01</td>
+                  <td>2026-06-30</td>
+                  <td><span class="badge badge-green">Active (نشطة)</span></td>
+                </tr>
               </tbody>
             </table>
           </div>
