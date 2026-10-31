@@ -2732,7 +2732,7 @@ const App = {
         </div>
         <div>
           <button class="btn btn-sm btn-primary" onclick="App.selectCatalogAction(${item.catalog_id})">
-            اختيار واعتماد ➕
+            اختيار وتبني ➕
           </button>
         </div>
       </div>
