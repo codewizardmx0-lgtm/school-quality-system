@@ -40,6 +40,7 @@ class EvaluationCycle extends Model
      * @var array<int, string>
      */
     protected $fillable = [
+        'name',
         'version_id',
         'academic_year',
         'start_date',

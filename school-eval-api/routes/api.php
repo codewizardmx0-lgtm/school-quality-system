@@ -23,6 +23,8 @@ Route::prefix('v1')->group(function () {
     // --------------------------------------------------------------------------
     Route::prefix('auth')->group(function () {
         Route::post('/login', [AuthController::class, 'login'])->name('api.v1.auth.login');
+        Route::post('/password/forgot', [\App\Http\Controllers\Api\V1\PasswordResetController::class, 'forgotPassword'])->name('api.v1.auth.password.forgot');
+        Route::post('/password/reset', [\App\Http\Controllers\Api\V1\PasswordResetController::class, 'resetPassword'])->name('api.v1.auth.password.reset');
     });
 
     // --------------------------------------------------------------------------
@@ -102,9 +104,19 @@ Route::prefix('v1')->group(function () {
             Route::delete('/{indicatorId}/requirements/{requirementId}', [\App\Http\Controllers\Api\V1\StandardManagementController::class, 'deleteRequirement'])->name('api.v1.indicators.requirements.delete');
         });
 
+        // إدارة دورات التقييم المركزية وتسجيل مشاركة المدارس (Evaluation Cycles - الشريحة 10)
+        Route::prefix('evaluation-cycles')->group(function () {
+            Route::get('/', [\App\Http\Controllers\Api\V1\EvaluationCycleController::class, 'index'])->name('api.v1.evaluation-cycles.index');
+            Route::post('/', [\App\Http\Controllers\Api\V1\EvaluationCycleController::class, 'store'])->name('api.v1.evaluation-cycles.store');
+            Route::get('/{id}', [\App\Http\Controllers\Api\V1\EvaluationCycleController::class, 'show'])->name('api.v1.evaluation-cycles.show');
+            Route::patch('/{id}', [\App\Http\Controllers\Api\V1\EvaluationCycleController::class, 'update'])->name('api.v1.evaluation-cycles.update');
+            Route::post('/{id}/participations', [\App\Http\Controllers\Api\V1\EvaluationCycleController::class, 'enrollSchools'])->name('api.v1.evaluation-cycles.participations.store');
+        });
+
         // عمليات التقييم المدرسي مع العزل المؤسسي ورصد الدرجات (Evaluations)
         Route::prefix('evaluations')->group(function () {
             Route::get('/', [\App\Http\Controllers\Api\V1\EvaluationController::class, 'index'])->name('api.v1.evaluations.index');
+            Route::post('/', [\App\Http\Controllers\Api\V1\EvaluationController::class, 'store'])->name('api.v1.evaluations.store');
             Route::get('/{id}', [\App\Http\Controllers\Api\V1\EvaluationController::class, 'show'])->name('api.v1.evaluations.show');
             Route::get('/{id}/standards-tree', [\App\Http\Controllers\Api\V1\EvaluationController::class, 'standardsTree'])->name('api.v1.evaluations.standards-tree');
             Route::get('/{id}/improvement-suggestions', [\App\Http\Controllers\Api\V1\ImprovementSuggestionController::class, 'index'])->name('api.v1.evaluations.improvement-suggestions');
@@ -157,6 +169,14 @@ Route::prefix('v1')->group(function () {
             Route::delete('/{id}/actions/{actionId}', [\App\Http\Controllers\Api\V1\ImprovementPlanController::class, 'deleteAction'])->name('api.v1.improvement-plans.actions.delete');
             Route::post('/{id}/actions/{actionId}/evidences', [\App\Http\Controllers\Api\V1\ImprovementPlanController::class, 'attachActionEvidence'])->name('api.v1.improvement-plans.actions.evidences.store');
             Route::post('/{id}/review-notes', [\App\Http\Controllers\Api\V1\ImprovementPlanController::class, 'storeReviewNote'])->name('api.v1.improvement-plans.review-notes.store');
+        });
+
+        // سجل الإشعارات الدائم والتنبيهات النظامية (Notifications - الشريحة 10)
+        Route::prefix('notifications')->group(function () {
+            Route::get('/', [\App\Http\Controllers\Api\V1\NotificationController::class, 'index'])->name('api.v1.notifications.index');
+            Route::get('/unread-count', [\App\Http\Controllers\Api\V1\NotificationController::class, 'unreadCount'])->name('api.v1.notifications.unread-count');
+            Route::patch('/{id}/read', [\App\Http\Controllers\Api\V1\NotificationController::class, 'markAsRead'])->name('api.v1.notifications.mark-as-read');
+            Route::post('/mark-all-read', [\App\Http\Controllers\Api\V1\NotificationController::class, 'markAllAsRead'])->name('api.v1.notifications.mark-all-read');
         });
 
         // --------------------------------------------------------------------------

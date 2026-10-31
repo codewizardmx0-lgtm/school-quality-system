@@ -12,7 +12,10 @@ use App\Models\IndicatorScoreDescriptor;
 use App\Models\Note;
 use App\Models\StandardVersion;
 use App\Models\User;
+use App\Models\CycleParticipation;
+use App\Models\EvaluationCycle;
 use App\Services\EvaluationLockChecker;
+use App\Services\NotificationService;
 use App\Events\EvaluationSubmitted;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -55,6 +58,121 @@ class EvaluationController extends Controller
         return ApiResponse::success(
             data: EvaluationResource::collection($evaluations)->resolve($request),
             message: null
+        );
+    }
+
+    /**
+     * بدء ملف تقييم ذاتي جديد للمدرسة ضمن دورة تقييمية نشطة (مقيّم المدرسة حصرًا - G-26).
+     *
+     * POST /api/v1/evaluations
+     * الشروط الحتمية:
+     * 1. الدورة نشطة ومفتوحة (Active) وضمن الإطار الزمني المحدد.
+     * 2. الإصدار المعياري المرتبط بالدورة مُقرّ ونشط (Approved/Active).
+     * 3. المدرسة مسجلة رسمياً ومشاركة بالدورة (cycle_participations).
+     * 4. عدم وجود ملف تقييم مسبق لنفس المدرسة في نفس الدورة (unique cycle_id + school_id).
+     * 5. المنشئ مقيّم مدرسة يتبع لنفس المدرسة (user_type = 'school', evaluations.create).
+     */
+    public function store(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        if (!$user) {
+            return ApiResponse::unauthorized();
+        }
+
+        // عزل الأدوار: الأدمن والمشرف والمدير محظورون من بدء التقييم
+        if ($user->hasRole('admin')) {
+            return ApiResponse::forbidden('غير مصرح: مسؤول النظام لا يملك صلاحية إنشاء ملفات التقييم الذاتي (BR-GEN-06).');
+        }
+
+        if ($user->hasRole('ministry_supervisor')) {
+            return ApiResponse::forbidden('غير مصرح: المشرف الوزاري لا ينشئ ملفات التقييم نيابة عن المدارس.');
+        }
+
+        if (!$user->hasPermission('evaluations.create') || $user->user_type !== 'school' || empty($user->school_id)) {
+            return ApiResponse::forbidden('غير مصرح: بدء ملف التقييم الذاتي متاح لمقيّم المدرسة فقط.');
+        }
+
+        $validator = Validator::make($request->all(), [
+            'cycle_id' => ['required', 'integer'],
+        ], [
+            'cycle_id.required' => 'معرّف دورة التقييم مطلوب.',
+            'cycle_id.integer'  => 'معرّف دورة التقييم يجب أن يكون عدداً صحيحاً.',
+        ]);
+
+        if ($validator->fails()) {
+            return ApiResponse::validationError($validator->errors()->toArray());
+        }
+
+        $cycle = EvaluationCycle::with('version')->find($request->cycle_id);
+        if (!$cycle) {
+            return ApiResponse::notFound('دورة التقييم المحددة غير موجودة.');
+        }
+
+        // 1. فحص حالة وفترة الدورة التقييمية
+        if ($cycle->status !== 'Active') {
+            return ApiResponse::validationError([
+                'cycle_id' => ['دورة التقييم المحددة مغلقة ولا تقبل بدء ملفات تقييم جديدة.'],
+            ]);
+        }
+
+        $today = now()->toDateString();
+        $startDate = $cycle->start_date ? $cycle->start_date->toDateString() : null;
+        $endDate = $cycle->end_date ? $cycle->end_date->toDateString() : null;
+
+        if (($startDate && $today < $startDate) || ($endDate && $today > $endDate)) {
+            return ApiResponse::validationError([
+                'cycle_id' => ['فترة الدورة التقييمية المحددة خارج النطاق الزمني المسموح به حالياً.'],
+            ]);
+        }
+
+        // 2. فحص إقرار إصدار المعايير
+        if (!$cycle->version || !$cycle->version->isApproved()) {
+            return ApiResponse::validationError([
+                'version_id' => ['إصدار معايير الاعتماد المدرسي المرتبط بالدورة غير مُقرّ.'],
+            ]);
+        }
+
+        // 3. فحص مشاركة المدرسة في الدورة
+        $isEnrolled = CycleParticipation::where('cycle_id', $cycle->cycle_id)
+            ->where('school_id', $user->school_id)
+            ->exists();
+
+        if (!$isEnrolled) {
+            return ApiResponse::validationError([
+                'school_id' => ['المدرسة غير مسجلة للمشاركة في هذه الدورة التقييمية.'],
+            ]);
+        }
+
+        // 4. فحص التفرد: تقييم واحد فقط للمدرسة في الدورة الواحدة
+        $existing = Evaluation::where('cycle_id', $cycle->cycle_id)
+            ->where('school_id', $user->school_id)
+            ->first();
+
+        if ($existing) {
+            return ApiResponse::validationError([
+                'cycle_id' => ['يوجد ملف تقييم ذاتي مسجل مسبقاً لهذه المدرسة ضمن هذه الدورة.'],
+            ]);
+        }
+
+        // 5. إنشاء ملف التقييم بحالة InProgress
+        $evaluation = DB::transaction(function () use ($cycle, $user) {
+            return Evaluation::create([
+                'cycle_id'           => $cycle->cycle_id,
+                'school_id'          => $user->school_id,
+                'created_by_user_id' => $user->user_id,
+                'status'             => 'InProgress',
+            ]);
+        });
+
+        // 6. إرسال الإشعارات النظامية لمدير المدرسة والمشرفين الوزاريين
+        app(NotificationService::class)->notifyEvaluationInitiated($evaluation, $user);
+
+        $evaluation->load(['school', 'cycle', 'creator']);
+
+        return ApiResponse::success(
+            data: (new EvaluationResource($evaluation))->resolve($request),
+            message: 'تم بدء ملف التقييم الذاتي للمدرسة بنجاح.',
+            status: 201
         );
     }
 
@@ -692,6 +810,7 @@ class EvaluationController extends Controller
             $evaluation->save();
 
             event(new EvaluationSubmitted($evaluation, $user));
+            app(NotificationService::class)->notifyEvaluationSubmitted($evaluation, $user);
         });
 
         return ApiResponse::success(

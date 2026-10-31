@@ -350,14 +350,20 @@ const App = {
 
   updateUserNav() {
     const badge = document.getElementById('user-badge');
+    const bellBtn = document.getElementById('btn-notifications-bell');
     if (!badge) return;
 
     if (!this.state.user) {
       badge.classList.add('hidden');
+      if (bellBtn) bellBtn.classList.add('hidden');
       return;
     }
 
     badge.classList.remove('hidden');
+    if (bellBtn) {
+      bellBtn.classList.remove('hidden');
+      this.loadNotificationsCount();
+    }
     document.getElementById('user-name').textContent = this.state.user.fullName || this.state.user.username;
     document.getElementById('user-school').textContent = this.state.user.school?.schoolName || (this.state.user.ministry?.ministryName || 'إدارة النظام');
 
@@ -404,7 +410,6 @@ const App = {
         { id: 'admin-schools', label: '🏫 إدارة المدارس', screen: 'admin', tab: 'schools' },
         { id: 'admin-users', label: '👥 إدارة الحسابات', screen: 'admin', tab: 'users' },
         { id: 'admin-roles', label: '🛡️ الأدوار والصلاحيات', screen: 'admin', tab: 'roles' },
-        { id: 'admin-cycles', label: '📋 ملفات التقييم', screen: 'cycles' },
         { id: 'admin-standards', label: '📖 معايير الاعتماد المدرسي', screen: 'standards-review' },
       ];
     } else if (this.hasRole('school_principal')) {
@@ -418,8 +423,8 @@ const App = {
       ];
     } else if (this.hasRole('school_evaluator')) {
       items = [
+        { id: 'eval-cycles', label: '📋 دورات وملفات التقييم', screen: 'cycles' },
         { id: 'eval-tree', label: '📝 استمارة التقييم الذاتي', screen: 'standards-tree' },
-        { id: 'eval-cycles', label: '📋 ملفات التقييم', screen: 'cycles' },
         { id: 'eval-results', label: '🎯 نتائج الرصد', screen: 'assessment-results' },
         { id: 'eval-evinv', label: '📑 جرد وحصر الشواهد', screen: 'evidence-inventory' },
         { id: 'eval-sugg', label: '💡 مجالات واقتراحات التحسين', screen: 'suggestions' },
@@ -428,7 +433,7 @@ const App = {
       ];
     } else if (this.hasRole('ministry_supervisor')) {
       items = [
-        { id: 'sup-hub', label: '👁️ المتابعة الإشرافية', screen: 'supervision' },
+        { id: 'sup-hub', label: '👁️ المتابعة الإشرافية وإدارة الدورات', screen: 'supervision' },
         { id: 'sup-cycles', label: '📋 استعراض تقييمات المدارس', screen: 'cycles' },
         { id: 'sup-std', label: '📖 معايير الاعتماد المدرسي', screen: 'standards-review' },
       ];
@@ -613,20 +618,48 @@ const App = {
   // ---------------------------------------------------------------------------
   // 5. الشاشة 2: لوحة الدورات والتقييمات (Screen 2: Cycles & Evaluations)
   // ---------------------------------------------------------------------------
+  // الشاشة 2: استعراض التقييمات والدورات (مع إمكانية بدء تقييم جديد G-26)
+  // ---------------------------------------------------------------------------
   async loadEvaluations() {
     const tbody = document.getElementById('evaluations-table-body');
+    const ctaContainer = document.getElementById('active-cycle-cta-container');
     if (!tbody) return;
-    tbody.innerHTML = '<tr><td colspan="6" style="text-align: center;">جارِ جلب التقييمات...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align: center;">جارِ جلب التقييمات والدورات...</td></tr>';
 
-    const res = await this.request('/evaluations');
-    if (!res.ok) {
-      tbody.innerHTML = `<tr><td colspan="6" style="color: red; text-align: center;">${res.message}</td></tr>`;
+    const [evalsRes, cyclesRes] = await Promise.all([
+      this.request('/evaluations'),
+      this.request('/evaluation-cycles')
+    ]);
+
+    // معالجة بطاقة الحث على بدء تقييم جديد لمدرستك (G-26)
+    if (ctaContainer) {
+      ctaContainer.innerHTML = '';
+      if (cyclesRes.ok && Array.isArray(cyclesRes.data)) {
+        const startableCycle = cyclesRes.data.find(c => c.schoolContext?.canStartEvaluation);
+        if (startableCycle && this.hasRole('school_evaluator')) {
+          ctaContainer.innerHTML = `
+            <div class="cta-start-evaluation-card">
+              <div>
+                <h4>🌱 دورة تقييمية نشطة متاحة لمدرستك: ${startableCycle.name} (${startableCycle.academicYear})</h4>
+                <p>مدرستك مسجلة رسمياً بالدورة، ويمكنك الآن فتح ملف التقييم الذاتي وبدء رصد درجات المؤشرات ورفع الشواهد.</p>
+              </div>
+              <button class="btn btn-primary" style="background: #059669; border-color: #047857; font-size: 0.95rem; font-weight: 700;" onclick="App.startNewEvaluation(${startableCycle.cycleId})">
+                🌱 بدء ملف تقييم ذاتي جديد
+              </button>
+            </div>
+          `;
+        }
+      }
+    }
+
+    if (!evalsRes.ok) {
+      tbody.innerHTML = `<tr><td colspan="6" style="color: red; text-align: center;">${evalsRes.message}</td></tr>`;
       return;
     }
 
-    this.state.evaluations = res.data || [];
+    this.state.evaluations = evalsRes.data || [];
     if (this.state.evaluations.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="6" style="text-align: center;">لا توجد تقييمات مسجلة لهذه المدرسة.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align: center;">لا توجد تقييمات سابقة مسجلة لهذه المدرسة. استخدم زر بدء التقييم أعلاه لبدء ملف جديد.</td></tr>';
       return;
     }
 
@@ -660,6 +693,25 @@ const App = {
         </td>
       </tr>
     `).join('');
+  },
+
+  async startNewEvaluation(cycleId) {
+    if (!confirm('هل تريد تأكيد بدء ملف التقييم الذاتي لمدرستك ضمن هذه الدورة التقييمية؟')) return;
+    const res = await this.request('/evaluations', {
+      method: 'POST',
+      body: JSON.stringify({ cycle_id: cycleId })
+    });
+
+    if (!res.ok) {
+      alert(res.message || 'تعذر بدء ملف التقييم الذاتي.');
+      return;
+    }
+
+    alert('تم فتح وبدء ملف التقييم الذاتي للمدرسة بنجاح!');
+    await this.loadEvaluations();
+    if (res.data?.evaluationId) {
+      this.selectEvaluation(res.data.evaluationId);
+    }
   },
 
   selectEvaluation(evalId) {
@@ -6748,6 +6800,418 @@ const App = {
     } else {
       this.showAlert(res.message || 'تعذر فتح جرد الشواهد للتقييم المحدد.', 'error');
     }
+  },
+
+  // ---------------------------------------------------------------------------
+  // الشريحة 10: إدارة دورات التقييم المركزية (Supervision Evaluation Cycles)
+  // ---------------------------------------------------------------------------
+  switchSupervisionTab(tab) {
+    const tabSchools = document.getElementById('supervision-tab-schools');
+    const tabCycles = document.getElementById('supervision-tab-cycles');
+    const btnSchools = document.getElementById('tab-btn-supervision-schools');
+    const btnCycles = document.getElementById('tab-btn-supervision-cycles');
+
+    if (tab === 'cycles') {
+      if (tabSchools) tabSchools.classList.add('hidden');
+      if (tabCycles) tabCycles.classList.remove('hidden');
+      if (btnSchools) btnSchools.classList.remove('active');
+      if (btnCycles) btnCycles.classList.add('active');
+      this.loadSupervisionCycles();
+    } else {
+      if (tabSchools) tabSchools.classList.remove('hidden');
+      if (tabCycles) tabCycles.classList.add('hidden');
+      if (btnSchools) btnSchools.classList.add('active');
+      if (btnCycles) btnCycles.classList.remove('active');
+      this.loadSupervisionData();
+    }
+  },
+
+  async loadSupervisionCycles() {
+    const tbody = document.getElementById('supervision-cycles-tbody');
+    if (!tbody) return;
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align: center;">جارِ جلب دورات التقييم المركزية...</td></tr>';
+
+    const res = await this.request('/evaluation-cycles');
+    if (!res.ok) {
+      tbody.innerHTML = `<tr><td colspan="8" style="color: red; text-align: center;">${res.message}</td></tr>`;
+      return;
+    }
+
+    const cycles = res.data || [];
+    if (cycles.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="8" style="text-align: center;">لا توجد دورات تقييم منشأة حتى الآن. يمكنك إطلاق دورة جديدة باستخدام الزر أعلاه.</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = cycles.map(c => {
+      const isAct = c.status === 'Active';
+      const statusBadge = isAct
+        ? '<span class="badge badge-green">نشطة (Active)</span>'
+        : '<span class="badge badge-gray">مغلقة (Closed)</span>';
+
+      const versionInfo = c.version
+        ? `${c.version.versionName || 'معايير الاعتماد المدرسي'} (v${c.version.versionNumber || '1.0'})`
+        : 'إصدار معايير معتمد';
+
+      const dateRange = `${c.startDate || '-'} إلى ${c.endDate || '-'}`;
+      const closeBtn = isAct
+        ? `<button class="btn btn-sm btn-outline-danger" onclick="App.closeEvaluationCycle(${c.cycleId})">🔒 إغلاق الدورة</button>`
+        : '<span style="font-size: 0.8rem; color: var(--text-muted);">مغلقة</span>';
+
+      const enrollBtn = isAct
+        ? `<button class="btn btn-sm btn-secondary" onclick="App.openEnrollSchoolsModal(${c.cycleId})">🏫 إلحاق مدارس</button>`
+        : '';
+
+      return `
+        <tr>
+          <td><strong>#${c.cycleId}</strong></td>
+          <td><strong>${c.name || 'دورة التقييم'}</strong></td>
+          <td>${c.academicYear}</td>
+          <td><span class="badge badge-blue">${versionInfo}</span></td>
+          <td style="font-size: 0.82rem;">${dateRange}</td>
+          <td><span class="badge badge-purple">${c.participationsCount || 0} مدرسة</span></td>
+          <td>${statusBadge}</td>
+          <td>
+            <div style="display: flex; gap: 0.35rem; flex-wrap: wrap;">
+              ${enrollBtn}
+              ${closeBtn}
+            </div>
+          </td>
+        </tr>
+      `;
+    }).join('');
+  },
+
+  openLaunchCycleModal() {
+    const nameEl = document.getElementById('cycle-name');
+    const yearEl = document.getElementById('cycle-academic-year');
+    const startEl = document.getElementById('cycle-start-date');
+    const endEl = document.getElementById('cycle-end-date');
+    const alertEl = document.getElementById('launch-cycle-alert');
+
+    if (alertEl) alertEl.classList.add('hidden');
+    if (nameEl) nameEl.value = 'الدورة التقييمية لمدارس التعليم العام 2026-2027';
+    if (yearEl) yearEl.value = '2026/2027';
+
+    const today = new Date().toISOString().split('T')[0];
+    const sixMonthsLater = new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    if (startEl) startEl.value = today;
+    if (endEl) endEl.value = sixMonthsLater;
+
+    const modal = document.getElementById('modal-launch-cycle');
+    if (modal) modal.classList.remove('hidden');
+  },
+
+  closeLaunchCycleModal() {
+    const modal = document.getElementById('modal-launch-cycle');
+    if (modal) modal.classList.add('hidden');
+  },
+
+  async handleSaveLaunchCycle(event) {
+    event.preventDefault();
+    const name = document.getElementById('cycle-name')?.value;
+    const academic_year = document.getElementById('cycle-academic-year')?.value;
+    const start_date = document.getElementById('cycle-start-date')?.value;
+    const end_date = document.getElementById('cycle-end-date')?.value;
+    const enroll_all_schools = document.getElementById('cycle-enroll-all')?.checked;
+    const alertEl = document.getElementById('launch-cycle-alert');
+
+    const res = await this.request('/evaluation-cycles', {
+      method: 'POST',
+      body: JSON.stringify({
+        name,
+        academic_year,
+        start_date,
+        end_date,
+        enroll_all_schools
+      })
+    });
+
+    if (!res.ok) {
+      if (alertEl) {
+        alertEl.textContent = res.message || 'تعذر إطلاق الدورة.';
+        alertEl.classList.remove('hidden');
+      } else {
+        alert(res.message);
+      }
+      return;
+    }
+
+    alert('تم إطلاق دورة التقييم الجديدة بنجاح وربطها تلقائياً بالإصدار المُقرّ!');
+    this.closeLaunchCycleModal();
+    this.loadSupervisionCycles();
+  },
+
+  async closeEvaluationCycle(cycleId) {
+    if (!confirm('هل أنت متأكد من إغلاق هذه الدورة التقييمية؟ لن تتمكن المدارس من فتح تقييمات جديدة بعدها.')) return;
+    const res = await this.request(`/evaluation-cycles/${cycleId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status: 'Closed' })
+    });
+
+    if (!res.ok) {
+      alert(res.message || 'تعذر إغلاق الدورة.');
+      return;
+    }
+
+    alert('تم إغلاق دورة التقييم بنجاح.');
+    this.loadSupervisionCycles();
+  },
+
+  async openEnrollSchoolsModal(cycleId) {
+    document.getElementById('enroll-cycle-id').value = cycleId;
+    const listEl = document.getElementById('enroll-schools-list');
+    const alertEl = document.getElementById('enroll-schools-alert');
+    if (alertEl) alertEl.classList.add('hidden');
+    if (listEl) listEl.innerHTML = '<div style="text-align: center;">جارِ جلب قائمة المدارس...</div>';
+
+    const modal = document.getElementById('modal-enroll-schools');
+    if (modal) modal.classList.remove('hidden');
+
+    const res = await this.request('/schools');
+    if (!res.ok || !Array.isArray(res.data)) {
+      if (listEl) listEl.innerHTML = '<div style="color: red;">تعذر جلب المدارس.</div>';
+      return;
+    }
+
+    listEl.innerHTML = res.data.map(s => `
+      <label style="display: flex; align-items: center; gap: 0.5rem; padding: 0.3rem 0; font-size: 0.88rem; cursor: pointer;">
+        <input type="checkbox" name="enroll-school-ids" value="${s.schoolId}">
+        <span><strong>${s.schoolName}</strong> (${s.educationalStage || 'عام'}) - ${s.governorate || ''}</span>
+      </label>
+    `).join('');
+  },
+
+  closeEnrollSchoolsModal() {
+    const modal = document.getElementById('modal-enroll-schools');
+    if (modal) modal.classList.add('hidden');
+  },
+
+  async handleSaveEnrollSchools(event) {
+    event.preventDefault();
+    const cycleId = document.getElementById('enroll-cycle-id')?.value;
+    const checkboxes = document.querySelectorAll('input[name="enroll-school-ids"]:checked');
+    const school_ids = Array.from(checkboxes).map(cb => parseInt(cb.value));
+
+    if (school_ids.length === 0) {
+      alert('يرجى تحديد مدرسة واحدة على الأقل.');
+      return;
+    }
+
+    const res = await this.request(`/evaluation-cycles/${cycleId}/participations`, {
+      method: 'POST',
+      body: JSON.stringify({ school_ids })
+    });
+
+    if (!res.ok) {
+      alert(res.message || 'تعذر تسجيل المدارس.');
+      return;
+    }
+
+    alert('تم تسجيل المدارس بنجاح وإرسال الإشعارات لهم!');
+    this.closeEnrollSchoolsModal();
+    this.loadSupervisionCycles();
+  },
+
+  // ---------------------------------------------------------------------------
+  // الشريحة 10: منظومة الإشعارات والتنبيهات (In-App Notifications)
+  // ---------------------------------------------------------------------------
+  async loadNotificationsCount() {
+    if (!this.state.user) return;
+    const res = await this.request('/notifications/unread-count');
+    const badge = document.getElementById('notifications-unread-badge');
+    if (res.ok && badge) {
+      const count = res.data?.unreadCount || 0;
+      this.state.unreadNotificationsCount = count;
+      badge.textContent = count;
+      if (count > 0) {
+        badge.classList.remove('hidden');
+      } else {
+        badge.classList.add('hidden');
+      }
+    }
+  },
+
+  async loadNotifications() {
+    const container = document.getElementById('notifications-modal-list');
+    if (!container) return;
+    container.innerHTML = '<div style="text-align: center; color: var(--text-muted); padding: 1.5rem;">جارِ تحميل التنبيهات...</div>';
+
+    const res = await this.request('/notifications?limit=50');
+    if (!res.ok) {
+      container.innerHTML = `<div style="color: red; text-align: center; padding: 1rem;">${res.message}</div>`;
+      return;
+    }
+
+    const notifs = res.data || [];
+    this.state.notifications = notifs;
+
+    if (notifs.length === 0) {
+      container.innerHTML = '<div style="text-align: center; color: var(--text-muted); padding: 2rem;">📭 لا توجد إشعارات مسجلة لحسابك حالياً.</div>';
+      return;
+    }
+
+    container.innerHTML = notifs.map(n => {
+      const unreadCls = !n.isRead ? 'unread' : '';
+      const dateStr = n.createdAt ? new Date(n.createdAt).toLocaleString('ar-YE') : '';
+      const dot = !n.isRead ? '<span style="color: var(--primary); font-size: 1.2rem; line-height: 1;">●</span>' : '';
+
+      return `
+        <div class="notification-item ${unreadCls}" onclick="App.markNotificationRead(${n.notificationId})">
+          <div class="notification-header">
+            <div style="display: flex; align-items: center; gap: 0.35rem;">
+              ${dot}
+              <span class="notification-title">${n.title || 'إشعار نظامي'}</span>
+            </div>
+            <span class="notification-time">${dateStr}</span>
+          </div>
+          <div class="notification-body">${n.message || ''}</div>
+        </div>
+      `;
+    }).join('');
+  },
+
+  toggleNotificationsModal() {
+    const modal = document.getElementById('modal-notifications');
+    if (!modal) return;
+    const isHidden = modal.classList.contains('hidden');
+    if (isHidden) {
+      modal.classList.remove('hidden');
+      this.loadNotifications();
+    } else {
+      modal.classList.add('hidden');
+    }
+  },
+
+  async markNotificationRead(id) {
+    const res = await this.request(`/notifications/${id}/read`, { method: 'PATCH' });
+    if (res.ok) {
+      await this.loadNotificationsCount();
+      await this.loadNotifications();
+    }
+  },
+
+  async markAllNotificationsRead() {
+    const res = await this.request('/notifications/mark-all-read', { method: 'POST' });
+    if (res.ok) {
+      await this.loadNotificationsCount();
+      await this.loadNotifications();
+    }
+  },
+
+  // ---------------------------------------------------------------------------
+  // الشريحة 10: استعادة كلمة المرور وإعادة التعيين (Password Recovery - G-05)
+  // ---------------------------------------------------------------------------
+  openForgotPasswordModal() {
+    const alertEl = document.getElementById('forgot-password-alert');
+    const formReq = document.getElementById('form-forgot-request');
+    const formReset = document.getElementById('form-forgot-reset');
+    const emailInput = document.getElementById('forgot-email');
+
+    if (alertEl) alertEl.classList.add('hidden');
+    if (formReq) formReq.classList.remove('hidden');
+    if (formReset) formReset.classList.add('hidden');
+    if (emailInput) emailInput.value = '';
+
+    const modal = document.getElementById('modal-forgot-password');
+    if (modal) modal.classList.remove('hidden');
+  },
+
+  closeForgotPasswordModal() {
+    const modal = document.getElementById('modal-forgot-password');
+    if (modal) modal.classList.add('hidden');
+  },
+
+  async handleForgotPassword(event) {
+    event.preventDefault();
+    const email = document.getElementById('forgot-email')?.value?.trim();
+    const alertEl = document.getElementById('forgot-password-alert');
+    if (!email) return;
+
+    const res = await this.request('/auth/password/forgot', {
+      method: 'POST',
+      body: JSON.stringify({ email })
+    });
+
+    if (!res.ok) {
+      if (alertEl) {
+        alertEl.textContent = res.message || 'تعذر إرسال طلب استعادة كلمة المرور.';
+        alertEl.className = 'alert alert-error';
+        alertEl.classList.remove('hidden');
+      }
+      return;
+    }
+
+    if (alertEl) {
+      alertEl.textContent = res.message || 'تم إرسال تعليمات الاستعادة بنجاح.';
+      alertEl.className = 'alert alert-info';
+      alertEl.classList.remove('hidden');
+    }
+
+    // الانتقال للخطوة 2
+    document.getElementById('form-forgot-request')?.classList.add('hidden');
+    const formReset = document.getElementById('form-forgot-reset');
+    if (formReset) {
+      formReset.classList.remove('hidden');
+      // إذا أعاد الباك إند الرمز في بيئة الاختبار/التطوير نملأه تلقائياً للتسهيل
+      if (res.data?.resetToken) {
+        const tokenInput = document.getElementById('reset-token');
+        if (tokenInput) tokenInput.value = res.data.resetToken;
+      }
+    }
+  },
+
+  async handleResetPassword(event) {
+    event.preventDefault();
+    const email = document.getElementById('forgot-email')?.value?.trim();
+    const token = document.getElementById('reset-token')?.value?.trim();
+    const password = document.getElementById('reset-password')?.value;
+    const password_confirmation = document.getElementById('reset-password-confirm')?.value;
+    const alertEl = document.getElementById('forgot-password-alert');
+
+    if (password !== password_confirmation) {
+      if (alertEl) {
+        alertEl.textContent = 'كلمة المرور وتأكيدها غير متطابقين.';
+        alertEl.className = 'alert alert-error';
+        alertEl.classList.remove('hidden');
+      }
+      return;
+    }
+
+    const res = await this.request('/auth/password/reset', {
+      method: 'POST',
+      body: JSON.stringify({
+        email,
+        token,
+        password,
+        password_confirmation
+      })
+    });
+
+    if (!res.ok) {
+      if (alertEl) {
+        alertEl.textContent = res.message || 'تعذر إعادة تعيين كلمة المرور.';
+        alertEl.className = 'alert alert-error';
+        alertEl.classList.remove('hidden');
+      }
+      return;
+    }
+
+    if (alertEl) {
+      alertEl.textContent = 'تمت إعادة تعيين كلمة المرور بنجاح! يمكنك الآن تسجيل الدخول بكلمة المرور الجديدة.';
+      alertEl.className = 'alert alert-info';
+      alertEl.classList.remove('hidden');
+    }
+
+    // تحديث حقل اسم المستخدم وتعيين كلمة المرور الجديدة في شاشة تسجيل الدخول
+    const loginUser = document.getElementById('login-username');
+    const loginPass = document.getElementById('login-password');
+    if (loginUser) loginUser.value = email;
+    if (loginPass) loginPass.value = password;
+
+    setTimeout(() => {
+      this.closeForgotPasswordModal();
+    }, 1800);
   },
 
   // ---------------------------------------------------------------------------

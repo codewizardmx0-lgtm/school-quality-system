@@ -34,6 +34,11 @@
       </div>
 
       <div class="user-nav">
+        <!-- جرس الإشعارات والتنبيهات (الشريحة 10) -->
+        <button id="btn-notifications-bell" class="notification-bell-btn hidden" onclick="App.toggleNotificationsModal()" title="التنبيهات والإشعارات">
+          🔔
+          <span id="notifications-unread-badge" class="notification-badge hidden">0</span>
+        </button>
         <div id="user-badge" class="user-badge hidden">
           <span id="user-name">اسم المستخدم</span>
           <span id="user-school" class="badge badge-gray">المدرسة</span>
@@ -86,6 +91,12 @@
         <button type="submit" id="btn-submit-login" class="btn btn-primary" style="width: 100%;">
           دخول إلى النظام
         </button>
+
+        <div style="text-align: center; margin-top: 0.75rem;">
+          <a href="javascript:void(0)" onclick="App.openForgotPasswordModal()" style="font-size: 0.85rem; color: var(--primary); text-decoration: none; font-weight: 600;">
+            🔑 نسيت كلمة المرور؟ استعادة الحساب
+          </a>
+        </div>
       </form>
 
       <!-- قسم تسجيل الدخول السريع (يظهر تلقائياً في وضع المطور Dev Mode) -->
@@ -139,6 +150,10 @@
         <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem;">
           تُعرض ملفات التقييم المرتبطة بدورات التقييم الرسمية للمدرسة مع حالة الملف (مسودة / مكتمل / مقفل).
         </p>
+
+        <!-- منطقة إتاحة بدء تقييم جديد في دورة نشطة (G-26) -->
+        <div id="active-cycle-cta-container"></div>
+
         <div class="table-responsive">
           <table>
             <thead>
@@ -2017,9 +2032,6 @@
         <button type="button" id="tab-btn-admin-roles" class="tab-btn" onclick="App.switchAdminTab('roles')">
           🛡️ الأدوار والصلاحيات (Roles & Permissions)
         </button>
-        <button type="button" id="tab-btn-admin-cycles" class="tab-btn" onclick="App.switchAdminTab('cycles')">
-          📋 دورات التقييم (Evaluation Cycles)
-        </button>
       </div>
 
       <!-- تبويب إدارة المدارس -->
@@ -2105,48 +2117,6 @@
         </div>
       </div>
 
-      <!-- تبويب دورات التقييم المركزية -->
-      <div id="admin-tab-cycles" class="hidden">
-        <div class="card">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem;">
-            <div>
-              <h3 class="card-title" style="margin-bottom: 0.25rem;">دورات التقييم المركزية (Evaluation Cycles)</h3>
-              <p style="font-size: 0.82rem; color: var(--text-muted); margin: 0;">الدورات السنوية المركزية الحاكمة لملفات تقييم المدارس والمرتبطة بالإصدارات المعيارية المُقرّة.</p>
-            </div>
-            <button type="button" class="btn btn-sm btn-primary" onclick="App.handleCreateEvaluationCycle()">+ إنشاء دورة تقييم جديدة</button>
-          </div>
-
-          <div class="alert alert-warning" style="margin-bottom: 1rem; font-size: 0.85rem; line-height: 1.6;">
-            ⚠️ <strong>ملاحظة توثيقية وهندسية (فجوة معمارية مسجلة G-24):</strong><br>
-            لا يوجد مسار برمجى (API Endpoint) لإنشاء أو إدارة دورات التقييم <code>evaluation_cycles</code> في الباك إند حالياً. تُدار الدورات الحالية عبر التهيئة المركزية بالـ Seeder (العام الدراسي 2025/2026م والإصدار المعياري 2026.1). لإنشاء دورات جديدة، يتم توفير مسار وزاري مستقبلاً وفق خارطة الطريق.
-          </div>
-
-          <div class="table-responsive">
-            <table>
-              <thead>
-                <tr>
-                  <th>معرف الدورة</th>
-                  <th>العام الدراسي</th>
-                  <th>الإصدار المعياري المعتمد</th>
-                  <th>تاريخ البدء</th>
-                  <th>تاريخ النهاية</th>
-                  <th>الحالة</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td><strong>#1</strong></td>
-                  <td>2025/2026</td>
-                  <td>الإصدار الوطني 2026.1 (مُقرّ)</td>
-                  <td>2025-09-01</td>
-                  <td>2026-06-30</td>
-                  <td><span class="badge badge-green">Active (نشطة)</span></td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
     </section>
 
     <!-- ========================================================================= -->
@@ -2156,9 +2126,9 @@
       <div class="card" style="margin-bottom: 1rem;">
         <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem;">
           <div>
-            <h2 style="font-size: 1.3rem; color: #7c3aed; margin: 0;">👁️ لوحة المتابعة الإشرافية (مشرف الوزارة)</h2>
+            <h2 style="font-size: 1.3rem; color: #7c3aed; margin: 0;">👁️ لوحة المتابعة الإشرافية وإدارة الدورات (مشرف الوزارة)</h2>
             <p style="font-size: 0.85rem; color: var(--text-muted); margin-top: 0.25rem;">
-              متابعة وتقييم أداء مدارس المحافظة، والاطلاع على نتائج التقييم الذاتي، وتدوين الملاحظات التوجيهية الخارجية.
+              إطلاق وإدارة دورات التقييم المركزية (G-24)، ومتابعة أداء المدارس، والاطلاع على نتائج التقييم الذاتي، وتدوين الملاحظات التوجيهية.
             </p>
           </div>
           <div>
@@ -2167,43 +2137,93 @@
         </div>
       </div>
 
-      <div class="supervision-stats-grid">
-        <div class="supervision-stat-card">
-          <span style="font-size: 0.82rem; color: var(--text-muted);">إجمالي المدارس الخاضعة للإشراف</span>
-          <div class="val" id="sup-stat-total-schools" style="color: #4f46e5;">0</div>
-          <span style="font-size: 0.78rem; color: #64748b;">مدارس نطاق المحافظة</span>
+      <!-- تبويبات لوحة المشرف الوزاري -->
+      <div class="tabs-nav" id="supervision-tabs" style="margin-bottom: 1rem;">
+        <button type="button" id="tab-btn-supervision-schools" class="tab-btn active" onclick="App.switchSupervisionTab('schools')">
+          🏫 متابعة تقييمات المدارس (Schools Assessments)
+        </button>
+        <button type="button" id="tab-btn-supervision-cycles" class="tab-btn" onclick="App.switchSupervisionTab('cycles')">
+          📋 إدارة دورات التقييم المركزية (Evaluation Cycles)
+        </button>
+      </div>
+
+      <!-- تبويب متابعة المدارس والتقييمات -->
+      <div id="supervision-tab-schools">
+        <div class="supervision-stats-grid">
+          <div class="supervision-stat-card">
+            <span style="font-size: 0.82rem; color: var(--text-muted);">إجمالي المدارس الخاضعة للإشراف</span>
+            <div class="val" id="sup-stat-total-schools" style="color: #4f46e5;">0</div>
+            <span style="font-size: 0.78rem; color: #64748b;">مدارس نطاق المحافظة</span>
+          </div>
+          <div class="supervision-stat-card">
+            <span style="font-size: 0.82rem; color: var(--text-muted);">تقييمات مكتملة ومقفلة</span>
+            <div class="val" id="sup-stat-locked" style="color: #16a34a;">0</div>
+            <span style="font-size: 0.78rem; color: #16a34a;">جاهزة للمراجعة والتدقيق</span>
+          </div>
+          <div class="supervision-stat-card">
+            <span style="font-size: 0.82rem; color: var(--text-muted);">تقييمات قيد الإنجاز (مسودة)</span>
+            <div class="val" id="sup-stat-draft" style="color: #d97706;">0</div>
+            <span style="font-size: 0.78rem; color: #d97706;">قيد الرصد وجمع الشواهد</span>
+          </div>
         </div>
-        <div class="supervision-stat-card">
-          <span style="font-size: 0.82rem; color: var(--text-muted);">تقييمات مكتملة ومقفلة</span>
-          <div class="val" id="sup-stat-locked" style="color: #16a34a;">0</div>
-          <span style="font-size: 0.78rem; color: #16a34a;">جاهزة للمراجعة والتدقيق</span>
-        </div>
-        <div class="supervision-stat-card">
-          <span style="font-size: 0.82rem; color: var(--text-muted);">تقييمات قيد الإنجاز (مسودة)</span>
-          <div class="val" id="sup-stat-draft" style="color: #d97706;">0</div>
-          <span style="font-size: 0.78rem; color: #d97706;">قيد الرصد وجمع الشواهد</span>
+
+        <div class="card">
+          <h3 class="card-title">قائمة المدارس والتقييمات الذاتية</h3>
+          <div class="table-responsive">
+            <table>
+              <thead>
+                <tr>
+                  <th>المدرسة</th>
+                  <th>الكود الوزاري</th>
+                  <th>المرحلة</th>
+                  <th>المحافظة والمديرية</th>
+                  <th>حالة التقييم</th>
+                  <th>العام الدراسي</th>
+                  <th>الإجراءات الإشرافية</th>
+                </tr>
+              </thead>
+              <tbody id="supervision-schools-tbody">
+                <tr><td colspan="7" style="text-align: center;">جارِ جلب قائمة المدارس والتقييمات...</td></tr>
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
 
-      <div class="card">
-        <h3 class="card-title">قائمة المدارس والتقييمات الذاتية</h3>
-        <div class="table-responsive">
-          <table>
-            <thead>
-              <tr>
-                <th>المدرسة</th>
-                <th>الكود الوزاري</th>
-                <th>المرحلة</th>
-                <th>المحافظة والمديرية</th>
-                <th>حالة التقييم</th>
-                <th>العام الدراسي</th>
-                <th>الإجراءات الإشرافية</th>
-              </tr>
-            </thead>
-            <tbody id="supervision-schools-tbody">
-              <tr><td colspan="7" style="text-align: center;">جارِ جلب قائمة المدارس والتقييمات...</td></tr>
-            </tbody>
-          </table>
+      <!-- تبويب إدارة دورات التقييم المركزية (خاص بالمشرف الوزاري) -->
+      <div id="supervision-tab-cycles" class="hidden">
+        <div class="card">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem;">
+            <div>
+              <h3 class="card-title" style="margin-bottom: 0.25rem;">دورات التقييم المركزية المعتمدة</h3>
+              <p style="font-size: 0.82rem; color: var(--text-muted); margin: 0;">
+                إطلاق وإغلاق الدورات التقييمية وربطها التلقائي بآخر إصدار معايير مُقرّ، وإلحاق المدارس المشاركة.
+              </p>
+            </div>
+            <button type="button" class="btn btn-sm btn-primary" onclick="App.openLaunchCycleModal()">
+              🚀 + إطلاق دورة تقييمية جديدة
+            </button>
+          </div>
+
+          <div class="table-responsive">
+            <table>
+              <thead>
+                <tr>
+                  <th>معرف الدورة</th>
+                  <th>اسم الدورة</th>
+                  <th>العام الدراسي</th>
+                  <th>الإصدار المعياري الحاكم</th>
+                  <th>الفترة الزمنية</th>
+                  <th>المدارس المشاركة</th>
+                  <th>الحالة</th>
+                  <th>الإجراءات</th>
+                </tr>
+              </thead>
+              <tbody id="supervision-cycles-tbody">
+                <tr><td colspan="8" style="text-align: center;">جارِ جلب دورات التقييم...</td></tr>
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
     </section>
@@ -2892,6 +2912,166 @@
         <div style="display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem;">
           <button type="button" class="btn btn-secondary" onclick="App.closeCreateIndicatorModal()">إلغاء</button>
           <button type="submit" class="btn btn-primary">➕ إنشاء المؤشر</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ========================================================================= -->
+  <!-- نوافذ الشريحة 10: الإشعارات، استعادة كلمة المرور، وإطلاق دورات التقييم     -->
+  <!-- ========================================================================= -->
+
+  <!-- نافذة سجل الإشعارات والتنبيهات -->
+  <div id="modal-notifications" class="modal-overlay hidden">
+    <div class="modal-content" style="max-width: 580px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 0.75rem; margin-bottom: 1rem;">
+        <h3 style="font-size: 1.15rem; color: var(--primary); margin: 0; display: flex; align-items: center; gap: 0.5rem;">
+          <span>🔔</span> سجل الإشعارات والتنبيهات
+        </h3>
+        <div style="display: flex; gap: 0.5rem;">
+          <button type="button" class="btn btn-sm btn-outline-secondary" onclick="App.markAllNotificationsRead()">
+            ✓ تحديد الكل كمقروء
+          </button>
+          <button type="button" class="btn btn-sm btn-secondary" onclick="App.toggleNotificationsModal()">✕ إغلاق</button>
+        </div>
+      </div>
+
+      <div id="notifications-modal-list" style="max-height: 420px; overflow-y: auto; padding-left: 0.25rem;">
+        <div style="text-align: center; color: var(--text-muted); padding: 1.5rem;">جارِ تحميل الإشعارات...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- نافذة استعادة كلمة المرور (G-05) -->
+  <div id="modal-forgot-password" class="modal-overlay hidden">
+    <div class="modal-content" style="max-width: 480px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 0.75rem; margin-bottom: 1rem;">
+        <h3 style="font-size: 1.15rem; color: var(--primary); margin: 0; display: flex; align-items: center; gap: 0.5rem;">
+          <span>🔑</span> استعادة كلمة المرور
+        </h3>
+        <button type="button" class="btn btn-sm btn-secondary" onclick="App.closeForgotPasswordModal()">✕</button>
+      </div>
+
+      <div id="forgot-password-alert" class="alert hidden" style="margin-bottom: 1rem;"></div>
+
+      <!-- الخطوة 1: طلب الرمز -->
+      <form id="form-forgot-request" onsubmit="App.handleForgotPassword(event)">
+        <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem;">
+          أدخل بريدك الإلكتروني المسجل في النظام وسنرسل لك رمز تحقق مؤقتاً صالحاً لمدة 60 دقيقة.
+        </p>
+        <div class="form-group">
+          <label class="form-label" for="forgot-email">البريد الإلكتروني:</label>
+          <input type="email" id="forgot-email" class="form-control" required placeholder="quality@belqees.edu.ye">
+        </div>
+        <div style="display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem;">
+          <button type="button" class="btn btn-secondary" onclick="App.closeForgotPasswordModal()">إلغاء</button>
+          <button type="submit" class="btn btn-primary">📩 إرسال رمز الاستعادة</button>
+        </div>
+      </form>
+
+      <!-- الخطوة 2: إدخال الرمز وكلمة المرور الجديدة -->
+      <form id="form-forgot-reset" class="hidden" onsubmit="App.handleResetPassword(event)">
+        <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem;">
+          تم استلام الرمز بنجاح. يرجى إدخال رمز التحقق وتعيين كلمة المرور الجديدة.
+        </p>
+        <div class="form-group">
+          <label class="form-label" for="reset-token">رمز التحقق (Reset Token):</label>
+          <input type="text" id="reset-token" class="form-control" required placeholder="الصق الرمز المستلم هنا...">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="reset-password">كلمة المرور الجديدة (8 أحرف فأكثر):</label>
+          <input type="password" id="reset-password" class="form-control" required minlength="8" placeholder="••••••••">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="reset-password-confirm">تأكيد كلمة المرور الجديدة:</label>
+          <input type="password" id="reset-password-confirm" class="form-control" required minlength="8" placeholder="••••••••">
+        </div>
+        <div style="display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem;">
+          <button type="button" class="btn btn-secondary" onclick="App.closeForgotPasswordModal()">إلغاء</button>
+          <button type="submit" class="btn btn-primary">🔒 حفظ كلمة المرور والدخول</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- نافذة إطلاق دورة تقييمية جديدة (خاص بالمشرف الوزاري - G-24) -->
+  <div id="modal-launch-cycle" class="modal-overlay hidden">
+    <div class="modal-content" style="max-width: 540px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 0.75rem; margin-bottom: 1rem;">
+        <h3 style="font-size: 1.15rem; color: #7c3aed; margin: 0; display: flex; align-items: center; gap: 0.5rem;">
+          <span>🚀</span> إطلاق دورة تقييمية جديدة (مشرف الوزارة)
+        </h3>
+        <button type="button" class="btn btn-sm btn-secondary" onclick="App.closeLaunchCycleModal()">✕</button>
+      </div>
+
+      <div class="alert alert-info" style="margin-bottom: 1rem; font-size: 0.85rem; line-height: 1.5;">
+        ℹ️ <strong>الربط التلقائي بالمعايير:</strong> ترتبط الدورة الجديدة تلقائياً بآخر إصدار معايير مُقرّ ونشط في المنظومة، وتُرسل إشعارات فورية لمديري ومقيمي المدارس المسجلة.
+      </div>
+
+      <div id="launch-cycle-alert" class="alert alert-error hidden" style="margin-bottom: 1rem;"></div>
+
+      <form onsubmit="App.handleSaveLaunchCycle(event)">
+        <div class="form-group">
+          <label class="form-label" for="cycle-name">اسم الدورة التقييمية:</label>
+          <input type="text" id="cycle-name" class="form-control" placeholder="مثال: الدورة التقييمية العامة للعام 2026-2027">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="cycle-academic-year">العام الدراسي:</label>
+          <input type="text" id="cycle-academic-year" class="form-control" required placeholder="مثال: 2026/2027" value="2026/2027">
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+          <div class="form-group">
+            <label class="form-label" for="cycle-start-date">تاريخ البدء:</label>
+            <input type="date" id="cycle-start-date" class="form-control" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="cycle-end-date">تاريخ النهاية:</label>
+            <input type="date" id="cycle-end-date" class="form-control" required>
+          </div>
+        </div>
+
+        <div class="form-group" style="margin-top: 0.75rem; background: #f8fafc; padding: 0.75rem; border-radius: 6px; border: 1px solid var(--border);">
+          <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.88rem; cursor: pointer; margin: 0; font-weight: 600;">
+            <input type="checkbox" id="cycle-enroll-all" checked>
+            <span>تسجيل كافة المدارس النشطة في المنظومة تلقائياً للمشاركة في هذه الدورة</span>
+          </label>
+        </div>
+
+        <div style="display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1.25rem;">
+          <button type="button" class="btn btn-secondary" onclick="App.closeLaunchCycleModal()">إلغاء</button>
+          <button type="submit" class="btn btn-primary" style="background: #7c3aed; border-color: #6d28d9;">
+            🚀 تأكيد إطلاق الدورة
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- نافذة إلحاق وتسجيل مدارس إضافية بالدورة -->
+  <div id="modal-enroll-schools" class="modal-overlay hidden">
+    <div class="modal-content" style="max-width: 500px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 0.75rem; margin-bottom: 1rem;">
+        <h3 style="font-size: 1.15rem; color: var(--primary); margin: 0;">🏫 إلحاق مدارس بالدورة التقييمية</h3>
+        <button type="button" class="btn btn-sm btn-secondary" onclick="App.closeEnrollSchoolsModal()">✕</button>
+      </div>
+
+      <div id="enroll-schools-alert" class="alert alert-error hidden" style="margin-bottom: 1rem;"></div>
+
+      <form onsubmit="App.handleSaveEnrollSchools(event)">
+        <input type="hidden" id="enroll-cycle-id">
+        <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem;">
+          اختر المدارس المراد تسجيلها وإتاحة بدء التقييم الذاتي لها في هذه الدورة:
+        </p>
+
+        <div id="enroll-schools-list" style="max-height: 250px; overflow-y: auto; border: 1px solid var(--border); border-radius: 6px; padding: 0.5rem; margin-bottom: 1rem; background: #fff;">
+          <!-- قائمة المدارس للشيك بوكس -->
+        </div>
+
+        <div style="display: flex; justify-content: flex-end; gap: 0.5rem;">
+          <button type="button" class="btn btn-secondary" onclick="App.closeEnrollSchoolsModal()">إلغاء</button>
+          <button type="submit" class="btn btn-primary">✓ تسجيل المدارس المحددة</button>
         </div>
       </form>
     </div>

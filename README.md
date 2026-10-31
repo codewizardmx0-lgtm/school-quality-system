@@ -31,15 +31,16 @@ school-quality-system/
 | **الشريحة 7** | **إدارة المعايير وإصداراتها وأوزانها النسبية (Standards & Versions Management)** | **مكتملة 100%** | [`docs/slices/slice7_standards_management.md`](docs/slices/slice7_standards_management.md) |
 | **الشريحة 8** | **الخطط التربوية والتطوير المهني ومتابعة التنفيذ (Educational Plans & Execution Tracking)** | **مكتملة 100%** | [`docs/slices/slice8_educational_plans.md`](docs/slices/slice8_educational_plans.md) |
 | **الشريحة 9** | **التقارير والتصدير والسياقات المعتمدة (Reports, Export & Trend Analysis)** | **مكتملة 100%** | [`docs/slices/slice9_reports_export.md`](docs/slices/slice9_reports_export.md) |
+| **الشريحة 10** | **إدارة دورات التقييم، بدء ملفات التقييم، ومنظومة الإشعارات واستعادة الحسابات (Cycles, Evaluations, Notifications & Reset)** | **مكتملة 100%** | [`docs/slices/slice10_cycles_notifications.md`](docs/slices/slice10_cycles_notifications.md) |
 
 ---
 
 ## نقطة الاسترجاع والوسم الرسمي للمرحلة (Milestone Release Tag)
 
 > [!TIP]
-> **الوسم المرجعي للمرحلة السابقة (الشرائح 1 إلى 6):** `v0.6.0-slices-1-to-6-complete` (مدمج في main)  
-> **حالة فرع التطوير الرئيسي (`develop`):** مدمج به الشرائح حتى السابعة بالكامل، وفرع الشريحة الثامنة وإصلاحات الواجهات `feature/slice8-frontend-fixes` مكتمل ومختبر بـ **189 اختباراً آلياً ناجحاً بنسبة 100% (8,956 تأكيداً)**.
-> **حالة الشرائح الميدانية:** الشرائح من 1 إلى 8 مكتملة ومحققة 100%، والشرائح من 9 إلى 12 قادمة وفق خارطة الطريق.
+> **الوسم المرجعي للمرحلة السابقة (الشرائح 1 إلى 9):** `v0.9.0-slice9-reports-complete` (مدمج في develop)  
+> **حالة فرع التطوير للشريحة 10 (`feature/slice10-cycles-and-notifications`):** مكتمل ومختبر بـ **223 اختباراً آلياً ناجحاً بنسبة 100% (9,111 تأكيداً)**.
+> **حالة الشرائح الميدانية:** الشرائح من 1 إلى 10 مكتملة ومحققة 100%، والشرائح 11 و 12 قادمة وفق خارطة الطريق.
 
 ---
 
