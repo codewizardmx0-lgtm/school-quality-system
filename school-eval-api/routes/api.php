@@ -113,6 +113,10 @@ Route::prefix('v1')->group(function () {
             Route::post('/{id}/dev-reset', [\App\Http\Controllers\Api\V1\EvaluationController::class, 'devReset'])->name('api.v1.evaluations.dev-reset');
             Route::get('/{id}/indicators-context', [\App\Http\Controllers\Api\V1\EvaluationController::class, 'indicatorsContext'])->name('api.v1.evaluations.indicators-context');
             Route::get('/{id}/evidence-inventory', [\App\Http\Controllers\Api\V1\EvidenceController::class, 'inventory'])->name('api.v1.evaluations.evidence-inventory');
+            Route::get('/{id}/export-pdf', [\App\Http\Controllers\Api\V1\EvaluationController::class, 'exportPdf'])->name('api.v1.evaluations.export-pdf');
+            Route::get('/{id}/export-excel', [\App\Http\Controllers\Api\V1\EvaluationController::class, 'exportExcel'])->name('api.v1.evaluations.export-excel');
+            Route::get('/{id}/trend', [\App\Http\Controllers\Api\V1\EvaluationController::class, 'trend'])->name('api.v1.evaluations.trend');
+            Route::get('/{id}/action-recommendations', [\App\Http\Controllers\Api\V1\EvaluationController::class, 'actionRecommendations'])->name('api.v1.evaluations.action-recommendations');
             Route::get('/{id}/indicators/{indicatorId}/evidences', [\App\Http\Controllers\Api\V1\EvidenceController::class, 'indexByIndicator'])->name('api.v1.evaluations.indicators.evidences.index');
             Route::post('/{id}/indicators/{indicatorId}/evidences', [\App\Http\Controllers\Api\V1\EvidenceController::class, 'storeByIndicator'])->name('api.v1.evaluations.indicators.evidences.store');
         });

@@ -11,6 +11,7 @@ use App\Models\Indicator;
 use App\Models\IndicatorScoreDescriptor;
 use App\Models\Note;
 use App\Models\StandardVersion;
+use App\Models\User;
 use App\Services\EvaluationLockChecker;
 use App\Events\EvaluationSubmitted;
 use Illuminate\Http\JsonResponse;
@@ -829,5 +830,165 @@ class EvaluationController extends Controller
             data: null,
             message: 'تم إفراغ التقييم التجريبي بنجاح.'
         );
+    }
+
+    /**
+     * تصدير بطاقة تقويم المدرسة الرسمية بصيغة PDF (الشريحة 9).
+     *
+     * GET /api/v1/evaluations/{id}/export-pdf
+     */
+    public function exportPdf(Request $request, int $id)
+    {
+        $user = $request->user();
+        $evaluation = Evaluation::with(['school', 'cycle'])->find($id);
+
+        if (!$evaluation) {
+            return ApiResponse::notFound('ملف التقييم المطلوب غير موجود.');
+        }
+
+        $authError = $this->authorizeReportOrExportAccess($user, $evaluation);
+        if ($authError) {
+            return $authError;
+        }
+
+        $reportService = app(\App\Services\EvaluationReportService::class);
+        $pdfContent = $reportService->generateEvaluationCardPdf($evaluation, $user);
+
+        $filename = "evaluation_card_{$evaluation->evaluation_id}.pdf";
+
+        return response($pdfContent, 200, [
+            'Content-Type'        => 'application/pdf',
+            'Content-Disposition' => "attachment; filename=\"{$filename}\"",
+        ]);
+    }
+
+    /**
+     * تصدير نتائج التقييم وسجل الشواهد والخطط بصيغة Excel (الشريحة 9).
+     *
+     * GET /api/v1/evaluations/{id}/export-excel
+     */
+    public function exportExcel(Request $request, int $id)
+    {
+        $user = $request->user();
+        $evaluation = Evaluation::with(['school', 'cycle'])->find($id);
+
+        if (!$evaluation) {
+            return ApiResponse::notFound('ملف التقييم المطلوب غير موجود.');
+        }
+
+        $authError = $this->authorizeReportOrExportAccess($user, $evaluation);
+        if ($authError) {
+            return $authError;
+        }
+
+        $filename = "school_evaluation_{$evaluation->evaluation_id}.xlsx";
+
+        return \Maatwebsite\Excel\Facades\Excel::download(
+            new \App\Exports\EvaluationWorkbookExport($evaluation, $user),
+            $filename
+        );
+    }
+
+    /**
+     * استعراض بطاقة مقارنة الأداء وتتبع مسار التطور مع الدورة السابقة (Trend) - الشريحة 9.
+     *
+     * GET /api/v1/evaluations/{id}/trend
+     */
+    public function trend(Request $request, int $id): JsonResponse
+    {
+        $user = $request->user();
+        $evaluation = Evaluation::with(['school', 'cycle'])->find($id);
+
+        if (!$evaluation) {
+            return ApiResponse::notFound('ملف التقييم المطلوب غير موجود.');
+        }
+
+        $authError = $this->authorizeReportOrExportAccess($user, $evaluation);
+        if ($authError) {
+            return $authError;
+        }
+
+        $trendService = app(\App\Services\EvaluationTrendService::class);
+        $trendData = $trendService->calculateTrend($evaluation);
+
+        return ApiResponse::success(
+            data: $trendData,
+            message: 'تم استخراج بيانات مسار التطور مقارنة بالدورة السابقة بنجاح.'
+        );
+    }
+
+    /**
+     * اقتراح إجراءات نموذجية من بنك الإجراءات للمؤشرات الضعيفة (0 أو 1) - الشريحة 9.
+     *
+     * GET /api/v1/evaluations/{id}/action-recommendations?indicator_code={code}
+     */
+    public function actionRecommendations(Request $request, int $id): JsonResponse
+    {
+        $user = $request->user();
+        $evaluation = Evaluation::with(['school'])->find($id);
+
+        if (!$evaluation) {
+            return ApiResponse::notFound('ملف التقييم المطلوب غير موجود.');
+        }
+
+        $authError = $this->authorizeReportOrExportAccess($user, $evaluation);
+        if ($authError) {
+            return $authError;
+        }
+
+        $indicatorCode = $request->query('indicator_code');
+        if (!$indicatorCode || !is_string($indicatorCode)) {
+            return ApiResponse::validationError([
+                'indicator_code' => ['رمز المؤشر مطلوب لاستخراج توصيات بنك الإجراءات.'],
+            ]);
+        }
+
+        // جلب درجة المؤشر في هذا التقييم إن وجدت
+        $result = EvaluationResult::where('evaluation_id', $evaluation->evaluation_id)
+            ->whereHas('indicator', fn($q) => $q->where('code', $indicatorCode))
+            ->first();
+
+        $score = $result ? $result->score : null;
+
+        $catalogService = app(\App\Services\ActionCatalogService::class);
+        $recommendations = $catalogService->getRecommendationsForIndicator($indicatorCode, $score);
+
+        return ApiResponse::success(
+            data: $recommendations,
+            message: 'تم استخراج التوصيات المقترحة من بنك الإجراءات بنجاح.'
+        );
+    }
+
+    /**
+     * التحقق من أمن وصلاحيات الوصول للتقارير والتصدير (الشريحة 9).
+     */
+    protected function authorizeReportOrExportAccess(?User $user, Evaluation $evaluation): ?JsonResponse
+    {
+        if (!$user) {
+            return ApiResponse::unauthorized('يجب تسجيل الدخول للمتابعة.');
+        }
+
+        // 1. مسؤول المعايير ممنوع من شاشات المدارس وتقاريرها (BR-MIN-01)
+        if ($user->hasRole('ministry_standards_manager')) {
+            return ApiResponse::forbidden('غير مصرح لك بالاطلاع على تقارير المدارس أو تصديرها (BR-MIN-01).');
+        }
+
+        // 2. عزل المدارس الصارم (القرار المعماري 9)
+        if ($user->user_type === 'school' && (int) $user->school_id !== (int) $evaluation->school_id) {
+            return ApiResponse::notFound('ملف التقييم المطلوب غير موجود.');
+        }
+
+        // 3. فحص الصلاحيات العامة
+        $hasAccess = $user->hasRole('admin')
+            || $user->user_type === 'admin'
+            || $user->user_type === 'system'
+            || $user->hasPermission('reports.view')
+            || $user->hasPermission('evaluations.view');
+
+        if (!$hasAccess) {
+            return ApiResponse::forbidden('غير مصرح لك بتصدير أو استعراض هذا التقرير.');
+        }
+
+        return null;
     }
 }

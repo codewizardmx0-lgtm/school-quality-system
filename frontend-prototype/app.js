@@ -5,6 +5,9 @@
  */
 
 const App = {
+  get apiBaseUrl() {
+    return this.state.apiUrl;
+  },
   state: {
     apiUrl: 'http://127.0.0.1:8000/api/v1',
     token: localStorage.getItem('eval_token') || null,
@@ -714,6 +717,9 @@ const App = {
       this.state.indicatorsContext = {};
     }
 
+    // مقارنة الأداء مع الدورة السابقة (الشريحة 9)
+    this.loadEvaluationTrend(evalId, 'tree');
+
     // تحديث ترويسة الشجرة والإنجاز الإجمالي من بيانات الـ API (قراءة schoolName و academicYear مباشرة من الاستجابة)
     const schoolName = data.schoolName || this.state.currentEvaluation?.school?.schoolName || this.state.user?.school?.schoolName || 'المدرسة';
     const cycleAcademicYear = data.academicYear || this.state.currentEvaluation?.cycle?.academicYear || '';
@@ -997,6 +1003,14 @@ const App = {
       ctxCard.classList.add('hidden');
     }
 
+    // بطاقة التوصيات من بنك التدخلات للمؤشرات ذات الأداء المتدني (الشريحة 9)
+    const recCard = document.getElementById('indicator-action-recommendations-card');
+    if (currentScore !== null && currentScore <= 1) {
+      this.loadActionRecommendations(currentScore);
+    } else if (recCard) {
+      recCard.classList.add('hidden');
+    }
+
     modal.classList.remove('hidden');
   },
 
@@ -1012,6 +1026,14 @@ const App = {
     document.getElementById('selected-score-value').value = scoreVal;
     document.getElementById('selected-descriptor-id').value = descriptorId || '';
     this.clearErrors(['score']);
+
+    // عرض أو إخفاء بطاقة التوصيات من بنك التدخلات بناءً على الدرجة (الشريحة 9)
+    if (scoreVal <= 1) {
+      this.loadActionRecommendations(scoreVal);
+    } else {
+      const recCard = document.getElementById('indicator-action-recommendations-card');
+      if (recCard) recCard.classList.add('hidden');
+    }
   },
 
   closeScoringModal() {
@@ -4194,6 +4216,9 @@ const App = {
     const perfLabel = data.performance_level?.label || 'متميز';
     const perfBadge = finalScore >= 90 ? 'badge-green' : (finalScore >= 75 ? 'badge-blue' : (finalScore >= 50 ? 'badge-yellow' : 'badge-red'));
 
+    // مقارنة الأداء مع الدورة السابقة في شاشة النتائج (الشريحة 9)
+    this.loadEvaluationTrend(evalId, 'results');
+
     bannerBox.innerHTML = `
       <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
         <div>
@@ -4730,6 +4755,253 @@ const App = {
       console.error(err);
       this.showAlert('تعذر النسخ تلقائياً، يرجى النسخ اليدوي.', 'error');
     });
+  },
+
+  // =========================================================================
+  // الشريحة 9: تصدير بطاقة التقويم الرسمية (PDF) ومصنف التقييم (Excel) ومقارنة الأداء (Trend)
+  // =========================================================================
+
+  async exportEvaluationPdf(evalId) {
+    evalId = evalId || this.getEvaluationId();
+    if (!evalId) {
+      this.showAlert('لم يتم العثور على ملف تقييم نشط للتصدير.', 'error');
+      return;
+    }
+    this.showAlert('جارِ إنشاء وتحميل بطاقة التقويم الرسمية (PDF)...', 'info');
+    try {
+      const token = this.state.token;
+      const res = await fetch(`${this.state.apiUrl}/evaluations/${evalId}/export-pdf`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/pdf, application/json',
+        }
+      });
+
+      if (!res.ok) {
+        let errData = {};
+        try { errData = await res.json(); } catch(e){}
+        this.showAlert(errData.message || `فشل تصدير ملف PDF (رمز الخطأ: ${res.status}).`, 'error');
+        return;
+      }
+
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `evaluation_card_${evalId}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+      this.showAlert('تم تحميل بطاقة التقويم الرسمية (PDF) بنجاح.', 'success');
+    } catch (err) {
+      this.showAlert('تعذر الاتصال بالخادم لتصدير ملف PDF: ' + err.message, 'error');
+    }
+  },
+
+  async exportEvaluationExcel(evalId) {
+    evalId = evalId || this.getEvaluationId();
+    if (!evalId) {
+      this.showAlert('لم يتم العثور على ملف تقييم نشط للتصدير.', 'error');
+      return;
+    }
+    this.showAlert('جارِ إنشاء وتحميل مصنف التقييم الشامل (Excel)...', 'info');
+    try {
+      const token = this.state.token;
+      const res = await fetch(`${this.state.apiUrl}/evaluations/${evalId}/export-excel`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/json',
+        }
+      });
+
+      if (!res.ok) {
+        let errData = {};
+        try { errData = await res.json(); } catch(e){}
+        this.showAlert(errData.message || `فشل تصدير مصنف Excel (رمز الخطأ: ${res.status}).`, 'error');
+        return;
+      }
+
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `school_evaluation_${evalId}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+      this.showAlert('تم تحميل مصنف البيانات الشامل (Excel) بنجاح.', 'success');
+    } catch (err) {
+      this.showAlert('تعذر الاتصال بالخادم لتصدير ملف Excel: ' + err.message, 'error');
+    }
+  },
+
+  async loadEvaluationTrend(evalId, context = 'tree') {
+    evalId = evalId || this.getEvaluationId();
+    if (!evalId) return;
+
+    const targetId = context === 'tree' ? 'tree-trend-card' : 'res-trend-card';
+    const cardEl = document.getElementById(targetId);
+    if (!cardEl) return;
+
+    try {
+      const res = await this.request(`/evaluations/${evalId}/trend`);
+      if (!res.ok || !res.data) {
+        cardEl.classList.add('hidden');
+        return;
+      }
+
+      const trend = res.data;
+      cardEl.classList.remove('hidden');
+
+      if (!trend.has_previous_cycle) {
+        cardEl.style.background = '#f8fafc';
+        cardEl.style.border = '1px solid #e2e8f0';
+        cardEl.innerHTML = `
+          <div style="display: flex; align-items: center; gap: 0.5rem; color: #475569; font-size: 0.85rem;">
+            <span style="font-size: 1.1rem;">🌱</span>
+            <div>
+              <strong>التقييم التأسيسي الأول للمدرسة:</strong>
+              <span style="margin-right: 0.35rem;">${trend.notice || 'لا توجد دورة تقييم سابقة مكتملة للمقارنة معها.'}</span>
+            </div>
+          </div>
+        `;
+        return;
+      }
+
+      const delta = trend.score_delta ?? 0;
+      const isImproved = delta > 0;
+      const isRegressed = delta < 0;
+      const deltaSign = delta > 0 ? `+${delta}%` : `${delta}%`;
+      const deltaColor = isImproved ? '#16a34a' : (isRegressed ? '#dc2626' : '#64748b');
+      const deltaBg = isImproved ? '#f0fdf4' : (isRegressed ? '#fef2f2' : '#f8fafc');
+      const deltaBorder = isImproved ? '#bbf7d0' : (isRegressed ? '#fecaca' : '#e2e8f0');
+
+      const prevCycle = trend.previous_cycle || {};
+      const breakdown = trend.breakdown || {};
+
+      cardEl.style.background = deltaBg;
+      cardEl.style.border = `1px solid ${deltaBorder}`;
+      cardEl.innerHTML = `
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
+          <div>
+            <span style="font-weight: 700; color: #1e293b; font-size: 0.95rem;">📈 مقارنة الأداء مع الدورة السابقة:</span>
+            <span style="font-size: 0.85rem; color: #475569; margin-right: 0.5rem;">
+              (${prevCycle.academic_year || ''} - ${prevCycle.name || 'الدورة السابقة'})
+            </span>
+          </div>
+          <div style="font-size: 1rem; font-weight: 800; color: ${deltaColor};">
+            فارق النتيجة الإجمالية: ${deltaSign}
+          </div>
+        </div>
+        <div style="display: flex; gap: 1rem; flex-wrap: wrap; margin-top: 0.5rem; font-size: 0.85rem;">
+          <span class="badge badge-green" style="font-size: 0.8rem;">
+            🟢 مؤشرات تحسنت: ${breakdown.improved_count ?? 0}
+          </span>
+          <span class="badge badge-red" style="font-size: 0.8rem;">
+            🔴 مؤشرات تراجعت: ${breakdown.regressed_count ?? 0}
+          </span>
+          <span class="badge badge-gray" style="font-size: 0.8rem;">
+            ⚪ مؤشرات مستقرة: ${breakdown.maintained_count ?? 0}
+          </span>
+          <span style="font-size: 0.8rem; color: #64748b; margin-right: auto;">
+            الدرجة السابقة: ${trend.previous_score ?? 0}% &larr; الحالية: ${trend.current_score ?? 0}%
+          </span>
+        </div>
+      `;
+    } catch (err) {
+      cardEl.classList.add('hidden');
+    }
+  },
+
+  async loadActionRecommendations(scoreVal) {
+    const evalId = this.state.currentEvaluation?.evaluationId || this.getEvaluationId();
+    const ind = this.state.currentIndicator;
+    const cardEl = document.getElementById('indicator-action-recommendations-card');
+    const listEl = document.getElementById('indicator-action-recommendations-list');
+    if (!cardEl || !listEl || !evalId || !ind) return;
+
+    const indCode = ind.code || ind.indicatorCode;
+    if (!indCode) return;
+
+    cardEl.classList.remove('hidden');
+    listEl.innerHTML = '<span style="font-size: 0.8rem; color: #9a3412;">جارِ جلب التوصيات والإجراءات المقترحة من بنك التدخلات...</span>';
+
+    try {
+      const res = await this.request(`/evaluations/${evalId}/action-recommendations?indicator_code=${encodeURIComponent(indCode)}`);
+      if (!res.ok || !res.data || res.data.length === 0) {
+        listEl.innerHTML = '<span style="font-size: 0.8rem; color: #9a3412;">لا توجد إجراءات نموذجية مسجلة في البنك لهذا المؤشر حالياً.</span>';
+        return;
+      }
+
+      const items = res.data;
+      listEl.innerHTML = items.map((item, idx) => `
+        <div style="background: white; border: 1px solid #fed7aa; border-radius: 6px; padding: 0.6rem; display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+          <div style="flex: 1; min-width: 250px;">
+            <div style="font-weight: 700; color: #9a3412; font-size: 0.85rem;">${item.title_ar || item.title}</div>
+            <div style="font-size: 0.78rem; color: #475569; margin-top: 0.2rem;">${item.description_ar || item.description || ''}</div>
+            <div style="font-size: 0.73rem; color: #64748b; margin-top: 0.25rem;">
+              الفئة المستهدفة: <strong>${item.target_group_ar || item.target_group || 'غير محدد'}</strong> | 
+              المدة المقترحة: <strong>${item.default_timeline_days || 30} يوماً</strong>
+            </div>
+          </div>
+          <div>
+            <button type="button" class="btn btn-sm btn-outline-warning" style="background: #fff7ed; border-color: #ea580c; color: #c2410c; font-weight: 600;" 
+                    onclick='App.adoptActionRecommendation(${JSON.stringify(item).replace(/'/g, "&apos;")})'>
+              ➕ إضافة للخطة
+            </button>
+          </div>
+        </div>
+      `).join('');
+    } catch (err) {
+      listEl.innerHTML = '<span style="font-size: 0.8rem; color: #dc2626;">تعذر جلب التوصيات من البنك.</span>';
+    }
+  },
+
+  async adoptActionRecommendation(item) {
+    this.closeScoringModal();
+    this.navTo('plans');
+
+    setTimeout(async () => {
+      if (!this.state.plans || this.state.plans.length === 0) {
+        await this.loadPlans();
+      }
+      const plans = this.state.plans || [];
+      if (plans.length === 0) {
+        this.showAlert('لا توجد خطة تحسين بعد. يرجى إنشاء خطة أولاً ثم إضافة الإجراء المقترح.', 'warning');
+        this.toggleCreatePlanForm(true);
+        const titleInput = document.getElementById('plan-title');
+        if (titleInput) {
+          titleInput.value = `خطة تطوير: ${item.title_ar || item.title}`;
+        }
+        return;
+      }
+
+      const firstPlan = plans[0];
+      await this.showPlanDetails(firstPlan.planId);
+      this.openActionModal();
+
+      setTimeout(() => {
+        const titleEl = document.getElementById('action-title');
+        const respEl = document.getElementById('action-responsible');
+        const startEl = document.getElementById('action-start-date');
+        const dueEl = document.getElementById('action-due-date');
+
+        if (titleEl) titleEl.value = item.title_ar || item.title;
+        if (respEl) respEl.value = item.target_group_ar || item.target_group || 'فريق التطوير المدرسي';
+
+        const today = new Date();
+        if (startEl) startEl.value = today.toISOString().split('T')[0];
+
+        const days = item.default_timeline_days || 30;
+        const dueDate = new Date();
+        dueDate.setDate(dueDate.getDate() + days);
+        if (dueEl) dueEl.value = dueDate.toISOString().split('T')[0];
+
+        this.showAlert(`تم تحضير الإجراء المقترح (${item.title_ar || item.title}). يرجى حفظه.`, 'info');
+      }, 250);
+    }, 200);
   },
 
   showSubmitErrorsModal(res) {
