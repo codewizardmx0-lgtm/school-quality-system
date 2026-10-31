@@ -136,11 +136,11 @@ Authorization: Bearer <plainTextToken>
   "meta": null
 }
 ```
-- **401 Unauthorized (بيانات الاعتماد غير مطابقة):**
+- **401 Unauthorized (بيانات الدخول غير صحيحة):**
 ```json
 {
   "data": null,
-  "message": "بيانات الاعتماد غير صحيحة.",
+  "message": "بيانات الدخول غير صحيحة.",
   "errors": null,
   "meta": null
 }
@@ -301,7 +301,59 @@ Authorization: Bearer <plainTextToken>
 
 ---
 
-## 4. مصفوفة الصلاحيات والأدوار الخمسة المعتمدة (19 صلاحية و27 ربطًا)
+
+### 3.4 طلب استعادة كلمة المرور (Forgot Password - G-05)
+
+- **المسار:** `POST /api/v1/auth/password/forgot`
+- **الحماية:** عام (Public)
+- **الوصف:** استلام البريد الإلكتروني للمستخدم، وتوليد رمز تحقق آمن ومؤقت بصلاحية 60 دقيقة في جدول `password_reset_tokens`.
+
+#### جسم الطلب (Request Body):
+```json
+{
+  "email": "quality@belqees.edu.ye"
+}
+```
+
+#### استجابة النجاح (200 OK):
+```json
+{
+  "success": true,
+  "message": "تم إرسال تعليمات ورمز استعادة كلمة المرور إلى بريدك الإلكتروني بنجاح.",
+  "data": {
+    "email": "quality@belqees.edu.ye"
+  }
+}
+```
+
+---
+
+### 3.5 إعادة تعيين كلمة المرور (Reset Password - G-05)
+
+- **المسار:** `POST /api/v1/auth/password/reset`
+- **الحماية:** عام (Public)
+- **الوصف:** التحقق من مطابقة الرمز والبريد وصلاحيته الزمنية، وتحديث كلمة المرور المشفرة للمستخدم، وإبطال التوكن المستخدم والجلسات السابقة.
+
+#### جسم الطلب (Request Body):
+```json
+{
+  "email": "quality@belqees.edu.ye",
+  "token": "a1b2c3d4e5f6...",
+  "password": "NewStrongPassword@2026",
+  "password_confirmation": "NewStrongPassword@2026"
+}
+```
+
+#### استجابة النجاح (200 OK):
+```json
+{
+  "success": true,
+  "message": "تمت إعادة تعيين كلمة المرور بنجاح. يمكنك الآن تسجيل الدخول بكلمة المرور الجديدة.",
+  "data": null
+}
+```
+
+## 4. مصفوفة الصلاحيات والأدوار الخمسة الرسمية (19 صلاحية قانونية و27 ربطًا)
 
 تطابق مصفوفة الصلاحيات في النظام مصفوفة الفصل الرابع (القسم 4.5.3) بصورة قطعية:
 
@@ -313,7 +365,7 @@ Authorization: Bearer <plainTextToken>
 | 4 | `evaluations.create` | إنشاء تقييم مدرسي | | ✓ | | | |
 | 5 | `evaluations.view` | عرض التقييمات | | ✓ | ✓ | ✓ | |
 | 6 | `evaluations.edit` | رصد وتعديل نتائج التقييم | | ✓ | | | |
-| 7 | `evaluations.submit` | تقديم التقييم للاعتماد | | ✓ | | | |
+| 7 | `evaluations.submit` | تسليم التقييم الذاتي النهائي | | ✓ | | | |
 | 8 | `evidence.manage` | إدارة الشواهد والأدلة | | ✓ | | | |
 | 9 | `reports.generate` | توليد تقارير التقييم | | ✓ | | | |
 | 10 | `reports.view` | عرض التقارير | | ✓ | ✓ | ✓ | |

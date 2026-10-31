@@ -1,6 +1,6 @@
 # دليل التسليم الهندسي لتكامل واجهة React
 ## نظام تقويم جودة المدارس (school-eval-web)
-### تغطية الشرائح المنجزة: 1 إلى 8 (الإصدار v0.8.0)
+### تغطية الشرائح المنجزة: 1 إلى 10 (الإصدار v1.0.0-slices-1-to-10)
 
 ---
 
@@ -362,6 +362,26 @@ export const useAuth = () => {
 
 ---
 
+
+### 3.10 الشريحة 10: إدارة دورات التقييم، بدء ملفات التقييم الذاتي، الإشعارات واستعادة الحسابات (Cycles, Evaluations, Notifications & Reset)
+
+توفر الشريحة 10 كافة المسارات المحورية لإدارة دورات التقييم وبدء ملفات التقييم والإشعارات واستعادة الحسابات (12 مساراً):
+
+| المسار (Endpoint) | الطريقة (Method) | الصلاحية المطلوبة | الوصف الوظيفي لـ React |
+|---|:---:|---|---|
+| `/api/v1/evaluation-cycles` | `GET` | `cycles.launch` / `cycles.manage` | استعراض قائمة الدورات التقييمية مع حقول `canStartEvaluation`, `isEnrolled`, `evaluationId`. |
+| `/api/v1/evaluation-cycles` | `POST` | `cycles.launch` / `cycles.manage` | إطلاق دورة تقييم جديدة؛ يتم الربط التلقائي بآخر إصدار مُقرّ (حظر الأدمن 403). |
+| `/api/v1/evaluation-cycles/{id}` | `GET` | `cycles.launch` / `cycles.manage` | تفاصيل دورة محددة مع إحصاءات المدارس المسجلة وحالة الإصدار الحاكم. |
+| `/api/v1/evaluation-cycles/{id}` | `PATCH` | `cycles.launch` / `cycles.manage` | تحديث بيانات الدورة أو إغلاقها (`status = 'Closed'`). |
+| `/api/v1/evaluation-cycles/{id}/participations` | `POST` | `cycles.launch` / `cycles.manage` | إلحاق وتسجيل مدارس إضافية بالدورة المركزية (`school_ids: [1, 2]`). |
+| `/api/v1/evaluations` | `POST` | `evaluations.create` (المقيّم حصرًا) | **بدء ملف تقييم ذاتي جديد** للمدرسة (G-26)؛ يتحقق من الدورة والإصدار وعدم التكرار. |
+| `/api/v1/notifications` | `GET` | موثق (أي مستخدم) | استعراض سجل الإشعارات مع التمييز بين المقروء وغير المقروء (عزل تام 404). |
+| `/api/v1/notifications/unread-count` | `GET` | موثق (أي مستخدم) | جلب عدد الإشعارات غير المقروءة لتحديث شارة الجرس في Header تلقائياً. |
+| `/api/v1/notifications/{id}/read` | `PATCH` | موثق (صاحب الإشعار) | تحديد إشعار محدد كمقروء (رفض محاولة قراءة إشعار مستخدم آخر بـ 404). |
+| `/api/v1/notifications/mark-all-read` | `POST` | موثق (صاحب الإشعار) | تحديد كافة إشعارات المستخدم الحالي كمقروءة دفعة واحدة. |
+| `/api/v1/auth/password/forgot` | `POST` | عام (Public) | طلب رمز مؤقت لاستعادة كلمة المرور عبر البريد الإلكتروني (G-05). |
+| `/api/v1/auth/password/reset` | `POST` | عام (Public) | إعادة تعيين كلمة المرور برمز التحقق (صلاحية 60 دقيقة) وإبطال الجلسات السابقة. |
+
 ## القسم 4: هيكل مكونات React المقترح (Architecture & State Management)
 
 ### 4.1 شجرة المكونات المعمارية المقترحة
@@ -667,6 +687,51 @@ export default api;
    - عرض التوصيات مع زر `+ إضافة للخطة` ينقل المستخدم إلى شاشة الخطط مع تعبئة الإجراء مسبقاً بعنوان وتفاصيل التدخل الموصى به.
 
 ---
+
+### التدفق 9: دورة التقييم والإشعار الكاملة في React (End-to-End Cycle Flow)
+```mermaid
+sequenceDiagram
+    actor Supervisor as المشرف الوزاري
+    actor Evaluator as مقيّم الجودة بالمدرسة
+    actor Principal as مدير المدرسة
+    participant Web as تطبيق React
+    participant API as الباك إند Laravel
+    participant DB as قاعدة البيانات
+
+    Note over Supervisor, API: 1. إطلاق دورة التقييم المركزية
+    Supervisor->>Web: يفتح شاشة الدورات ويضغط "إطلاق دورة تقييمية جديدة"
+    Web->>API: POST /api/v1/evaluation-cycles { name, academic_year, start_date, end_date, school_ids }
+    API->>DB: التحقق من وجود إصدار معايير مُقرّ (Approved/Active) والربط التلقائي به
+    API->>DB: إدراج الدورة وتسجيل المدارس المشاركة
+    API->>DB: إطلاق إشعارات آلية فورية لمديري ومقيّمي المدارس المشاركة
+    API-->>Web: 201 Created (تم إطلاق الدورة بنجاح)
+
+    Note over Evaluator, API: 2. استلام الإشعار وبدء ملف التقييم
+    Evaluator->>Web: يسجل الدخول ويرى شارة الجرس الحمراء (1 إشعار جديد)
+    Web->>API: GET /api/v1/notifications/unread-count -> { count: 1 }
+    Evaluator->>Web: يضغط على الجرس، يرى "تم إطلاق دورة تقييم جديدة لمدرستكم"
+    Web->>API: PATCH /api/v1/notifications/{id}/read
+    Evaluator->>Web: ينتقل لشاشة الدورات، يرى بطاقة الدورة وزر "بدء ملف تقييم ذاتي جديد"
+    Evaluator->>Web: يضغط "بدء ملف تقييم ذاتي جديد"
+    Web->>API: POST /api/v1/evaluations { cycle_id: 1 }
+    API->>DB: فحص شروط البدء الخمسة (دورة مفتوحة + تاريخ صالح + إصدار مُقرّ + مشاركة + عدم التكرار)
+    API->>DB: إنشاء التقييم بحالة InProgress وبث إشعار للمشرف والمدير
+    API-->>Web: 201 Created { evaluation_id: 2, status: 'InProgress' }
+    Web-->>Evaluator: توجيه فوري لشجرة المعايير للبدء بالرصد ورفع الشواهد
+
+    Note over Evaluator, API: 3. الرصد وجمع الشواهد والتسليم النهائي
+    Evaluator->>Web: رصد درجات الـ 109 مؤشرات ورفع الشواهد
+    Evaluator->>Web: يضغط "إنهاء وتسليم التقييم الذاتي"
+    Web->>API: POST /api/v1/evaluations/{id}/submit
+    API->>DB: تجميد Snapshot وقفل التعديل وتحويل الحالة إلى Completed
+    API->>DB: إرسال إشعار للمشرف الوزاري "تم تسليم التقييم الذاتي للمدرسة"
+    API-->>Web: 200 OK (تم تسليم التقييم بنجاح)
+
+    Note over Supervisor, API: 4. المراجعة الإشرافية وتدوين التوجيهات
+    Supervisor->>Web: يرى إشعار التسليم في الجرس، يفتح لوحة المتابعة
+    Supervisor->>Web: يستعرض بطاقة التقويم والتقارير ويدوّن الملاحظات الإشرافية
+```
+
 ## القسم 6: قواعد صارمة (System Invariants) - لا يجوز مخالفتها
 
 > [!CAUTION]

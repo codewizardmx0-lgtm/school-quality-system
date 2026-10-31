@@ -68,6 +68,33 @@ Authorization: Bearer <plainTextToken>
 ---
 
 ## 4. نقاط النهاية التفصيلية
+### 4.0 بدء ملف تقييم ذاتي جديد للمدرسة (Evaluation Initiation - G-26)
+
+- **المسار:** `POST /api/v1/evaluations`
+- **الصلاحية المطلوبة:** `evaluations.create` (مقيّم المدرسة حصرًا)
+- **الوصف:** بدء ملف تقييم ذاتي للمدرسة في دورة نشطة مفتوحة مرتبطة بإصدار معايير مُقرّ.
+
+#### جسم الطلب (Request Body):
+```json
+{
+  "cycle_id": 1
+}
+```
+
+#### استجابة النجاح (201 Created):
+```json
+{
+  "success": true,
+  "message": "تم بدء ملف التقييم الذاتي للمدرسة بنجاح.",
+  "data": {
+    "evaluation_id": 3,
+    "school_id": 1,
+    "cycle_id": 1,
+    "status": "InProgress"
+  }
+}
+```
+
 
 ### 4.1 استعراض شجرة الإصدار المعياري الخام
 * **المسار:** `GET /api/v1/standard-versions/{id}`
@@ -445,6 +472,26 @@ Authorization: Bearer <plainTextToken>
 * **جسم الاستجابة:** تدفق البيانات الثنائية (Binary File Stream) للملف مباشرة.
 
 ---
+
+
+### 4.9 إنهاء وتسليم التقييم الذاتي وقفل العمليات (Evaluation Submission - G-01 & BR-SCH-03)
+
+- **المسار:** `POST /api/v1/evaluations/{id}/submit`
+- **الصلاحية المطلوبة:** `evaluations.submit` (مقيّم المدرسة حصرًا)
+- **الوصف:** فحص استيفاء الـ 109 مؤشرات، تجميد لقطة السياق `school_context_snapshot`، قفل التعديل وتحويل الحالة إلى `Completed`.
+
+#### استجابة النجاح (200 OK):
+```json
+{
+  "success": true,
+  "message": "تم إغلاق التقييم الذاتي بنجاح وقفل العمليات التعديلية (BR-SCH-03).",
+  "data": {
+    "evaluation_id": 1,
+    "status": "Completed",
+    "is_locked": true
+  }
+}
+```
 
 ## 5. أمثلة الأخطاء المتوقعة ورموز الاستجابة (Error Handling)
 
