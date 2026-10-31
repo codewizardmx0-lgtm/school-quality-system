@@ -9,9 +9,9 @@
 ```
 school-quality-system/
 ├── school-eval-api/       # الباك إند: Laravel 11 API مع Sanctum و MySQL
-├── school-eval-web/       # الفرونت إند: تطبيق React (Vite + TailwindCSS)
+├── school-eval-web/       # الفرونت إند: تطبيق React 19 (Vite + TypeScript + TailwindCSS)
 ├── frontend-prototype/    # نموذج أولي تفاعلي للتحقق من تسلسل العمليات وتكامل الـ API (الشرائح 1-10)
-└── docs/                  # التوثيق المعماري، الأدلة، وتوثيق الشرائح (Slices)
+└── docs/                  # التوثيق المعماري، الأدلة، وتوثيق الشرائح (Slices) والأرشيف
 ```
 
 ---
@@ -22,7 +22,7 @@ school-quality-system/
 |---|---|---|---|
 | [`v0.6.0`](https://github.com/codewizardmx0-lgtm/school-quality-system/releases/tag/v0.6.0) | اكتمال الشرائح 1 إلى 6 الأساسية | 112 اختبارًا ناجحًا (100%) | [`docs/slices/README.md`](docs/slices/README.md) |
 | [`v0.9.0`](https://github.com/codewizardmx0-lgtm/school-quality-system/releases/tag/v0.9.0) | اكتمال الشرائح 7 و 8 و 9 وتصدير التقارير | 208 اختبارات ناجحة (100%) | [`docs/slices/slice9_reports_export.md`](docs/slices/slice9_reports_export.md) |
-| **`v1.0.0-slices-1-to-10`** *(مقترح بعد الدمج)* | اكتمال دورات التقييم، بدء التقييم الذاتي، الإشعارات، واستعادة الحسابات | **223 اختبارًا ناجحًا (100%)** | [`docs/slices/slice10_cycles_notifications.md`](docs/slices/slice10_cycles_notifications.md) |
+| [`v1.0.0-slices-1-to-10`](https://github.com/codewizardmx0-lgtm/school-quality-system/releases/tag/v1.0.0-slices-1-to-10) | اكتمال دورات التقييم، بدء التقييم الذاتي، الإشعارات، واستعادة الحسابات | **223 اختبارًا ناجحًا (100%)** | [`docs/slices/slice10_cycles_notifications.md`](docs/slices/slice10_cycles_notifications.md) |
 
 ---
 
@@ -59,6 +59,69 @@ school-quality-system/
 
 ---
 
+## دليل التشغيل السريع للمنظومة (Quick Start & Run Guide)
+
+### 1. المتطلبات الأساسية للتشغيل
+- **PHP:** إصدار 8.4 فما فوق (مدمج في Laragon).
+- **Node.js:** إصدار v20 فما فوق مع npm.
+- **MySQL:** إصدار 8.4 فما فوق (المنفذ الافتراضي `3306`).
+- **Composer:** لإدارة حزم ومكتبات PHP.
+
+### 2. تشغيل قاعدة البيانات (MySQL)
+تأكد من تشغيل خدمة MySQL عبر لوحة تحكم Laragon بالنقر على **Start All**، أو عبر موجه الأوامر:
+```powershell
+& "C:\laragon\bin\mysql\mysql-8.4.3-winx64\bin\mysqld.exe" --defaults-file="C:\laragon\bin\mysql\mysql-8.4.3-winx64\my.ini" --console
+```
+
+### 3. تشغيل الواجهة الخلفية (Laravel API)
+افتح نافذة طرفية أولى وتوجه إلى مجلد `school-eval-api`:
+```bash
+cd school-eval-api
+php artisan serve --port=8000
+```
+> الخادم سيعمل على: `http://127.0.0.1:8000`
+
+### 4. تشغيل تطبيق الواجهة الأمامية (React Web)
+افتح نافذة طرفية ثانية وتوجه إلى مجلد `school-eval-web`:
+```bash
+cd school-eval-web
+npm run dev
+```
+> التطبيق سيعمل على: `http://localhost:3000`
+
+### 5. حسابات التجربة والفحص المسبق (Seed Data Accounts)
+
+| الدور الوظيفي | اسم المستخدم (Username) | كلمة المرور | المدرسة / النطاق |
+|---|---|---|---|
+| **مسؤول النظام (Admin)** | `admin` | `ChangeMeDevPassword@2026` | إدارة النظام المركزية |
+| **مقيّم الجودة (بلقيس)** | `quality_belqees` | `ChangeMeDevPassword@2026` | مدرسة بلقيس النموذجية |
+| **مدير مدرسة (بلقيس)** | `principal_belqees` | `ChangeMeDevPassword@2026` | مدرسة بلقيس النموذجية |
+| **مقيّم الجودة (الفاروق)** | `quality_farouq` | `ChangeMeDevPassword@2026` | مدرسة الفاروق الأساسية |
+| **مدير مدرسة (الفاروق)** | `principal_farouq` | `ChangeMeDevPassword@2026` | مدرسة الفاروق الأساسية |
+| **مشرف تربوي وزاري** | `supervisor_ministry` | `ChangeMeDevPassword@2026` | وزارة التربية والتعليم |
+| **مدير إدارة المعايير** | `standards_manager_ministry` | `ChangeMeDevPassword@2026` | وزارة التربية والتعليم |
+
+### 6. أوامر الصيانة الدورية
+- **مسح الكاش وإعادة التهيئة:** `cd school-eval-api && php artisan optimize:clear`
+- **فحص بناء تطبيق الويب:** `cd school-eval-web && npm run build`
+- **تشغيل الاختبارات الآلية:** `cd school-eval-api && php artisan test`
+
+---
+
+## تشغيل الاختبارات الآلية (Automated Testing)
+
+```bash
+cd school-eval-api
+php artisan test
+```
+
+**النتيجة الفعلية لحزمة الاختبارات الآلية (Ground Truth):**
+- **223 اختبارًا ناجحًا بنسبة 100% (Passed)**
+- **9,111 تأكيدًا برمجيًا (Assertions)**
+- **0 إخفاقات / 0 أخطاء (0 Failures, 0 Errors)**
+
+---
+
 ## خارطة الشرائح المستقبلية المتبقية (Remaining Roadmap)
 
 * **الشريحة 11: الجاهزية للإنتاج والأمان والتحسين (Production Readiness):**
@@ -79,26 +142,49 @@ school-quality-system/
 
 ---
 
-## تشغيل الاختبارات الآلية (Automated Testing)
+## خريطة التوثيق المرجعي الشاملة (Master Documentation Index)
 
-```bash
-cd school-eval-api
-php artisan test
-```
+الهيكل التوثيقي المعتمد للمشروع منظم وفق مبدأ المصدر المرجعي الموحد (Single Source of Truth):
 
-**النتيجة الفعلية لحزمة الاختبارات الآلية (Ground Truth):**
-- **223 اختبارًا ناجحًا بنسبة 100% (Passed)**
-- **9,111 تأكيدًا برمجيًا (Assertions)**
-- **0 إخفاقات / 0 أخطاء (0 Failures, 0 Errors)**
+### 1. الوثائق التأسيسية والمعمارية (Core Specs & Guidelines)
+- [`gaps.md`](gaps.md): سجل الفجوات والانحرافات التقنية وقرارات التصميم وحالة الإغلاق (26 فجوة مستوفاة وموثقة).
+- [`docs/slices_roadmap.md`](docs/slices_roadmap.md): خارطة طريق الشرائح الهندسية لجميع الشرائح من 1 إلى 12.
+- [`docs/project_master_reference.md`](docs/project_master_reference.md): المرجع المعماري الشامل لبنية النظام، الفاعلين، ومصفوفة الصلاحيات.
+- [`docs/conventions.md`](docs/conventions.md): معايير البرمجة والتسمية، وقواعد الأمان، واستراتيجية الاختبارات.
 
----
+### 2. توثيق الشرائح المنفذة (Implemented Slices: 0 to 10)
+- [`docs/slices/README.md`](docs/slices/README.md): الفهرس المعماري الموحد لجميع الشرائح المنفذة.
+- [`docs/slices/slice1_auth_admin.md`](docs/slices/slice1_auth_admin.md): الشريحة 1 - المصادقة والعزل المؤسسي وإدارة المستخدمين والمدارس.
+- [`docs/slices/slice2_evaluation_evidence.md`](docs/slices/slice2_evaluation_evidence.md): الشريحة 2 - التقييم الذاتي ورصد الدرجات والشواهد.
+- [`docs/slices/slice3_improvement_plans.md`](docs/slices/slice3_improvement_plans.md): الشريحة 3 - خطط وإجراءات التحسين وتتبع التأخر.
+- [`docs/slices/slice4_reports_analytics.md`](docs/slices/slice4_reports_analytics.md): الشريحة 4 - التقارير والتحليلات والنتائج الموزونة واللوحة.
+- [`docs/slices/slice5_evidence_organization.md`](docs/slices/slice5_evidence_organization.md): الشريحة 5 - تنظيم وتصنيف وتدقيق الشواهد وحصر النواقص.
+- [`docs/slices/slice6_school_profile.md`](docs/slices/slice6_school_profile.md): الشريحة 6 - الملف التعريفي، الكادر، المرافق، وسياق المؤشرات.
+- [`docs/slices/slice7_standards_management.md`](docs/slices/slice7_standards_management.md): الشريحة 7 - إدارة المعايير وإصداراتها وأوزانها النسبية.
+- [`docs/slices/slice8_educational_plans.md`](docs/slices/slice8_educational_plans.md): الشريحة 8 - الخطط التربوية وبنك الإجراءات والشواهد التنفيذية.
+- [`docs/slices/slice9_reports_export.md`](docs/slices/slice9_reports_export.md): الشريحة 9 - تصدير PDF/Excel، مقارنة الأداء، وتوسيع السياقات.
+- [`docs/slices/slice10_cycles_notifications.md`](docs/slices/slice10_cycles_notifications.md): الشريحة 10 - إدارة الدورات، بدء التقييم، الإشعارات، واستعادة الحسابات.
 
-## روابط التوثيق المرجعي الأساسي
+### 3. واجهات برمجة التطبيقات ونقاط النهاية والتسليم (API Endpoints & Handover)
+- [`docs/handover/react-integration-guide.md`](docs/handover/react-integration-guide.md): دليل التسليم البرمجي لمهندسي React (نقاط النهاية، النماذج، أخطاء الاستجابة، ورسائل التحقق).
+- [`docs/api/auth_endpoints.md`](docs/api/auth_endpoints.md): مرجع نقاط نهاية المصادقة، الملف الشخصي، استعادة كلمة المرور، وإدارة المستخدمين والمدارس.
+- [`docs/api/evaluation_endpoints.md`](docs/api/evaluation_endpoints.md): مرجع نقاط نهاية شجرة المعايير، التقييم الذاتي، الشواهد، وسياق المؤشرات، وبدء التقييم.
+- [`docs/api/improvement_endpoints.md`](docs/api/improvement_endpoints.md): مرجع نقاط نهاية خطط التحسين، الإجراءات، الملاحظات الداخلية، وبنك الإجراءات، والخطط التربوية.
+- [`docs/api/reports_analytics_endpoints.md`](docs/api/reports_analytics_endpoints.md): مرجع نقاط نهاية التقارير، التحليلات، التصدير (PDF/Excel)، والدورات، والإشعارات.
 
-* الفهرس المعماري الشامل للشرائح: [`docs/slices/README.md`](docs/slices/README.md)
-* خارطة طريق الشرائح وتفاصيل الشريحة 11 و 12: [`docs/slices_roadmap.md`](docs/slices_roadmap.md)
-* سجل الفجوات والانحرافات التقنية: [`gaps.md`](gaps.md)
-* دليل التسليم الهندسي لتطبيق React: [`docs/handover/react-integration-guide.md`](docs/handover/react-integration-guide.md)
-* دليل التحقق العملي للواجهة النموذجية: [`frontend-prototype/verification-guide.md`](frontend-prototype/verification-guide.md)
-* دليل تشغيل النموذج الأولي (الشرائح 1-10): [`frontend-prototype/README.md`](frontend-prototype/README.md)
-* خارطة سياقات المؤشرات الـ 109: [`docs/indicator-context-roadmap.md`](docs/indicator-context-roadmap.md)
+### 4. سياق المؤشرات وقواعد البيانات والمعايير الوطنية (Data Layer & Standards)
+- [`docs/indicator-context-roadmap.md`](docs/indicator-context-roadmap.md): خارطة السياق الاسترشادي للـ 109 مؤشرات وتصنيفها الحسابي والمستقبلي.
+- [`docs/models_guide.md`](docs/models_guide.md): دليل نماذج البيانات (40 نموذج Eloquent) والعلاقات والسمات والقواعد.
+- [`docs/migrations_guide.md`](docs/migrations_guide.md): دليل تهيئة وتنفيذ هجرات قاعدة البيانات (40 جدولاً).
+- [`docs/المعايير/معايير_الاعتماد_المستخرجة.md`](docs/المعايير/معايير_الاعتماد_المستخرجة.md): الوثيقة المرجعية الرسمية المستخرجة للمجالات والمعايير والـ 109 مؤشرات وواصفاتها.
+- [`docs/chapter4/chapter4_system_design.md`](docs/chapter4/chapter4_system_design.md): التصميم الهندسي التفصيلي للفصل الرابع المتوافق مع الواقع البرمجي.
+
+### 5. النموذج التفاعلي وأدلة التحقق (Prototypes & Verification)
+- [`frontend-prototype/README.md`](frontend-prototype/README.md): دليل النموذج الأولي التفاعلي وهيكله وطريقة تشغيله.
+- [`frontend-prototype/verification-guide.md`](frontend-prototype/verification-guide.md): دليل التحقق السريع لسيناريوهات الفحص عبر النموذج الأولي لكافة الشرائح 1-10.
+
+### 6. الأرشيف التاريخي وتقارير المراجعة (Historical Archive)
+- [`docs/archive/chapter4/`](docs/archive/chapter4/): مسودات وسجلات المزامنة التاريخية للتصميم الهندسي قبل التوحيد.
+- [`docs/archive/seeders/`](docs/archive/seeders/): تقارير التدقيق والتنفيذ الأولية للبيانات المعيارية والـ Seeders.
+- [`docs/archive/reports/`](docs/archive/reports/): تقارير فحص واختبار النماذج والبيانات الأولية.
+- [`docs/archive/prototype/`](docs/archive/prototype/): ملاحظات التدفقات وسجلات الفجوات المبكرة للنموذج الأولي.
