@@ -143,7 +143,7 @@
 - **الجداول (5 جداول):**
   1. `reports`: تقارير التقييم المولدة رسمياً وحالتها (Draft, Final).
   2. `evaluation_submissions`: محاولات رفع وتسليم المخرج للوزارة بحالاتها الخمس (SubmissionStatus). تتضمن قيد `UNIQUE (report_id, attempt_no)` وقيد فحص `CHECK` لتاريخ الإرسال `submitted_at`.
-  3. `internal_review_notes`: ملاحظات المراجعة الداخلية لمدير المدرسة على التقرير قبل اعتماده.
+  3. `internal_review_notes`: ملاحظات المراجعة الداخلية لمدير المدرسة على التقرير قبل تسليمه.
   4. `plan_review_notes`: ملاحظات مدير المدرسة على خطة التحسين وإجراءاتها.
   5. `supervisor_notes`: ملاحظات المشرف الوزاري على محاولة الإرسال (مرتبطة بـ `submission_id`).
 - **الاعتماديات:** يعتمد على `evaluations`، `users`، `improvement_plans`.
