@@ -826,7 +826,7 @@ class EvaluationController extends Controller
                 ],
                 'isLocked' => true,
             ],
-            message: 'تم إغلاق التقييم الذاتي واعتماده بنجاح وقفل العمليات التعديلية (BR-SCH-03).'
+            message: 'تم إغلاق التقييم الذاتي وتسليمه بنجاح وقفل العمليات التعديلية (BR-SCH-03).'
         );
     }
 
@@ -895,7 +895,17 @@ class EvaluationController extends Controller
      */
     public function devReset(Request $request, int $id): JsonResponse
     {
+        // 1. قفل المسار خارج البيئة المحلية حصراً (REV-T009 / U-22)
+        if (!app()->environment('local')) {
+            return ApiResponse::forbidden('مسار إعادة الضبط التجريبي متاح فقط في البيئة المحلية (local environment).');
+        }
+
         $user = $request->user();
+
+        // 2. التحقق الصارم من التفويض والعزل المؤسسي (منع الأدمن والمشرفين ومستخدمي المدارس الأخرى من التدخل التشغيلي BR-GEN-06)
+        if (!$user || $user->user_type !== 'school' || !$user->hasPermission('evaluations.edit')) {
+            return ApiResponse::forbidden('غير مصرح لك بإفراغ هذا التقييم؛ الإجراء محصور بمقيّم المدرسة المصرح له.');
+        }
 
         $evaluation = Evaluation::find($id);
         if (!$evaluation) {
@@ -903,7 +913,7 @@ class EvaluationController extends Controller
         }
 
         // عزل المدارس (القرار المعماري 9)
-        if ($user->user_type === 'school' && (int) $user->school_id !== (int) $evaluation->school_id) {
+        if ((int) $user->school_id !== (int) $evaluation->school_id) {
             return ApiResponse::notFound('ملف التقييم غير موجود.');
         }
 

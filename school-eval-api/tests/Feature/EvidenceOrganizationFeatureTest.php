@@ -1704,38 +1704,64 @@ class EvidenceOrganizationFeatureTest extends TestCase
     }
 
     /**
-     * اختبار 30: التحقق من عمل مسار إفراغ التقييم التجريبي (dev-reset) وحذف الدرجات والشواهد الوهمية، ورفضه على التقييم المقفل.
+     * اختبار 30: التحقق من قفل مسار إفراغ التقييم التجريبي (dev-reset) خارج البيئة المحلية،
+     * ومنع الأدمن والمشرفين ومستخدمي المدارس الأخرى، وسماحه فقط لمقيم المدرسة في البيئة المحلية (REV-T009 / U-22).
      */
-    public function test_dev_reset_clears_results_and_evidences_for_unlocked_evaluation(): void
+    public function test_dev_reset_is_blocked_outside_local_and_for_unauthorized_users(): void
     {
-        Sanctum::actingAs($this->evaluatorBelqees);
-
-        // التأكد من وجود نتيجة وشاهد للتقييم
         $evalId = $this->evaluationBelqees->evaluation_id;
-        $this->assertDatabaseHas('evaluation_results', [
-            'evaluation_id' => $evalId,
-        ]);
-        $this->assertDatabaseHas('evidences', [
-            'evidence_id' => $this->evidenceBelqees->evidence_id,
-        ]);
 
-        // تنفيذ طلب الإفراغ التجريبي
+        // 1. التحقق من حظر المسار خارج البيئة المحلية (مثل testing أو production)
+        Sanctum::actingAs($this->evaluatorBelqees);
+        $this->app['env'] = 'production';
+        $prodRes = $this->postJson("/api/v1/evaluations/{$evalId}/dev-reset");
+        $prodRes->assertStatus(403)
+            ->assertJsonPath('message', 'مسار إعادة الضبط التجريبي متاح فقط في البيئة المحلية (local environment).');
+
+        // 2. إعادة البيئة إلى local لفحص صلاحيات وعزل المستخدمين
+        $this->app['env'] = 'local';
+
+        // 2.أ: حظر مسؤول النظام (Admin) - منع التدخل التشغيلي BR-GEN-06
+        $admin = User::where('username', 'admin')->first();
+        if ($admin) {
+            Sanctum::actingAs($admin);
+            $adminRes = $this->postJson("/api/v1/evaluations/{$evalId}/dev-reset");
+            $adminRes->assertStatus(403)
+                ->assertJsonPath('message', 'غير مصرح لك بإفراغ هذا التقييم؛ الإجراء محصور بمقيّم المدرسة المصرح له.');
+        }
+
+        // 2.ب: حظر المشرف الوزاري
+        $supervisor = User::where('username', 'supervisor_ministry')->first();
+        if ($supervisor) {
+            Sanctum::actingAs($supervisor);
+            $supRes = $this->postJson("/api/v1/evaluations/{$evalId}/dev-reset");
+            $supRes->assertStatus(403);
+        }
+
+        // 2.ج: حظر مقيّم مدرسة أخرى (مدرسة الفاروق تحاول إفراغ بلقيس) -> 404 عزل مؤسسي
+        Sanctum::actingAs($this->evaluatorFarouq);
+        $otherSchoolRes = $this->postJson("/api/v1/evaluations/{$evalId}/dev-reset");
+        $otherSchoolRes->assertStatus(404);
+
+        // 3. السماح لمقيم المدرسة نفسه في البيئة المحلية وإفراغ البيانات بنجاح
+        Sanctum::actingAs($this->evaluatorBelqees);
+        $this->assertDatabaseHas('evaluation_results', ['evaluation_id' => $evalId]);
+        $this->assertDatabaseHas('evidences', ['evidence_id' => $this->evidenceBelqees->evidence_id]);
+
         $resetRes = $this->postJson("/api/v1/evaluations/{$evalId}/dev-reset");
         $resetRes->assertStatus(200)
             ->assertJsonPath('message', 'تم إفراغ التقييم التجريبي بنجاح.');
 
-        // التحقق من حذف كافة النتائج والشواهد المرتبطة بهذا التقييم
-        $this->assertDatabaseMissing('evaluation_results', [
-            'evaluation_id' => $evalId,
-        ]);
-        $this->assertDatabaseMissing('evidences', [
-            'evidence_id' => $this->evidenceBelqees->evidence_id,
-        ]);
+        $this->assertDatabaseMissing('evaluation_results', ['evaluation_id' => $evalId]);
+        $this->assertDatabaseMissing('evidences', ['evidence_id' => $this->evidenceBelqees->evidence_id]);
 
-        // التحقق من رفض الإفراغ على التقييم المكتمل المقفل
+        // 4. رفض الإفراغ على التقييم المقفل والمكتمل
         $this->evaluationBelqees->update(['status' => 'Completed']);
         $lockedResetRes = $this->postJson("/api/v1/evaluations/{$evalId}/dev-reset");
         $lockedResetRes->assertStatus(422)
             ->assertJsonValidationErrors(['evaluation']);
+
+        // إعادة البيئة الأصلية
+        $this->app['env'] = 'testing';
     }
 }

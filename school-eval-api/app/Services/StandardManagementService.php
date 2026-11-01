@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Indicator;
 use App\Models\IndicatorEvidenceRequirement;
 use App\Models\IndicatorScoreDescriptor;
+use App\Models\IndicatorVerificationMethod;
 use App\Models\ScoreLevel;
 use App\Models\Standard;
 use App\Models\StandardVersion;
@@ -196,6 +197,18 @@ class StandardManagementService
                                 'description'         => $req->description,
                                 'required'            => $req->required,
                                 'display_order'       => $req->display_order,
+                            ]);
+                        }
+
+                        // نسخ أساليب وأدوات التحقق المقررة للمؤشر (REV-T027 / U-28)
+                        $verificationMethods = IndicatorVerificationMethod::where('indicator_id', $ind->indicator_id)->get();
+                        foreach ($verificationMethods as $method) {
+                            IndicatorVerificationMethod::create([
+                                'indicator_id'   => $newInd->indicator_id,
+                                'tool_id'        => $method->tool_id,
+                                'required'       => $method->required,
+                                'usage_guidance' => $method->usage_guidance,
+                                'created_at'     => now(),
                             ]);
                         }
                     }
@@ -521,6 +534,9 @@ class StandardManagementService
 
             IndicatorEvidenceRequirement::where('indicator_id', $indicator->indicator_id)
                 ->where('standard_version_id', $version->version_id)
+                ->delete();
+
+            IndicatorVerificationMethod::where('indicator_id', $indicator->indicator_id)
                 ->delete();
 
             return (bool) $indicator->delete();

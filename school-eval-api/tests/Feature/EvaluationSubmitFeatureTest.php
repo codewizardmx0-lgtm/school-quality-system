@@ -280,7 +280,7 @@ class EvaluationSubmitFeatureTest extends TestCase
         $response = $this->postJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/submit");
 
         $response->assertStatus(200)
-            ->assertJsonPath('message', 'تم إغلاق التقييم الذاتي واعتماده بنجاح وقفل العمليات التعديلية (BR-SCH-03).')
+            ->assertJsonPath('message', 'تم إغلاق التقييم الذاتي وتسليمه بنجاح وقفل العمليات التعديلية (BR-SCH-03).')
             ->assertJsonPath('data.status', 'Completed')
             ->assertJsonPath('data.isLocked', true)
             ->assertJsonPath('data.evaluationId', $this->evaluationBelqees->evaluation_id)

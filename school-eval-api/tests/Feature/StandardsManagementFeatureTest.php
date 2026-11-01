@@ -8,6 +8,7 @@ use App\Models\EvaluationResult;
 use App\Models\Indicator;
 use App\Models\IndicatorEvidenceRequirement;
 use App\Models\IndicatorScoreDescriptor;
+use App\Models\IndicatorVerificationMethod;
 use App\Models\Role;
 use App\Models\School;
 use App\Models\Standard;
@@ -136,6 +137,22 @@ class StandardsManagementFeatureTest extends TestCase
 
         $requirementsCount = IndicatorEvidenceRequirement::where('standard_version_id', $clonedVersion->version_id)->count();
         $this->assertEquals(278, $requirementsCount);
+
+        // التحقق من استنساخ أساليب وأدوات التحقق المقررة للمؤشرات (REV-T027 / U-28)
+        $sourceMethodsCount = IndicatorVerificationMethod::whereHas('indicator.subStandard.standard', function ($q) {
+            $q->where('version_id', $this->seededVersion->version_id);
+        })->count();
+
+        $clonedMethodsCount = IndicatorVerificationMethod::whereHas('indicator.subStandard.standard', function ($q) use ($clonedVersion) {
+            $q->where('version_id', $clonedVersion->version_id);
+        })->count();
+
+        $this->assertGreaterThan(0, $sourceMethodsCount, 'يجب أن يحتوي الإصدار المصدر على أساليب تحقق مقررة.');
+        $this->assertEquals($sourceMethodsCount, $clonedMethodsCount, 'يجب أن يتطابق عدد أساليب التحقق المستنسخة مع الإصدار المصدر.');
+
+        // التحقق من بقاء الإصدار المصدر دون تغيير
+        $this->assertEquals(109, Indicator::whereHas('subStandard.standard', fn($q) => $q->where('version_id', $this->seededVersion->version_id))->count());
+        $this->assertEquals($sourceMethodsCount, IndicatorVerificationMethod::whereHas('indicator.subStandard.standard', fn($q) => $q->where('version_id', $this->seededVersion->version_id))->count());
     }
 
     /**
