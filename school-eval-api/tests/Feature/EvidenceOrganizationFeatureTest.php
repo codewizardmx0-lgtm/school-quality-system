@@ -3,16 +3,19 @@
 namespace Tests\Feature;
 
 use App\Models\Attachment;
+use App\Models\DocumentVersion;
 use App\Models\Evaluation;
 use App\Models\EvaluationCycle;
 use App\Models\EvaluationResult;
 use App\Models\Evidence;
+use App\Models\EvidenceLink;
 use App\Models\EvidenceVersion;
 use App\Models\Indicator;
 use App\Models\IndicatorEvidenceRequirement;
 use App\Models\IndicatorScoreDescriptor;
 use App\Models\Note;
 use App\Models\School;
+use App\Models\SchoolDocument;
 use App\Models\Standard;
 use App\Models\StandardVersion;
 use App\Models\SubStandard;
@@ -55,6 +58,9 @@ class EvidenceOrganizationFeatureTest extends TestCase
     protected Indicator $secondIndicator;
     protected EvaluationResult $resultBelqees;
     protected Evidence $evidenceBelqees;
+    protected SchoolDocument $documentBelqees;
+    protected DocumentVersion $docVersionBelqees;
+    protected EvidenceLink $evidenceLinkBelqees;
 
     protected function setUp(): void
     {
@@ -157,10 +163,39 @@ class EvidenceOrganizationFeatureTest extends TestCase
             'file_size'   => 1024,
             'storage_uri' => 'attachments/evidence/sample.pdf',
         ]);
+
+        $this->documentBelqees = SchoolDocument::create([
+            'school_id'          => $this->schoolBelqees->school_id,
+            'title'              => 'محضر اجتماع لجنة التقييم الذاتي الأول',
+            'description'        => 'توثيق الاجتماع التحضيري لتوزيع الأدوار',
+            'document_type'      => 'minutes',
+            'created_by_user_id' => $this->evaluatorBelqees->user_id,
+        ]);
+
+        $this->docVersionBelqees = DocumentVersion::create([
+            'school_id'          => $this->schoolBelqees->school_id,
+            'school_document_id' => $this->documentBelqees->id,
+            'version_no'         => 1,
+            'is_current'         => true,
+            'file_name'          => 'minutes.pdf',
+            'storage_uri'        => 'school_documents/' . $this->schoolBelqees->school_id . '/minutes.pdf',
+            'file_size'          => 1024,
+            'mime_type'          => 'application/pdf',
+        ]);
+
+        $this->evidenceLinkBelqees = EvidenceLink::create([
+            'school_id'            => $this->schoolBelqees->school_id,
+            'evaluation_id'        => $this->evaluationBelqees->evaluation_id,
+            'evaluation_result_id' => $this->resultBelqees->result_id,
+            'indicator_id'         => $this->firstIndicator->indicator_id,
+            'document_version_id'  => $this->docVersionBelqees->id,
+            'justification'        => 'يثبت تفعيل لجان الجودة بالمدرسة',
+            'status'               => 'draft',
+        ]);
     }
 
     /**
-     * اختبار 1: تصنيف الشاهد يدوياً بأنواع صالحة مختلفة.
+     * اختبار 1: تصنيف الشاهد يدوياً بأنواع صالحة مختلفة عبر المعمارية الجديدة.
      */
     public function test_user_can_classify_evidence_manually(): void
     {
@@ -169,17 +204,20 @@ class EvidenceOrganizationFeatureTest extends TestCase
         $validTypes = ['minutes', 'plan', 'record', 'report', 'board', 'image', 'other'];
 
         foreach ($validTypes as $type) {
-            $response = $this->patchJson("/api/v1/evidences/{$this->evidenceBelqees->evidence_id}/classify", [
-                'evidence_type' => $type,
+            $file = UploadedFile::fake()->create("doc_{$type}.pdf", 100, 'application/pdf');
+            $response = $this->postJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$this->firstIndicator->indicator_id}/evidence-links/upload", [
+                'title'         => "مستند تجريبي لنوع {$type}",
+                'document_type' => $type,
+                'file'          => $file,
             ]);
 
-            $response->assertStatus(200)
-                ->assertJsonPath('data.evidenceType', $type)
-                ->assertJsonPath('message', 'تم تصنيف الشاهد بنجاح.');
+            $response->assertStatus(201)
+                ->assertJsonPath('data.document.documentType', $type)
+                ->assertJsonPath('message', 'تم رفع المستند وربطه بالمؤشر بنجاح.');
 
-            $this->assertDatabaseHas('evidences', [
-                'evidence_id'   => $this->evidenceBelqees->evidence_id,
-                'evidence_type' => $type,
+            $this->assertDatabaseHas('school_documents', [
+                'school_id'     => $this->schoolBelqees->school_id,
+                'document_type' => $type,
             ]);
         }
     }
@@ -191,16 +229,26 @@ class EvidenceOrganizationFeatureTest extends TestCase
     {
         Sanctum::actingAs($this->evaluatorBelqees);
 
-        $response = $this->patchJson("/api/v1/evidences/{$this->evidenceBelqees->evidence_id}/classify", [
+        // المسار القديم مغلق 422
+        $legacyRes = $this->patchJson("/api/v1/evidences/{$this->evidenceBelqees->evidence_id}/classify", [
             'evidence_type' => 'unsupported_type_xyz',
+        ]);
+        $legacyRes->assertStatus(422);
+
+        // المسار الجديد يرفض النوع غير المعرف 422
+        $file = UploadedFile::fake()->create('invalid_type.pdf', 100, 'application/pdf');
+        $response = $this->postJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$this->firstIndicator->indicator_id}/evidence-links/upload", [
+            'title'         => 'مستند بنوع غير صالح',
+            'document_type' => 'unsupported_type_xyz',
+            'file'          => $file,
         ]);
 
         $response->assertStatus(422)
-            ->assertJsonValidationErrors(['evidence_type']);
+            ->assertJsonValidationErrors(['document_type']);
     }
 
     /**
-     * اختبار 3: إعادة ربط الشاهد بمؤشر آخر مع إنشاء نتيجة التقييم للمؤشر الجديد تلقائياً.
+     * اختبار 3: ربط مستند بمؤشر آخر مع تبرير مستقل وفك الارتباط دون حذف المستند.
      */
     public function test_user_can_link_evidence_to_another_indicator(): void
     {
@@ -208,80 +256,108 @@ class EvidenceOrganizationFeatureTest extends TestCase
 
         $targetIndicatorId = $this->secondIndicator->indicator_id;
 
-        $response = $this->postJson("/api/v1/evidences/{$this->evidenceBelqees->evidence_id}/link-indicator", [
-            'indicator_id' => $targetIndicatorId,
+        $response = $this->postJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$targetIndicatorId}/evidence-links", [
+            'document_id'   => $this->documentBelqees->id,
+            'justification' => 'تبرير مستقل لربط نفس المستند بالمؤشر الثاني',
         ]);
 
-        $response->assertStatus(200)
+        $response->assertStatus(201)
             ->assertJsonPath('data.indicatorId', $targetIndicatorId)
-            ->assertJsonPath('message', 'تم ربط الشاهد بالمؤشر بنجاح.');
+            ->assertJsonPath('data.documentVersionId', $this->docVersionBelqees->id)
+            ->assertJsonPath('message', 'تم ربط المستند بالمؤشر بنجاح.');
 
-        $this->assertDatabaseHas('evidences', [
-            'evidence_id'  => $this->evidenceBelqees->evidence_id,
-            'indicator_id' => $targetIndicatorId,
+        $this->assertDatabaseHas('evidence_links', [
+            'evaluation_id'       => $this->evaluationBelqees->evaluation_id,
+            'indicator_id'        => $targetIndicatorId,
+            'document_version_id' => $this->docVersionBelqees->id,
+            'justification'       => 'تبرير مستقل لربط نفس المستند بالمؤشر الثاني',
         ]);
 
-        // التأكد من إنشاء نتيجة تقييم في نفس التقييم للمؤشر الجديد
+        // التأكد من وجود نتيجة تقييم في نفس التقييم للمؤشر الجديد
         $this->assertDatabaseHas('evaluation_results', [
             'evaluation_id' => $this->evaluationBelqees->evaluation_id,
             'indicator_id'  => $targetIndicatorId,
         ]);
+
+        // فك ارتباط الرابط دون حذف المستند أو نسخته
+        $linkId = $response->json('data.evidenceLinkId');
+        $unlinkRes = $this->deleteJson("/api/v1/evidence-links/{$linkId}");
+        $unlinkRes->assertStatus(200);
+
+        $this->assertDatabaseMissing('evidence_links', [
+            'id' => $linkId,
+        ]);
+        $this->assertDatabaseHas('school_documents', [
+            'id' => $this->documentBelqees->id,
+        ]);
+        $this->assertDatabaseHas('document_versions', [
+            'id' => $this->docVersionBelqees->id,
+        ]);
     }
 
     /**
-     * اختبار 4: ربط الشاهد بنفس المؤشر يرجع نجاحاً ورسالة تفيد بأنه مرتبط بالفعل.
+     * اختبار 4: ربط نفس نسخة المستند بنفس المؤشر يرجع 422 لمنع التكرار.
      */
     public function test_linking_evidence_to_same_indicator_is_idempotent(): void
     {
         Sanctum::actingAs($this->evaluatorBelqees);
 
-        $response = $this->postJson("/api/v1/evidences/{$this->evidenceBelqees->evidence_id}/link-indicator", [
-            'indicator_id' => $this->firstIndicator->indicator_id,
+        $response = $this->postJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$this->firstIndicator->indicator_id}/evidence-links", [
+            'document_version_id' => $this->docVersionBelqees->id,
         ]);
 
-        $response->assertStatus(200)
-            ->assertJsonPath('data.indicatorId', $this->firstIndicator->indicator_id)
-            ->assertJsonPath('message', 'الشاهد مرتبط بالفعل بهذا المؤشر.');
+        $response->assertStatus(422)
+            ->assertJsonValidationErrors(['document_version_id']);
     }
 
     /**
-     * اختبار 5: تحديث حالة الشاهد (Draft, Completed, Audited).
+     * اختبار 5: ضبط حالة رابط الشاهد (Draft و Completed) والتأكد من إغلاق المسار القديم.
      */
     public function test_user_can_update_evidence_status(): void
     {
         Sanctum::actingAs($this->evaluatorBelqees);
 
-        $statuses = [
-            'completed' => 'Completed',
-            'audited'   => 'Audited',
-            'draft'     => 'Draft',
-        ];
+        // المسار القديم مغلق 422
+        $legacyRes = $this->patchJson("/api/v1/evidences/{$this->evidenceBelqees->evidence_id}/status", [
+            'status' => 'Completed',
+        ]);
+        $legacyRes->assertStatus(422);
 
-        foreach ($statuses as $input => $expected) {
-            $response = $this->patchJson("/api/v1/evidences/{$this->evidenceBelqees->evidence_id}/status", [
-                'status' => $input,
-            ]);
+        // ربط مستند بحالة completed
+        $resCompleted = $this->postJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$this->secondIndicator->indicator_id}/evidence-links", [
+            'document_id' => $this->documentBelqees->id,
+            'status'      => 'completed',
+        ]);
+        $resCompleted->assertStatus(201)
+            ->assertJsonPath('data.status', 'completed');
 
-            $response->assertStatus(200)
-                ->assertJsonPath('data.status', $expected)
-                ->assertJsonPath('message', 'تم تحديث حالة الشاهد بنجاح.');
-
-            $this->assertDatabaseHas('evidences', [
-                'evidence_id' => $this->evidenceBelqees->evidence_id,
-                'status'      => $expected,
-            ]);
-        }
+        // رفع مستند بحالة draft
+        $file = UploadedFile::fake()->create('draft_doc.pdf', 100, 'application/pdf');
+        $resDraft = $this->postJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$this->secondIndicator->indicator_id}/evidence-links/upload", [
+            'title'  => 'مستند مسودة',
+            'status' => 'draft',
+            'file'   => $file,
+        ]);
+        $resDraft->assertStatus(201)
+            ->assertJsonPath('data.status', 'draft');
     }
 
     /**
-     * اختبار 6: رفض تحديث حالة الشاهد بقيمة غير معروفة برمز 422.
+     * اختبار 6: رفض حالة غير معروفة برمز 422.
      */
     public function test_update_status_rejects_invalid_status(): void
     {
         Sanctum::actingAs($this->evaluatorBelqees);
 
-        $response = $this->patchJson("/api/v1/evidences/{$this->evidenceBelqees->evidence_id}/status", [
+        // المسار القديم يرفض 422
+        $this->patchJson("/api/v1/evidences/{$this->evidenceBelqees->evidence_id}/status", [
             'status' => 'Rejected',
+        ])->assertStatus(422);
+
+        // المسار الجديد يرفض حالة غير معروفة
+        $response = $this->postJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$this->firstIndicator->indicator_id}/evidence-links", [
+            'document_id' => $this->documentBelqees->id,
+            'status'      => 'Rejected',
         ]);
 
         $response->assertStatus(422)
@@ -289,7 +365,7 @@ class EvidenceOrganizationFeatureTest extends TestCase
     }
 
     /**
-     * اختبار 7: إضافة ملاحظات المراجع وتوثيق المراجع والوقت.
+     * اختبار 7: التأكد من إغلاق مسار إضافة ملاحظات المراجع القديم برمز 422.
      */
     public function test_reviewer_can_add_review_notes_on_evidence(): void
     {
@@ -301,16 +377,8 @@ class EvidenceOrganizationFeatureTest extends TestCase
             'notes' => $note,
         ]);
 
-        $response->assertStatus(200)
-            ->assertJsonPath('data.reviewerNotes', $note)
-            ->assertJsonPath('data.reviewedBy.userId', $this->principalBelqees->user_id)
-            ->assertJsonPath('message', 'تمت إضافة ملاحظات المراجع على الشاهد بنجاح.');
-
-        $this->assertDatabaseHas('evidences', [
-            'evidence_id'         => $this->evidenceBelqees->evidence_id,
-            'reviewer_notes'      => $note,
-            'reviewed_by_user_id' => $this->principalBelqees->user_id,
-        ]);
+        $response->assertStatus(422)
+            ->assertJsonPath('message', 'تم إيقاف التعديل عبر مسارات الشواهد القديمة.');
     }
 
     /**
@@ -350,36 +418,40 @@ class EvidenceOrganizationFeatureTest extends TestCase
      */
     public function test_evidence_organization_strictly_enforces_tenant_isolation_404(): void
     {
-        // مقيم مدرسة الفاروق يحاول الوصول لشاهد مدرسة بلقيس
+        // مقيم مدرسة الفاروق يحاول الوصول لشواهد مدرسة بلقيس
         Sanctum::actingAs($this->evaluatorFarouq);
 
-        // محاولة التصنيف
-        $this->patchJson("/api/v1/evidences/{$this->evidenceBelqees->evidence_id}/classify", [
-            'evidence_type' => 'report',
+        // 1. استعراض روابط الشواهد لمؤشر بلقيس -> 404
+        $this->getJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$this->firstIndicator->indicator_id}/evidence-links")
+            ->assertStatus(404);
+
+        // 2. رفع وربط مستند بتقييم بلقيس -> 404
+        $file = UploadedFile::fake()->create('intruder.pdf', 100, 'application/pdf');
+        $this->postJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$this->firstIndicator->indicator_id}/evidence-links/upload", [
+            'title' => 'شاهد متسلل',
+            'file'  => $file,
         ])->assertStatus(404);
 
-        // محاولة إعادة الربط
-        $this->postJson("/api/v1/evidences/{$this->evidenceBelqees->evidence_id}/link-indicator", [
-            'indicator_id' => $this->secondIndicator->indicator_id,
+        // 3. ربط مستند بتقييم بلقيس -> 404
+        $this->postJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$this->firstIndicator->indicator_id}/evidence-links", [
+            'document_id' => $this->documentBelqees->id,
         ])->assertStatus(404);
 
-        // محاولة تعديل الحالة
-        $this->patchJson("/api/v1/evidences/{$this->evidenceBelqees->evidence_id}/status", [
-            'status' => 'Audited',
-        ])->assertStatus(404);
+        // 4. فك ارتباط شاهد من تقييم بلقيس -> 404
+        $this->deleteJson("/api/v1/evidence-links/{$this->evidenceLinkBelqees->id}")
+            ->assertStatus(404);
 
-        // محاولة إضافة ملاحظات مراجع
-        $this->postJson("/api/v1/evidences/{$this->evidenceBelqees->evidence_id}/review-notes", [
-            'notes' => 'ملاحظة متسللة',
-        ])->assertStatus(404);
+        // 5. استعراض مستندات مدرسة بلقيس -> 404
+        $this->getJson("/api/v1/schools/{$this->schoolBelqees->school_id}/documents")
+            ->assertStatus(404);
 
-        // محاولة جرد شواهد مدرسة أخرى
+        // 6. محاولة جرد شواهد مدرسة أخرى -> 404
         $this->getJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/evidence-inventory")
             ->assertStatus(404);
     }
 
     /**
-     * اختبار 10: حظر التعديل أو التصنيف للشواهد بعد قفل التقييم واعتماده برمز 422 (BR-SCH-03).
+     * اختبار 10: حظر التعديل أو الربط للشواهد بعد قفل التقييم واعتماده برمز 422 (BR-SCH-03).
      */
     public function test_modifications_are_prohibited_when_evaluation_is_locked_422(): void
     {
@@ -388,29 +460,23 @@ class EvidenceOrganizationFeatureTest extends TestCase
         // قفل التقييم ونقله لحالة Completed
         $this->evaluationBelqees->update(['status' => 'Completed']);
 
-        // 1. محاولة التصنيف
-        $responseClassify = $this->patchJson("/api/v1/evidences/{$this->evidenceBelqees->evidence_id}/classify", [
-            'evidence_type' => 'plan',
+        // 1. محاولة رفع وربط مستند جديد بعد القفل -> 422
+        $file = UploadedFile::fake()->create('locked.pdf', 100, 'application/pdf');
+        $responseUpload = $this->postJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$this->firstIndicator->indicator_id}/evidence-links/upload", [
+            'title' => 'مستند بعد القفل',
+            'file'  => $file,
         ]);
-        $responseClassify->assertStatus(422);
+        $responseUpload->assertStatus(422);
 
-        // 2. محاولة إعادة الربط
-        $responseLink = $this->postJson("/api/v1/evidences/{$this->evidenceBelqees->evidence_id}/link-indicator", [
-            'indicator_id' => $this->secondIndicator->indicator_id,
+        // 2. محاولة ربط مستند قائم بعد القفل -> 422
+        $responseLink = $this->postJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$this->secondIndicator->indicator_id}/evidence-links", [
+            'document_id' => $this->documentBelqees->id,
         ]);
         $responseLink->assertStatus(422);
 
-        // 3. محاولة تعديل الحالة
-        $responseStatus = $this->patchJson("/api/v1/evidences/{$this->evidenceBelqees->evidence_id}/status", [
-            'status' => 'Audited',
-        ]);
-        $responseStatus->assertStatus(422);
-
-        // 4. محاولة إضافة ملاحظة مراجع
-        $responseNote = $this->postJson("/api/v1/evidences/{$this->evidenceBelqees->evidence_id}/review-notes", [
-            'notes' => 'ملاحظة بعد القفل',
-        ]);
-        $responseNote->assertStatus(422);
+        // 3. محاولة فك ارتباط شاهد بعد القفل -> 422
+        $responseUnlink = $this->deleteJson("/api/v1/evidence-links/{$this->evidenceLinkBelqees->id}");
+        $responseUnlink->assertStatus(422);
     }
 
     /**
@@ -431,72 +497,77 @@ class EvidenceOrganizationFeatureTest extends TestCase
 
         Sanctum::actingAs($regularUser);
 
-        // محاولة التصنيف
-        $this->patchJson("/api/v1/evidences/{$this->evidenceBelqees->evidence_id}/classify", [
-            'evidence_type' => 'report',
+        // 1. محاولة رفع وربط مستند -> 403
+        $file = UploadedFile::fake()->create('file.pdf', 100, 'application/pdf');
+        $this->postJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$this->firstIndicator->indicator_id}/evidence-links/upload", [
+            'title' => 'مستند غير مصرح به',
+            'file'  => $file,
         ])->assertStatus(403);
 
-        // محاولة إعادة الربط
-        $this->postJson("/api/v1/evidences/{$this->evidenceBelqees->evidence_id}/link-indicator", [
-            'indicator_id' => $this->secondIndicator->indicator_id,
+        // 2. محاولة ربط مستند قائم -> 403
+        $this->postJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$this->secondIndicator->indicator_id}/evidence-links", [
+            'document_id' => $this->documentBelqees->id,
         ])->assertStatus(403);
 
-        // محاولة تعديل الحالة
-        $this->patchJson("/api/v1/evidences/{$this->evidenceBelqees->evidence_id}/status", [
-            'status' => 'Audited',
-        ])->assertStatus(403);
+        // 3. محاولة فك ارتباط شاهد -> 403
+        $this->deleteJson("/api/v1/evidence-links/{$this->evidenceLinkBelqees->id}")
+            ->assertStatus(403);
 
-        // محاولة إضافة ملاحظة مراجع
-        $this->postJson("/api/v1/evidences/{$this->evidenceBelqees->evidence_id}/review-notes", [
-            'notes' => 'ملاحظة غير مصرح بها',
-        ])->assertStatus(403);
+        // 4. محاولة استعراض روابط الشواهد -> 403
+        $this->getJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$this->firstIndicator->indicator_id}/evidence-links")
+            ->assertStatus(403);
 
-        // محاولة جرد الشواهد
+        // 5. محاولة استعراض مستندات المدرسة -> 403
+        $this->getJson("/api/v1/schools/{$this->schoolBelqees->school_id}/documents")
+            ->assertStatus(403);
+
+        // 6. محاولة جرد الشواهد -> 403
         $this->getJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/evidence-inventory")
             ->assertStatus(403);
     }
 
     /**
-     * اختبار 12: إمكانية إنشاء أكثر من شاهد نشط لنفس المؤشر بنجاح.
+     * اختبار 12: إمكانية إنشاء أكثر من رابط شاهد لنفس المؤشر بنجاح.
      */
     public function test_can_create_multiple_evidences_for_same_indicator(): void
     {
         Sanctum::actingAs($this->evaluatorBelqees);
 
-        $file2 = UploadedFile::fake()->create('second_evidence.pdf', 300, 'application/pdf');
+        $file2 = UploadedFile::fake()->create('second_document.pdf', 300, 'application/pdf');
 
-        $response = $this->postJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$this->firstIndicator->indicator_id}/evidences", [
-            'title'         => 'الشاهد الثاني لنفس المؤشر - سجل إضافي',
-            'description'   => 'وثيقة داعمة إضافية لا تحل محل الشاهد الأول',
-            'evidence_type' => 'record',
+        $response = $this->postJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$this->firstIndicator->indicator_id}/evidence-links/upload", [
+            'title'         => 'المستند الثاني لنفس المؤشر - سجل إضافي',
+            'description'   => 'وثيقة داعمة إضافية لا تحل محل المستند الأول',
+            'document_type' => 'record',
             'file'          => $file2,
         ]);
 
         $response->assertStatus(201)
-            ->assertJsonPath('data.title', 'الشاهد الثاني لنفس المؤشر - سجل إضافي')
-            ->assertJsonPath('data.evidenceType', 'record');
+            ->assertJsonPath('data.document.title', 'المستند الثاني لنفس المؤشر - سجل إضافي')
+            ->assertJsonPath('data.document.documentType', 'record');
 
-        $newEvidenceId = $response->json('data.evidenceId');
-        $this->assertNotNull($newEvidenceId);
-        $this->assertNotEquals($this->evidenceBelqees->evidence_id, $newEvidenceId);
+        $newLinkId = $response->json('data.evidenceLinkId');
+        $this->assertNotNull($newLinkId);
+        $this->assertNotEquals($this->evidenceLinkBelqees->id, $newLinkId);
 
-        // التأكد من وجود شاهدين للمؤشر في قاعدة البيانات
-        $count = Evidence::where('indicator_id', $this->firstIndicator->indicator_id)
-            ->where('result_id', $this->resultBelqees->result_id)
+        // التأكد من وجود رابطين للمؤشر في قاعدة البيانات
+        $count = EvidenceLink::where('indicator_id', $this->firstIndicator->indicator_id)
+            ->where('evaluation_id', $this->evaluationBelqees->evaluation_id)
             ->count();
         $this->assertEquals(2, $count);
 
-        // التأكد من أن كل شاهد له نسخته النشطة (current = true)
-        $this->assertDatabaseHas('evidence_versions', [
-            'evidence_id' => $this->evidenceBelqees->evidence_id,
-            'version_no'  => 1,
-            'current'     => true,
+        // التأكد من أن كل مستند له نسخته الحالية (is_current = true)
+        $this->assertDatabaseHas('document_versions', [
+            'school_document_id' => $this->documentBelqees->id,
+            'version_no'         => 1,
+            'is_current'         => true,
         ]);
 
-        $this->assertDatabaseHas('evidence_versions', [
-            'evidence_id' => $newEvidenceId,
-            'version_no'  => 1,
-            'current'     => true,
+        $newDocId = $response->json('data.document.id');
+        $this->assertDatabaseHas('document_versions', [
+            'school_document_id' => $newDocId,
+            'version_no'         => 1,
+            'is_current'         => true,
         ]);
     }
 
@@ -507,145 +578,171 @@ class EvidenceOrganizationFeatureTest extends TestCase
     {
         Sanctum::actingAs($this->evaluatorBelqees);
 
-        // إنشاء شاهد ثانٍ
+        // إنشاء مستند ثانٍ وربطه بالمؤشر
         $file2 = UploadedFile::fake()->create('plan_doc.pdf', 250, 'application/pdf');
-        $this->postJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$this->firstIndicator->indicator_id}/evidences", [
+        $this->postJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$this->firstIndicator->indicator_id}/evidence-links/upload", [
             'title'         => 'خطة العمل الداعمة',
             'description'   => 'خطة داعمة للمؤشر',
-            'evidence_type' => 'plan',
+            'document_type' => 'plan',
             'file'          => $file2,
         ])->assertStatus(201);
 
-        // استدعاء endpoint قائمة شواهد المؤشر
-        $response = $this->getJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$this->firstIndicator->indicator_id}/evidences");
+        // استدعاء endpoint قائمة روابط شواهد المؤشر
+        $response = $this->getJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$this->firstIndicator->indicator_id}/evidence-links");
 
         $response->assertStatus(200)
             ->assertJsonStructure([
                 'data' => [
                     '*' => [
-                        'evidenceId',
-                        'resultId',
+                        'evidenceLinkId',
+                        'evaluationId',
                         'indicatorId',
-                        'title',
-                        'evidenceType',
+                        'documentVersionId',
+                        'document' => [
+                            'id',
+                            'title',
+                            'documentType',
+                        ],
+                        'version' => [
+                            'id',
+                            'versionNo',
+                            'fileName',
+                            'fileSize',
+                            'mimeType',
+                        ],
                         'status',
-                        'versions',
                     ],
                 ],
                 'message',
             ]);
 
-        $evidences = $response->json('data');
-        $this->assertCount(2, $evidences);
+        $links = $response->json('data');
+        $this->assertCount(2, $links);
     }
 
     /**
-     * اختبار 14: بقاء النسخة النشطة لكل شاهد مستقلة عند رفع نسخة جديدة لأحد الشاهدين.
+     * اختبار 14: بقاء النسخة النشطة لكل مستند مستقلة عند رفع نسخة جديدة لأحد المستندين.
      */
     public function test_active_versions_remain_independent_between_multiple_evidences(): void
     {
         Sanctum::actingAs($this->evaluatorBelqees);
 
-        // إنشاء شاهد ثانٍ
-        $file2 = UploadedFile::fake()->create('minutes.pdf', 150, 'application/pdf');
-        $createRes = $this->postJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$this->firstIndicator->indicator_id}/evidences", [
+        // إنشاء مستند ثانٍ
+        $file2 = UploadedFile::fake()->create('minutes2.pdf', 150, 'application/pdf');
+        $createRes = $this->postJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$this->firstIndicator->indicator_id}/evidence-links/upload", [
             'title'         => 'محضر الاجتماع الداعم',
             'description'   => 'محضر اجتماع رقم 2',
-            'evidence_type' => 'minutes',
+            'document_type' => 'minutes',
             'file'          => $file2,
         ]);
-        $secondEvidenceId = $createRes->json('data.evidenceId');
-        $this->assertNotNull($secondEvidenceId);
+        $secondDocId = $createRes->json('data.document.id');
+        $this->assertNotNull($secondDocId);
 
-        // رفع نسخة ثانية للشاهد الأول فقط
-        $revisionFile = UploadedFile::fake()->create('first_evidence_v2.pdf', 400, 'application/pdf');
-        $versionRes = $this->postJson("/api/v1/evidences/{$this->evidenceBelqees->evidence_id}/versions", [
-            'change_summary' => 'تحديث بيانات الشاهد الأول بالإحصائيات الأحدث',
-            'file'           => $revisionFile,
-        ]);
-        $versionRes->assertStatus(201);
-
-        // فحص الشاهد الأول: نسخته الأولى أصبحت غير نشطة ونسخته الثانية نشطة
-        $this->assertDatabaseHas('evidence_versions', [
-            'evidence_id' => $this->evidenceBelqees->evidence_id,
-            'version_no'  => 1,
-            'current'     => false,
-        ]);
-        $this->assertDatabaseHas('evidence_versions', [
-            'evidence_id' => $this->evidenceBelqees->evidence_id,
-            'version_no'  => 2,
-            'current'     => true,
+        // رفع نسخة ثانية للمستند الأول فقط
+        DocumentVersion::where('school_document_id', $this->documentBelqees->id)->update(['is_current' => false]);
+        DocumentVersion::create([
+            'school_id'          => $this->schoolBelqees->school_id,
+            'school_document_id' => $this->documentBelqees->id,
+            'version_no'         => 2,
+            'is_current'         => true,
+            'file_name'          => 'first_doc_v2.pdf',
+            'storage_uri'        => 'school_documents/' . $this->schoolBelqees->school_id . '/first_doc_v2.pdf',
+            'file_size'          => 2048,
+            'mime_type'          => 'application/pdf',
         ]);
 
-        // فحص الشاهد الثاني: نسخته الأولى ما زالت نشطة بالكامل ولم تتأثر إطلاقاً
-        $this->assertDatabaseHas('evidence_versions', [
-            'evidence_id' => $secondEvidenceId,
-            'version_no'  => 1,
-            'current'     => true,
+        // فحص المستند الأول: نسخته الأولى أصبحت غير نشطة ونسخته الثانية نشطة
+        $this->assertDatabaseHas('document_versions', [
+            'school_document_id' => $this->documentBelqees->id,
+            'version_no'         => 1,
+            'is_current'         => false,
+        ]);
+        $this->assertDatabaseHas('document_versions', [
+            'school_document_id' => $this->documentBelqees->id,
+            'version_no'         => 2,
+            'is_current'         => true,
+        ]);
+
+        // فحص المستند الثاني: نسخته الأولى ما زالت نشطة بالكامل ولم تتأثر إطلاقاً
+        $this->assertDatabaseHas('document_versions', [
+            'school_document_id' => $secondDocId,
+            'version_no'         => 1,
+            'is_current'         => true,
         ]);
     }
 
     /**
-     * اختبار 15: عدم كسر قيد "نسخة واحدة نشطة لكل شاهد" مهما تعددت النسخ والشواهد.
+     * اختبار 15: عدم كسر قيد "نسخة واحدة نشطة لكل مستند" مهما تعددت النسخ.
      */
     public function test_single_active_version_per_evidence_preserved(): void
     {
         Sanctum::actingAs($this->evaluatorBelqees);
 
-        // إنشاء شاهد ثانٍ
+        // إنشاء مستند ثانٍ
         $file2 = UploadedFile::fake()->create('board.png', 100, 'image/png');
-        $createRes = $this->postJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$this->firstIndicator->indicator_id}/evidences", [
+        $createRes = $this->postJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$this->firstIndicator->indicator_id}/evidence-links/upload", [
             'title'         => 'لوحة الشرف',
             'description'   => 'صورة لوحة الشرف',
-            'evidence_type' => 'board',
+            'document_type' => 'board',
             'file'          => $file2,
         ]);
-        $secondEvidenceId = $createRes->json('data.evidenceId');
-        $this->assertNotNull($secondEvidenceId);
+        $secondDocId = $createRes->json('data.document.id');
+        $this->assertNotNull($secondDocId);
 
-        // رفع نسخة v2 ثم v3 للشاهد الأول
-        $v2 = UploadedFile::fake()->create('v2.pdf', 200, 'application/pdf');
-        $this->postJson("/api/v1/evidences/{$this->evidenceBelqees->evidence_id}/versions", [
-            'change_summary' => 'نسخة ثانية',
-            'file'           => $v2,
-        ])->assertStatus(201);
+        // إنشاء نسخة v2 ثم v3 للمستند الأول
+        DocumentVersion::where('school_document_id', $this->documentBelqees->id)->update(['is_current' => false]);
+        DocumentVersion::create([
+            'school_id'          => $this->schoolBelqees->school_id,
+            'school_document_id' => $this->documentBelqees->id,
+            'version_no'         => 2,
+            'is_current'         => false,
+            'file_name'          => 'v2.pdf',
+            'storage_uri'        => 'school_documents/' . $this->schoolBelqees->school_id . '/v2.pdf',
+            'file_size'          => 200,
+            'mime_type'          => 'application/pdf',
+        ]);
 
-        $v3 = UploadedFile::fake()->create('v3.pdf', 250, 'application/pdf');
-        $this->postJson("/api/v1/evidences/{$this->evidenceBelqees->evidence_id}/versions", [
-            'change_summary' => 'نسخة ثالثة',
-            'file'           => $v3,
-        ])->assertStatus(201);
+        DocumentVersion::create([
+            'school_id'          => $this->schoolBelqees->school_id,
+            'school_document_id' => $this->documentBelqees->id,
+            'version_no'         => 3,
+            'is_current'         => true,
+            'file_name'          => 'v3.pdf',
+            'storage_uri'        => 'school_documents/' . $this->schoolBelqees->school_id . '/v3.pdf',
+            'file_size'          => 300,
+            'mime_type'          => 'application/pdf',
+        ]);
 
-        // فحص: الشاهد الأول يملك نسخة نشطة واحدة فقط
-        $activeVersionsCount1 = EvidenceVersion::where('evidence_id', $this->evidenceBelqees->evidence_id)
-            ->where('current', true)
+        // فحص: المستند الأول يملك نسخة نشطة واحدة فقط
+        $activeVersionsCount1 = DocumentVersion::where('school_document_id', $this->documentBelqees->id)
+            ->where('is_current', true)
             ->count();
         $this->assertEquals(1, $activeVersionsCount1);
 
-        // فحص: الشاهد الثاني يملك أيضاً نسخة نشطة واحدة فقط
-        $activeVersionsCount2 = EvidenceVersion::where('evidence_id', $secondEvidenceId)
-            ->where('current', true)
+        // فحص: المستند الثاني يملك أيضاً نسخة نشطة واحدة فقط
+        $activeVersionsCount2 = DocumentVersion::where('school_document_id', $secondDocId)
+            ->where('is_current', true)
             ->count();
         $this->assertEquals(1, $activeVersionsCount2);
 
-        // إجمالي النسخ للشاهد الأول هو 3
-        $this->assertEquals(3, EvidenceVersion::where('evidence_id', $this->evidenceBelqees->evidence_id)->count());
+        // إجمالي النسخ للمستند الأول هو 3
+        $this->assertEquals(3, DocumentVersion::where('school_document_id', $this->documentBelqees->id)->count());
     }
 
     /**
-     * اختبار 16: التحقق من العزل المؤسسي وقفل التقييم لمسار شواهد المؤشر.
+     * اختبار 16: التحقق من العزل المؤسسي وقفل التقييم لمسار روابط شواهد المؤشر.
      */
     public function test_indicator_evidences_tenant_isolation_and_lock_rules(): void
     {
         // 1. عزل المؤسسات: مقيم مدرسة الفاروق يحاول الوصول لشواهد مؤشر مدرسة بلقيس -> 404
         Sanctum::actingAs($this->evaluatorFarouq);
-        $this->getJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$this->firstIndicator->indicator_id}/evidences")
+        $this->getJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$this->firstIndicator->indicator_id}/evidence-links")
             ->assertStatus(404);
 
         $file = UploadedFile::fake()->create('intruder.pdf', 100, 'application/pdf');
-        $this->postJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$this->firstIndicator->indicator_id}/evidences", [
+        $this->postJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$this->firstIndicator->indicator_id}/evidence-links/upload", [
             'title'         => 'شاهد غير مصرح به',
-            'evidence_type' => 'report',
+            'document_type' => 'report',
             'file'          => $file,
         ])->assertStatus(404);
 
@@ -711,6 +808,35 @@ class EvidenceOrganizationFeatureTest extends TestCase
 
             if ($result) {
                 foreach ($reqList as $req) {
+                    $doc = SchoolDocument::create([
+                        'school_id'          => $this->schoolBelqees->school_id,
+                        'title'              => 'شاهد مستوف للمتطلب ' . $req->requirement_id,
+                        'description'        => 'وصف المستند',
+                        'document_type'      => 'report',
+                        'created_by_user_id' => $this->evaluatorBelqees->user_id,
+                    ]);
+
+                    $version = DocumentVersion::create([
+                        'school_id'          => $this->schoolBelqees->school_id,
+                        'school_document_id' => $doc->id,
+                        'version_no'         => 1,
+                        'is_current'         => true,
+                        'file_name'          => 'doc_' . $req->requirement_id . '.pdf',
+                        'storage_uri'        => 'school_documents/' . $this->schoolBelqees->school_id . '/doc_' . $req->requirement_id . '.pdf',
+                        'file_size'          => 1024,
+                        'mime_type'          => 'application/pdf',
+                    ]);
+
+                    EvidenceLink::create([
+                        'school_id'            => $this->schoolBelqees->school_id,
+                        'evaluation_id'        => $this->evaluationBelqees->evaluation_id,
+                        'evaluation_result_id' => $result->result_id,
+                        'indicator_id'         => $indicatorId,
+                        'document_version_id'  => $version->id,
+                        'justification'        => 'مبرر الشاهد',
+                        'status'               => 'completed',
+                    ]);
+
                     $evidence = Evidence::create([
                         'result_id'     => $result->result_id,
                         'indicator_id'  => $indicatorId,
@@ -749,10 +875,10 @@ class EvidenceOrganizationFeatureTest extends TestCase
 
         // 3. رفع شاهد لهذا المؤشر دون رصد درجات له
         $file = UploadedFile::fake()->create('unscored_evidence.pdf', 200, 'application/pdf');
-        $uploadRes = $this->postJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$targetIndicator->indicator_id}/evidences", [
+        $uploadRes = $this->postJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$targetIndicator->indicator_id}/evidence-links/upload", [
             'title'         => 'شاهد لمؤشر بلا رصد',
             'description'   => 'شاهد مرفوع قبل رصد الدرجة',
-            'evidence_type' => 'record',
+            'document_type' => 'record',
             'file'          => $file,
         ]);
         $uploadRes->assertStatus(201);
@@ -799,9 +925,9 @@ class EvidenceOrganizationFeatureTest extends TestCase
 
         // رفع شاهد للمؤشر غير المرصود (ينشئ نتيجة تلقائية بحالة Pending)
         $file = UploadedFile::fake()->create('pending_ev.pdf', 200, 'application/pdf');
-        $this->postJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$targetIndicator->indicator_id}/evidences", [
+        $this->postJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$targetIndicator->indicator_id}/evidence-links/upload", [
             'title'         => 'شاهد غير مرصود',
-            'evidence_type' => 'plan',
+            'document_type' => 'plan',
             'file'          => $file,
         ])->assertStatus(201);
 
@@ -838,10 +964,14 @@ class EvidenceOrganizationFeatureTest extends TestCase
             ->firstOrFail()
             ->indicator_id;
 
-        // حذف الشواهد السابقة للمؤشر وجعل شاهده بحالة Draft فقط
+        // تنظيف الشواهد السابقة للمؤشر وجعل شاهده بحالة Draft فقط
         $result = EvaluationResult::where('evaluation_id', $this->evaluationBelqees->evaluation_id)
             ->where('indicator_id', $targetIndicatorId)
             ->first();
+
+        EvidenceLink::where('evaluation_id', $this->evaluationBelqees->evaluation_id)
+            ->where('indicator_id', $targetIndicatorId)
+            ->delete();
 
         $existingEvIds = Evidence::where('result_id', $result->result_id)->pluck('evidence_id');
         $existingVersionIds = EvidenceVersion::whereIn('evidence_id', $existingEvIds)->pluck('evidence_version_id');
@@ -849,19 +979,14 @@ class EvidenceOrganizationFeatureTest extends TestCase
         EvidenceVersion::whereIn('evidence_id', $existingEvIds)->delete();
         Evidence::whereIn('evidence_id', $existingEvIds)->delete();
 
-        $draftEvidence = Evidence::create([
-            'result_id'     => $result->result_id,
-            'indicator_id'  => $targetIndicatorId,
+        $file = UploadedFile::fake()->create('draft_doc.pdf', 100, 'application/pdf');
+        $uploadRes = $this->postJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$targetIndicatorId}/evidence-links/upload", [
             'title'         => 'شاهد مسودة فقط',
-            'status'        => 'Draft',
-            'evidence_type' => 'report',
+            'status'        => 'draft',
+            'document_type' => 'report',
+            'file'          => $file,
         ]);
-
-        EvidenceVersion::create([
-            'evidence_id' => $draftEvidence->evidence_id,
-            'version_no'  => 1,
-            'current'     => true,
-        ]);
+        $uploadRes->assertStatus(201);
 
         // 1. فحص الجرد: يجب أن يظهر المؤشر كناقص الشواهد لأن الشاهد مسودة Draft
         $inventoryRes = $this->getJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/evidence-inventory");
@@ -909,31 +1034,29 @@ class EvidenceOrganizationFeatureTest extends TestCase
             ->where('indicator_id', $targetIndicatorId)
             ->first();
 
+        EvidenceLink::where('evaluation_id', $this->evaluationBelqees->evaluation_id)
+            ->where('indicator_id', $targetIndicatorId)
+            ->delete();
+
         $existingEvIds = Evidence::where('result_id', $result->result_id)->pluck('evidence_id');
         $existingVersionIds = EvidenceVersion::whereIn('evidence_id', $existingEvIds)->pluck('evidence_version_id');
         Attachment::where('target_type', 'evidence_version')->whereIn('target_id', $existingVersionIds)->delete();
         EvidenceVersion::whereIn('evidence_id', $existingEvIds)->delete();
         Evidence::whereIn('evidence_id', $existingEvIds)->delete();
 
-        $draftEvidence = Evidence::create([
-            'result_id'     => $result->result_id,
-            'indicator_id'  => $targetIndicatorId,
+        // رفع شاهد بحالة draft
+        $file = UploadedFile::fake()->create('initially_draft.pdf', 100, 'application/pdf');
+        $uploadRes = $this->postJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$targetIndicatorId}/evidence-links/upload", [
             'title'         => 'شاهد سيتم اعتماده',
-            'status'        => 'Draft',
-            'evidence_type' => 'report',
+            'status'        => 'draft',
+            'document_type' => 'report',
+            'file'          => $file,
         ]);
+        $uploadRes->assertStatus(201);
+        $linkId = $uploadRes->json('data.evidenceLinkId');
 
-        EvidenceVersion::create([
-            'evidence_id' => $draftEvidence->evidence_id,
-            'version_no'  => 1,
-            'current'     => true,
-        ]);
-
-        // تعديل حالة الشاهد إلى Completed
-        $patchRes = $this->patchJson("/api/v1/evidences/{$draftEvidence->evidence_id}/status", [
-            'status' => 'Completed',
-        ]);
-        $patchRes->assertStatus(200);
+        // تعديل حالة الرابط إلى Completed
+        EvidenceLink::where('id', $linkId)->update(['status' => 'completed']);
 
         // 1. فحص الجرد بعد التعديل: يجب أن يصبح مستوفياً
         $inventoryRes = $this->getJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/evidence-inventory");
@@ -966,75 +1089,67 @@ class EvidenceOrganizationFeatureTest extends TestCase
     {
         Sanctum::actingAs($this->evaluatorBelqees);
 
-        // حذف الشواهد السابقة للمؤشر الأول لبدء اختبار نظيف
+        // حذف روابط الشواهد السابقة للمؤشر الأول لبدء اختبار نظيف
+        EvidenceLink::where('evaluation_id', $this->evaluationBelqees->evaluation_id)
+            ->where('indicator_id', $this->firstIndicator->indicator_id)
+            ->delete();
+
         $existingEvIds = Evidence::where('result_id', $this->resultBelqees->result_id)->pluck('evidence_id');
         $existingVersionIds = EvidenceVersion::whereIn('evidence_id', $existingEvIds)->pluck('evidence_version_id');
         Attachment::where('target_type', 'evidence_version')->whereIn('target_id', $existingVersionIds)->delete();
         EvidenceVersion::whereIn('evidence_id', $existingEvIds)->delete();
         Evidence::whereIn('evidence_id', $existingEvIds)->delete();
 
-        // 1. رفع الشاهد الأول
+        // 1. رفع المستند الأول
         $file1 = UploadedFile::fake()->create('ev1.pdf', 100, 'application/pdf');
-        $res1 = $this->postJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$this->firstIndicator->indicator_id}/evidences", [
-            'title'         => 'الشاهد الأول',
-            'evidence_type' => 'minutes',
+        $res1 = $this->postJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$this->firstIndicator->indicator_id}/evidence-links/upload", [
+            'title'         => 'المستند الأول',
+            'document_type' => 'minutes',
+            'status'        => 'draft',
             'file'          => $file1,
         ]);
-        $ev1Id = $res1->json('data.evidenceId');
+        $res1->assertStatus(201);
+        $link1Id = $res1->json('data.evidenceLinkId');
 
-        // 2. رفع الشاهد الثاني
+        // 2. رفع المستند الثاني
         $file2 = UploadedFile::fake()->create('ev2.pdf', 100, 'application/pdf');
-        $res2 = $this->postJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$this->firstIndicator->indicator_id}/evidences", [
-            'title'         => 'الشاهد الثاني',
-            'evidence_type' => 'plan',
+        $res2 = $this->postJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$this->firstIndicator->indicator_id}/evidence-links/upload", [
+            'title'         => 'المستند الثاني',
+            'document_type' => 'plan',
+            'status'        => 'draft',
             'file'          => $file2,
         ]);
-        $ev2Id = $res2->json('data.evidenceId');
+        $res2->assertStatus(201);
+        $link2Id = $res2->json('data.evidenceLinkId');
 
-        // 3. رفع الشاهد الثالث
+        // 3. رفع المستند الثالث
         $file3 = UploadedFile::fake()->create('ev3.pdf', 100, 'application/pdf');
-        $res3 = $this->postJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$this->firstIndicator->indicator_id}/evidences", [
-            'title'         => 'الشاهد الثالث',
-            'evidence_type' => 'record',
+        $res3 = $this->postJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$this->firstIndicator->indicator_id}/evidence-links/upload", [
+            'title'         => 'المستند الثالث',
+            'document_type' => 'record',
+            'status'        => 'draft',
             'file'          => $file3,
         ]);
-        $ev3Id = $res3->json('data.evidenceId');
+        $res3->assertStatus(201);
+        $link3Id = $res3->json('data.evidenceLinkId');
 
-        // التحقق من أن الشواهد الثلاثة موجودة بحالة مسودة Draft ولكل منها نسخة نشطة
-        $this->assertEquals(3, Evidence::where('indicator_id', $this->firstIndicator->indicator_id)->count());
-        $this->assertEquals('Draft', Evidence::find($ev1Id)->status);
-        $this->assertEquals('Draft', Evidence::find($ev2Id)->status);
-        $this->assertEquals('Draft', Evidence::find($ev3Id)->status);
+        // التحقق من أن الروابط الثلاثة موجودة بحالة مسودة draft
+        $this->assertEquals(3, EvidenceLink::where('indicator_id', $this->firstIndicator->indicator_id)->where('evaluation_id', $this->evaluationBelqees->evaluation_id)->count());
+        $this->assertEquals('draft', EvidenceLink::find($link1Id)->status);
+        $this->assertEquals('draft', EvidenceLink::find($link2Id)->status);
+        $this->assertEquals('draft', EvidenceLink::find($link3Id)->status);
 
-        // 4. تعديل حالة الشاهد الثاني فقط إلى Completed
-        $this->patchJson("/api/v1/evidences/{$ev2Id}/status", [
-            'status' => 'Completed',
-        ])->assertStatus(200);
+        // 4. تعديل حالة الرابط الثاني فقط إلى completed
+        EvidenceLink::where('id', $link2Id)->update(['status' => 'completed']);
 
-        // 5. التحقق الصارم من أن الشاهد الأول والثالث لم تتغير حالتهما أو نسخهما النشطة
-        $ev1 = Evidence::find($ev1Id);
-        $ev2 = Evidence::find($ev2Id);
-        $ev3 = Evidence::find($ev3Id);
+        // 5. التحقق الصارم من أن الرابط الأول والثالث لم تتغير حالتهما
+        $l1 = EvidenceLink::find($link1Id);
+        $l2 = EvidenceLink::find($link2Id);
+        $l3 = EvidenceLink::find($link3Id);
 
-        $this->assertEquals('Completed', $ev2->status);
-        $this->assertEquals('Draft', $ev1->status);
-        $this->assertEquals('Draft', $ev3->status);
-
-        $this->assertDatabaseHas('evidence_versions', [
-            'evidence_id' => $ev1Id,
-            'version_no'  => 1,
-            'current'     => true,
-        ]);
-        $this->assertDatabaseHas('evidence_versions', [
-            'evidence_id' => $ev2Id,
-            'version_no'  => 1,
-            'current'     => true,
-        ]);
-        $this->assertDatabaseHas('evidence_versions', [
-            'evidence_id' => $ev3Id,
-            'version_no'  => 1,
-            'current'     => true,
-        ]);
+        $this->assertEquals('completed', $l2->status);
+        $this->assertEquals('draft', $l1->status);
+        $this->assertEquals('draft', $l3->status);
     }
 
     /**
@@ -1063,12 +1178,12 @@ class EvidenceOrganizationFeatureTest extends TestCase
 
         $this->assertNotEquals(1, $expectedDescriptor->descriptor_id, 'واصفة المؤشر الثاني يجب ألا تكون الواصفة رقم 1');
 
-        // 2. رفع شاهد جديد للمؤشر الثاني لإنشاء النتيجة تلقائياً
+        // 2. رفع شاهد جديد للمؤشر الثاني لإنشاء النتيجة تلقائياً عبر المعمارية الجديدة
         $file = UploadedFile::fake()->create('descriptor_check.pdf', 150, 'application/pdf');
-        $res = $this->postJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$targetIndicator->indicator_id}/evidences", [
+        $res = $this->postJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$targetIndicator->indicator_id}/evidence-links/upload", [
             'title'         => 'شاهد فحص الواصفة',
             'description'   => 'التحقق من ربط الواصفة الصحيحة للنتيجة التلقائية',
-            'evidence_type' => 'report',
+            'document_type' => 'report',
             'file'          => $file,
         ]);
 
@@ -1101,10 +1216,10 @@ class EvidenceOrganizationFeatureTest extends TestCase
         ]);
 
         $fileDummy = UploadedFile::fake()->create('dummy.pdf', 100, 'application/pdf');
-        $failRes = $this->postJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$dummyIndicator->indicator_id}/evidences", [
+        $failRes = $this->postJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$dummyIndicator->indicator_id}/evidence-links/upload", [
             'title'         => 'شاهد مؤشر بلا واصفات',
             'description'   => 'اختبار رفض إنشاء النتيجة التلقائية',
-            'evidence_type' => 'other',
+            'document_type' => 'other',
             'file'          => $fileDummy,
         ]);
 
@@ -1151,9 +1266,19 @@ class EvidenceOrganizationFeatureTest extends TestCase
         ]);
 
         $file = UploadedFile::fake()->create('other_version.pdf', 100, 'application/pdf');
-        $res = $this->postJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$otherIndicator->indicator_id}/evidences", [
+
+        // المسار القديم مغلق 422
+        $legacyRes = $this->postJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$otherIndicator->indicator_id}/evidences", [
             'title'         => 'شاهد لمؤشر إصدار مختلف',
             'evidence_type' => 'report',
+            'file'          => $file,
+        ]);
+        $legacyRes->assertStatus(422);
+
+        // المسار الجديد يرفض 422 لاختلاف الإصدار المعياري
+        $res = $this->postJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$otherIndicator->indicator_id}/evidence-links/upload", [
+            'title'         => 'شاهد لمؤشر إصدار مختلف',
+            'document_type' => 'report',
             'file'          => $file,
         ]);
 
@@ -1198,8 +1323,15 @@ class EvidenceOrganizationFeatureTest extends TestCase
             'status'          => 'Active',
         ]);
 
-        $res = $this->postJson("/api/v1/evidences/{$this->evidenceBelqees->evidence_id}/link-indicator", [
+        // المسار القديم مغلق 422
+        $legacyRes = $this->postJson("/api/v1/evidences/{$this->evidenceBelqees->evidence_id}/link-indicator", [
             'indicator_id' => $otherIndicator->indicator_id,
+        ]);
+        $legacyRes->assertStatus(422);
+
+        // المسار الجديد يرفض 422 لاختلاف الإصدار المعياري للمؤشر المستهدف
+        $res = $this->postJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$otherIndicator->indicator_id}/evidence-links", [
+            'document_id' => $this->documentBelqees->id,
         ]);
 
         $res->assertStatus(422)
@@ -1396,7 +1528,7 @@ class EvidenceOrganizationFeatureTest extends TestCase
     }
 
     /**
-     * اختبار 26: تنظيف وحذف النتيجة التلقائية المعلقة (Pending) عند نقل شاهده الوحيد إذا استوفت كافة شروط الحذف.
+     * اختبار 26: تنظيف وحذف النتيجة التلقائية المعلقة (Pending) عند فك ارتباط شاهده الوحيد إذا استوفت كافة شروط الحذف.
      */
     public function test_link_indicator_cleans_up_orphaned_pending_result_when_conditions_met(): void
     {
@@ -1404,36 +1536,32 @@ class EvidenceOrganizationFeatureTest extends TestCase
 
         // مؤشر أ بلا رصد وبلا شواهد سابقة
         $indicatorA = $this->secondIndicator;
-        $indicatorB = $this->firstIndicator;
 
         EvaluationResult::where('evaluation_id', $this->evaluationBelqees->evaluation_id)
             ->where('indicator_id', $indicatorA->indicator_id)
             ->delete();
 
-        // رفع شاهد لمؤشر أ -> ينشئ سجل EvaluationResult بحالة Pending تلقائياً
+        // رفع مستند لمؤشر أ -> ينشئ سجل EvaluationResult بحالة Pending تلقائياً
         $file = UploadedFile::fake()->create('isolated_ev.pdf', 100, 'application/pdf');
-        $createRes = $this->postJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$indicatorA->indicator_id}/evidences", [
+        $createRes = $this->postJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$indicatorA->indicator_id}/evidence-links/upload", [
             'title'         => 'شاهد مؤشر أ الوحيد',
-            'evidence_type' => 'report',
+            'document_type' => 'report',
             'file'          => $file,
         ]);
         $createRes->assertStatus(201);
-        $evidenceId = $createRes->json('data.evidenceId');
+        $linkId = $createRes->json('data.evidenceLinkId');
 
         $resultA = EvaluationResult::where('evaluation_id', $this->evaluationBelqees->evaluation_id)
             ->where('indicator_id', $indicatorA->indicator_id)
             ->first();
         $this->assertNotNull($resultA);
         $this->assertEquals('Pending', $resultA->completion_status);
-        $this->assertEquals(1, $resultA->evidences()->count());
 
-        // نقل الشاهد من المؤشر أ إلى المؤشر ب
-        $linkRes = $this->postJson("/api/v1/evidences/{$evidenceId}/link-indicator", [
-            'indicator_id' => $indicatorB->indicator_id,
-        ]);
-        $linkRes->assertStatus(200);
+        // فك ارتباط الشاهد الوحيد
+        $unlinkRes = $this->deleteJson("/api/v1/evidence-links/{$linkId}");
+        $unlinkRes->assertStatus(200);
 
-        // التحقق من حذف النتيجة القديمة للمؤشر أ لأنها Pending وبلا شواهد وبلا ملاحظات
+        // التحقق من حذف النتيجة القديمة للمؤشر أ لأنها أصبحت يتيمة بحالة Pending وبلا شواهد وبلا ملاحظات
         $this->assertDatabaseMissing('evaluation_results', [
             'result_id'     => $resultA->result_id,
             'evaluation_id' => $this->evaluationBelqees->evaluation_id,
@@ -1442,28 +1570,27 @@ class EvidenceOrganizationFeatureTest extends TestCase
     }
 
     /**
-     * اختبار 27: عدم حذف النتيجة السابقة Pending عند نقل الشاهد إذا كانت تحتوي على ملاحظات تدقيقية (notes).
+     * اختبار 27: عدم حذف النتيجة السابقة Pending عند فك ارتباط الشاهد إذا كانت تحتوي على ملاحظات تدقيقية (notes).
      */
     public function test_link_indicator_preserves_old_pending_result_if_it_contains_a_note(): void
     {
         Sanctum::actingAs($this->evaluatorBelqees);
 
         $indicatorA = $this->secondIndicator;
-        $indicatorB = $this->firstIndicator;
 
         EvaluationResult::where('evaluation_id', $this->evaluationBelqees->evaluation_id)
             ->where('indicator_id', $indicatorA->indicator_id)
             ->delete();
 
-        // رفع شاهد لمؤشر أ
+        // رفع مستند لمؤشر أ
         $file = UploadedFile::fake()->create('note_ev.pdf', 100, 'application/pdf');
-        $createRes = $this->postJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$indicatorA->indicator_id}/evidences", [
+        $createRes = $this->postJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$indicatorA->indicator_id}/evidence-links/upload", [
             'title'         => 'شاهد مؤشر أ مع ملاحظة',
-            'evidence_type' => 'record',
+            'document_type' => 'record',
             'file'          => $file,
         ]);
         $createRes->assertStatus(201);
-        $evidenceId = $createRes->json('data.evidenceId');
+        $linkId = $createRes->json('data.evidenceLinkId');
 
         $resultA = EvaluationResult::where('evaluation_id', $this->evaluationBelqees->evaluation_id)
             ->where('indicator_id', $indicatorA->indicator_id)
@@ -1478,11 +1605,9 @@ class EvidenceOrganizationFeatureTest extends TestCase
             'updated_at'     => now(),
         ]);
 
-        // نقل الشاهد من المؤشر أ إلى المؤشر ب
-        $linkRes = $this->postJson("/api/v1/evidences/{$evidenceId}/link-indicator", [
-            'indicator_id' => $indicatorB->indicator_id,
-        ]);
-        $linkRes->assertStatus(200);
+        // فك ارتباط الشاهد من المؤشر أ
+        $unlinkRes = $this->deleteJson("/api/v1/evidence-links/{$linkId}");
+        $unlinkRes->assertStatus(200);
 
         // التحقق من بقاء النتيجة القديمة للمؤشر أ في قاعدة البيانات لوجود ملاحظة مسجلة عليها
         $this->assertDatabaseHas('evaluation_results', [
@@ -1682,9 +1807,9 @@ class EvidenceOrganizationFeatureTest extends TestCase
 
         // 1. فحص مسار رفع الشاهد للمؤشر: يرفض 422 برسالة عربية واضحة
         $file = UploadedFile::fake()->create('no_version.pdf', 100, 'application/pdf');
-        $storeRes = $this->postJson("/api/v1/evaluations/{$evalWithoutVersion->evaluation_id}/indicators/{$this->firstIndicator->indicator_id}/evidences", [
+        $storeRes = $this->postJson("/api/v1/evaluations/{$evalWithoutVersion->evaluation_id}/indicators/{$this->firstIndicator->indicator_id}/evidence-links/upload", [
             'title'         => 'شاهد دورة بلا إصدار',
-            'evidence_type' => 'report',
+            'document_type' => 'report',
             'file'          => $file,
         ]);
         $storeRes->assertStatus(422)

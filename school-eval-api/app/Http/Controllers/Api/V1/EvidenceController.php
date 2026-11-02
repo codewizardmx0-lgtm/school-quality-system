@@ -363,6 +363,21 @@ class EvidenceController extends Controller
                     'isSufficient'           => $ind['is_sufficient'],
                     'status'                 => $ind['status'],
                     'evidences'              => $ind['evidences']->map(function ($ev) {
+                        if ($ev instanceof \App\Models\EvidenceLink) {
+                            $doc = $ev->documentVersion?->document;
+                            return [
+                                'evidenceId'    => $ev->id,
+                                'title'         => $doc?->title ?? '',
+                                'evidenceType'  => $doc?->document_type ?? 'other',
+                                'status'        => $ev->status,
+                                'reviewerNotes' => null,
+                                'reviewedBy'    => null,
+                                'reviewedAt'    => null,
+                                'createdAt'     => $ev->created_at?->toIso8601ZuluString(),
+                                'versionsCount' => $doc ? $doc->versions()->count() : 1,
+                            ];
+                        }
+
                         return [
                             'evidenceId'    => $ev->evidence_id,
                             'title'         => $ev->title,
@@ -372,7 +387,7 @@ class EvidenceController extends Controller
                             'reviewedBy'    => $ev->reviewer?->full_name,
                             'reviewedAt'    => $ev->reviewed_at?->toIso8601ZuluString(),
                             'createdAt'     => $ev->created_at?->toIso8601ZuluString(),
-                            'versionsCount' => $ev->versions->count(),
+                            'versionsCount' => $ev->versions ? $ev->versions->count() : 1,
                         ];
                     })->values(),
                 ];
@@ -644,20 +659,35 @@ class EvidenceController extends Controller
         // قاعدة القفل: يُمنع التعديل والربط بعد التسليم أو القفل (422)
         $lockStatus = EvaluationLockChecker::canModifyIndicator($evaluation, $indicatorId);
         if (!$lockStatus['allowed']) {
+            $key = $lockStatus['errorKey'] ?? 'evaluation';
             $msg = $lockStatus['message'] ?? 'ملف التقييم مقفل ولا يمكن ربط شواهد جديدة.';
-            return ApiResponse::validationError(['evaluation' => [$msg]], $msg);
+            return ApiResponse::validationError([$key => [$msg]], $msg);
         }
 
-        $indicator = Indicator::find($indicatorId);
+        $cycle = $evaluation->cycle;
+        $versionId = (int) ($cycle?->version_id ?? $cycle?->standard_version_id ?? 0);
+        if ($versionId <= 0) {
+            return ApiResponse::validationError([
+                'cycle' => ['دورة التقييم غير مرتبطة بإصدار معياري معتمد.']
+            ], 'دورة التقييم غير مرتبطة بإصدار معياري معتمد.');
+        }
+
+        $indicator = Indicator::with('subStandard.standard')->find($indicatorId);
         if (!$indicator) {
             return ApiResponse::notFound('المؤشر المطلوب غير موجود.');
+        }
+
+        if ((int) ($indicator->subStandard?->standard?->version_id ?? 0) !== $versionId) {
+            return ApiResponse::validationError([
+                'indicator_id' => ['المؤشر المستهدف لا ينتمي للإصدار المعياري المعتمد لدورة التقييم.']
+            ], 'المؤشر المستهدف لا ينتمي للإصدار المعياري المعتمد لدورة التقييم.');
         }
 
         $validator = Validator::make($request->all(), [
             'document_id'         => 'nullable|integer',
             'document_version_id' => 'nullable|integer',
             'justification'       => 'nullable|string|max:1000',
-            'status'              => 'nullable|in:draft,completed',
+            'status'              => 'nullable|in:draft,completed,Draft,Completed',
         ]);
 
         if ($validator->fails()) {
@@ -701,15 +731,35 @@ class EvidenceController extends Controller
             ], 'المستند مرتبط مسبقاً بهذا المؤشر.');
         }
 
-        $result = EvaluationResult::firstOrCreate(
-            ['evaluation_id' => $evaluation->evaluation_id, 'indicator_id' => $indicatorId],
-            [
-                'school_id' => $evaluation->school_id,
-                'completion_status' => 'Draft',
-            ]
-        );
+        $result = EvaluationResult::where('evaluation_id', $evaluation->evaluation_id)
+            ->where('indicator_id', $indicatorId)
+            ->first();
 
-        $status = $request->input('status', EvidenceLink::STATUS_COMPLETED);
+        if (!$result) {
+            $descriptor = IndicatorScoreDescriptor::where('indicator_id', $indicatorId)
+                ->where('standard_version_id', $versionId)
+                ->whereHas('scoreLevel', fn($q) => $q->where('score_value', 0))
+                ->first();
+
+            if (!$descriptor) {
+                return ApiResponse::validationError([
+                    'descriptor' => ['تعذر إنشاء النتيجة التلقائية لعدم وجود واصفة تقييم معتمدة للدرجة (0) لهذا المؤشر في هذا الإصدار المعياري.']
+                ], 'تعذر إنشاء النتيجة التلقائية لعدم وجود واصفة تقييم معتمدة للدرجة (0) لهذا المؤشر في هذا الإصدار المعياري.');
+            }
+
+            $result = EvaluationResult::create([
+                'evaluation_id'       => $evaluation->evaluation_id,
+                'indicator_id'        => $indicatorId,
+                'score_descriptor_id' => $descriptor->descriptor_id,
+                'standard_version_id' => $versionId,
+                'evaluator_user_id'   => $user->user_id,
+                'score'               => 0,
+                'completion_status'   => 'Pending',
+            ]);
+        }
+
+        $inputStatus = strtolower($request->input('status', EvidenceLink::STATUS_COMPLETED));
+        $status = ($inputStatus === 'draft') ? EvidenceLink::STATUS_DRAFT : EvidenceLink::STATUS_COMPLETED;
 
         $link = EvidenceLink::create([
             'school_id'            => $evaluation->school_id,
@@ -750,22 +800,37 @@ class EvidenceController extends Controller
         // قاعدة القفل
         $lockStatus = EvaluationLockChecker::canModifyIndicator($evaluation, $indicatorId);
         if (!$lockStatus['allowed']) {
+            $key = $lockStatus['errorKey'] ?? 'evaluation';
             $msg = $lockStatus['message'] ?? 'ملف التقييم مقفل بعد تسليمه ولا يمكن رفع شواهد جديدة.';
-            return ApiResponse::validationError(['evaluation' => [$msg]], $msg);
+            return ApiResponse::validationError([$key => [$msg]], $msg);
         }
 
-        $indicator = Indicator::find($indicatorId);
+        $cycle = $evaluation->cycle;
+        $versionId = (int) ($cycle?->version_id ?? $cycle?->standard_version_id ?? 0);
+        if ($versionId <= 0) {
+            return ApiResponse::validationError([
+                'cycle' => ['دورة التقييم غير مرتبطة بإصدار معياري معتمد.']
+            ], 'دورة التقييم غير مرتبطة بإصدار معياري معتمد.');
+        }
+
+        $indicator = Indicator::with('subStandard.standard')->find($indicatorId);
         if (!$indicator) {
             return ApiResponse::notFound('المؤشر المطلوب غير موجود.');
+        }
+
+        if ((int) ($indicator->subStandard?->standard?->version_id ?? 0) !== $versionId) {
+            return ApiResponse::validationError([
+                'indicator' => ['المؤشر لا ينتمي للإصدار المعياري المعتمد لدورة التقييم.']
+            ], 'المؤشر لا ينتمي للإصدار المعياري المعتمد لدورة التقييم.');
         }
 
         $validator = Validator::make($request->all(), [
             'title'         => 'required|string|max:255',
             'file'          => 'required|file|max:20480|mimes:pdf,png,jpg,jpeg,doc,docx,xls,xlsx',
-            'document_type' => 'nullable|string|max:50',
+            'document_type' => 'nullable|string|in:minutes,plan,record,report,board,image,other',
             'description'   => 'nullable|string|max:2000',
             'justification' => 'nullable|string|max:1000',
-            'status'        => 'nullable|in:draft,completed',
+            'status'        => 'nullable|in:draft,completed,Draft,Completed',
         ]);
 
         if ($validator->fails()) {
@@ -773,9 +838,10 @@ class EvidenceController extends Controller
         }
 
         $uploadedFile = $request->file('file');
-        $status = $request->input('status', EvidenceLink::STATUS_COMPLETED);
+        $inputStatus = strtolower($request->input('status', EvidenceLink::STATUS_COMPLETED));
+        $status = ($inputStatus === 'draft') ? EvidenceLink::STATUS_DRAFT : EvidenceLink::STATUS_COMPLETED;
 
-        $link = DB::transaction(function () use ($request, $evaluation, $indicatorId, $user, $uploadedFile, $status) {
+        $link = DB::transaction(function () use ($request, $evaluation, $indicatorId, $user, $uploadedFile, $status, $versionId) {
             $storagePath = $uploadedFile->store('school_documents/' . $evaluation->school_id, 'local');
 
             $doc = SchoolDocument::create([
@@ -797,13 +863,37 @@ class EvidenceController extends Controller
                 'mime_type'          => $uploadedFile->getClientMimeType() ?: $uploadedFile->getMimeType(),
             ]);
 
-            $result = EvaluationResult::firstOrCreate(
-                ['evaluation_id' => $evaluation->evaluation_id, 'indicator_id' => $indicatorId],
-                [
-                    'school_id' => $evaluation->school_id,
-                    'completion_status' => 'Draft',
-                ]
-            );
+            $result = EvaluationResult::where('evaluation_id', $evaluation->evaluation_id)
+                ->where('indicator_id', $indicatorId)
+                ->first();
+
+            if (!$result) {
+                $descriptor = IndicatorScoreDescriptor::where('indicator_id', $indicatorId)
+                    ->where('standard_version_id', $versionId)
+                    ->whereHas('scoreLevel', fn($q) => $q->where('score_value', 0))
+                    ->first();
+
+                if (!$descriptor) {
+                    abort(response()->json([
+                        'status'  => 'error',
+                        'code'    => 422,
+                        'message' => 'تعذر إنشاء النتيجة التلقائية لعدم وجود واصفة تقييم معتمدة للدرجة (0) لهذا المؤشر في هذا الإصدار المعياري.',
+                        'errors'  => [
+                            'descriptor' => ['تعذر إنشاء النتيجة التلقائية لعدم وجود واصفة تقييم معتمدة للدرجة (0) لهذا المؤشر في هذا الإصدار المعياري.']
+                        ]
+                    ], 422));
+                }
+
+                $result = EvaluationResult::create([
+                    'evaluation_id'       => $evaluation->evaluation_id,
+                    'indicator_id'        => $indicatorId,
+                    'score_descriptor_id' => $descriptor->descriptor_id,
+                    'standard_version_id' => $versionId,
+                    'evaluator_user_id'   => $user->user_id,
+                    'score'               => 0,
+                    'completion_status'   => 'Pending',
+                ]);
+            }
 
             return EvidenceLink::create([
                 'school_id'            => $evaluation->school_id,
@@ -868,7 +958,7 @@ class EvidenceController extends Controller
             return ApiResponse::forbidden('غير مصرح لك بفك ارتباط الشواهد.');
         }
 
-        $link = EvidenceLink::with('evaluation')->find($linkId);
+        $link = EvidenceLink::with(['evaluation', 'evaluationResult'])->find($linkId);
         if (!$link) {
             return ApiResponse::notFound('رابط الشاهد غير موجود.');
         }
@@ -887,7 +977,22 @@ class EvidenceController extends Controller
             }
         }
 
+        $result = $link->evaluationResult;
+        $evalId = $link->evaluation_id;
+        $indId = $link->indicator_id;
+
         $link->delete();
+
+        // تنظيف وحذف النتيجة المعلقة (Pending) إن أصبحت يتيمة وبلا ملاحظات
+        if ($result && $result->completion_status === 'Pending') {
+            $remainingLinks = EvidenceLink::where('evaluation_id', $evalId)->where('indicator_id', $indId)->count();
+            $remainingEvidences = $result->evidences()->count();
+            $hasNotes = $result->notes()->count() > 0;
+
+            if ($remainingLinks === 0 && $remainingEvidences === 0 && !$hasNotes) {
+                $result->delete();
+            }
+        }
 
         return ApiResponse::success(null, 'تم فك ارتباط الشاهد بالمؤشر بنجاح دون حذف المستند الأصلي أو ملفه.');
     }

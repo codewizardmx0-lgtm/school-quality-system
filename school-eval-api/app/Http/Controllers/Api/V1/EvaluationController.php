@@ -935,6 +935,8 @@ class EvaluationController extends Controller
                     \App\Models\ImprovementArea::whereIn('area_id', $areaIds)->delete();
                 }
 
+                \App\Models\EvidenceLink::where('evaluation_id', $evaluation->evaluation_id)->delete();
+
                 foreach ($results as $result) {
                     $evidences = \App\Models\Evidence::where('result_id', $result->result_id)->get();
                     foreach ($evidences as $evidence) {
