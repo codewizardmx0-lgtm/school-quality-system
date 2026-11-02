@@ -120,16 +120,6 @@ class EvaluationResult extends Model
     }
 
     /**
-     * الشواهد والأدلة الداعمة المسجلة لهذه النتيجة.
-     *
-     * @return HasMany
-     */
-    public function evidences(): HasMany
-    {
-        return $this->hasMany(Evidence::class, 'result_id', 'result_id');
-    }
-
-    /**
      * الملاحظات التوثيقية المسجلة على هذه النتيجة.
      *
      * @return HasMany
@@ -174,5 +164,15 @@ class EvaluationResult extends Model
     public function improvementAreas(): HasMany
     {
         return $this->hasMany(ImprovementArea::class, 'result_id', 'result_id');
+    }
+
+    /**
+     * روابط الشواهد المقترنة بنتيجة هذا التقييم (U-24).
+     *
+     * @return HasMany
+     */
+    public function evidenceLinks(): HasMany
+    {
+        return $this->hasMany(EvidenceLink::class, 'evaluation_result_id', 'result_id');
     }
 }

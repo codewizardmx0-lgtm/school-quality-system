@@ -3,15 +3,16 @@
 namespace Tests\Feature;
 
 use App\Models\Attachment;
+use App\Models\DocumentVersion;
 use App\Models\Evaluation;
 use App\Models\EvaluationCycle;
 use App\Models\EvaluationResult;
-use App\Models\Evidence;
-use App\Models\EvidenceVersion;
+use App\Models\EvidenceLink;
 use App\Models\Indicator;
 use App\Models\IndicatorEvidenceRequirement;
 use App\Models\IndicatorScoreDescriptor;
 use App\Models\School;
+use App\Models\SchoolDocument;
 use App\Models\SchoolEnrollmentMetric;
 use App\Models\SchoolFacility;
 use App\Models\SchoolStaffMetric;
@@ -638,34 +639,42 @@ class SchoolManagementFeatureTest extends TestCase
             ->get()
             ->groupBy('indicator_id');
 
+        EvidenceLink::where('evaluation_id', $evaluation->evaluation_id)->delete();
+
         foreach ($requirements as $indicatorId => $reqList) {
             $result = EvaluationResult::where('evaluation_id', $evaluation->evaluation_id)
                 ->where('indicator_id', $indicatorId)
                 ->first();
 
             if ($result) {
-                // حذف الشواهد السابقة إن وجدت
-                $oldEvidences = Evidence::where('result_id', $result->result_id)->get();
-                foreach ($oldEvidences as $oldEv) {
-                    EvidenceVersion::where('evidence_id', $oldEv->evidence_id)->delete();
-                    $oldEv->delete();
-                }
-
                 foreach ($reqList as $req) {
-                    $evidence = Evidence::create([
-                        'result_id'     => $result->result_id,
-                        'indicator_id'  => $indicatorId,
-                        'title'         => 'شاهد معتمد للمتطلب ' . $req->requirement_id,
-                        'description'   => 'وصف الشاهد المكتمل',
-                        'justification' => 'مبررات ودلالات الشاهد',
-                        'evidence_type' => 'record',
-                        'status'        => 'Completed',
+                    $doc = SchoolDocument::create([
+                        'school_id'          => $evaluation->school_id,
+                        'title'              => 'شاهد معتمد للمتطلب ' . $req->requirement_id,
+                        'description'        => 'وصف الشاهد المكتمل',
+                        'document_type'      => 'record',
+                        'created_by_user_id' => $this->evaluatorBelqees->user_id,
                     ]);
 
-                    EvidenceVersion::create([
-                        'evidence_id' => $evidence->evidence_id,
-                        'version_no'  => 1,
-                        'current'     => true,
+                    $version = DocumentVersion::create([
+                        'school_id'          => $evaluation->school_id,
+                        'school_document_id' => $doc->id,
+                        'version_no'         => 1,
+                        'is_current'         => true,
+                        'file_name'          => 'doc_' . $req->requirement_id . '.pdf',
+                        'storage_uri'        => 'school_documents/' . $evaluation->school_id . '/doc_' . $req->requirement_id . '.pdf',
+                        'file_size'          => 1024,
+                        'mime_type'          => 'application/pdf',
+                    ]);
+
+                    EvidenceLink::create([
+                        'school_id'            => $evaluation->school_id,
+                        'evaluation_id'        => $evaluation->evaluation_id,
+                        'evaluation_result_id' => $result->result_id,
+                        'indicator_id'         => $indicatorId,
+                        'document_version_id'  => $version->id,
+                        'justification'        => 'مبررات ودلالات الشاهد',
+                        'status'               => 'completed',
                     ]);
                 }
             }

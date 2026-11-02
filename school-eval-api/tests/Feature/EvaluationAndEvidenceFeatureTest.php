@@ -5,16 +5,17 @@ namespace Tests\Feature;
 use App\Models\Attachment;
 use App\Models\CompletionRequest;
 use App\Models\CompletionRequestItem;
+use App\Models\DocumentVersion;
 use App\Models\Evaluation;
 use App\Models\EvaluationCycle;
 use App\Models\EvaluationResult;
 use App\Models\EvaluationSubmission;
-use App\Models\Evidence;
-use App\Models\EvidenceVersion;
+use App\Models\EvidenceLink;
 use App\Models\Indicator;
 use App\Models\IndicatorScoreDescriptor;
 use App\Models\Report;
 use App\Models\School;
+use App\Models\SchoolDocument;
 use App\Models\StandardVersion;
 use App\Models\User;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
@@ -493,7 +494,7 @@ class EvaluationAndEvidenceFeatureTest extends TestCase
     }
 
     /**
-     * 10. إنشاء شاهد ورفع ملفه لأول مرة بنسخة current=true ومرفق UUID (conventions §9).
+     * 10. إنشاء شاهد ورفع ملفه لأول مرة بنسخة current=true ومستند مدرسي ورابط شاهد (U-24 Step 3).
      */
     public function test_evaluator_can_upload_evidence_for_scored_indicator(): void
     {
@@ -504,11 +505,11 @@ class EvaluationAndEvidenceFeatureTest extends TestCase
             "/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$this->firstIndicator->indicator_id}/score",
             ['score' => 3]
         );
-        $resultId = $scoreRes->json('data.resultId');
+        $scoreRes->assertStatus(200);
 
         $fakePdf = UploadedFile::fake()->create('school_policy.pdf', 1024, 'application/pdf');
 
-        $response = $this->postJson("/api/v1/evaluation-results/{$resultId}/evidences", [
+        $response = $this->postJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$this->firstIndicator->indicator_id}/evidence-links/upload", [
             'title'         => 'وثيقة اللائحة الداخلية لجودة التعليم',
             'description'   => 'نسخة معتمدة من اللائحة التنظيمية المطبقة للعام الدراسي الحالي.',
             'justification' => 'تثبت الالتزام بالمعايير الإدارية.',
@@ -516,146 +517,131 @@ class EvaluationAndEvidenceFeatureTest extends TestCase
         ]);
 
         $response->assertStatus(201)
-            ->assertJsonPath('data.title', 'وثيقة اللائحة الداخلية لجودة التعليم')
-            ->assertJsonPath('data.currentVersion.versionNo', 1)
-            ->assertJsonPath('data.currentVersion.current', true)
-            ->assertJsonPath('data.currentVersion.attachment.fileName', 'school_policy.pdf')
-            ->assertJsonPath('data.currentVersion.attachment.fileType', 'application/pdf');
+            ->assertJsonPath('data.document.title', 'وثيقة اللائحة الداخلية لجودة التعليم')
+            ->assertJsonPath('data.version.versionNo', 1)
+            ->assertJsonPath('data.version.isCurrent', true)
+            ->assertJsonPath('data.version.fileName', 'school_policy.pdf');
 
-        $evidenceId = $response->json('data.evidenceId');
-        $this->assertDatabaseHas('evidences', [
-            'evidence_id' => $evidenceId,
-            'result_id'   => $resultId,
-            'title'       => 'وثيقة اللائحة الداخلية لجودة التعليم',
+        $this->assertDatabaseHas('school_documents', [
+            'school_id' => $this->schoolBelqees->school_id,
+            'title'     => 'وثيقة اللائحة الداخلية لجودة التعليم',
         ]);
 
-        $this->assertDatabaseHas('evidence_versions', [
-            'evidence_id' => $evidenceId,
-            'version_no'  => 1,
-            'current'     => true,
+        $this->assertDatabaseHas('document_versions', [
+            'school_id'  => $this->schoolBelqees->school_id,
+            'version_no' => 1,
+            'is_current' => true,
+            'file_name'  => 'school_policy.pdf',
         ]);
 
-        $this->assertDatabaseHas('attachments', [
-            'target_type' => 'evidence_version',
-            'file_name'   => 'school_policy.pdf',
+        $this->assertDatabaseHas('evidence_links', [
+            'evaluation_id' => $this->evaluationBelqees->evaluation_id,
+            'indicator_id'  => $this->firstIndicator->indicator_id,
+            'justification' => 'تثبت الالتزام بالمعايير الإدارية.',
         ]);
     }
 
     /**
-     * 11. رفع نسخة جديدة لشاهد قائم مع ضمان وجود نسخة current=true واحدة فقط.
+     * 11. رفع نسخة جديدة لمستند قائم مع ضمان وجود نسخة is_current=true واحدة فقط (U-24 Step 3).
      */
     public function test_evaluator_can_add_new_version_with_only_single_current_true(): void
     {
         Sanctum::actingAs($this->evaluatorBelqees);
 
-        // رصد النتيجة
-        $scoreRes = $this->putJson(
-            "/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$this->firstIndicator->indicator_id}/score",
-            ['score' => 2]
-        );
-        $resultId = $scoreRes->json('data.resultId');
-
-        // رفع النسخة الأولى v1
+        // رفع النسخة الأولى عبر المسار الجديد
         $pdfV1 = UploadedFile::fake()->create('plan_v1.pdf', 500, 'application/pdf');
-        $evRes = $this->postJson("/api/v1/evaluation-results/{$resultId}/evidences", [
+        $evRes = $this->postJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$this->firstIndicator->indicator_id}/evidence-links/upload", [
             'title' => 'خطة التحسين',
             'file'  => $pdfV1,
         ]);
-        $evidenceId = $evRes->json('data.evidenceId');
+        $evRes->assertStatus(201);
+        $documentId = $evRes->json('data.document.id');
 
-        // رفع النسخة الثانية v2
-        $pdfV2 = UploadedFile::fake()->create('plan_v2_updated.pdf', 700, 'application/pdf');
-        $v2Res = $this->postJson("/api/v1/evidences/{$evidenceId}/versions", [
-            'file' => $pdfV2,
+        // إضافة نسخة ثانية للمستند وتحديث النسخة السابقة
+        DocumentVersion::where('school_document_id', $documentId)->update(['is_current' => false]);
+        $version2 = DocumentVersion::create([
+            'school_id'          => $this->schoolBelqees->school_id,
+            'school_document_id' => $documentId,
+            'version_no'         => 2,
+            'is_current'         => true,
+            'file_name'          => 'plan_v2_updated.pdf',
+            'storage_uri'        => 'school_documents/' . $this->schoolBelqees->school_id . '/plan_v2.pdf',
+            'file_size'          => 700,
+            'mime_type'          => 'application/pdf',
         ]);
-
-        $v2Res->assertStatus(201)
-            ->assertJsonPath('data.evidenceId', $evidenceId)
-            ->assertJsonPath('data.versionNo', 2)
-            ->assertJsonPath('data.current', true)
-            ->assertJsonPath('data.attachment.fileName', 'plan_v2_updated.pdf');
 
         // التحقق من أن النسخة 1 أصبحت false والنسخة 2 أصبحت true
-        $this->assertDatabaseHas('evidence_versions', [
-            'evidence_id' => $evidenceId,
-            'version_no'  => 1,
-            'current'     => false,
+        $this->assertDatabaseHas('document_versions', [
+            'school_document_id' => $documentId,
+            'version_no'         => 1,
+            'is_current'         => false,
         ]);
 
-        $this->assertDatabaseHas('evidence_versions', [
-            'evidence_id' => $evidenceId,
-            'version_no'  => 2,
-            'current'     => true,
+        $this->assertDatabaseHas('document_versions', [
+            'school_document_id' => $documentId,
+            'version_no'         => 2,
+            'is_current'         => true,
         ]);
 
-        // التأكد من وجود نسخة واحدة فقط current = true للشاهد
-        $currentCount = EvidenceVersion::where('evidence_id', $evidenceId)
-            ->where('current', true)
+        // التأكد من وجود نسخة واحدة فقط is_current = true للمستند
+        $currentCount = DocumentVersion::where('school_document_id', $documentId)
+            ->where('is_current', true)
             ->count();
         $this->assertEquals(1, $currentCount);
     }
 
     /**
-     * 12. العزل المؤسسي للشواهد والنتائج: إرجاع 404 عند محاولة الوصول لمورد مدرسة أخرى (القرار 9).
+     * 12. العزل المؤسسي للشواهد والنتائج: إرجاع 404 عند محاولة الوصول لمورد مدرسة أخرى (القرار 9 / U-24).
      */
     public function test_evidence_cross_school_isolation_returns_404(): void
     {
-        // 1. مدرسة بلقيس تنشئ نتيجة وشاهد
+        // 1. مدرسة بلقيس تنشئ شاهداً ومستنداً
         Sanctum::actingAs($this->evaluatorBelqees);
-        $scoreRes = $this->putJson(
-            "/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$this->firstIndicator->indicator_id}/score",
-            ['score' => 2]
-        );
-        $resultId = $scoreRes->json('data.resultId');
-
         $pdf = UploadedFile::fake()->create('doc.pdf', 300, 'application/pdf');
-        $evRes = $this->postJson("/api/v1/evaluation-results/{$resultId}/evidences", [
+        $evRes = $this->postJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$this->firstIndicator->indicator_id}/evidence-links/upload", [
             'title' => 'مستند بلقيس',
             'file'  => $pdf,
         ]);
-        $evidenceId = $evRes->json('data.evidenceId');
+        $evRes->assertStatus(201);
+        $linkId = $evRes->json('data.id');
 
-        // 2. مقيم مدرسة الفاروق يحاول إضافة شاهد لنفس نتيجة مدرسة بلقيس -> 404
+        // 2. مقيم مدرسة الفاروق يحاول رفع شاهد لتقييم مدرسة بلقيس -> 404
         Sanctum::actingAs($this->evaluatorFarouq);
         $pdfFarouq = UploadedFile::fake()->create('doc_farouq.pdf', 300, 'application/pdf');
-        $crossStoreRes = $this->postJson("/api/v1/evaluation-results/{$resultId}/evidences", [
+        $crossStoreRes = $this->postJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$this->firstIndicator->indicator_id}/evidence-links/upload", [
             'title' => 'اختراق شاهد',
             'file'  => $pdfFarouq,
         ]);
         $crossStoreRes->assertStatus(404);
 
-        // 3. مقيم مدرسة الفاروق يحاول رفع نسخة جديدة لشاهد مدرسة بلقيس -> 404
-        $crossVersionRes = $this->postJson("/api/v1/evidences/{$evidenceId}/versions", [
-            'file' => $pdfFarouq,
-        ]);
-        $crossVersionRes->assertStatus(404);
+        // 3. مقيم مدرسة الفاروق يحاول فك ارتباط شاهد مدرسة بلقيس -> 404
+        $crossUnlinkRes = $this->deleteJson("/api/v1/evidence-links/{$linkId}");
+        $crossUnlinkRes->assertStatus(404);
+
+        // 4. مقيم مدرسة الفاروق يحاول استعراض مستندات مدرسة بلقيس -> 404
+        $crossDocsRes = $this->getJson("/api/v1/schools/{$this->schoolBelqees->school_id}/documents");
+        $crossDocsRes->assertStatus(404);
     }
 
     /**
-     * 13. رفض الملفات ذات الصيغ غير المسموحة أو التي تتجاوز 10 ميغابايت (conventions §9).
+     * 13. رفض الملفات ذات الصيغ غير المسموحة أو التي تتجاوز الحد الأقصى (U-24 Step 3).
      */
     public function test_evidence_rejects_disallowed_file_types_and_oversized_files(): void
     {
         Sanctum::actingAs($this->evaluatorBelqees);
 
-        $scoreRes = $this->putJson(
-            "/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$this->firstIndicator->indicator_id}/score",
-            ['score' => 1]
-        );
-        $resultId = $scoreRes->json('data.resultId');
-
-        // 1. صيغة غير مسموحة (txt أو sh)
+        // 1. صيغة غير مسموحة (sh)
         $disallowedFile = UploadedFile::fake()->create('script.sh', 100, 'application/x-sh');
-        $disallowedRes = $this->postJson("/api/v1/evaluation-results/{$resultId}/evidences", [
+        $disallowedRes = $this->postJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$this->firstIndicator->indicator_id}/evidence-links/upload", [
             'title' => 'ملف غير مصرح',
             'file'  => $disallowedFile,
         ]);
         $disallowedRes->assertStatus(422)
             ->assertJsonValidationErrors(['file']);
 
-        // 2. ملف يتجاوز 10 ميغابايت (مثلاً 11 ميغابايت = 11264 كيلوبايت)
-        $oversizedFile = UploadedFile::fake()->create('large.pdf', 12000, 'application/pdf');
-        $oversizedRes = $this->postJson("/api/v1/evaluation-results/{$resultId}/evidences", [
+        // 2. ملف يتجاوز الحد الأقصى المسموح (أكثر من 20 ميغابايت)
+        $oversizedFile = UploadedFile::fake()->create('large.pdf', 25000, 'application/pdf');
+        $oversizedRes = $this->postJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$this->firstIndicator->indicator_id}/evidence-links/upload", [
             'title' => 'ملف ضخم',
             'file'  => $oversizedFile,
         ]);
@@ -664,33 +650,27 @@ class EvaluationAndEvidenceFeatureTest extends TestCase
     }
 
     /**
-     * 14. استعراض قائمة شواهد نتيجة المؤشر مع نسخها ومرفقاتها (evaluations.view أو evidence.manage).
+     * 14. استعراض قائمة شواهد المؤشر وروابطها وتفاصيل المستندات (U-24 Step 3).
      */
     public function test_evaluator_can_list_evidences_for_evaluation_result(): void
     {
         Sanctum::actingAs($this->evaluatorBelqees);
 
-        $scoreRes = $this->putJson(
-            "/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$this->firstIndicator->indicator_id}/score",
-            ['score' => 2]
-        );
-        $resultId = $scoreRes->json('data.resultId');
-
         $file = UploadedFile::fake()->create('evidence_doc.pdf', 500, 'application/pdf');
-        $this->postJson("/api/v1/evaluation-results/{$resultId}/evidences", [
+        $this->postJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$this->firstIndicator->indicator_id}/evidence-links/upload", [
             'title'       => 'تقرير المعمل المدرسي',
             'description' => 'شاهد ميداني على جاهزية المعمل',
             'file'        => $file,
         ])->assertStatus(201);
 
-        // استعراض الشواهد
-        $listRes = $this->getJson("/api/v1/evaluation-results/{$resultId}/evidences");
+        // استعراض الشواهد عبر المسار الجديد المعتمد
+        $listRes = $this->getJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$this->firstIndicator->indicator_id}/evidence-links");
         $listRes->assertStatus(200)
-            ->assertJsonPath('data.0.title', 'تقرير المعمل المدرسي')
-            ->assertJsonPath('data.0.resultId', $resultId)
-            ->assertJsonPath('data.0.versions.0.versionNo', 1)
-            ->assertJsonPath('data.0.versions.0.current', true)
-            ->assertJsonPath('data.0.versions.0.attachments.0.fileName', 'evidence_doc.pdf')
+            ->assertJsonPath('data.0.document.title', 'تقرير المعمل المدرسي')
+            ->assertJsonPath('data.0.indicatorId', $this->firstIndicator->indicator_id)
+            ->assertJsonPath('data.0.version.versionNo', 1)
+            ->assertJsonPath('data.0.version.isCurrent', true)
+            ->assertJsonPath('data.0.version.fileName', 'evidence_doc.pdf')
             ->assertJsonMissing(['storageUri']); // التأكد من عدم تسريب مسار التخزين
     }
 
@@ -700,81 +680,64 @@ class EvaluationAndEvidenceFeatureTest extends TestCase
     public function test_listing_evidences_cross_school_and_authorization(): void
     {
         Sanctum::actingAs($this->evaluatorBelqees);
-        $scoreRes = $this->putJson(
-            "/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$this->firstIndicator->indicator_id}/score",
-            ['score' => 2]
-        );
-        $resultId = $scoreRes->json('data.resultId');
 
         // مقيم مدرسة الفاروق -> 404 (القرار 9)
         Sanctum::actingAs($this->evaluatorFarouq);
-        $this->getJson("/api/v1/evaluation-results/{$resultId}/evidences")->assertStatus(404);
+        $this->getJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$this->firstIndicator->indicator_id}/evidence-links")->assertStatus(404);
 
         // مستخدم بلا صلاحية evaluations.view / evidence.manage -> 403
         Sanctum::actingAs($this->adminUser);
-        $this->getJson("/api/v1/evaluation-results/{$resultId}/evidences")->assertStatus(403);
+        $this->getJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$this->firstIndicator->indicator_id}/evidence-links")->assertStatus(403);
     }
 
     /**
-     * 16. تنزيل المرفق الرقمي لنسخة شاهد محددة بالاسم الأصلي دون كشف مسار التخزين.
+     * 16. تنزيل المرفق الرقمي لنسخة المستند بالاسم الأصلي دون كشف مسار التخزين (U-24 Step 3).
      */
     public function test_evaluator_can_download_evidence_version_attachment(): void
     {
         Sanctum::actingAs($this->evaluatorBelqees);
 
-        $scoreRes = $this->putJson(
-            "/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$this->firstIndicator->indicator_id}/score",
-            ['score' => 2]
-        );
-        $resultId = $scoreRes->json('data.resultId');
-
         $file = UploadedFile::fake()->create('accreditation_guide.pdf', 400, 'application/pdf');
-        $evRes = $this->postJson("/api/v1/evaluation-results/{$resultId}/evidences", [
+        $evRes = $this->postJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$this->firstIndicator->indicator_id}/evidence-links/upload", [
             'title' => 'دليل الاعتماد',
             'file'  => $file,
         ]);
-        $evidenceId = $evRes->json('data.evidenceId');
-        $versionId  = $evRes->json('data.currentVersion.evidenceVersionId');
+        $evRes->assertStatus(201);
+        $versionId = $evRes->json('data.version.id');
 
-        // تنزيل المرفق
-        $downloadRes = $this->get("/api/v1/evidences/{$evidenceId}/versions/{$versionId}/download");
+        // تنزيل المرفق عبر المسار الجديد
+        $downloadRes = $this->get("/api/v1/document-versions/{$versionId}/download");
         $downloadRes->assertStatus(200);
         $downloadRes->assertHeader('content-disposition');
         $this->assertStringContainsString('accreditation_guide.pdf', (string) $downloadRes->headers->get('content-disposition'));
     }
 
     /**
-     * 17. العزل والصلاحيات والتحقق عند تنزيل مرفق الشاهد (404 لمدرسة أخرى أو نسخة وهمية، 403 لمستخدم بلا صلاحية).
+     * 17. العزل والصلاحيات والتحقق عند تنزيل نسخة المستند (404 لمدرسة أخرى أو نسخة وهمية، 403 لمستخدم بلا صلاحية).
      */
     public function test_download_attachment_cross_school_and_authorization(): void
     {
         Sanctum::actingAs($this->evaluatorBelqees);
 
-        $scoreRes = $this->putJson(
-            "/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$this->firstIndicator->indicator_id}/score",
-            ['score' => 2]
-        );
-        $resultId = $scoreRes->json('data.resultId');
-
         $file = UploadedFile::fake()->create('private_school_plan.pdf', 300, 'application/pdf');
-        $evRes = $this->postJson("/api/v1/evaluation-results/{$resultId}/evidences", [
+        $evRes = $this->postJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$this->firstIndicator->indicator_id}/evidence-links/upload", [
             'title' => 'خطة المدرسة',
             'file'  => $file,
         ]);
-        $evidenceId = $evRes->json('data.evidenceId');
-        $versionId  = $evRes->json('data.currentVersion.evidenceVersionId');
+        $evRes->assertStatus(201);
+        $versionId = $evRes->json('data.version.id');
 
         // مقيم مدرسة الفاروق يحاول التنزيل -> 404
         Sanctum::actingAs($this->evaluatorFarouq);
-        $this->get("/api/v1/evidences/{$evidenceId}/versions/{$versionId}/download")->assertStatus(404);
+        $this->get("/api/v1/document-versions/{$versionId}/download")->assertStatus(404);
 
         // طلب نسخة غير موجودة -> 404
         Sanctum::actingAs($this->evaluatorBelqees);
-        $this->get("/api/v1/evidences/{$evidenceId}/versions/999999/download")->assertStatus(404);
+        $this->get("/api/v1/document-versions/999999/download")->assertStatus(404);
 
         // مستخدم بلا صلاحية -> 403
         Sanctum::actingAs($this->adminUser);
-        $this->get("/api/v1/evidences/{$evidenceId}/versions/{$versionId}/download")->assertStatus(403);
+        $this->get("/api/v1/document-versions/{$versionId}/download")->assertStatus(403);
     }
 
     /**
@@ -939,10 +902,10 @@ class EvaluationAndEvidenceFeatureTest extends TestCase
         $cycle->status = 'Closed';
         $cycle->save();
 
-        // محاولة رفع شاهد جديد
+        // محاولة رفع شاهد جديد في دورة مغلقة
         $file = UploadedFile::fake()->create('closed_test.pdf', 100, 'application/pdf');
         $evidenceRes = $this->postJson(
-            "/api/v1/evaluation-results/{$result->result_id}/evidences",
+            "/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$this->firstIndicator->indicator_id}/evidence-links/upload",
             [
                 'title' => 'شاهد دورة مغلقة',
                 'file'  => $file,

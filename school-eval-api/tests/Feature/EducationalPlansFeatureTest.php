@@ -2,10 +2,11 @@
 
 namespace Tests\Feature;
 
+use App\Models\DocumentVersion;
 use App\Models\Evaluation;
 use App\Models\EvaluationCycle;
 use App\Models\EvaluationResult;
-use App\Models\Evidence;
+use App\Models\EvidenceLink;
 use App\Models\ImprovementAction;
 use App\Models\ImprovementArea;
 use App\Models\ImprovementPlan;
@@ -13,6 +14,7 @@ use App\Models\Indicator;
 use App\Models\PlanImprovementArea;
 use App\Models\PlanReviewNote;
 use App\Models\School;
+use App\Models\SchoolDocument;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
@@ -553,7 +555,7 @@ class EducationalPlansFeatureTest extends TestCase
     }
 
     /**
-     * 8. ربط شاهد تنفيذ بالإجراء واستعراضه ضمن تفاصيل الخطة.
+     * 8. ربط شاهد تنفيذ بالإجراء واستعراضه ضمن تفاصيل الخطة (المعمارية الجديدة U-24).
      */
     public function test_execution_evidence_can_be_attached_to_action(): void
     {
@@ -588,31 +590,292 @@ class EducationalPlansFeatureTest extends TestCase
             'progress_description'           => 'Moderate',
         ]);
 
-        $evidence = Evidence::create([
-            'result_id'    => $this->resultBelqees->result_id,
-            'indicator_id' => $this->resultBelqees->indicator_id,
-            'title'        => 'تقرير تركيب البرمجيات ومحضر الاستلام',
-            'description'  => 'توثيق رسمي لاستلام وتجهيز المعمل.',
-            'status'       => 'Approved',
+        $doc = SchoolDocument::create([
+            'school_id'          => $this->schoolBelqees->school_id,
+            'title'              => 'تقرير تركيب البرمجيات ومحضر الاستلام',
+            'document_type'      => 'report',
+            'description'        => 'توثيق رسمي لاستلام وتجهيز المعمل.',
+            'created_by_user_id' => $this->evaluatorBelqees->user_id,
         ]);
 
-        // ربط الشاهد بالإجراء
+        $version = DocumentVersion::create([
+            'school_id'          => $this->schoolBelqees->school_id,
+            'school_document_id' => $doc->id,
+            'version_no'         => 1,
+            'is_current'         => true,
+            'file_name'          => 'software_report.pdf',
+            'storage_uri'        => 'documents/software_report.pdf',
+            'file_size'          => 1024,
+            'mime_type'          => 'application/pdf',
+        ]);
+
+        $evidenceLink = EvidenceLink::create([
+            'school_id'            => $this->schoolBelqees->school_id,
+            'evaluation_id'        => $this->evaluationBelqees->evaluation_id,
+            'evaluation_result_id' => $this->resultBelqees->result_id,
+            'indicator_id'         => $this->resultBelqees->indicator_id,
+            'document_version_id'  => $version->id,
+            'justification'        => 'إثبات توفير التجهيزات التقنية للطلاب.',
+            'status'               => EvidenceLink::STATUS_COMPLETED,
+        ]);
+
+        // ربط الشاهد بالإجراء عبر evidenceLinkId
         $resAttach = $this->postJson("/api/v1/improvement-plans/{$plan->plan_id}/actions/{$action->action_id}/evidences", [
-            'evidenceId' => $evidence->evidence_id,
+            'evidenceLinkId' => $evidenceLink->id,
         ]);
 
         $resAttach->assertStatus(200)
-            ->assertJsonPath('data.evidenceId', $evidence->evidence_id)
-            ->assertJsonPath('data.actionId', $action->action_id);
+            ->assertJsonPath('data.evidenceLinkId', $evidenceLink->id)
+            ->assertJsonPath('data.actionId', $action->action_id)
+            ->assertJsonPath('data.title', 'تقرير تركيب البرمجيات ومحضر الاستلام');
 
-        $this->assertEquals($action->action_id, $evidence->fresh()->action_id);
+        $this->assertEquals($action->action_id, $evidenceLink->fresh()->action_id);
 
         // استعراض تفاصيل الخطة والتأكد من ظهور الشاهد
         $resDetails = $this->getJson("/api/v1/improvement-plans/{$plan->plan_id}");
         $resDetails->assertStatus(200);
         $actionData = collect($resDetails->json('data.actions'))->firstWhere('actionId', $action->action_id);
         $this->assertNotEmpty($actionData['evidences']);
-        $this->assertEquals($evidence->evidence_id, $actionData['evidences'][0]['evidenceId']);
+        $this->assertEquals($evidenceLink->id, $actionData['evidences'][0]['evidenceLinkId']);
+        $this->assertEquals('تقرير تركيب البرمجيات ومحضر الاستلام', $actionData['evidences'][0]['title']);
+    }
+
+    /**
+     * منع ربط شاهد مدرسة أخرى بإجراء التحسين (عزل المدارس 404).
+     */
+    public function test_cannot_attach_evidence_from_another_school_to_action(): void
+    {
+        Sanctum::actingAs($this->evaluatorBelqees);
+
+        $plan = ImprovementPlan::create([
+            'cycle_id'             => $this->cycle->cycle_id,
+            'school_id'            => $this->schoolBelqees->school_id,
+            'created_by_user_id'   => $this->evaluatorBelqees->user_id,
+            'title'                => 'خطة مدرسة بلقيس',
+            'plan_type'            => 'QualityImprovement',
+            'start_date'           => Carbon::today(),
+            'end_date'             => Carbon::today()->addMonths(2),
+            'status'               => 'Active',
+            'progress_description' => 'Moderate',
+        ]);
+
+        PlanImprovementArea::create([
+            'plan_id' => $plan->plan_id,
+            'area_id' => $this->areaBelqees->area_id,
+        ]);
+
+        $action = ImprovementAction::create([
+            'plan_id'                        => $plan->plan_id,
+            'area_id'                        => $this->areaBelqees->area_id,
+            'title'                          => 'إجراء مدرسة بلقيس',
+            'responsible_person_description' => 'المنسق',
+            'start_date'                     => Carbon::today(),
+            'due_date'                       => Carbon::today()->addWeeks(2),
+            'status'                         => 'InProgress',
+            'completion_percentage'          => 20,
+            'progress_description'           => 'Low',
+        ]);
+
+        // إنشاء شاهد تابع لمدرسة الفاروق
+        $otherDoc = SchoolDocument::create([
+            'school_id'          => $this->schoolFarouq->school_id,
+            'title'              => 'مستند خاص بمدرسة الفاروق',
+            'document_type'      => 'report',
+            'created_by_user_id' => $this->evaluatorFarouq->user_id,
+        ]);
+
+        $otherVersion = DocumentVersion::create([
+            'school_id'          => $this->schoolFarouq->school_id,
+            'school_document_id' => $otherDoc->id,
+            'version_no'         => 1,
+            'is_current'         => true,
+            'file_name'          => 'farouq_doc.pdf',
+            'storage_uri'        => 'documents/farouq_doc.pdf',
+            'file_size'          => 2048,
+            'mime_type'          => 'application/pdf',
+        ]);
+
+        $otherLink = EvidenceLink::create([
+            'school_id'            => $this->schoolFarouq->school_id,
+            'evaluation_id'        => $this->evaluationFarouq->evaluation_id,
+            'evaluation_result_id' => $this->resultFarouq->result_id,
+            'indicator_id'         => $this->resultFarouq->indicator_id,
+            'document_version_id'  => $otherVersion->id,
+            'justification'        => 'شاهد لمدرسة أخرى.',
+            'status'               => EvidenceLink::STATUS_COMPLETED,
+        ]);
+
+        // محاولة ربط شاهد مدرسة الفاروق بخطة مدرسة بلقيس -> يجب أن تفشل 404
+        $res = $this->postJson("/api/v1/improvement-plans/{$plan->plan_id}/actions/{$action->action_id}/evidences", [
+            'evidenceLinkId' => $otherLink->id,
+        ]);
+
+        $res->assertStatus(404);
+        $this->assertNull($otherLink->fresh()->action_id);
+    }
+
+    /**
+     * منع ربط الشاهد بعد قفل التقييم أو إغلاق دورة التقييم (422).
+     */
+    public function test_cannot_attach_evidence_to_action_when_evaluation_is_locked_or_cycle_closed(): void
+    {
+        Sanctum::actingAs($this->evaluatorBelqees);
+
+        $plan = ImprovementPlan::create([
+            'cycle_id'             => $this->cycle->cycle_id,
+            'school_id'            => $this->schoolBelqees->school_id,
+            'created_by_user_id'   => $this->evaluatorBelqees->user_id,
+            'title'                => 'خطة اختبار القفل',
+            'plan_type'            => 'QualityImprovement',
+            'start_date'           => Carbon::today(),
+            'end_date'             => Carbon::today()->addMonths(2),
+            'status'               => 'Active',
+            'progress_description' => 'Moderate',
+        ]);
+
+        PlanImprovementArea::create([
+            'plan_id' => $plan->plan_id,
+            'area_id' => $this->areaBelqees->area_id,
+        ]);
+
+        $action = ImprovementAction::create([
+            'plan_id'                        => $plan->plan_id,
+            'area_id'                        => $this->areaBelqees->area_id,
+            'title'                          => 'إجراء اختبار القفل',
+            'responsible_person_description' => 'المنسق',
+            'start_date'                     => Carbon::today(),
+            'due_date'                       => Carbon::today()->addWeeks(2),
+            'status'                         => 'InProgress',
+            'completion_percentage'          => 20,
+            'progress_description'           => 'Low',
+        ]);
+
+        $doc = SchoolDocument::create([
+            'school_id'          => $this->schoolBelqees->school_id,
+            'title'              => 'مستند اختبار القفل',
+            'document_type'      => 'report',
+            'created_by_user_id' => $this->evaluatorBelqees->user_id,
+        ]);
+
+        $version = DocumentVersion::create([
+            'school_id'          => $this->schoolBelqees->school_id,
+            'school_document_id' => $doc->id,
+            'version_no'         => 1,
+            'is_current'         => true,
+            'file_name'          => 'lock_test.pdf',
+            'storage_uri'        => 'documents/lock_test.pdf',
+            'file_size'          => 1024,
+            'mime_type'          => 'application/pdf',
+        ]);
+
+        $link = EvidenceLink::create([
+            'school_id'            => $this->schoolBelqees->school_id,
+            'evaluation_id'        => $this->evaluationBelqees->evaluation_id,
+            'evaluation_result_id' => $this->resultBelqees->result_id,
+            'indicator_id'         => $this->resultBelqees->indicator_id,
+            'document_version_id'  => $version->id,
+            'justification'        => 'شاهد اختبار القيود.',
+            'status'               => EvidenceLink::STATUS_COMPLETED,
+        ]);
+
+        // 1. فحص إغلاق دورة التقييم
+        $this->cycle->update(['status' => 'Closed']);
+        $resClosedCycle = $this->postJson("/api/v1/improvement-plans/{$plan->plan_id}/actions/{$action->action_id}/evidences", [
+            'evidenceLinkId' => $link->id,
+        ]);
+        $resClosedCycle->assertStatus(422);
+
+        // إعادة تفعيل الدورة
+        $this->cycle->update(['status' => 'Active']);
+
+        // 2. فحص قفل ملف التقييم (Completed)
+        $this->evaluationBelqees->update(['status' => 'Completed']);
+        $resLockedEval = $this->postJson("/api/v1/improvement-plans/{$plan->plan_id}/actions/{$action->action_id}/evidences", [
+            'evidenceLinkId' => $link->id,
+        ]);
+        $resLockedEval->assertStatus(422);
+
+        // استعادة حالة التقييم
+        $this->evaluationBelqees->update(['status' => 'InProgress']);
+    }
+
+    /**
+     * فك ارتباط الشاهد بالإجراء دون حذف الشاهد أو المستند.
+     */
+    public function test_can_detach_evidence_from_action_without_deleting_evidence_or_document(): void
+    {
+        Sanctum::actingAs($this->evaluatorBelqees);
+
+        $plan = ImprovementPlan::create([
+            'cycle_id'             => $this->cycle->cycle_id,
+            'school_id'            => $this->schoolBelqees->school_id,
+            'created_by_user_id'   => $this->evaluatorBelqees->user_id,
+            'title'                => 'خطة فك الارتباط',
+            'plan_type'            => 'QualityImprovement',
+            'start_date'           => Carbon::today(),
+            'end_date'             => Carbon::today()->addMonths(2),
+            'status'               => 'Active',
+            'progress_description' => 'Moderate',
+        ]);
+
+        PlanImprovementArea::create([
+            'plan_id' => $plan->plan_id,
+            'area_id' => $this->areaBelqees->area_id,
+        ]);
+
+        $action = ImprovementAction::create([
+            'plan_id'                        => $plan->plan_id,
+            'area_id'                        => $this->areaBelqees->area_id,
+            'title'                          => 'إجراء فك الارتباط',
+            'responsible_person_description' => 'المنسق',
+            'start_date'                     => Carbon::today(),
+            'due_date'                       => Carbon::today()->addWeeks(2),
+            'status'                         => 'InProgress',
+            'completion_percentage'          => 40,
+            'progress_description'           => 'Low',
+        ]);
+
+        $doc = SchoolDocument::create([
+            'school_id'          => $this->schoolBelqees->school_id,
+            'title'              => 'مستند مستمر الوجود',
+            'document_type'      => 'minutes',
+            'created_by_user_id' => $this->evaluatorBelqees->user_id,
+        ]);
+
+        $version = DocumentVersion::create([
+            'school_id'          => $this->schoolBelqees->school_id,
+            'school_document_id' => $doc->id,
+            'version_no'         => 1,
+            'is_current'         => true,
+            'file_name'          => 'minutes.pdf',
+            'storage_uri'        => 'documents/minutes.pdf',
+            'file_size'          => 1500,
+            'mime_type'          => 'application/pdf',
+        ]);
+
+        $link = EvidenceLink::create([
+            'school_id'            => $this->schoolBelqees->school_id,
+            'evaluation_id'        => $this->evaluationBelqees->evaluation_id,
+            'evaluation_result_id' => $this->resultBelqees->result_id,
+            'indicator_id'         => $this->resultBelqees->indicator_id,
+            'document_version_id'  => $version->id,
+            'action_id'            => $action->action_id, // مرتبط حالياً بالإجراء
+            'justification'        => 'محضر اجتماع توثيقي.',
+            'status'               => EvidenceLink::STATUS_COMPLETED,
+        ]);
+
+        // فك ارتباط الشاهد بالإجراء عبر DELETE
+        $resDetach = $this->deleteJson("/api/v1/improvement-plans/{$plan->plan_id}/actions/{$action->action_id}/evidences/{$link->id}");
+
+        $resDetach->assertStatus(200);
+
+        // التأكد من أن حقل action_id أصبح null
+        $this->assertNull($link->fresh()->action_id);
+
+        // التأكد الحاسم من بقاء الرابط والمستند والنسخة في قاعدة البيانات دون أي حذف
+        $this->assertDatabaseHas('evidence_links', ['id' => $link->id]);
+        $this->assertDatabaseHas('school_documents', ['id' => $doc->id]);
+        $this->assertDatabaseHas('document_versions', ['id' => $version->id]);
     }
 
     /**

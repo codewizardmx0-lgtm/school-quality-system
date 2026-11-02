@@ -46,7 +46,7 @@ class EvaluationController extends Controller
             return ApiResponse::forbidden('غير مصرح');
         }
 
-        $query = Evaluation::with(['school', 'cycle', 'creator', 'results.indicator', 'results.scoreDescriptor', 'results.evidences']);
+        $query = Evaluation::with(['school', 'cycle', 'creator', 'results.indicator', 'results.scoreDescriptor', 'results.evidenceLinks']);
 
         // عزل النطاق لمستخدم المدرسة: حصر التقييمات بمدرسته فقط
         if ($user->user_type === 'school') {
@@ -187,7 +187,7 @@ class EvaluationController extends Controller
             return ApiResponse::forbidden('غير مصرح');
         }
 
-        $evaluation = Evaluation::with(['school', 'cycle', 'creator', 'results.indicator', 'results.scoreDescriptor', 'results.evidences'])
+        $evaluation = Evaluation::with(['school', 'cycle', 'creator', 'results.indicator', 'results.scoreDescriptor', 'results.evidenceLinks'])
             ->find($id);
 
         if (!$evaluation) {
@@ -268,7 +268,7 @@ class EvaluationController extends Controller
         $existingResults = EvaluationResult::where('evaluation_id', $evaluation->evaluation_id)
             ->with([
                 'scoreDescriptor',
-                'evidences',
+                'evidenceLinks',
                 'verificationTools',
                 'notes' => function ($q) {
                     $q->orderBy('note_id', 'desc')->with('author');
@@ -331,7 +331,7 @@ class EvaluationController extends Controller
                                 'scoreDescriptorLabel'   => ($result && $result->completion_status === 'Completed') ? $result->scoreDescriptor?->label : null,
                                 'completionStatus'       => $result?->completion_status,
                                 'textualResult'          => $result?->textual_result,
-                                'evidenceCount'          => $result ? $result->evidences->count() : 0,
+                                'evidenceCount'          => $result ? $result->evidenceLinks->count() : 0,
                                 'notesCount'             => $result ? $result->notes->count() : 0,
                                 'notes'                  => $notes,
                                 'verificationToolIds'    => $result ? $result->verificationTools->pluck('tool_id')->all() : [],
@@ -826,7 +826,7 @@ class EvaluationController extends Controller
                 ],
                 'isLocked' => true,
             ],
-            message: 'تم إغلاق التقييم الذاتي واعتماده بنجاح وقفل العمليات التعديلية (BR-SCH-03).'
+            message: 'تم إغلاق التقييم الذاتي وتسليمه بنجاح وقفل العمليات التعديلية (BR-SCH-03).'
         );
     }
 
@@ -895,7 +895,17 @@ class EvaluationController extends Controller
      */
     public function devReset(Request $request, int $id): JsonResponse
     {
+        // 1. قفل المسار خارج البيئة المحلية حصراً (REV-T009 / U-22)
+        if (!app()->environment('local')) {
+            return ApiResponse::forbidden('مسار إعادة الضبط التجريبي متاح فقط في البيئة المحلية (local environment).');
+        }
+
         $user = $request->user();
+
+        // 2. التحقق الصارم من التفويض والعزل المؤسسي (منع الأدمن والمشرفين ومستخدمي المدارس الأخرى من التدخل التشغيلي BR-GEN-06)
+        if (!$user || $user->user_type !== 'school' || !$user->hasPermission('evaluations.edit')) {
+            return ApiResponse::forbidden('غير مصرح لك بإفراغ هذا التقييم؛ الإجراء محصور بمقيّم المدرسة المصرح له.');
+        }
 
         $evaluation = Evaluation::find($id);
         if (!$evaluation) {
@@ -903,7 +913,7 @@ class EvaluationController extends Controller
         }
 
         // عزل المدارس (القرار المعماري 9)
-        if ($user->user_type === 'school' && (int) $user->school_id !== (int) $evaluation->school_id) {
+        if ((int) $user->school_id !== (int) $evaluation->school_id) {
             return ApiResponse::notFound('ملف التقييم غير موجود.');
         }
 
@@ -925,19 +935,9 @@ class EvaluationController extends Controller
                     \App\Models\ImprovementArea::whereIn('area_id', $areaIds)->delete();
                 }
 
-                foreach ($results as $result) {
-                    $evidences = \App\Models\Evidence::where('result_id', $result->result_id)->get();
-                    foreach ($evidences as $evidence) {
-                        $versions = \App\Models\EvidenceVersion::where('evidence_id', $evidence->evidence_id)->get();
-                        foreach ($versions as $version) {
-                            \App\Models\Attachment::where('target_type', 'evidence_version')
-                                ->where('target_id', $version->evidence_version_id)
-                                ->delete();
-                            $version->delete();
-                        }
-                        $evidence->delete();
-                    }
+                \App\Models\EvidenceLink::where('evaluation_id', $evaluation->evaluation_id)->delete();
 
+                foreach ($results as $result) {
                     DB::table('evaluation_result_verification_methods')->where('evaluation_result_id', $result->result_id)->delete();
                     \App\Models\Note::where('result_id', $result->result_id)->delete();
                     $result->delete();

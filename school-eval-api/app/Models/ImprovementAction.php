@@ -125,12 +125,12 @@ class ImprovementAction extends Model
     }
 
     /**
-     * شواهد وأدلة إثبات تنفيذ هذا الإجراء (الشريحة 8).
+     * روابط الشواهد والمستندات التقييمية المرتبطة بهذا الإجراء (المعمارية الجديدة U-24).
      *
      * @return HasMany
      */
-    public function evidences(): HasMany
+    public function evidenceLinks(): HasMany
     {
-        return $this->hasMany(Evidence::class, 'action_id', 'action_id');
+        return $this->hasMany(EvidenceLink::class, 'action_id', 'action_id');
     }
 }

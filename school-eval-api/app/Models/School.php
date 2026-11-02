@@ -165,4 +165,24 @@ class School extends Model
     {
         return $this->hasMany(SchoolFacility::class, 'school_id', 'school_id');
     }
+
+    /**
+     * مستندات المدرسة المرفوعة في المستودع المؤسسي (U-24).
+     *
+     * @return HasMany
+     */
+    public function documents(): HasMany
+    {
+        return $this->hasMany(SchoolDocument::class, 'school_id', 'school_id');
+    }
+
+    /**
+     * روابط الشواهد الموثقة للمدرسة عبر التقييمات والمؤشرات (U-24).
+     *
+     * @return HasMany
+     */
+    public function evidenceLinks(): HasMany
+    {
+        return $this->hasMany(EvidenceLink::class, 'school_id', 'school_id');
+    }
 }
