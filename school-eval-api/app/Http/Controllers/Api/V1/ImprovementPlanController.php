@@ -7,12 +7,14 @@ use App\Http\Controllers\Controller;
 use App\Http\Responses\ApiResponse;
 use App\Models\EvaluationCycle;
 use App\Models\Evidence;
+use App\Models\EvidenceLink;
 use App\Models\ImprovementAction;
 use App\Models\ImprovementArea;
 use App\Models\ImprovementPlan;
 use App\Models\PlanImprovementArea;
 use App\Models\PlanReviewNote;
 use App\Services\ActionCatalogService;
+use App\Services\EvaluationLockChecker;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -196,7 +198,7 @@ class ImprovementPlanController extends Controller
             return $created;
         });
 
-        $plan->load(['cycle', 'school', 'creator', 'areas.indicator', 'actions.area', 'actions.evidences', 'reviewNotes.author']);
+        $plan->load(['cycle', 'school', 'creator', 'areas.indicator', 'actions.area', 'actions.evidences', 'actions.evidenceLinks.documentVersion.document', 'reviewNotes.author']);
 
         return ApiResponse::success(
             data: $this->formatPlanDetails($plan),
@@ -226,6 +228,7 @@ class ImprovementPlanController extends Controller
             'areas.indicator',
             'actions.area',
             'actions.evidences',
+            'actions.evidenceLinks.documentVersion.document',
             'reviewNotes.author',
         ])->find($id);
 
@@ -417,7 +420,7 @@ class ImprovementPlanController extends Controller
         $plan->progress_description = $overallProgress['code'];
         $plan->save();
 
-        $plan->load(['cycle', 'school', 'creator', 'areas.indicator', 'actions.area', 'actions.evidences', 'reviewNotes.author']);
+        $plan->load(['cycle', 'school', 'creator', 'areas.indicator', 'actions.area', 'actions.evidences', 'actions.evidenceLinks.documentVersion.document', 'reviewNotes.author']);
 
         return ApiResponse::success(
             data: $this->formatPlanDetails($plan),
@@ -524,7 +527,7 @@ class ImprovementPlanController extends Controller
         $plan->progress_description = $overallProgress['code'];
         $plan->save();
 
-        $action->load(['area', 'evidences']);
+        $action->load(['area', 'evidences', 'evidenceLinks.documentVersion.document']);
 
         return ApiResponse::success(
             data: $this->formatAction($action),
@@ -649,7 +652,7 @@ class ImprovementPlanController extends Controller
         $plan->progress_description = $overallProgress['code'];
         $plan->save();
 
-        $action->load(['area', 'evidences']);
+        $action->load(['area', 'evidences', 'evidenceLinks.documentVersion.document']);
 
         return ApiResponse::success(
             data: $this->formatAction($action),
@@ -697,6 +700,7 @@ class ImprovementPlanController extends Controller
         }
 
         // فك ربط أي شواهد مرتبطة بهذا الإجراء
+        EvidenceLink::where('action_id', $action->action_id)->update(['action_id' => null]);
         Evidence::where('action_id', $action->action_id)->update(['action_id' => null]);
 
         $action->delete();
@@ -714,7 +718,7 @@ class ImprovementPlanController extends Controller
     }
 
     /**
-     * ربط شاهد/دليل إثبات بإجراء تنفيذي لتوثيق الإنجاز ميدانياً (الشريحة 8).
+     * ربط شاهد/دليل إثبات بإجراء تنفيذي لتوثيق الإنجاز ميدانياً (U-24 الخطوة 4أ).
      *
      * POST /api/v1/improvement-plans/{id}/actions/{actionId}/evidences
      * الصلاحية: plans.manage
@@ -727,7 +731,7 @@ class ImprovementPlanController extends Controller
             return ApiResponse::forbidden('غير مصرح لك بربط شواهد التنفيذ بالإجراء.');
         }
 
-        $plan = ImprovementPlan::find($id);
+        $plan = ImprovementPlan::with('cycle')->find($id);
         if (!$plan) {
             return ApiResponse::notFound('خطة التحسين المطلوبة غير موجودة.');
         }
@@ -745,29 +749,112 @@ class ImprovementPlanController extends Controller
         }
 
         $validator = Validator::make($request->all(), [
-            'evidenceId'  => ['required_without:evidence_id', 'integer'],
-            'evidence_id' => ['required_without:evidenceId', 'integer'],
-        ], [
-            'evidenceId.required_without'  => 'معرف الشاهد التنفيذي إلزامي.',
-            'evidence_id.required_without' => 'معرف الشاهد التنفيذي إلزامي.',
+            'evidenceLinkId'   => ['nullable', 'integer'],
+            'evidence_link_id' => ['nullable', 'integer'],
+            'evidenceId'       => ['nullable', 'integer'],
+            'evidence_id'      => ['nullable', 'integer'],
         ]);
 
         if ($validator->fails()) {
             return ApiResponse::validationError($validator->errors()->toArray());
         }
 
-        $evidenceId = (int) ($request->input('evidenceId') ?? $request->input('evidence_id'));
-        $evidence = Evidence::with('result.evaluation')->find($evidenceId);
+        $linkId = $request->input('evidenceLinkId')
+            ?? $request->input('evidence_link_id')
+            ?? $request->input('evidenceId')
+            ?? $request->input('evidence_id');
+
+        if (!$linkId) {
+            return ApiResponse::validationError([
+                'evidenceLinkId' => ['معرف رابط الشاهد إلزامي.'],
+            ], 'معرف رابط الشاهد إلزامي.');
+        }
+
+        // فحص قفل الخطة أو إغلاق الدورة
+        if ($plan->status === 'Closed') {
+            return ApiResponse::validationError([
+                'plan' => ['خطة التحسين مغلقة ولا يمكن تعديل أو ربط شواهد جديدة بها.'],
+            ], 'خطة التحسين مغلقة ولا يمكن تعديل شواهدها.');
+        }
+
+        if ($plan->cycle && $plan->cycle->status === 'Closed') {
+            return ApiResponse::validationError([
+                'cycle' => ['دورة التقييم مغلقة حالياً ولا يُسمح بربط الشواهد (FR-SCH-01).'],
+            ], 'دورة التقييم مغلقة حالياً ولا يُسمح بربط الشواهد.');
+        }
+
+        // 1. البحث في المعمارية الجديدة (EvidenceLink)
+        $link = EvidenceLink::with(['evaluation.cycle', 'documentVersion.document'])->find($linkId);
+
+        if ($link) {
+            // عزل المدارس: التأكد من تبعية الشاهد لنفس مدرسة الخطة
+            if ((int) $link->school_id !== (int) $plan->school_id) {
+                return ApiResponse::notFound('الشاهد المطلوب غير موجود.');
+            }
+            if ($user->user_type === 'school' && (int) $link->school_id !== (int) $user->school_id) {
+                return ApiResponse::notFound('الشاهد المطلوب غير موجود.');
+            }
+
+            // فحص قفل التقييم المرتبط أو دورته
+            if ($link->evaluation) {
+                if ($link->evaluation->cycle && $link->evaluation->cycle->status === 'Closed') {
+                    return ApiResponse::validationError([
+                        'cycle' => ['دورة التقييم مغلقة حالياً ولا يُسمح بربط شواهدها.'],
+                    ], 'دورة التقييم مغلقة حالياً ولا يُسمح بربط الشواهد.');
+                }
+
+                if (EvaluationLockChecker::isEvaluationLocked($link->evaluation)) {
+                    return ApiResponse::validationError([
+                        'evaluation' => ['ملف التقييم المرتبط بهذا الشاهد مقفل ولا يُسمح بتعديل أو ربط شواهده (BR-SCH-03).'],
+                    ], 'ملف التقييم المرتبط بهذا الشاهد مقفل ولا يُسمح بربط شواهده.');
+                }
+            }
+
+            $link->action_id = $action->action_id;
+            $link->save();
+
+            $title = $link->documentVersion?->document?->title ?? '';
+
+            return ApiResponse::success(
+                data: [
+                    'evidenceLinkId' => (int) $link->id,
+                    'evidenceId'     => (int) $link->id,
+                    'actionId'       => (int) $link->action_id,
+                    'title'          => $title,
+                    'status'         => $link->status,
+                    'justification'  => $link->justification,
+                ],
+                message: 'تم ربط شاهد التنفيذ بالإجراء بنجاح.'
+            );
+        }
+
+        // 2. الدعم الاحتياطي للجدول القديم Evidence
+        $evidence = Evidence::with('result.evaluation.cycle')->find($linkId);
 
         if (!$evidence) {
             return ApiResponse::notFound('الشاهد المطلوب غير موجود.');
         }
 
         // عزل المدارس: التأكد من تبعية الشاهد للمدرسة
-        if ($user->user_type === 'school') {
-            $evSchoolId = $evidence->result?->evaluation?->school_id;
-            if ($evSchoolId && (int) $evSchoolId !== (int) $user->school_id) {
-                return ApiResponse::notFound('الشاهد المطلوب غير موجود.');
+        $evSchoolId = $evidence->result?->evaluation?->school_id;
+        if ($evSchoolId && (int) $evSchoolId !== (int) $plan->school_id) {
+            return ApiResponse::notFound('الشاهد المطلوب غير موجود.');
+        }
+        if ($user->user_type === 'school' && $evSchoolId && (int) $evSchoolId !== (int) $user->school_id) {
+            return ApiResponse::notFound('الشاهد المطلوب غير موجود.');
+        }
+
+        if ($evidence->result?->evaluation) {
+            $eval = $evidence->result->evaluation;
+            if ($eval->cycle && $eval->cycle->status === 'Closed') {
+                return ApiResponse::validationError([
+                    'cycle' => ['دورة التقييم مغلقة حالياً ولا يُسمح بربط الشواهد.'],
+                ], 'دورة التقييم مغلقة حالياً ولا يُسمح بربط الشواهد.');
+            }
+            if (EvaluationLockChecker::isEvaluationLocked($eval)) {
+                return ApiResponse::validationError([
+                    'evaluation' => ['ملف التقييم المرتبط بهذا الشاهد مقفل ولا يُسمح بربط شواهده.'],
+                ], 'ملف التقييم المرتبط بهذا الشاهد مقفل ولا يُسمح بربط شواهده.');
             }
         }
 
@@ -776,12 +863,120 @@ class ImprovementPlanController extends Controller
 
         return ApiResponse::success(
             data: [
-                'evidenceId' => (int) $evidence->evidence_id,
-                'actionId'   => (int) $evidence->action_id,
-                'title'      => $evidence->title,
-                'status'     => $evidence->status,
+                'evidenceLinkId' => (int) $evidence->evidence_id,
+                'evidenceId'     => (int) $evidence->evidence_id,
+                'actionId'       => (int) $evidence->action_id,
+                'title'          => $evidence->title,
+                'status'         => $evidence->status,
             ],
             message: 'تم ربط شاهد التنفيذ بالإجراء بنجاح.'
+        );
+    }
+
+    /**
+     * فك ارتباط شاهد/دليل إثبات بإجراء تنفيذي دون حذف الشاهد أو مستنده (U-24 الخطوة 4أ).
+     *
+     * DELETE /api/v1/improvement-plans/{id}/actions/{actionId}/evidences/{evidenceLinkId}
+     * الصلاحية: plans.manage
+     */
+    public function detachActionEvidence(Request $request, int $id, int $actionId, int $evidenceLinkId): JsonResponse
+    {
+        $user = $request->user();
+
+        if (!$user->hasPermission('plans.manage')) {
+            return ApiResponse::forbidden('غير مصرح لك بفك ارتباط شواهد التنفيذ بالإجراء.');
+        }
+
+        $plan = ImprovementPlan::with('cycle')->find($id);
+        if (!$plan) {
+            return ApiResponse::notFound('خطة التحسين المطلوبة غير موجودة.');
+        }
+
+        if ($user->user_type === 'school' && (int) $user->school_id !== (int) $plan->school_id) {
+            return ApiResponse::notFound('خطة التحسين المطلوبة غير موجودة.');
+        }
+
+        $action = ImprovementAction::where('plan_id', $plan->plan_id)
+            ->where('action_id', $actionId)
+            ->first();
+
+        if (!$action) {
+            return ApiResponse::notFound('الإجراء التنفيذي المطلوب غير موجود ضمن هذه الخطة.');
+        }
+
+        // فحص قفل الخطة أو إغلاق الدورة
+        if ($plan->status === 'Closed') {
+            return ApiResponse::validationError([
+                'plan' => ['خطة التحسين مغلقة ولا يمكن تعديل أو فك شواهدها.'],
+            ], 'خطة التحسين مغلقة ولا يمكن تعديل شواهدها.');
+        }
+
+        if ($plan->cycle && $plan->cycle->status === 'Closed') {
+            return ApiResponse::validationError([
+                'cycle' => ['دورة التقييم مغلقة حالياً ولا يُسمح بالتعديل (FR-SCH-01).'],
+            ], 'دورة التقييم مغلقة حالياً ولا يُسمح بالتعديل.');
+        }
+
+        // 1. البحث في EvidenceLink أولاً
+        $link = EvidenceLink::with('evaluation.cycle')
+            ->where('id', $evidenceLinkId)
+            ->where('action_id', $action->action_id)
+            ->first();
+
+        if ($link) {
+            if ((int) $link->school_id !== (int) $plan->school_id) {
+                return ApiResponse::notFound('الشاهد المطلوب غير موجود.');
+            }
+            if ($user->user_type === 'school' && (int) $link->school_id !== (int) $user->school_id) {
+                return ApiResponse::notFound('الشاهد المطلوب غير موجود.');
+            }
+
+            // فحص قفل التقييم
+            if ($link->evaluation && EvaluationLockChecker::isEvaluationLocked($link->evaluation)) {
+                return ApiResponse::validationError([
+                    'evaluation' => ['ملف التقييم المرتبط بهذا الشاهد مقفل ولا يُسمح بتعديل شواهده (BR-SCH-03).'],
+                ], 'ملف التقييم المرتبط بهذا الشاهد مقفل ولا يُسمح بتعديل شواهده.');
+            }
+
+            $link->action_id = null;
+            $link->save();
+
+            return ApiResponse::success(
+                data: null,
+                message: 'تم فك ارتباط الشاهد بالإجراء بنجاح دون حذف المستند.'
+            );
+        }
+
+        // 2. الدعم الاحتياطي لـ Evidence القديم
+        $evidence = Evidence::with('result.evaluation.cycle')
+            ->where('evidence_id', $evidenceLinkId)
+            ->where('action_id', $action->action_id)
+            ->first();
+
+        if (!$evidence) {
+            return ApiResponse::notFound('الشاهد المطلوب غير مرتبط بهذا الإجراء.');
+        }
+
+        $evSchoolId = $evidence->result?->evaluation?->school_id;
+        if ($evSchoolId && (int) $evSchoolId !== (int) $plan->school_id) {
+            return ApiResponse::notFound('الشاهد المطلوب غير موجود.');
+        }
+        if ($user->user_type === 'school' && $evSchoolId && (int) $evSchoolId !== (int) $user->school_id) {
+            return ApiResponse::notFound('الشاهد المطلوب غير موجود.');
+        }
+
+        if ($evidence->result?->evaluation && EvaluationLockChecker::isEvaluationLocked($evidence->result->evaluation)) {
+            return ApiResponse::validationError([
+                'evaluation' => ['ملف التقييم المرتبط بهذا الشاهد مقفل ولا يُسمح بتعديل شواهده (BR-SCH-03).'],
+            ], 'ملف التقييم المرتبط بهذا الشاهد مقفل ولا يُسمح بتعديل شواهده.');
+        }
+
+        $evidence->action_id = null;
+        $evidence->save();
+
+        return ApiResponse::success(
+            data: null,
+            message: 'تم فك ارتباط الشاهد بالإجراء بنجاح دون حذف المستند.'
         );
     }
 
@@ -1074,13 +1269,27 @@ class ImprovementPlanController extends Controller
 
         $progressLevel = ProgressLevel::tryFrom($action->progress_description) ?? ProgressLevel::NotStarted;
 
-        $evidences = $action->relationLoaded('evidences') ? $action->evidences->map(function ($ev) {
-            return [
-                'evidenceId' => (int) $ev->evidence_id,
-                'title'      => $ev->title,
-                'status'     => $ev->status,
-            ];
-        })->values() : [];
+        $evidences = [];
+        if ($action->relationLoaded('evidenceLinks') && $action->evidenceLinks->isNotEmpty()) {
+            $evidences = $action->evidenceLinks->map(function ($link) {
+                return [
+                    'evidenceLinkId' => (int) $link->id,
+                    'evidenceId'     => (int) $link->id,
+                    'title'          => $link->documentVersion?->document?->title ?? '',
+                    'status'         => $link->status,
+                    'justification'  => $link->justification,
+                ];
+            })->values()->toArray();
+        } elseif ($action->relationLoaded('evidences')) {
+            $evidences = $action->evidences->map(function ($ev) {
+                return [
+                    'evidenceLinkId' => (int) $ev->evidence_id,
+                    'evidenceId'     => (int) $ev->evidence_id,
+                    'title'          => $ev->title,
+                    'status'         => $ev->status,
+                ];
+            })->values()->toArray();
+        }
 
         return [
             'actionId'                     => (int) $action->action_id,

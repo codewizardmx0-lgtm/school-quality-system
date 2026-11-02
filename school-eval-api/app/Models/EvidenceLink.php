@@ -45,6 +45,7 @@ class EvidenceLink extends Model
         'evaluation_result_id',
         'indicator_id',
         'document_version_id',
+        'action_id',
         'justification',
         'status',
     ];
@@ -62,6 +63,7 @@ class EvidenceLink extends Model
             'evaluation_result_id' => 'integer',
             'indicator_id'         => 'integer',
             'document_version_id'  => 'integer',
+            'action_id'            => 'integer',
             'created_at'           => 'datetime',
             'updated_at'           => 'datetime',
         ];
@@ -132,5 +134,15 @@ class EvidenceLink extends Model
             'document_version_id', // المفتاح الأجنبي على جدول evidence_links
             'school_document_id'   // المفتاح الأجنبي على جدول document_versions
         );
+    }
+
+    /**
+     * إجراء التحسين المرتبط بهذا الشاهد التنفيذي (إن وجد).
+     *
+     * @return BelongsTo
+     */
+    public function action(): BelongsTo
+    {
+        return $this->belongsTo(ImprovementAction::class, 'action_id', 'action_id');
     }
 }

@@ -4,6 +4,7 @@ namespace App\Exports;
 
 use App\Models\Evaluation;
 use App\Models\Evidence;
+use App\Models\EvidenceLink;
 use App\Models\User;
 use Illuminate\Support\Collection;
 use Maatwebsite\Excel\Concerns\FromCollection;
@@ -34,9 +35,11 @@ class EvaluationEvidencesSheet implements FromCollection, WithHeadings, WithTitl
         $headings = [
             'رمز المؤشر',
             'اسم المؤشر',
-            'عنوان الشاهد',
-            'نوع الشاهد',
-            'حالة الشاهد',
+            'اسم المستند',
+            'نوع المستند',
+            'رقم النسخة',
+            'المبرر المستقل',
+            'حالة الرابط',
         ];
 
         if ($role === 'admin') {
@@ -56,21 +59,55 @@ class EvaluationEvidencesSheet implements FromCollection, WithHeadings, WithTitl
     {
         $role = $this->getUserRole();
 
-        // جلب شواهد هذا التقييم عبر EvaluationResult أو المرتبطة مباشرة بالمدرسة ومؤشراتها
+        // 1. جلب الشواهد من المعمارية الجديدة: evidence_links و document_versions و school_documents
+        $links = EvidenceLink::query()
+            ->where('evaluation_id', $this->evaluation->evaluation_id)
+            ->with(['indicator', 'documentVersion.document'])
+            ->orderBy('indicator_id')
+            ->get();
+
+        $rows = [];
+
+        if ($links->isNotEmpty()) {
+            foreach ($links as $link) {
+                $doc = $link->documentVersion?->document;
+                $row = [
+                    'indicator_code' => $link->indicator?->code ?? '—',
+                    'indicator_name' => $link->indicator?->name ?? '—',
+                    'title'          => $doc?->title ?? '—',
+                    'document_type'  => $this->translateDocumentType($doc?->document_type),
+                    'version_no'     => $link->documentVersion ? ('v' . $link->documentVersion->version_no) : '—',
+                    'justification'  => $link->justification ?: '—',
+                    'status'         => $this->translateStatus($link->status),
+                ];
+
+                if ($role === 'admin' || $role === 'school_principal' || $role === 'ministry_supervisor') {
+                    $row['notes'] = '—';
+                }
+
+                $row['created_at'] = $link->created_at ? $link->created_at->format('Y-m-d') : '—';
+
+                $rows[] = $row;
+            }
+
+            return collect($rows);
+        }
+
+        // 2. مسار احتياطي للبيانات القديمة إن لم توجد روابط جديدة
         $evidences = Evidence::query()
             ->whereHas('result', fn($q) => $q->where('evaluation_id', $this->evaluation->evaluation_id))
             ->with(['indicator', 'reviewer.roles'])
             ->orderBy('indicator_id')
             ->get();
 
-        $rows = [];
-
         foreach ($evidences as $ev) {
             $row = [
                 'indicator_code' => $ev->indicator?->code ?? '—',
                 'indicator_name' => $ev->indicator?->name ?? '—',
                 'title'          => $ev->title,
-                'evidence_type'  => $this->translateType($ev->evidence_type),
+                'document_type'  => $this->translateType($ev->evidence_type),
+                'version_no'     => 'v1',
+                'justification'  => $ev->description ?: '—',
                 'status'         => $this->translateStatus($ev->status),
             ];
 
@@ -111,6 +148,19 @@ class EvaluationEvidencesSheet implements FromCollection, WithHeadings, WithTitl
         return 'school_evaluator';
     }
 
+    protected function translateDocumentType(?string $type): string
+    {
+        return match ($type) {
+            'minutes' => 'محضر اجتماع',
+            'plan'    => 'خطة عمل',
+            'record'  => 'سجل مدرسي',
+            'report'  => 'تقرير إنجاز',
+            'board'   => 'لوحة إعلانات',
+            'image'   => 'صورة فوتوغرافية',
+            default   => 'أخرى / عام',
+        };
+    }
+
     protected function translateType(?string $type): string
     {
         return match ($type) {
@@ -123,11 +173,12 @@ class EvaluationEvidencesSheet implements FromCollection, WithHeadings, WithTitl
 
     protected function translateStatus(?string $status): string
     {
-        return match ($status) {
-            'Valid' => 'مقبول ومعتمد',
-            'Pending' => 'قيد المراجعة',
-            'Rejected' => 'مرفوض',
-            default => 'مسودة',
+        return match (strtolower((string) $status)) {
+            'completed', 'valid' => 'مقبول ومعتمد',
+            'pending'            => 'قيد المراجعة',
+            'rejected'           => 'مرفوض',
+            'draft'              => 'مسودة',
+            default              => $status ?: 'مسودة',
         };
     }
 

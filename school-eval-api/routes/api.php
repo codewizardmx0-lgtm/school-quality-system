@@ -180,6 +180,7 @@ Route::prefix('v1')->group(function () {
             Route::patch('/{id}/actions/{actionId}', [\App\Http\Controllers\Api\V1\ImprovementPlanController::class, 'updateAction'])->name('api.v1.improvement-plans.actions.update');
             Route::delete('/{id}/actions/{actionId}', [\App\Http\Controllers\Api\V1\ImprovementPlanController::class, 'deleteAction'])->name('api.v1.improvement-plans.actions.delete');
             Route::post('/{id}/actions/{actionId}/evidences', [\App\Http\Controllers\Api\V1\ImprovementPlanController::class, 'attachActionEvidence'])->name('api.v1.improvement-plans.actions.evidences.store');
+            Route::delete('/{id}/actions/{actionId}/evidences/{evidenceLinkId}', [\App\Http\Controllers\Api\V1\ImprovementPlanController::class, 'detachActionEvidence'])->name('api.v1.improvement-plans.actions.evidences.delete');
             Route::post('/{id}/review-notes', [\App\Http\Controllers\Api\V1\ImprovementPlanController::class, 'storeReviewNote'])->name('api.v1.improvement-plans.review-notes.store');
         });
 
