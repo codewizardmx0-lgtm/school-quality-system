@@ -46,7 +46,7 @@ class EvaluationController extends Controller
             return ApiResponse::forbidden('غير مصرح');
         }
 
-        $query = Evaluation::with(['school', 'cycle', 'creator', 'results.indicator', 'results.scoreDescriptor', 'results.evidences']);
+        $query = Evaluation::with(['school', 'cycle', 'creator', 'results.indicator', 'results.scoreDescriptor', 'results.evidenceLinks']);
 
         // عزل النطاق لمستخدم المدرسة: حصر التقييمات بمدرسته فقط
         if ($user->user_type === 'school') {
@@ -187,7 +187,7 @@ class EvaluationController extends Controller
             return ApiResponse::forbidden('غير مصرح');
         }
 
-        $evaluation = Evaluation::with(['school', 'cycle', 'creator', 'results.indicator', 'results.scoreDescriptor', 'results.evidences'])
+        $evaluation = Evaluation::with(['school', 'cycle', 'creator', 'results.indicator', 'results.scoreDescriptor', 'results.evidenceLinks'])
             ->find($id);
 
         if (!$evaluation) {
@@ -268,7 +268,7 @@ class EvaluationController extends Controller
         $existingResults = EvaluationResult::where('evaluation_id', $evaluation->evaluation_id)
             ->with([
                 'scoreDescriptor',
-                'evidences',
+                'evidenceLinks',
                 'verificationTools',
                 'notes' => function ($q) {
                     $q->orderBy('note_id', 'desc')->with('author');
@@ -331,7 +331,7 @@ class EvaluationController extends Controller
                                 'scoreDescriptorLabel'   => ($result && $result->completion_status === 'Completed') ? $result->scoreDescriptor?->label : null,
                                 'completionStatus'       => $result?->completion_status,
                                 'textualResult'          => $result?->textual_result,
-                                'evidenceCount'          => $result ? $result->evidences->count() : 0,
+                                'evidenceCount'          => $result ? $result->evidenceLinks->count() : 0,
                                 'notesCount'             => $result ? $result->notes->count() : 0,
                                 'notes'                  => $notes,
                                 'verificationToolIds'    => $result ? $result->verificationTools->pluck('tool_id')->all() : [],
@@ -938,18 +938,6 @@ class EvaluationController extends Controller
                 \App\Models\EvidenceLink::where('evaluation_id', $evaluation->evaluation_id)->delete();
 
                 foreach ($results as $result) {
-                    $evidences = \App\Models\Evidence::where('result_id', $result->result_id)->get();
-                    foreach ($evidences as $evidence) {
-                        $versions = \App\Models\EvidenceVersion::where('evidence_id', $evidence->evidence_id)->get();
-                        foreach ($versions as $version) {
-                            \App\Models\Attachment::where('target_type', 'evidence_version')
-                                ->where('target_id', $version->evidence_version_id)
-                                ->delete();
-                            $version->delete();
-                        }
-                        $evidence->delete();
-                    }
-
                     DB::table('evaluation_result_verification_methods')->where('evaluation_result_id', $result->result_id)->delete();
                     \App\Models\Note::where('result_id', $result->result_id)->delete();
                     $result->delete();

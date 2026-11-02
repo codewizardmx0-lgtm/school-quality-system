@@ -120,16 +120,6 @@ class EvaluationResult extends Model
     }
 
     /**
-     * الشواهد والأدلة الداعمة المسجلة لهذه النتيجة.
-     *
-     * @return HasMany
-     */
-    public function evidences(): HasMany
-    {
-        return $this->hasMany(Evidence::class, 'result_id', 'result_id');
-    }
-
-    /**
      * الملاحظات التوثيقية المسجلة على هذه النتيجة.
      *
      * @return HasMany

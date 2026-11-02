@@ -129,25 +129,11 @@ Route::prefix('v1')->group(function () {
             Route::get('/{id}/export-excel', [\App\Http\Controllers\Api\V1\EvaluationController::class, 'exportExcel'])->name('api.v1.evaluations.export-excel');
             Route::get('/{id}/trend', [\App\Http\Controllers\Api\V1\EvaluationController::class, 'trend'])->name('api.v1.evaluations.trend');
             Route::get('/{id}/action-recommendations', [\App\Http\Controllers\Api\V1\EvaluationController::class, 'actionRecommendations'])->name('api.v1.evaluations.action-recommendations');
-            Route::get('/{id}/indicators/{indicatorId}/evidences', [\App\Http\Controllers\Api\V1\EvidenceController::class, 'indexByIndicator'])->name('api.v1.evaluations.indicators.evidences.index');
-            Route::post('/{id}/indicators/{indicatorId}/evidences', [\App\Http\Controllers\Api\V1\EvidenceController::class, 'storeByIndicator'])->name('api.v1.evaluations.indicators.evidences.store');
         });
 
-        // نتائج التقييم: الملاحظات وإدارة الشواهد (Evaluation Results)
+        // نتائج التقييم: الملاحظات (Evaluation Results)
         Route::prefix('evaluation-results')->group(function () {
             Route::post('/{id}/notes', [\App\Http\Controllers\Api\V1\EvaluationController::class, 'addNote'])->name('api.v1.evaluation-results.notes.store');
-            Route::get('/{id}/evidences', [\App\Http\Controllers\Api\V1\EvidenceController::class, 'indexByResult'])->name('api.v1.evaluation-results.evidences.index');
-            Route::post('/{id}/evidences', [\App\Http\Controllers\Api\V1\EvidenceController::class, 'store'])->name('api.v1.evaluation-results.evidences.store');
-        });
-
-        // الشواهد: التنظيم والتصنيف والربط والنسخ التاريخية والمرفقات (Evidence Organization & Versions - مسارات قديمة مؤقتة للقراءة فقط)
-        Route::prefix('evidences')->group(function () {
-            Route::patch('/{id}/classify', [\App\Http\Controllers\Api\V1\EvidenceController::class, 'classify'])->name('api.v1.evidences.classify');
-            Route::match(['post', 'patch'], '/{id}/link-indicator', [\App\Http\Controllers\Api\V1\EvidenceController::class, 'linkIndicator'])->name('api.v1.evidences.link-indicator');
-            Route::patch('/{id}/status', [\App\Http\Controllers\Api\V1\EvidenceController::class, 'updateStatus'])->name('api.v1.evidences.status.update');
-            Route::match(['post', 'patch'], '/{id}/review-notes', [\App\Http\Controllers\Api\V1\EvidenceController::class, 'addReviewNote'])->name('api.v1.evidences.review-notes.store');
-            Route::post('/{id}/versions', [\App\Http\Controllers\Api\V1\EvidenceController::class, 'addVersion'])->name('api.v1.evidences.versions.store');
-            Route::get('/{id}/versions/{versionId}/download', [\App\Http\Controllers\Api\V1\EvidenceController::class, 'downloadVersion'])->name('api.v1.evidences.versions.download');
         });
 
         // معمارية الشواهد النظيفة ثلاثية المستويات (U-24 Step 2: Clean Evidence Architecture)
@@ -208,10 +194,6 @@ Route::prefix('v1')->group(function () {
                 ->name('api.v1.schools.assessments.evidence-summary');
             Route::get('/assessments/{assessment}/evidence-inventory', [\App\Http\Controllers\Api\V1\EvidenceController::class, 'inventory'])
                 ->name('api.v1.schools.assessments.evidence-inventory');
-            Route::get('/assessments/{assessment}/indicators/{indicatorId}/evidences', [\App\Http\Controllers\Api\V1\EvidenceController::class, 'indexByIndicator'])
-                ->name('api.v1.schools.assessments.indicators.evidences.index');
-            Route::post('/assessments/{assessment}/indicators/{indicatorId}/evidences', [\App\Http\Controllers\Api\V1\EvidenceController::class, 'storeByIndicator'])
-                ->name('api.v1.schools.assessments.indicators.evidences.store');
             Route::get('/assessments/{assessment}/indicators-context', [\App\Http\Controllers\Api\V1\EvaluationController::class, 'indicatorsContextBySchool'])
                 ->name('api.v1.schools.assessments.indicators-context');
             Route::get('/assessments/{assessment}/export', [\App\Http\Controllers\Api\V1\ReportsAnalyticsController::class, 'exportAssessment'])
@@ -231,8 +213,6 @@ Route::middleware(['auth:sanctum', 'session.timeout'])->group(function () {
         Route::get('/assessments/{assessment}/standards/{standard}/results', [\App\Http\Controllers\Api\V1\ReportsAnalyticsController::class, 'standardResults'])->name('api.schools.assessments.standards.results');
         Route::get('/assessments/{assessment}/evidence-summary', [\App\Http\Controllers\Api\V1\ReportsAnalyticsController::class, 'evidenceSummary'])->name('api.schools.assessments.evidence-summary');
         Route::get('/assessments/{assessment}/evidence-inventory', [\App\Http\Controllers\Api\V1\EvidenceController::class, 'inventory'])->name('api.schools.assessments.evidence-inventory');
-        Route::get('/assessments/{assessment}/indicators/{indicatorId}/evidences', [\App\Http\Controllers\Api\V1\EvidenceController::class, 'indexByIndicator'])->name('api.schools.assessments.indicators.evidences.index');
-        Route::post('/assessments/{assessment}/indicators/{indicatorId}/evidences', [\App\Http\Controllers\Api\V1\EvidenceController::class, 'storeByIndicator'])->name('api.schools.assessments.indicators.evidences.store');
         Route::get('/assessments/{assessment}/indicators-context', [\App\Http\Controllers\Api\V1\EvaluationController::class, 'indicatorsContextBySchool'])->name('api.schools.assessments.indicators-context');
         Route::get('/assessments/{assessment}/export', [\App\Http\Controllers\Api\V1\ReportsAnalyticsController::class, 'exportAssessment'])->name('api.schools.assessments.export');
         Route::post('/assessments/{assessment}/submit', [\App\Http\Controllers\Api\V1\EvaluationController::class, 'submitBySchool'])->name('api.schools.assessments.submit');

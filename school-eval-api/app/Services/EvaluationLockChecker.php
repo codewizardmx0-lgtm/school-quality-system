@@ -5,7 +5,6 @@ namespace App\Services;
 use App\Models\CompletionRequestItem;
 use App\Models\Evaluation;
 use App\Models\EvaluationSubmission;
-use App\Models\Evidence;
 
 /**
  * خدمة مركزية للتحقق من حالة قفل التقييم وفق قاعدة العمل BR-SCH-03.

@@ -3,7 +3,6 @@
 namespace App\Exports;
 
 use App\Models\Evaluation;
-use App\Models\Evidence;
 use App\Models\EvidenceLink;
 use App\Models\User;
 use Illuminate\Support\Collection;
@@ -68,60 +67,23 @@ class EvaluationEvidencesSheet implements FromCollection, WithHeadings, WithTitl
 
         $rows = [];
 
-        if ($links->isNotEmpty()) {
-            foreach ($links as $link) {
-                $doc = $link->documentVersion?->document;
-                $row = [
-                    'indicator_code' => $link->indicator?->code ?? '—',
-                    'indicator_name' => $link->indicator?->name ?? '—',
-                    'title'          => $doc?->title ?? '—',
-                    'document_type'  => $this->translateDocumentType($doc?->document_type),
-                    'version_no'     => $link->documentVersion ? ('v' . $link->documentVersion->version_no) : '—',
-                    'justification'  => $link->justification ?: '—',
-                    'status'         => $this->translateStatus($link->status),
-                ];
-
-                if ($role === 'admin' || $role === 'school_principal' || $role === 'ministry_supervisor') {
-                    $row['notes'] = '—';
-                }
-
-                $row['created_at'] = $link->created_at ? $link->created_at->format('Y-m-d') : '—';
-
-                $rows[] = $row;
-            }
-
-            return collect($rows);
-        }
-
-        // 2. مسار احتياطي للبيانات القديمة إن لم توجد روابط جديدة
-        $evidences = Evidence::query()
-            ->whereHas('result', fn($q) => $q->where('evaluation_id', $this->evaluation->evaluation_id))
-            ->with(['indicator', 'reviewer.roles'])
-            ->orderBy('indicator_id')
-            ->get();
-
-        foreach ($evidences as $ev) {
+        foreach ($links as $link) {
+            $doc = $link->documentVersion?->document;
             $row = [
-                'indicator_code' => $ev->indicator?->code ?? '—',
-                'indicator_name' => $ev->indicator?->name ?? '—',
-                'title'          => $ev->title,
-                'document_type'  => $this->translateType($ev->evidence_type),
-                'version_no'     => 'v1',
-                'justification'  => $ev->description ?: '—',
-                'status'         => $this->translateStatus($ev->status),
+                'indicator_code' => $link->indicator?->code ?? '—',
+                'indicator_name' => $link->indicator?->name ?? '—',
+                'title'          => $doc?->title ?? '—',
+                'document_type'  => $this->translateDocumentType($doc?->document_type),
+                'version_no'     => $link->documentVersion ? ('v' . $link->documentVersion->version_no) : '—',
+                'justification'  => $link->justification ?: '—',
+                'status'         => $this->translateStatus($link->status),
             ];
 
-            if ($role === 'admin') {
-                $row['notes'] = $ev->reviewer_notes ?: '—';
-            } elseif ($role === 'school_principal') {
-                $isPrincipal = $ev->reviewer && $ev->reviewer->hasRole('school_principal');
-                $row['notes'] = $isPrincipal ? ($ev->reviewer_notes ?: '—') : '—';
-            } elseif ($role === 'ministry_supervisor') {
-                $isSupervisor = $ev->reviewer && $ev->reviewer->hasRole('ministry_supervisor');
-                $row['notes'] = $isSupervisor ? ($ev->reviewer_notes ?: '—') : '—';
+            if ($role === 'admin' || $role === 'school_principal' || $role === 'ministry_supervisor') {
+                $row['notes'] = '—';
             }
 
-            $row['created_at'] = $ev->created_at ? $ev->created_at->format('Y-m-d') : '—';
+            $row['created_at'] = $link->created_at ? $link->created_at->format('Y-m-d') : '—';
 
             $rows[] = $row;
         }
@@ -158,16 +120,6 @@ class EvaluationEvidencesSheet implements FromCollection, WithHeadings, WithTitl
             'board'   => 'لوحة إعلانات',
             'image'   => 'صورة فوتوغرافية',
             default   => 'أخرى / عام',
-        };
-    }
-
-    protected function translateType(?string $type): string
-    {
-        return match ($type) {
-            'file' => 'ملف وثائقي',
-            'url'  => 'رابط خارجي',
-            'text' => 'إقرار نصي',
-            default => 'مرفق',
         };
     }
 

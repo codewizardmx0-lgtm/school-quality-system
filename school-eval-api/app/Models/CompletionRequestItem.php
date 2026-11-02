@@ -80,14 +80,4 @@ class CompletionRequestItem extends Model
     {
         return $this->belongsTo(Indicator::class, 'indicator_id', 'indicator_id');
     }
-
-    /**
-     * الشاهد أو الدليل المستهدف بالنقص (إن وُجد).
-     *
-     * @return BelongsTo
-     */
-    public function evidence(): BelongsTo
-    {
-        return $this->belongsTo(Evidence::class, 'evidence_id', 'evidence_id');
-    }
 }

@@ -4,13 +4,10 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Http\Responses\ApiResponse;
-use App\Models\Attachment;
 use App\Models\DocumentVersion;
 use App\Models\Evaluation;
 use App\Models\EvaluationResult;
-use App\Models\Evidence;
 use App\Models\EvidenceLink;
-use App\Models\EvidenceVersion;
 use App\Models\Indicator;
 use App\Models\IndicatorEvidenceRequirement;
 use App\Models\IndicatorScoreDescriptor;
@@ -38,266 +35,6 @@ use Illuminate\Support\Str;
 class EvidenceController extends Controller
 {
     /**
-     * استعراض قائمة شواهد نتيجة مؤشر محدد مع نسخها ومرفقاتها وملاحظات التدقيق.
-     *
-     * GET /api/v1/evaluation-results/{id}/evidences
-     * الصلاحية: evaluations.view أو evidence.manage
-     */
-    public function indexByResult(Request $request, int $id): JsonResponse
-    {
-        $user = $request->user();
-
-        if (!$user->hasPermission('evaluations.view') && !$user->hasPermission('evidence.manage')) {
-            return ApiResponse::forbidden('غير مصرح لك باستعراض الشواهد.');
-        }
-
-        $result = EvaluationResult::with('evaluation')->find($id);
-        if (!$result || !$result->evaluation) {
-            return ApiResponse::notFound('نتيجة المؤشر المطلوبة غير موجودة.');
-        }
-
-        $evaluation = $result->evaluation;
-
-        // عزل المدارس (القرار المعماري 9)
-        if ($user->user_type === 'school' && (int) $user->school_id !== (int) $evaluation->school_id) {
-            return ApiResponse::notFound('نتيجة المؤشر المطلوبة غير موجودة.');
-        }
-
-        if ($user->cannot('view', $evaluation)) {
-            return ApiResponse::forbidden('غير مصرح لك باستعراض شواهد هذا التقييم.');
-        }
-
-        // قراءة الشواهد أولاً من المعمارية الجديدة (EvidenceLink)
-        $links = EvidenceLink::where('evaluation_result_id', $result->result_id)
-            ->orWhere(function ($q) use ($result) {
-                $q->where('evaluation_id', $result->evaluation_id)
-                  ->where('indicator_id', $result->indicator_id);
-            })
-            ->with(['documentVersion.document'])
-            ->orderBy('id', 'desc')
-            ->get();
-
-        if ($links->isNotEmpty()) {
-            $data = $links->map(function ($link) {
-                return $this->formatEvidenceLink($link);
-            });
-
-            return ApiResponse::success(
-                data: $data,
-                message: null
-            );
-        }
-
-        $evidences = Evidence::where('result_id', $result->result_id)
-            ->with([
-                'versions' => function ($q) {
-                    $q->orderBy('version_no', 'desc');
-                },
-                'versions.attachments',
-                'reviewer',
-            ])
-            ->orderBy('evidence_id', 'desc')
-            ->get();
-
-        $data = $evidences->map(function ($evidence) {
-            return $this->formatEvidence($evidence);
-        });
-
-        return ApiResponse::success(
-            data: $data,
-            message: null
-        );
-    }
-
-    /**
-     * استعراض قائمة جميع الشواهد النشطة المرتبطة بمؤشر محدد داخل ملف التقييم مع نسخها النشطة ومرفقاتها وملاحظات التدقيق.
-     *
-     * GET /api/v1/evaluations/{id}/indicators/{indicatorId}/evidences
-     * أو GET /api/v1/schools/{school}/assessments/{assessment}/indicators/{indicatorId}/evidences
-     * الصلاحية: evaluations.view أو evidence.manage
-     */
-    public function indexByIndicator(Request $request, int $id, int $indicatorId, ?int $thirdParam = null): JsonResponse
-    {
-        $evalId = $thirdParam !== null ? $indicatorId : $id;
-        $actualIndicatorId = $thirdParam !== null ? $thirdParam : $indicatorId;
-        $schoolId = $thirdParam !== null ? $id : null;
-
-        $user = $request->user();
-
-        if (!$user->hasPermission('evaluations.view') && !$user->hasPermission('evidence.manage')) {
-            return ApiResponse::forbidden('غير مصرح لك باستعراض الشواهد.');
-        }
-
-        $evaluation = Evaluation::with(['cycle', 'school'])->find($evalId);
-        if (!$evaluation || ($schoolId !== null && (int) $evaluation->school_id !== (int) $schoolId)) {
-            return ApiResponse::notFound('ملف التقييم المطلوب غير موجود.');
-        }
-
-        // عزل المدارس (القرار المعماري 9)
-        if ($user->user_type === 'school' && (int) $user->school_id !== (int) $evaluation->school_id) {
-            return ApiResponse::notFound('ملف التقييم المطلوب غير موجود.');
-        }
-
-        if ($user->cannot('view', $evaluation)) {
-            return ApiResponse::forbidden('غير مصرح لك باستعراض شواهد هذا التقييم.');
-        }
-
-        $indicator = Indicator::with('subStandard.standard')
-            ->where('indicator_id', $actualIndicatorId)
-            ->where('status', 'Active')
-            ->first();
-
-        if (!$indicator) {
-            return ApiResponse::notFound('المؤشر المطلوب غير موجود أو غير فعّال.');
-        }
-
-        // التحقق من أن دورة التقييم مرتبطة بإصدار معياري معتمد
-        $evaluation->loadMissing('cycle');
-        $versionId = (int) ($evaluation->cycle?->standard_version_id ?? $evaluation->cycle?->version_id);
-        if (!$versionId) {
-            return ApiResponse::validationError([
-                'cycle' => ['دورة التقييم غير مرتبطة بإصدار معياري معتمد.'],
-            ], 'دورة التقييم غير مرتبطة بإصدار معياري معتمد.');
-        }
-
-        if ((int) $indicator->subStandard?->standard?->version_id !== $versionId) {
-            return ApiResponse::validationError([
-                'indicator' => ['المؤشر لا ينتمي للإصدار المعياري المعتمد لدورة التقييم.'],
-            ], 'المؤشر لا ينتمي للإصدار المعياري المعتمد لدورة التقييم.');
-        }
-
-        // جلب سجل النتيجة للمؤشر في هذا التقييم
-        $result = EvaluationResult::where('evaluation_id', $evaluation->evaluation_id)
-            ->where('indicator_id', $actualIndicatorId)
-            ->first();
-
-        // قراءة الشواهد أولاً من المعمارية الجديدة (EvidenceLink)
-        $links = EvidenceLink::where('evaluation_id', $evaluation->evaluation_id)
-            ->where('indicator_id', $actualIndicatorId)
-            ->with(['documentVersion.document'])
-            ->orderBy('id', 'desc')
-            ->get();
-
-        if ($links->isNotEmpty()) {
-            $data = $links->map(function ($link) {
-                return $this->formatEvidenceLink($link);
-            });
-
-            return ApiResponse::success(
-                data: $data,
-                message: 'تم استرجاع قائمة الشواهد بنجاح.'
-            );
-        }
-
-        if (!$result) {
-            return ApiResponse::success(
-                data: [],
-                message: 'لا توجد شواهد مرفوعة لهذا المؤشر بعد.'
-            );
-        }
-
-        $evidences = Evidence::where('result_id', $result->result_id)
-            ->with([
-                'versions' => function ($q) {
-                    $q->orderBy('version_no', 'desc');
-                },
-                'versions.attachments',
-                'reviewer',
-            ])
-            ->orderBy('evidence_id', 'desc')
-            ->get();
-
-        $data = $evidences->map(function ($evidence) {
-            return $this->formatEvidence($evidence);
-        });
-
-        return ApiResponse::success(
-            data: $data,
-            message: 'تم استرجاع قائمة الشواهد بنجاح.'
-        );
-    }
-
-    /**
-     * إنشاء شاهد جديد (مسار قديم مؤقت - محول للقراءة فقط في U-24 Step 2 وسيتم حذفه في الخطوة 3).
-     *
-     * POST /api/v1/evaluations/{id}/indicators/{indicatorId}/evidences
-     */
-    public function storeByIndicator(Request $request, int $id, int $indicatorId, ?int $thirdParam = null): JsonResponse
-    {
-        return ApiResponse::validationError([
-            'evidence' => ['تم تحويل إدارة الشواهد إلى المعمارية الجديدة؛ مسارات الشواهد القديمة مغلقة ومؤقتة للقراءة فقط وسيتم حذفها في الخطوة 3. يرجى استخدام مسارات /evidence-links المعتمدة.'],
-        ], 'تم إيقاف التعديل عبر مسارات الشواهد القديمة.');
-    }
-
-    /**
-     * إنشاء شاهد جديد لنتيجة (مسار قديم مؤقت - محول للقراءة فقط في U-24 Step 2 وسيتم حذفه في الخطوة 3).
-     *
-     * POST /api/v1/evaluation-results/{id}/evidences
-     */
-    public function store(Request $request, int $id): JsonResponse
-    {
-        return ApiResponse::validationError([
-            'evidence' => ['تم تحويل إدارة الشواهد إلى المعمارية الجديدة؛ مسارات الشواهد القديمة مغلقة ومؤقتة للقراءة فقط وسيتم حذفها في الخطوة 3. يرجى استخدام مسارات /evidence-links المعتمدة.'],
-        ], 'تم إيقاف التعديل عبر مسارات الشواهد القديمة.');
-    }
-
-    /**
-     * منطق التحقق القديم (معطل في U-24 Step 2).
-     */
-    protected function createEvidenceForRecord(Request $request, EvaluationResult $result): JsonResponse
-    {
-        return ApiResponse::validationError([
-            'evidence' => ['تم إيقاف الإنشاء عبر المسار القديم.'],
-        ], 'تم إيقاف الإنشاء عبر المسار القديم.');
-    }
-
-    /**
-     * تصنيف الشاهد يدوياً (مسار قديم مؤقت - معطل في U-24 Step 2 وسيتم حذفه في الخطوة 3).
-     *
-     * PATCH /api/v1/evidences/{id}/classify
-     */
-    public function classify(Request $request, int $id): JsonResponse
-    {
-        return ApiResponse::validationError([
-            'evidence' => ['تم تحويل إدارة الشواهد إلى المعمارية الجديدة؛ مسارات الشواهد القديمة مغلقة ومؤقتة للقراءة فقط وسيتم حذفها في الخطوة 3.'],
-        ], 'تم إيقاف التعديل عبر مسارات الشواهد القديمة.');
-    }
-
-    /**
-     * ربط الشاهد بالمؤشر (مسار قديم مؤقت - معطل في U-24 Step 2 وسيتم حذفه في الخطوة 3).
-     *
-     * POST/PATCH /api/v1/evidences/{id}/link-indicator
-     */
-    public function linkIndicator(Request $request, int $id): JsonResponse
-    {
-        return ApiResponse::validationError([
-            'evidence' => ['تم تحويل إدارة الشواهد إلى المعمارية الجديدة؛ مسارات الشواهد القديمة مغلقة ومؤقتة للقراءة فقط وسيتم حذفها في الخطوة 3. يرجى استخدام POST /api/v1/evaluations/{id}/indicators/{indicatorId}/evidence-links.'],
-        ], 'تم إيقاف التعديل عبر مسارات الشواهد القديمة.');
-    }
-
-    /**
-     * تحديث حالة الشاهد (مسار قديم مؤقت - معطل في U-24 Step 2 وسيتم حذفه في الخطوة 3).
-     *
-     * PATCH /api/v1/evidences/{id}/status
-     */
-    public function updateStatus(Request $request, int $id): JsonResponse
-    {
-        return ApiResponse::validationError([
-            'evidence' => ['تم تحويل إدارة الشواهد إلى المعمارية الجديدة؛ مسارات الشواهد القديمة مغلقة ومؤقتة للقراءة فقط وسيتم حذفها في الخطوة 3.'],
-        ], 'تم إيقاف التعديل عبر مسارات الشواهد القديمة.');
-    }
-
-    /**
-     * إضافة ملاحظات تدقيق الشاهد (مسار قديم مؤقت - معطل في U-24 Step 2 وسيتم حذفه في الخطوة 3).
-     *
-     * POST/PATCH /api/v1/evidences/{id}/review-notes
-     */
-    public function addReviewNote(Request $request, int $id): JsonResponse
-    {
-        return ApiResponse::validationError([
-            'evidence' => ['تم تحويل إدارة الشواهد إلى المعمارية الجديدة؛ مسارات الشواهد القديمة مغلقة ومؤقتة للقراءة فقط وسيتم حذفها في الخطوة 3.'],
-        ], 'تم إيقاف التعديل عبر مسارات الشواهد القديمة.');
-    }
 
     /**
      * حصر الشواهد لكل مؤشر وإظهار النواقص والمكتمل للتقييم.
@@ -363,31 +100,17 @@ class EvidenceController extends Controller
                     'isSufficient'           => $ind['is_sufficient'],
                     'status'                 => $ind['status'],
                     'evidences'              => $ind['evidences']->map(function ($ev) {
-                        if ($ev instanceof \App\Models\EvidenceLink) {
-                            $doc = $ev->documentVersion?->document;
-                            return [
-                                'evidenceId'    => $ev->id,
-                                'title'         => $doc?->title ?? '',
-                                'evidenceType'  => $doc?->document_type ?? 'other',
-                                'status'        => $ev->status,
-                                'reviewerNotes' => null,
-                                'reviewedBy'    => null,
-                                'reviewedAt'    => null,
-                                'createdAt'     => $ev->created_at?->toIso8601ZuluString(),
-                                'versionsCount' => $doc ? $doc->versions()->count() : 1,
-                            ];
-                        }
-
+                        $doc = $ev->documentVersion?->document;
                         return [
-                            'evidenceId'    => $ev->evidence_id,
-                            'title'         => $ev->title,
-                            'evidenceType'  => $ev->evidence_type,
+                            'evidenceId'    => $ev->id,
+                            'title'         => $doc?->title ?? '',
+                            'evidenceType'  => $doc?->document_type ?? 'other',
                             'status'        => $ev->status,
-                            'reviewerNotes' => $ev->reviewer_notes,
-                            'reviewedBy'    => $ev->reviewer?->full_name,
-                            'reviewedAt'    => $ev->reviewed_at?->toIso8601ZuluString(),
+                            'reviewerNotes' => null,
+                            'reviewedBy'    => null,
+                            'reviewedAt'    => null,
                             'createdAt'     => $ev->created_at?->toIso8601ZuluString(),
-                            'versionsCount' => $ev->versions ? $ev->versions->count() : 1,
+                            'versionsCount' => $doc ? $doc->versions()->count() : 1,
                         ];
                     })->values(),
                 ];
@@ -433,129 +156,6 @@ class EvidenceController extends Controller
             ],
             message: 'تم استخراج حصر الشواهد بنجاح.'
         );
-    }
-
-    /**
-     * رفع نسخة جديدة لشاهد (مسار قديم مؤقت - معطل في U-24 Step 2 وسيتم حذفه في الخطوة 3).
-     *
-     * POST /api/v1/evidences/{id}/versions
-     */
-    public function addVersion(Request $request, int $id): JsonResponse
-    {
-        return ApiResponse::validationError([
-            'evidence' => ['تم تحويل إدارة الشواهد إلى المعمارية الجديدة؛ مسارات الشواهد القديمة مغلقة ومؤقتة للقراءة فقط وسيتم حذفها في الخطوة 3.'],
-        ], 'تم إيقاف التعديل عبر مسارات الشواهد القديمة.');
-    }
-
-    /**
-     * تنزيل المرفق الرقمي لنسخة شاهد محددة بالاسم الأصلي دون كشف مسار التخزين.
-     *
-     * GET /api/v1/evidences/{id}/versions/{versionId}/download
-     * الصلاحية: evaluations.view أو evidence.manage
-     */
-    public function downloadVersion(Request $request, int $id, int $versionId): mixed
-    {
-        $user = $request->user();
-
-        if (!$user->hasPermission('evaluations.view') && !$user->hasPermission('evidence.manage')) {
-            return ApiResponse::forbidden('غير مصرح لك بتحميل المرفق.');
-        }
-
-        $evidence = Evidence::with('result.evaluation')->find($id);
-        if (!$evidence || !$evidence->result || !$evidence->result->evaluation) {
-            return ApiResponse::notFound('الشاهد المطلوب غير موجود.');
-        }
-
-        $evaluation = $evidence->result->evaluation;
-
-        // عزل المدارس (القرار المعماري 9)
-        if ($user->user_type === 'school' && (int) $user->school_id !== (int) $evaluation->school_id) {
-            return ApiResponse::notFound('الشاهد المطلوب غير موجود.');
-        }
-
-        if ($user->cannot('view', $evaluation)) {
-            return ApiResponse::forbidden('غير مصرح لك باستعراض شواهد هذا التقييم.');
-        }
-
-        $version = EvidenceVersion::where('evidence_id', $evidence->evidence_id)
-            ->where('evidence_version_id', $versionId)
-            ->first();
-
-        if (!$version) {
-            return ApiResponse::notFound('نسخة الشاهد المطلوبة غير موجودة.');
-        }
-
-        $attachment = Attachment::where('target_type', 'evidence_version')
-            ->where('target_id', $version->evidence_version_id)
-            ->first();
-
-        if (!$attachment) {
-            return ApiResponse::notFound('المرفق المطلوب غير موجود.');
-        }
-
-        if (!Storage::disk('local')->exists($attachment->storage_uri)) {
-            return ApiResponse::notFound('ملف المرفق غير موجود على الخادم.');
-        }
-
-        return Storage::disk('local')->download(
-            $attachment->storage_uri,
-            $attachment->file_name
-        );
-    }
-
-    /**
-     * تنسيق بيانات الشاهد لتطابق معايير واجهات برمجة التطبيقات (API Contract).
-     */
-    protected function formatEvidence(Evidence $evidence): array
-    {
-        $evidence->loadMissing(['versions.attachments', 'reviewer']);
-        $currentVersion = $evidence->versions->firstWhere('current', true) ?? $evidence->versions->first();
-
-        return [
-            'evidenceId'     => $evidence->evidence_id,
-            'resultId'       => $evidence->result_id,
-            'indicatorId'    => $evidence->indicator_id,
-            'title'          => $evidence->title,
-            'description'    => $evidence->description,
-            'justification'  => $evidence->justification,
-            'evidenceType'   => $evidence->evidence_type ?: 'other',
-            'status'         => $evidence->status ?: 'Draft',
-            'reviewerNotes'  => $evidence->reviewer_notes,
-            'reviewedBy'     => $evidence->reviewer ? [
-                'userId'   => $evidence->reviewer->user_id,
-                'fullName' => $evidence->reviewer->full_name,
-            ] : null,
-            'reviewedAt'     => $evidence->reviewed_at?->toIso8601ZuluString(),
-            'createdAt'      => $evidence->created_at?->toIso8601ZuluString(),
-            'versions'       => $evidence->versions->map(function ($version) {
-                return [
-                    'evidenceVersionId' => $version->evidence_version_id,
-                    'versionNo'         => $version->version_no,
-                    'current'           => (bool) $version->current,
-                    'createdAt'         => $version->created_at?->toIso8601ZuluString(),
-                    'attachments'       => $version->attachments->map(function ($att) {
-                        return [
-                            'attachmentId' => $att->attachment_id,
-                            'fileName'     => $att->file_name,
-                            'fileType'     => $att->file_type,
-                            'fileSize'     => (int) $att->file_size,
-                        ];
-                    })->values(),
-                ];
-            })->values(),
-            'currentVersion' => $currentVersion ? [
-                'evidenceVersionId' => $currentVersion->evidence_version_id,
-                'versionNo'         => $currentVersion->version_no,
-                'current'           => (bool) $currentVersion->current,
-                'createdAt'         => $currentVersion->created_at?->toIso8601ZuluString(),
-                'attachment'        => $currentVersion->attachments->first() ? [
-                    'attachmentId' => $currentVersion->attachments->first()->attachment_id,
-                    'fileName'     => $currentVersion->attachments->first()->file_name,
-                    'fileType'     => $currentVersion->attachments->first()->file_type,
-                    'fileSize'     => (int) $currentVersion->attachments->first()->file_size,
-                ] : null,
-            ] : null,
-        ];
     }
 
     /**
@@ -986,10 +586,9 @@ class EvidenceController extends Controller
         // تنظيف وحذف النتيجة المعلقة (Pending) إن أصبحت يتيمة وبلا ملاحظات
         if ($result && $result->completion_status === 'Pending') {
             $remainingLinks = EvidenceLink::where('evaluation_id', $evalId)->where('indicator_id', $indId)->count();
-            $remainingEvidences = $result->evidences()->count();
             $hasNotes = $result->notes()->count() > 0;
 
-            if ($remainingLinks === 0 && $remainingEvidences === 0 && !$hasNotes) {
+            if ($remainingLinks === 0 && !$hasNotes) {
                 $result->delete();
             }
         }

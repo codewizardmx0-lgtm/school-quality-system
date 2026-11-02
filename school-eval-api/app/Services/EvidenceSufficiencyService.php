@@ -61,21 +61,6 @@ class EvidenceSufficiencyService
             });
             $draftCount = $draftLinks->count();
             $sourceEvidences = $links;
-        } elseif ($result && $result->evidences && $result->evidences->isNotEmpty()) {
-            // دعم استرجاع احتياطي مؤقت للقراءة حتى اكتمال ترحيل اختبارات الخطوة 3
-            $legacyEvidences = $result->evidences;
-            $uploadedCount = $legacyEvidences->count();
-
-            $validEvidences = $legacyEvidences->filter(function ($ev) {
-                return in_array(strtolower($ev->status ?? ''), ['completed', 'audited'], true);
-            });
-            $validCount = $validEvidences->count();
-
-            $draftEvidences = $legacyEvidences->filter(function ($ev) {
-                return strtolower($ev->status ?? '') === 'draft' || empty($ev->status);
-            });
-            $draftCount = $draftEvidences->count();
-            $sourceEvidences = $legacyEvidences;
         } else {
             $uploadedCount = 0;
             $validCount = 0;
@@ -149,10 +134,6 @@ class EvidenceSufficiencyService
 
         $resultsMap = EvaluationResult::query()
             ->where('evaluation_id', $evaluation->evaluation_id)
-            ->with([
-                'evidences.versions.attachments',
-                'evidences.reviewer',
-            ])
             ->get()
             ->keyBy('indicator_id');
 
