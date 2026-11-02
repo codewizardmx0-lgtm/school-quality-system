@@ -140,7 +140,7 @@ Route::prefix('v1')->group(function () {
             Route::post('/{id}/evidences', [\App\Http\Controllers\Api\V1\EvidenceController::class, 'store'])->name('api.v1.evaluation-results.evidences.store');
         });
 
-        // الشواهد: التنظيم والتصنيف والربط والنسخ التاريخية والمرفقات (Evidence Organization & Versions)
+        // الشواهد: التنظيم والتصنيف والربط والنسخ التاريخية والمرفقات (Evidence Organization & Versions - مسارات قديمة مؤقتة للقراءة فقط)
         Route::prefix('evidences')->group(function () {
             Route::patch('/{id}/classify', [\App\Http\Controllers\Api\V1\EvidenceController::class, 'classify'])->name('api.v1.evidences.classify');
             Route::match(['post', 'patch'], '/{id}/link-indicator', [\App\Http\Controllers\Api\V1\EvidenceController::class, 'linkIndicator'])->name('api.v1.evidences.link-indicator');
@@ -149,6 +149,18 @@ Route::prefix('v1')->group(function () {
             Route::post('/{id}/versions', [\App\Http\Controllers\Api\V1\EvidenceController::class, 'addVersion'])->name('api.v1.evidences.versions.store');
             Route::get('/{id}/versions/{versionId}/download', [\App\Http\Controllers\Api\V1\EvidenceController::class, 'downloadVersion'])->name('api.v1.evidences.versions.download');
         });
+
+        // معمارية الشواهد النظيفة ثلاثية المستويات (U-24 Step 2: Clean Evidence Architecture)
+        Route::get('/schools/{schoolId}/documents', [\App\Http\Controllers\Api\V1\EvidenceController::class, 'schoolDocuments'])->name('api.v1.schools.documents.index');
+
+        Route::prefix('evaluations/{id}/indicators/{indicatorId}/evidence-links')->group(function () {
+            Route::get('/', [\App\Http\Controllers\Api\V1\EvidenceController::class, 'indexEvidenceLinks'])->name('api.v1.evaluations.indicators.evidence-links.index');
+            Route::post('/', [\App\Http\Controllers\Api\V1\EvidenceController::class, 'linkExistingDocument'])->name('api.v1.evaluations.indicators.evidence-links.store');
+            Route::post('/upload', [\App\Http\Controllers\Api\V1\EvidenceController::class, 'uploadAndLinkDocument'])->name('api.v1.evaluations.indicators.evidence-links.upload');
+        });
+
+        Route::delete('/evidence-links/{linkId}', [\App\Http\Controllers\Api\V1\EvidenceController::class, 'unlinkEvidence'])->name('api.v1.evidence-links.destroy');
+        Route::get('/document-versions/{versionId}/download', [\App\Http\Controllers\Api\V1\EvidenceController::class, 'downloadDocumentVersion'])->name('api.v1.document-versions.download');
 
         // مجالات التحسين المستخلصة من نتائج التقييم (Improvement Areas)
         Route::prefix('improvement-areas')->group(function () {
