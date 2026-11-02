@@ -122,4 +122,14 @@ class Evaluation extends Model
     {
         return $this->hasMany(AiAnalysis::class, 'evaluation_id', 'evaluation_id');
     }
+
+    /**
+     * روابط الشواهد المرتبطة بمؤشرات هذا التقييم (U-24).
+     *
+     * @return HasMany
+     */
+    public function evidenceLinks(): HasMany
+    {
+        return $this->hasMany(EvidenceLink::class, 'evaluation_id', 'evaluation_id');
+    }
 }

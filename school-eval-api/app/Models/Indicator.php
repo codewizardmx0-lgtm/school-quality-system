@@ -157,4 +157,14 @@ class Indicator extends Model
     {
         return $this->hasMany(CompletionRequestItem::class, 'indicator_id', 'indicator_id');
     }
+
+    /**
+     * روابط الشواهد المقترنة بهذا المؤشر وفق معمارية المستندات النظيفة (U-24).
+     *
+     * @return HasMany
+     */
+    public function evidenceLinks(): HasMany
+    {
+        return $this->hasMany(EvidenceLink::class, 'indicator_id', 'indicator_id');
+    }
 }

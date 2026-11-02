@@ -175,4 +175,14 @@ class EvaluationResult extends Model
     {
         return $this->hasMany(ImprovementArea::class, 'result_id', 'result_id');
     }
+
+    /**
+     * روابط الشواهد المقترنة بنتيجة هذا التقييم (U-24).
+     *
+     * @return HasMany
+     */
+    public function evidenceLinks(): HasMany
+    {
+        return $this->hasMany(EvidenceLink::class, 'evaluation_result_id', 'result_id');
+    }
 }
