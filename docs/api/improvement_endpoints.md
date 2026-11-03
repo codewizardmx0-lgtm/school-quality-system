@@ -78,6 +78,8 @@ Authorization: Bearer <plainTextToken>
 ### 4.1 استرجاع مقترحات مجالات التحسين
 * **المسار:** `GET /api/v1/evaluations/{id}/improvement-suggestions`
 * **الصلاحية:** `plans.view` أو `plans.manage`
+* **معاملات الاستعلام (Query Parameters - U-23):**
+  * `target_score` (اختياري، رقمي 1 أو 2 أو 3، الافتراضي: 3): لتخصيص سقف التقدير المستهدف للتحسين. عند تمرير `target_score=2` مثلاً، تقتصر المقترحات على المؤشرات ذات التقدير الأقل من 2 (0 أو 1) وتُحسب الفجوة بناءً عليه.
 * **الاستجابة الناجحة (`200 OK`):**
 ```json
 {
@@ -164,7 +166,8 @@ Authorization: Bearer <plainTextToken>
   "resultId": 12,
   "name": "تفعيل وتوثيق استراتيجيات التعلم النشط",
   "description": "إلزام المعلمين بإرفاق خطط الدروس التفاعلية وسجلات المشاركة الصفية.",
-  "priority": "High"
+  "priority": "High",
+  "targetScore": 3
 }
 ```
 * **الاستجابة الناجحة (`201 Created`):**

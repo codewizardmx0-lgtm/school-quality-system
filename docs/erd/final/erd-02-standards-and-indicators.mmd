@@ -1,0 +1,108 @@
+erDiagram
+    %% =========================================================================
+    %% ERD-02: المعايير والمؤشرات والواصفات وأدوات التحقق
+    %% =========================================================================
+
+    STANDARD_VERSIONS {
+        int version_id PK "المعرف الفريد للإصدار المعياري"
+        string version_name "اسم الإصدار (e.g. المعايير الوطنية 2026)"
+        int issue_year "سنة الإصدار"
+        string status "حالة الإصدار (Draft, Active, Deprecated)"
+        datetime created_at "تاريخ إنشاء الإصدار"
+        datetime updated_at "تاريخ آخر تحديث"
+    }
+
+    STANDARDS {
+        int standard_id PK "المعرف الفريد للمعيار الرئيسي"
+        int version_id FK "الإصدار المعياري الحاوي"
+        string code "رمز المعيار (e.g. STD-01)"
+        string name "اسم المعيار الرئيسي"
+        string description "وصف المعيار وأهدافه"
+        decimal weight "الوزن النسبي للمعيار الرئيسي (مجموعها 100%)"
+        datetime created_at "تاريخ الإنشاء"
+        datetime updated_at "تاريخ آخر تحديث"
+    }
+
+    SUB_STANDARDS {
+        int sub_standard_id PK "المعرف الفريد للمعيار الفرعي"
+        int standard_id FK "المعيار الرئيسي التابع له"
+        string code "رمز المعيار الفرعي (e.g. SUB-01-01)"
+        string name "اسم المعيار الفرعي"
+        string description "وصف المعيار الفرعي ومجاله"
+        datetime created_at "تاريخ الإنشاء"
+        datetime updated_at "تاريخ آخر تحديث"
+    }
+
+    INDICATORS {
+        int indicator_id PK "المعرف الفريد للمؤشر"
+        int sub_standard_id FK "المعيار الفرعي التابع له"
+        string code "رمز المؤشر (e.g. IND-01-01-01)"
+        string name "نص المؤشر القابل للقياس"
+        string description "وصف وتفسير المؤشر"
+        decimal weight "الوزن النسبي للمؤشر ضمن المعيار"
+        string status "حالة المؤشر (Active, Inactive)"
+        datetime created_at "تاريخ الإنشاء"
+        datetime updated_at "تاريخ آخر تحديث"
+    }
+
+    SCORE_LEVELS {
+        int score_level_id PK "المعرف الفريد لمستوى التقدير"
+        int version_id FK "الإصدار التابع له سلم التقدير"
+        int score_value "القيمة الرقمية للدرجة (0, 1, 2, 3)"
+        string label "مسمى المستوى (غير متحقق، متحقق جزئياً، متحقق، متميز)"
+        string description "التوصيف العام للمستوى"
+    }
+
+    INDICATOR_SCORE_DESCRIPTORS {
+        int descriptor_id PK "المعرف الفريد لواصفة الأداء"
+        int indicator_id FK "المؤشر المقابل للواصفة"
+        int score_level_id FK "مستوى التقدير المقابل"
+        int standard_version_id FK "الإصدار المعياري المرجعي"
+        text description "النص المعياري التوصيفي لدرجة المؤشر"
+        int display_order "ترتيب العرض (0 إلى 3)"
+    }
+
+    INDICATOR_EVIDENCE_REQUIREMENTS {
+        int requirement_id PK "المعرف الفريد لمتطلب الشاهد"
+        int indicator_id FK "المؤشر المطلوب له الشاهد"
+        int standard_version_id FK "الإصدار المعياري"
+        string name "مسمى متطلب الشاهد الإرشادي"
+        string description "وصف المتطلب"
+        string requirement_type "نوع الإلزام (mandatory, optional)"
+    }
+
+    VERIFICATION_TOOLS {
+        int tool_id PK "المعرف الفريد لأداة التحقق"
+        string name UK "اسم الأداة (فحص وثائق، مقابلة، ملاحظة...)"
+        string description "وصف وتطبيق أداة التحقق"
+        string tool_type "نوع الأداة وتصنيفها"
+        datetime created_at "تاريخ الإنشاء"
+        datetime updated_at "تاريخ آخر تحديث"
+    }
+
+    INDICATOR_VERIFICATION_METHODS {
+        int id PK "المعرف الفريد لسجل الربط"
+        int indicator_id FK "المؤشر المقترن بالأداة"
+        int tool_id FK "أداة التحقق المعتمدة للمؤشر"
+        datetime created_at "تاريخ الربط"
+    }
+
+    %% العلاقات الهيكلية
+    STANDARD_VERSIONS ||--o{ STANDARDS : "يحتوي معايير رئيسية"
+    STANDARDS ||--o{ SUB_STANDARDS : "يتفرع إلى معايير فرعية"
+    SUB_STANDARDS ||--o{ INDICATORS : "يضم مؤشرات أداء"
+
+    STANDARD_VERSIONS ||--o{ SCORE_LEVELS : "يحدد سلم التقدير المعتمد"
+
+    INDICATORS ||--o{ INDICATOR_SCORE_DESCRIPTORS : "يملك 4 واصفات نوعية"
+    SCORE_LEVELS ||--o{ INDICATOR_SCORE_DESCRIPTORS : "يرتبط بمستوى التقدير"
+    STANDARD_VERSIONS ||--o{ INDICATOR_SCORE_DESCRIPTORS : "مرجعية الإصدار"
+
+    INDICATORS ||--o{ INDICATOR_EVIDENCE_REQUIREMENTS : "يحدد شواهده الاسترشادية"
+    STANDARD_VERSIONS ||--o{ INDICATOR_EVIDENCE_REQUIREMENTS : "مرجعية الإصدار"
+
+    INDICATORS ||--o{ INDICATOR_VERIFICATION_METHODS : "يقترن بأساليب تحقق"
+    VERIFICATION_TOOLS ||--o{ INDICATOR_VERIFICATION_METHODS : "تُستخدم للتحقق من المؤشر"
+
+%% عدد الجداول المشمولة في هذا المخطط: 9 جداول
+%% المصدر: ملفات التهجير (000004, 000005) ونماذج Eloquent في school-eval-api/app/Models
