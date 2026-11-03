@@ -48,6 +48,7 @@ class ImprovementArea extends Model
         'name',
         'description',
         'priority',
+        'target_score',
     ];
 
     /**
@@ -58,6 +59,7 @@ class ImprovementArea extends Model
     protected function casts(): array
     {
         return [
+            'target_score' => 'integer',
             'created_at' => 'datetime',
             'updated_at' => 'datetime',
         ];

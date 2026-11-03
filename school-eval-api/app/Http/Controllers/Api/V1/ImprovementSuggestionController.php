@@ -44,6 +44,17 @@ class ImprovementSuggestionController extends Controller
         }
 
         $targetScore = (int) config('evaluation.target_score', 3);
+        if ($request->filled('target_score') || $request->filled('targetScore')) {
+            $rawTarget = $request->input('target_score') ?? $request->input('targetScore');
+            $inputTarget = is_numeric($rawTarget) ? (int) $rawTarget : -1;
+            if ($inputTarget >= 1 && $inputTarget <= 3) {
+                $targetScore = $inputTarget;
+            } else {
+                return ApiResponse::validationError([
+                    'target_score' => ['يجب أن يكون التقدير المستهدف رقماً بين 1 و 3.'],
+                ], 'قيمة التقدير المستهدف غير صالحة.');
+            }
+        }
 
         // جلب نتائج التقييم الأقل من التقدير المستهدف
         $lowResults = EvaluationResult::query()

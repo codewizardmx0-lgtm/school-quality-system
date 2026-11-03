@@ -545,6 +545,12 @@ class EvaluationController extends Controller
             }
         }
 
+        // التحقق من وجود نتيجة سابقة لحفظها في سجل التدقيق
+        $existingResult = EvaluationResult::where('evaluation_id', $evaluation->evaluation_id)
+            ->where('indicator_id', $indicatorId)
+            ->first();
+        $oldScore = $existingResult ? (int) $existingResult->score : null;
+
         // تنفيذ الرصد Upsert
         $result = EvaluationResult::updateOrCreate(
             [
@@ -559,6 +565,21 @@ class EvaluationController extends Controller
                 'textual_result'      => $textualResult,
                 'completion_status'   => 'Completed',
             ]
+        );
+
+        // تسجيل عملية رصد النتيجة في سجل التدقيق
+        app(\App\Services\AuditLoggerService::class)->log(
+            action: 'evaluation.scored',
+            targetType: 'EvaluationResult',
+            targetId: $result->result_id,
+            oldValues: $oldScore !== null ? ['score' => $oldScore] : null,
+            newValues: [
+                'score' => $score,
+                'evaluation_id' => $evaluation->evaluation_id,
+                'indicator_id' => $indicatorId,
+            ],
+            userId: $user->user_id,
+            schoolId: $evaluation->school_id
         );
 
         // مزامنة أدوات التحقق المستخدمة فعلياً في النتيجة (FR-SCH-13)
@@ -840,6 +861,21 @@ class EvaluationController extends Controller
             event(new EvaluationSubmitted($evaluation, $user));
             app(NotificationService::class)->notifyEvaluationSubmitted($evaluation, $user);
 
+            // تسجيل عملية تسليم التقييم في سجل التدقيق
+            app(\App\Services\AuditLoggerService::class)->log(
+                action: 'evaluation.submitted',
+                targetType: 'Evaluation',
+                targetId: $evaluation->evaluation_id,
+                oldValues: ['status' => 'InProgress'],
+                newValues: [
+                    'status' => 'Submitted',
+                    'report_id' => $report->report_id,
+                    'attempt_no' => 1,
+                ],
+                userId: $user->user_id,
+                schoolId: $evaluation->school_id
+            );
+
             return [
                 'report' => $report,
                 'submission' => $submission,
@@ -896,7 +932,9 @@ class EvaluationController extends Controller
             ], 'لا يمكن إغلاق ملف التقييم في حالته الحالية.');
         }
 
-        DB::transaction(function () use ($evaluation, $user) {
+        $oldStatus = $evaluation->status;
+
+        DB::transaction(function () use ($evaluation, $user, $oldStatus) {
             $evaluation->status = 'Completed';
             $evaluation->updated_at = now();
             $evaluation->save();
@@ -915,6 +953,17 @@ class EvaluationController extends Controller
                         'status' => 'Completed',
                     ]);
             }
+
+            // تسجيل عملية الإغلاق المباشر في سجل التدقيق
+            app(\App\Services\AuditLoggerService::class)->log(
+                action: 'evaluation.direct_closed',
+                targetType: 'Evaluation',
+                targetId: $evaluation->evaluation_id,
+                oldValues: ['status' => $oldStatus],
+                newValues: ['status' => 'Completed'],
+                userId: $user->user_id,
+                schoolId: $evaluation->school_id
+            );
         });
 
         return ApiResponse::success(

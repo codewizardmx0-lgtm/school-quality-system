@@ -88,19 +88,28 @@ class EvaluationTrendService
 
         foreach ($currentIndicatorScores as $code => $currResult) {
             $currScore = (int) $currResult->score;
-            $indName = $currResult->indicator?->name;
+            $currName = $currResult->indicator?->name;
 
             if ($prevIndicatorScores->has($code)) {
                 $prevResult = $prevIndicatorScores->get($code);
                 $prevScore = (int) $prevResult->score;
+                $prevName = $prevResult->indicator?->name;
+
+                $textChanged = ($prevName !== null && $currName !== null && $prevName !== $currName);
 
                 $item = [
                     'indicator_code' => $code,
-                    'indicator_name' => $indName,
+                    'indicator_name' => $currName,
                     'previous_score' => $prevScore,
                     'current_score'  => $currScore,
                     'delta'          => $currScore - $prevScore,
+                    'text_changed'   => $textChanged,
                 ];
+
+                if ($textChanged) {
+                    $item['previous_name'] = $prevName;
+                    $item['current_name']  = $currName;
+                }
 
                 if ($currScore > $prevScore) {
                     $improved[] = $item;
@@ -112,8 +121,21 @@ class EvaluationTrendService
             } else {
                 $newlyEvaluated[] = [
                     'indicator_code' => $code,
-                    'indicator_name' => $indName,
+                    'indicator_name' => $currName,
                     'current_score'  => $currScore,
+                ];
+            }
+        }
+
+        // استخراج المؤشرات المقيمة سابقاً والمستبعدة/المحذوفة من الدورة الحالية (BR-SCH-07)
+        $deprecatedIndicators = [];
+        foreach ($prevIndicatorScores as $code => $prevResult) {
+            if (!$currentIndicatorScores->has($code)) {
+                $deprecatedIndicators[] = [
+                    'indicator_code' => $code,
+                    'indicator_name' => $prevResult->indicator?->name,
+                    'previous_score' => (int) $prevResult->score,
+                    'notice'         => 'مؤشر تم استبعاده أو إلغاؤه في الإصدار المعياري للدورة الحالية.',
                 ];
             }
         }
@@ -136,10 +158,12 @@ class EvaluationTrendService
                 'regressed_count' => count($regressed),
                 'maintained_count' => count($maintained),
                 'newly_evaluated_count' => count($newlyEvaluated),
+                'deprecated_count' => count($deprecatedIndicators),
                 'improved_indicators' => $improved,
                 'regressed_indicators' => $regressed,
                 'maintained_indicators' => $maintained,
                 'newly_evaluated_indicators' => $newlyEvaluated,
+                'deprecated_indicators' => $deprecatedIndicators,
             ],
         ];
     }

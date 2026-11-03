@@ -580,8 +580,25 @@ class EvidenceController extends Controller
         $result = $link->evaluationResult;
         $evalId = $link->evaluation_id;
         $indId = $link->indicator_id;
+        $evidenceId = $link->evidence_id;
+        $schoolId = $link->school_id;
 
         $link->delete();
+
+        // تسجيل فك ارتباط الشاهد في سجل التدقيق
+        app(\App\Services\AuditLoggerService::class)->log(
+            action: 'evidence.unlinked',
+            targetType: 'EvidenceLink',
+            targetId: $linkId,
+            oldValues: [
+                'evaluation_id' => $evalId,
+                'indicator_id' => $indId,
+                'evidence_id' => $evidenceId,
+            ],
+            newValues: null,
+            userId: $user->user_id,
+            schoolId: $schoolId
+        );
 
         // تنظيف وحذف النتيجة المعلقة (Pending) إن أصبحت يتيمة وبلا ملاحظات
         if ($result && $result->completion_status === 'Pending') {

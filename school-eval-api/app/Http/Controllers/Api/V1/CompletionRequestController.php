@@ -140,6 +140,22 @@ class CompletionRequestController extends Controller
             return $completionRequest;
         });
 
+        // تسجيل إنشاء طلب الاستكمال في سجل التدقيق
+        app(\App\Services\AuditLoggerService::class)->log(
+            action: 'completion.created',
+            targetType: 'CompletionRequest',
+            targetId: $createdRequest->request_id,
+            oldValues: ['evaluation_status' => 'Submitted'],
+            newValues: [
+                'evaluation_id' => $evaluation->evaluation_id,
+                'submission_id' => $createdRequest->submission_id,
+                'deadline' => $createdRequest->completion_deadline?->toIso8601ZuluString() ?? (string) $createdRequest->completion_deadline,
+                'items_count' => count($request->input('items')),
+            ],
+            userId: $user->user_id,
+            schoolId: $evaluation->school_id
+        );
+
         $createdRequest->load(['items.indicator', 'items.evidenceLink', 'requestedBy', 'submission']);
 
         return ApiResponse::success(
@@ -292,6 +308,20 @@ class CompletionRequestController extends Controller
         $completionRequest->deadline_extensions_count = ((int) $completionRequest->deadline_extensions_count) + 1;
         $completionRequest->save();
 
+        // تسجيل تمديد المهلة في سجل التدقيق
+        app(\App\Services\AuditLoggerService::class)->log(
+            action: 'completion.deadline_extended',
+            targetType: 'CompletionRequest',
+            targetId: $completionRequest->request_id,
+            oldValues: ['completion_deadline' => $currentDeadline?->toIso8601ZuluString()],
+            newValues: [
+                'completion_deadline' => $newDeadline->toIso8601ZuluString(),
+                'deadline_extensions_count' => $completionRequest->deadline_extensions_count,
+            ],
+            userId: $user->user_id,
+            schoolId: $completionRequest->submission?->report?->evaluation?->school_id
+        );
+
         return ApiResponse::success(
             data: [
                 'requestId' => $completionRequest->request_id,
@@ -395,6 +425,25 @@ class CompletionRequestController extends Controller
             ];
         });
 
+        // تسجيل إعادة التسليم في سجل التدقيق
+        app(\App\Services\AuditLoggerService::class)->log(
+            action: 'completion.resubmitted',
+            targetType: 'CompletionRequest',
+            targetId: $completionRequest->request_id,
+            oldValues: [
+                'request_status' => 'Open',
+                'evaluation_status' => 'NeedsCompletion',
+            ],
+            newValues: [
+                'request_status' => 'UnderReview',
+                'evaluation_status' => 'Submitted',
+                'attempt_no' => $resubmitResult['attemptNo'],
+                'submission_id' => $resubmitResult['newSubmission']->submission_id,
+            ],
+            userId: $user->user_id,
+            schoolId: $evaluation->school_id
+        );
+
         return ApiResponse::success(
             data: [
                 'requestId' => $completionRequest->request_id,
@@ -459,6 +508,23 @@ class CompletionRequestController extends Controller
                     ->update(['status' => 'Completed']);
             }
         });
+
+        // تسجيل إغلاق طلب الاستكمال في سجل التدقيق
+        app(\App\Services\AuditLoggerService::class)->log(
+            action: 'completion.closed',
+            targetType: 'CompletionRequest',
+            targetId: $completionRequest->request_id,
+            oldValues: [
+                'request_status' => 'UnderReview',
+                'evaluation_status' => 'Submitted',
+            ],
+            newValues: [
+                'request_status' => 'Resolved',
+                'evaluation_status' => 'Completed',
+            ],
+            userId: $user->user_id,
+            schoolId: $completionRequest->evaluation?->school_id
+        );
 
         return ApiResponse::success(
             data: [

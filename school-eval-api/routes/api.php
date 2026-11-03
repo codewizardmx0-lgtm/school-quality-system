@@ -36,7 +36,11 @@ Route::prefix('v1')->group(function () {
         Route::prefix('auth')->group(function () {
             Route::post('/logout', [AuthController::class, 'logout'])->name('api.v1.auth.logout');
             Route::get('/me', [AuthController::class, 'me'])->name('api.v1.auth.me');
+            Route::post('/password/change', [AuthController::class, 'changePassword'])->name('api.v1.auth.password.change');
         });
+
+        // سجل التدقيق للعمليات الحساسة (Audit Logs)
+        Route::get('/audit-logs', [\App\Http\Controllers\Api\V1\AuditLogController::class, 'index'])->name('api.v1.audit-logs.index');
 
         // المدارس مع العزل المؤسسي والتحقق من الصلاحيات (Schools)
         Route::prefix('schools')->group(function () {

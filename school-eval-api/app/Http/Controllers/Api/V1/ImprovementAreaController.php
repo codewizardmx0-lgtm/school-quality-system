@@ -67,16 +67,20 @@ class ImprovementAreaController extends Controller
         }
 
         $validator = Validator::make($request->all(), [
-            'resultId'    => ['required', 'integer'],
-            'name'        => ['required', 'string', 'max:200'],
-            'description' => ['nullable', 'string'],
-            'priority'    => ['required', 'string', 'in:Low,Medium,High'],
+            'resultId'     => ['required', 'integer'],
+            'name'         => ['required', 'string', 'max:200'],
+            'description'  => ['nullable', 'string'],
+            'priority'     => ['required', 'string', 'in:Low,Medium,High'],
+            'target_score' => ['nullable', 'integer', 'between:1,3'],
+            'targetScore'  => ['nullable', 'integer', 'between:1,3'],
         ], [
-            'resultId.required' => 'معرف نتيجة التقييم إلزامي لربط مجال التحسين.',
-            'name.required'     => 'اسم أو عنوان مجال التحسين إلزامي.',
-            'name.max'          => 'لا يمكن أن يتجاوز اسم مجال التحسين 200 حرف.',
-            'priority.required' => 'أولوية مجال التحسين إلزامية.',
-            'priority.in'       => 'قيمة الأولوية غير صالحة. القيم المسموحة: Low, Medium, High.',
+            'resultId.required'   => 'معرف نتيجة التقييم إلزامي لربط مجال التحسين.',
+            'name.required'       => 'اسم أو عنوان مجال التحسين إلزامي.',
+            'name.max'            => 'لا يمكن أن يتجاوز اسم مجال التحسين 200 حرف.',
+            'priority.required'   => 'أولوية مجال التحسين إلزامية.',
+            'priority.in'         => 'قيمة الأولوية غير صالحة. القيم المسموحة: Low, Medium, High.',
+            'target_score.between' => 'يجب أن يكون التقدير المستهدف بين 1 و 3.',
+            'targetScore.between'  => 'يجب أن يكون التقدير المستهدف بين 1 و 3.',
         ]);
 
         if ($validator->fails()) {
@@ -93,12 +97,15 @@ class ImprovementAreaController extends Controller
             return ApiResponse::notFound('نتيجة المؤشر المطلوبة غير موجودة.');
         }
 
+        $targetScore = $request->input('target_score') ?? $request->input('targetScore') ?? 3;
+
         $area = ImprovementArea::create([
             'result_id'    => $result->result_id,
             'indicator_id' => $result->indicator_id,
             'name'         => $request->name,
             'description'  => $request->description,
             'priority'     => $request->priority,
+            'target_score' => (int) $targetScore,
         ]);
 
         $area->load(['result.evaluation', 'indicator', 'plans']);
@@ -135,14 +142,18 @@ class ImprovementAreaController extends Controller
         }
 
         $validator = Validator::make($request->all(), [
-            'name'        => ['sometimes', 'required', 'string', 'max:200'],
-            'description' => ['nullable', 'string'],
-            'priority'    => ['sometimes', 'required', 'string', 'in:Low,Medium,High'],
+            'name'         => ['sometimes', 'required', 'string', 'max:200'],
+            'description'  => ['nullable', 'string'],
+            'priority'     => ['sometimes', 'required', 'string', 'in:Low,Medium,High'],
+            'target_score' => ['sometimes', 'nullable', 'integer', 'between:1,3'],
+            'targetScore'  => ['sometimes', 'nullable', 'integer', 'between:1,3'],
         ], [
-            'name.required'     => 'اسم أو عنوان مجال التحسين إلزامي.',
-            'name.max'          => 'لا يمكن أن يتجاوز اسم مجال التحسين 200 حرف.',
-            'priority.required' => 'أولوية مجال التحسين إلزامية.',
-            'priority.in'       => 'قيمة الأولوية غير صالحة. القيم المسموحة: Low, Medium, High.',
+            'name.required'        => 'اسم أو عنوان مجال التحسين إلزامي.',
+            'name.max'             => 'لا يمكن أن يتجاوز اسم مجال التحسين 200 حرف.',
+            'priority.required'    => 'أولوية مجال التحسين إلزامية.',
+            'priority.in'          => 'قيمة الأولوية غير صالحة. القيم المسموحة: Low, Medium, High.',
+            'target_score.between' => 'يجب أن يكون التقدير المستهدف بين 1 و 3.',
+            'targetScore.between'  => 'يجب أن يكون التقدير المستهدف بين 1 و 3.',
         ]);
 
         if ($validator->fails()) {
@@ -157,6 +168,9 @@ class ImprovementAreaController extends Controller
         }
         if ($request->has('priority')) {
             $area->priority = $request->priority;
+        }
+        if ($request->has('target_score') || $request->has('targetScore')) {
+            $area->target_score = (int) ($request->input('target_score') ?? $request->input('targetScore'));
         }
 
         $area->save();
@@ -189,6 +203,7 @@ class ImprovementAreaController extends Controller
             'description'      => $area->description,
             'priority'         => $area->priority,
             'priorityLabel'    => $priorityLabels[$area->priority] ?? $area->priority,
+            'targetScore'      => (int) ($area->target_score ?? 3),
             'linkedPlansCount' => $area->plans->count(),
             'createdAt'        => $area->created_at?->toIso8601String(),
         ];
