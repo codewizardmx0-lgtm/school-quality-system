@@ -114,4 +114,16 @@ class EvaluationPolicy
 
         return $user->hasPermission('evaluations.submit');
     }
+
+    /**
+     * هل يحق للمستخدم الإغلاق النهائي لملف التقييم (المشرف الوزاري فقط)؟
+     */
+    public function close(User $user, Evaluation $evaluation): bool
+    {
+        if ($user->user_type !== 'ministry') {
+            return false;
+        }
+
+        return $user->hasRole('ministry_supervisor') || $user->hasPermission('supervision.review');
+    }
 }

@@ -122,6 +122,9 @@ Route::prefix('v1')->group(function () {
             Route::get('/{id}/improvement-suggestions', [\App\Http\Controllers\Api\V1\ImprovementSuggestionController::class, 'index'])->name('api.v1.evaluations.improvement-suggestions');
             Route::put('/{evaluationId}/indicators/{indicatorId}/score', [\App\Http\Controllers\Api\V1\EvaluationController::class, 'scoreIndicator'])->name('api.v1.evaluations.indicators.score');
             Route::post('/{id}/submit', [\App\Http\Controllers\Api\V1\EvaluationController::class, 'submit'])->name('api.v1.evaluations.submit');
+            Route::post('/{id}/close', [\App\Http\Controllers\Api\V1\EvaluationController::class, 'directClose'])->name('api.v1.evaluations.close');
+            Route::get('/{id}/completion-requests', [\App\Http\Controllers\Api\V1\CompletionRequestController::class, 'index'])->name('api.v1.evaluations.completion-requests.index');
+            Route::post('/{id}/completion-requests', [\App\Http\Controllers\Api\V1\CompletionRequestController::class, 'store'])->name('api.v1.evaluations.completion-requests.store');
             Route::post('/{id}/dev-reset', [\App\Http\Controllers\Api\V1\EvaluationController::class, 'devReset'])->name('api.v1.evaluations.dev-reset');
             Route::get('/{id}/indicators-context', [\App\Http\Controllers\Api\V1\EvaluationController::class, 'indicatorsContext'])->name('api.v1.evaluations.indicators-context');
             Route::get('/{id}/evidence-inventory', [\App\Http\Controllers\Api\V1\EvidenceController::class, 'inventory'])->name('api.v1.evaluations.evidence-inventory');
@@ -134,6 +137,14 @@ Route::prefix('v1')->group(function () {
         // نتائج التقييم: الملاحظات (Evaluation Results)
         Route::prefix('evaluation-results')->group(function () {
             Route::post('/{id}/notes', [\App\Http\Controllers\Api\V1\EvaluationController::class, 'addNote'])->name('api.v1.evaluation-results.notes.store');
+        });
+
+        // إدارة طلبات الاستكمال والمهل وسجل محاولات التسليم (U-03, U-11, U-29)
+        Route::prefix('completion-requests')->group(function () {
+            Route::get('/{id}', [\App\Http\Controllers\Api\V1\CompletionRequestController::class, 'show'])->name('api.v1.completion-requests.show');
+            Route::patch('/{id}/deadline', [\App\Http\Controllers\Api\V1\CompletionRequestController::class, 'extendDeadline'])->name('api.v1.completion-requests.deadline');
+            Route::post('/{id}/resubmit', [\App\Http\Controllers\Api\V1\CompletionRequestController::class, 'resubmit'])->name('api.v1.completion-requests.resubmit');
+            Route::post('/{id}/close', [\App\Http\Controllers\Api\V1\CompletionRequestController::class, 'close'])->name('api.v1.completion-requests.close');
         });
 
         // معمارية الشواهد النظيفة ثلاثية المستويات (U-24 Step 2: Clean Evidence Architecture)

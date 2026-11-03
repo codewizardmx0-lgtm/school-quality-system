@@ -129,8 +129,8 @@ class SchoolMetricsService
      */
     public function calculateIndicatorsContext(Evaluation $evaluation): array
     {
-        // 1. إذا كان التقييم مكتملاً ويحتوي على لقطة مجمدة، نرجع اللقطة فوراً (BR-SCH-03)
-        if ($evaluation->status === 'Completed' && !empty($evaluation->school_context_snapshot)) {
+        // 1. إذا كان التقييم مسلماً أو مكتملاً ويحتوي على لقطة مجمدة، نرجع اللقطة فوراً (BR-SCH-03)
+        if (in_array($evaluation->status, ['Submitted', 'UnderReview', 'NeedsCompletion', 'Completed']) && !empty($evaluation->school_context_snapshot)) {
             $snapshot = $evaluation->school_context_snapshot;
 
             // ضمان اشتمال اللقطة على المؤشرات الجديدة للشريحة 9 حتى لو التقطت اللقطة في إصدار أقدم
@@ -144,7 +144,7 @@ class SchoolMetricsService
             return $snapshot;
         }
 
-        $isLegacyCompletedWithoutSnapshot = ($evaluation->status === 'Completed' && empty($evaluation->school_context_snapshot));
+        $isLegacyCompletedWithoutSnapshot = (in_array($evaluation->status, ['Submitted', 'UnderReview', 'NeedsCompletion', 'Completed']) && empty($evaluation->school_context_snapshot));
 
         $school = $evaluation->school;
         $academicYear = $evaluation->cycle?->academic_year ?? '2025/2026';

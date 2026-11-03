@@ -428,15 +428,15 @@ class SchoolManagementFeatureTest extends TestCase
         // تجهيز التقييم بالدرجات والشواهد الكاملة لتمكينه من الإغلاق
         $this->fillEvaluationRequirements($this->evaluationBelqees);
 
-        // 1. استدعاء مسار إغلاق وتقديم التقييم
+        // 1. استدعاء مسار تقديم التقييم (الانتقال إلى Submitted وفق القرار 1)
         $submitRes = $this->postJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/submit");
         $submitRes->assertStatus(200)
-            ->assertJsonPath('data.status', 'Completed')
+            ->assertJsonPath('data.status', 'Submitted')
             ->assertJsonPath('data.isLocked', true);
 
         // التأكد من حفظ الـ Snapshot في قاعدة البيانات
         $freshEval = $this->evaluationBelqees->fresh();
-        $this->assertEquals('Completed', $freshEval->status);
+        $this->assertEquals('Submitted', $freshEval->status);
         $this->assertNotNull($freshEval->school_context_snapshot);
         $this->assertEquals(80, $freshEval->school_context_snapshot['indicators']['1-1-2']['calculated_ratio']);
 
