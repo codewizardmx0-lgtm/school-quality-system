@@ -1,7 +1,8 @@
-﻿import React, { useState } from 'react';
+import React, { useState } from 'react';
 import { X, Eye, EyeOff } from 'lucide-react';
 import { theme } from '../../theme';
-import { mockAdminService, MOCK_ROLES, MOCK_SCHOOLS, MOCK_DIRECTORATES } from '../../services/mockAdminData';
+import { usersApi } from '../../api/usersApi';
+import { MOCK_ROLES, MOCK_SCHOOLS, MOCK_DIRECTORATES } from '../../services/mockAdminData';
 import type { CreateUserDto, UserType } from '../../types/admin.types';
 
 interface CreateUserModalProps {
@@ -61,23 +62,20 @@ export const CreateUserModal: React.FC<CreateUserModalProps> = ({ isOpen, onClos
     if (Object.keys(errs).length > 0) { setErrors(errs); return; }
     setLoading(true);
     try {
-      const role = MOCK_ROLES.find((r) => r.roleId === form.roleId);
-      const school = form.schoolId ? MOCK_SCHOOLS.find((s) => s.schoolId === form.schoolId) : null;
-      await mockAdminService.createUser({
-        ...form,
-        roleName: role?.roleName,
-        roleCode: role?.roleCode,
-        schoolName: school?.schoolName || null,
-        schoolCode: school?.schoolCode || null,
-        directorate: form.directorateId
-          ? MOCK_DIRECTORATES.find((d) => d.directorateId === form.directorateId)?.directorateName || null
-          : null,
-      });
+      await usersApi.createUser(form);
       addToast('success', `تم إنشاء حساب ${form.fullName} بنجاح`);
       onSuccess();
       onClose();
-    } catch {
-      addToast('error', 'فشل إنشاء الحساب، يرجى المحاولة لاحقاً');
+    } catch (err: any) {
+      if (err?.errors) {
+        const mappedErrors: Record<string, string> = {};
+        Object.entries(err.errors).forEach(([field, msgs]) => {
+          mappedErrors[field] = Array.isArray(msgs) ? (msgs as string[])[0] : String(msgs);
+        });
+        setErrors(mappedErrors);
+      } else {
+        addToast('error', err?.message || 'فشل إنشاء الحساب، يرجى المحاولة لاحقاً');
+      }
     } finally {
       setLoading(false);
     }

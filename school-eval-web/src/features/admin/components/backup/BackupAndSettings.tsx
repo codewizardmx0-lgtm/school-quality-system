@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   Database,
   HardDrive,
@@ -15,9 +15,9 @@ import { BackupArchiveTable } from './BackupArchiveTable';
 import { IntegrationSettingsForm } from './IntegrationSettingsForm';
 import { TriggerBackupModal } from './TriggerBackupModal';
 import { RestoreConfirmModal } from './RestoreConfirmModal';
-import { mockAdminService } from '../../services/mockAdminData';
+import { useAdminBackup } from '../../hooks/useAdminBackup';
 import { formatRelativeArabic } from '../../utils/dateUtils';
-import type { BackupRecord, SystemSettings, AdminScreen } from '../../types/admin.types';
+import type { BackupRecord, AdminScreen } from '../../types/admin.types';
 
 interface BackupAndSettingsProps {
   onNavigate: (screen: AdminScreen) => void;
@@ -25,35 +25,18 @@ interface BackupAndSettingsProps {
 }
 
 export const BackupAndSettings: React.FC<BackupAndSettingsProps> = ({ onNavigate, addToast }) => {
-  const [backups, setBackups] = useState<BackupRecord[]>([]);
-  const [settings, setSettings] = useState<SystemSettings | null>(null);
+  const {
+    backups,
+    settings,
+    loading,
+    error,
+    fetchData,
+  } = useAdminBackup();
 
   // Modals
   const [isTriggerOpen, setIsTriggerOpen] = useState(false);
   const [restoreBackup, setRestoreBackup] = useState<BackupRecord | null>(null);
   const [isRestoring, setIsRestoring] = useState(false);
-
-  useEffect(() => {
-    let ignore = false;
-    Promise.all([
-      mockAdminService.getBackups(),
-      mockAdminService.getSystemSettings(),
-    ])
-      .then(([backupsRes, settingsRes]) => {
-        if (!ignore) {
-          if (backupsRes.data) setBackups(backupsRes.data);
-          if (settingsRes.data) setSettings(settingsRes.data);
-        }
-      })
-      .catch(() => {
-        if (!ignore) {
-          addToast('error', 'فشل في تحميل بيانات النسخ الاحتياطية وإعدادات النظام');
-        }
-      });
-    return () => {
-      ignore = true;
-    };
-  }, []);
 
   const handleRestoreConfirm = async () => {
     if (!restoreBackup) return;
@@ -139,6 +122,42 @@ export const BackupAndSettings: React.FC<BackupAndSettingsProps> = ({ onNavigate
           + إنشاء نسخة احتياطية فورية
         </button>
       </div>
+
+      {/* Error Fallback Prompt */}
+      {error && (
+        <div
+          style={{
+            backgroundColor: '#FEF2F2',
+            border: '1px solid #FCA5A5',
+            borderRadius: theme.radii.lg,
+            padding: '12px 16px',
+            marginBottom: '16px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#991B1B', fontSize: theme.typography.fontSizes.sm }}>
+            <AlertTriangle size={18} />
+            <span>{error}</span>
+          </div>
+          <button
+            onClick={() => void fetchData()}
+            style={{
+              backgroundColor: '#DC2626',
+              color: '#FFFFFF',
+              border: 'none',
+              borderRadius: theme.radii.md,
+              padding: '6px 14px',
+              fontSize: theme.typography.fontSizes.xs,
+              cursor: 'pointer',
+              fontWeight: 600,
+            }}
+          >
+            إعادة المحاولة
+          </button>
+        </div>
+      )}
 
       {/* 4 Stat Cards */}
       <div
@@ -227,13 +246,19 @@ export const BackupAndSettings: React.FC<BackupAndSettingsProps> = ({ onNavigate
 
         {/* Left Column: Central System Settings & Integrations */}
         <div>
-          {settings && (
+          {loading && !settings ? (
+            <div className="animate-pulse" style={{ backgroundColor: theme.colors.neutral.white, borderRadius: theme.radii.xl, padding: '24px', border: `1px solid ${theme.colors.neutral[200]}` }}>
+              <div style={{ width: '180px', height: '20px', backgroundColor: '#E5E7EB', borderRadius: '4px', marginBottom: '16px' }} />
+              <div style={{ width: '100%', height: '80px', backgroundColor: '#F3F4F6', borderRadius: '8px', marginBottom: '12px' }} />
+              <div style={{ width: '100%', height: '80px', backgroundColor: '#F3F4F6', borderRadius: '8px' }} />
+            </div>
+          ) : settings ? (
             <IntegrationSettingsForm
               settings={settings}
-              onSave={(newS) => setSettings(newS)}
+              onSave={() => void fetchData()}
               addToast={addToast}
             />
-          )}
+          ) : null}
         </div>
       </div>
 
@@ -315,7 +340,7 @@ export const BackupAndSettings: React.FC<BackupAndSettingsProps> = ({ onNavigate
       <TriggerBackupModal
         isOpen={isTriggerOpen}
         onClose={() => setIsTriggerOpen(false)}
-        onSuccess={(newB) => setBackups((prev) => [newB, ...prev])}
+        onSuccess={() => void fetchData()}
         addToast={addToast}
       />
 

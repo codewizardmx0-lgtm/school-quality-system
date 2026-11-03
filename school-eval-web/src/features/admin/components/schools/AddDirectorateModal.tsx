@@ -1,7 +1,7 @@
-﻿import React, { useState } from 'react';
+import React, { useState } from 'react';
 import { X, MapPin } from 'lucide-react';
 import { theme } from '../../theme';
-import { mockAdminService } from '../../services/mockAdminData';
+import { schoolsApi } from '../../api/schoolsApi';
 import type { AddDirectorateDto } from '../../types/admin.types';
 
 interface AddDirectorateModalProps {
@@ -34,12 +34,17 @@ export const AddDirectorateModal: React.FC<AddDirectorateModalProps> = ({
     }
     setLoading(true);
     try {
-      await mockAdminService.createDirectorate(form);
+      await schoolsApi.addDirectorate(form);
       addToast('success', `تمت تهيئة "${form.directorateName}" بنجاح في النظام`);
       onSuccess();
       onClose();
-    } catch {
-      addToast('error', 'فشل في إضافة المديرية، يرجى المحاولة لاحقاً');
+    } catch (err: any) {
+      if (err?.errors) {
+        const firstError = Object.values(err.errors)[0];
+        setError(Array.isArray(firstError) ? firstError[0] : String(firstError));
+      } else {
+        addToast('error', err?.message || 'فشل في إضافة المديرية، يرجى المحاولة لاحقاً');
+      }
     } finally {
       setLoading(false);
     }

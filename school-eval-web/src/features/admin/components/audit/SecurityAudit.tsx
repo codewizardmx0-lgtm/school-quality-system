@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState } from 'react';
 import {
   ShieldAlert,
   Activity,
@@ -14,10 +14,10 @@ import { StatCard } from '../common/StatCard';
 import { StatusBadge } from '../common/StatusBadge';
 import { AuditFilterBar } from './AuditFilterBar';
 import { BlockedIpsModal } from './BlockedIpsModal';
-import { mockAdminService } from '../../services/mockAdminData';
+import { useAdminAudit } from '../../hooks/useAdminAudit';
 import { downloadEncryptedLog } from '../../utils/exportUtils';
 import { formatRelativeArabic, formatArabicDateTime } from '../../utils/dateUtils';
-import type { AuditLogEntry, BlockedIp, AdminScreen } from '../../types/admin.types';
+import type { AdminScreen } from '../../types/admin.types';
 
 interface SecurityAuditProps {
   onNavigate: (screen: AdminScreen) => void;
@@ -25,81 +25,27 @@ interface SecurityAuditProps {
 }
 
 export const SecurityAudit: React.FC<SecurityAuditProps> = ({ onNavigate, addToast }) => {
-  const [logs, setLogs] = useState<AuditLogEntry[]>([]);
-  const [blockedIps, setBlockedIps] = useState<BlockedIp[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  // Filters
-  const [actionType, setActionType] = useState('الكل');
-  const [actor, setActor] = useState('الكل');
-  const [timeScope, setTimeScope] = useState('all');
+  const {
+    logs,
+    filteredLogs,
+    blockedIps,
+    loading,
+    error,
+    actionType,
+    setActionType,
+    actor,
+    setActor,
+    timeScope,
+    setTimeScope,
+    fetchData,
+  } = useAdminAudit();
 
   // Modals
   const [isBlockedIpsOpen, setIsBlockedIpsOpen] = useState(false);
 
-  const fetchData = async () => {
-    try {
-      const [logsRes, ipsRes] = await Promise.all([
-        mockAdminService.getAuditLogs(),
-        mockAdminService.getBlockedIps(),
-      ]);
-      if (logsRes.data) setLogs(logsRes.data);
-      if (ipsRes.data) setBlockedIps(ipsRes.data);
-    } catch {
-      addToast('error', 'فشل في تحميل سجلات التدقيق الأمني');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleRefresh = () => {
-    setLoading(true);
     void fetchData();
   };
-
-  useEffect(() => {
-    let ignore = false;
-    Promise.all([
-      mockAdminService.getAuditLogs(),
-      mockAdminService.getBlockedIps(),
-    ])
-      .then(([logsRes, ipsRes]) => {
-        if (!ignore) {
-          if (logsRes.data) setLogs(logsRes.data);
-          if (ipsRes.data) setBlockedIps(ipsRes.data);
-          setLoading(false);
-        }
-      })
-      .catch(() => {
-        if (!ignore) {
-          addToast('error', 'فشل في تحميل سجلات التدقيق الأمني');
-          setLoading(false);
-        }
-      });
-    return () => {
-      ignore = true;
-    };
-  }, []);
-
-  // Filtered Logs
-  const filteredLogs = useMemo(() => {
-    const baseTimestamp = new Date('2026-11-02T12:00:00Z').getTime();
-    return logs.filter((l) => {
-      const matchAction = actionType === 'الكل' || l.eventType === actionType;
-      const matchActor = actor === 'الكل' || l.actorName.includes(actor);
-
-      let matchTime = true;
-      if (timeScope === '24h') {
-        const diffMs = baseTimestamp - new Date(l.timestamp).getTime();
-        matchTime = diffMs <= 24 * 3600 * 1000;
-      } else if (timeScope === '7d') {
-        const diffMs = baseTimestamp - new Date(l.timestamp).getTime();
-        matchTime = diffMs <= 7 * 24 * 3600 * 1000;
-      }
-
-      return matchAction && matchActor && matchTime;
-    });
-  }, [logs, actionType, actor, timeScope]);
 
   // Export encrypted CSV
   const handleExport = () => {
@@ -252,6 +198,42 @@ export const SecurityAudit: React.FC<SecurityAuditProps> = ({ onNavigate, addToa
         totalLogs={logs.length}
       />
 
+      {/* Error Fallback Prompt */}
+      {error && (
+        <div
+          style={{
+            backgroundColor: '#FEF2F2',
+            border: '1px solid #FCA5A5',
+            borderRadius: theme.radii.lg,
+            padding: '12px 16px',
+            marginBottom: '16px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#991B1B', fontSize: theme.typography.fontSizes.sm }}>
+            <ShieldAlert size={18} />
+            <span>{error}</span>
+          </div>
+          <button
+            onClick={() => void fetchData()}
+            style={{
+              backgroundColor: '#DC2626',
+              color: '#FFFFFF',
+              border: 'none',
+              borderRadius: theme.radii.md,
+              padding: '6px 14px',
+              fontSize: theme.typography.fontSizes.xs,
+              cursor: 'pointer',
+              fontWeight: 600,
+            }}
+          >
+            إعادة المحاولة
+          </button>
+        </div>
+      )}
+
       {/* Audit Data Table */}
       <div
         style={{
@@ -287,7 +269,34 @@ export const SecurityAudit: React.FC<SecurityAuditProps> = ({ onNavigate, addToa
             </tr>
           </thead>
           <tbody>
-            {filteredLogs.length === 0 ? (
+            {loading ? (
+              Array.from({ length: 5 }).map((_, i) => (
+                <tr key={`audit-skel-${i}`} className="animate-pulse" style={{ borderBottom: `1px solid ${theme.colors.neutral[100]}` }}>
+                  <td style={{ padding: '16px' }}>
+                    <div style={{ width: '80px', height: '14px', backgroundColor: '#E5E7EB', borderRadius: '4px', marginBottom: '4px' }} />
+                    <div style={{ width: '110px', height: '10px', backgroundColor: '#F3F4F6', borderRadius: '4px' }} />
+                  </td>
+                  <td style={{ padding: '16px' }}>
+                    <div style={{ width: '100px', height: '14px', backgroundColor: '#E5E7EB', borderRadius: '4px', marginBottom: '4px' }} />
+                    <div style={{ width: '80px', height: '12px', backgroundColor: '#F3F4F6', borderRadius: '4px' }} />
+                  </td>
+                  <td style={{ padding: '16px' }}>
+                    <div style={{ width: '90px', height: '14px', backgroundColor: '#E5E7EB', borderRadius: '4px', marginBottom: '6px' }} />
+                    <div style={{ width: '70px', height: '18px', backgroundColor: '#E5E7EB', borderRadius: '12px' }} />
+                  </td>
+                  <td style={{ padding: '16px' }}>
+                    <div style={{ width: '220px', height: '14px', backgroundColor: '#E5E7EB', borderRadius: '4px', marginBottom: '4px' }} />
+                    <div style={{ width: '80px', height: '12px', backgroundColor: '#F1F5F9', borderRadius: '4px' }} />
+                  </td>
+                  <td style={{ padding: '16px' }}>
+                    <div style={{ width: '90px', height: '14px', backgroundColor: '#E5E7EB', borderRadius: '4px' }} />
+                  </td>
+                  <td style={{ padding: '16px', textAlign: 'center' }}>
+                    <div style={{ width: '60px', height: '22px', backgroundColor: '#E5E7EB', borderRadius: '12px', margin: '0 auto' }} />
+                  </td>
+                </tr>
+              ))
+            ) : filteredLogs.length === 0 ? (
               <tr>
                 <td colSpan={6} style={{ padding: '40px', textAlign: 'center', color: theme.colors.neutral[400] }}>
                   لا توجد سجلات تدقيق مطابقة لمعايير التصفية المحددة

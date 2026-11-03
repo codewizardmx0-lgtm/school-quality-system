@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { X } from 'lucide-react';
 import { theme } from '../../theme';
-import { mockAdminService, MOCK_ROLES, MOCK_SCHOOLS, MOCK_DIRECTORATES } from '../../services/mockAdminData';
+import { usersApi } from '../../api/usersApi';
+import { MOCK_ROLES, MOCK_SCHOOLS, MOCK_DIRECTORATES } from '../../services/mockAdminData';
 import type { User, EditUserDto, UserType } from '../../types/admin.types';
 
 interface EditUserModalProps {
@@ -90,24 +91,20 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
     }
     setLoading(true);
     try {
-      const role = MOCK_ROLES.find((r) => r.roleId === form.roleId);
-      const school = form.schoolId ? MOCK_SCHOOLS.find((s) => s.schoolId === form.schoolId) : null;
-      const dir = form.directorateId ? MOCK_DIRECTORATES.find((d) => d.directorateId === form.directorateId) : null;
-
-      await mockAdminService.updateUser(user.userId, {
-        ...form,
-        roleName: role?.roleName,
-        roleCode: role?.roleCode,
-        schoolName: school?.schoolName || null,
-        schoolCode: school?.schoolCode || null,
-        directorate: dir?.directorateName || null,
-      });
-
+      await usersApi.updateUser(user.userId, form);
       addToast('success', `تم تحديث بيانات ${form.fullName} بنجاح`);
       onSuccess();
       onClose();
-    } catch {
-      addToast('error', 'فشل تحديث البيانات، يرجى المحاولة لاحقاً');
+    } catch (err: any) {
+      if (err?.errors) {
+        const mappedErrors: Record<string, string> = {};
+        Object.entries(err.errors).forEach(([field, msgs]) => {
+          mappedErrors[field] = Array.isArray(msgs) ? (msgs as string[])[0] : String(msgs);
+        });
+        setErrors(mappedErrors);
+      } else {
+        addToast('error', err?.message || 'فشل تحديث البيانات، يرجى المحاولة لاحقاً');
+      }
     } finally {
       setLoading(false);
     }

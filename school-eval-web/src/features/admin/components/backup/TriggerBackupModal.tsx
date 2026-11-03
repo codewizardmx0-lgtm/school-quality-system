@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { X, Database } from 'lucide-react';
 import { theme } from '../../theme';
-import { mockAdminService } from '../../services/mockAdminData';
+import { backupApi } from '../../api/backupApi';
 import type { BackupType, BackupRecord } from '../../types/admin.types';
 
 interface TriggerBackupModalProps {
@@ -51,7 +51,7 @@ export const TriggerBackupModal: React.FC<TriggerBackupModalProps> = ({
     }, 1500);
 
     try {
-      const res = await mockAdminService.triggerBackup(backupType);
+      const res = await backupApi.triggerBackup(backupType);
       clearTimeout(t1);
       clearTimeout(t2);
       clearTimeout(t3);

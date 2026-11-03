@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState } from 'react';
 import {
   School as SchoolIcon,
   Building2,
@@ -21,9 +21,9 @@ import { DirectorateSidebar } from './DirectorateSidebar';
 import { RegisterSchoolModal } from './RegisterSchoolModal';
 import { LinkEvaluatorModal } from './LinkEvaluatorModal';
 import { AddDirectorateModal } from './AddDirectorateModal';
-import { mockAdminService } from '../../services/mockAdminData';
+import { useAdminSchools } from '../../hooks/useAdminSchools';
 import { downloadCsv } from '../../utils/exportUtils';
-import type { School, Directorate, AdminScreen } from '../../types/admin.types';
+import type { School, AdminScreen } from '../../types/admin.types';
 
 interface SchoolsDirectoryProps {
   onNavigate: (screen: AdminScreen) => void;
@@ -31,77 +31,29 @@ interface SchoolsDirectoryProps {
 }
 
 export const SchoolsDirectory: React.FC<SchoolsDirectoryProps> = ({ onNavigate, addToast }) => {
-  const [schools, setSchools] = useState<School[]>([]);
-  const [directorates, setDirectorates] = useState<Directorate[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  // Filters
-  const [selectedDirectorateId, setSelectedDirectorateId] = useState<number | null>(1); // Default to التحرير
-  const [typeFilter, setTypeFilter] = useState<'all' | 'government' | 'private'>('all');
-  const [searchQuery, setSearchQuery] = useState('');
+  const {
+    schools,
+    filteredSchools,
+    directorates,
+    loading,
+    error,
+    selectedDirectorateId,
+    setSelectedDirectorateId,
+    typeFilter,
+    setTypeFilter,
+    searchQuery,
+    setSearchQuery,
+    fetchData,
+  } = useAdminSchools();
 
   // Modals
   const [isRegisterOpen, setIsRegisterOpen] = useState(false);
   const [isAddDirOpen, setIsAddDirOpen] = useState(false);
   const [linkingSchool, setLinkingSchool] = useState<School | null>(null);
 
-  const fetchData = async () => {
-    try {
-      const [schoolsRes, dirRes] = await Promise.all([
-        mockAdminService.getSchools(),
-        mockAdminService.getDirectorates(),
-      ]);
-      if (schoolsRes.data) setSchools(schoolsRes.data);
-      if (dirRes.data) setDirectorates(dirRes.data);
-    } catch {
-      addToast('error', 'فشل في تحميل بيانات المدارس والمديريات');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleRefresh = () => {
-    setLoading(true);
     void fetchData();
   };
-
-  useEffect(() => {
-    let ignore = false;
-    Promise.all([
-      mockAdminService.getSchools(),
-      mockAdminService.getDirectorates(),
-    ])
-      .then(([schoolsRes, dirRes]) => {
-        if (!ignore) {
-          if (schoolsRes.data) setSchools(schoolsRes.data);
-          if (dirRes.data) setDirectorates(dirRes.data);
-          setLoading(false);
-        }
-      })
-      .catch(() => {
-        if (!ignore) {
-          addToast('error', 'فشل في تحميل بيانات المدارس والمديريات');
-          setLoading(false);
-        }
-      });
-    return () => {
-      ignore = true;
-    };
-  }, []);
-
-  // Filtered Schools
-  const filteredSchools = useMemo(() => {
-    return schools.filter((s) => {
-      const matchDir = selectedDirectorateId === null || s.directorateId === selectedDirectorateId;
-      const matchType = typeFilter === 'all' || s.schoolType === typeFilter;
-      const matchSearch =
-        s.schoolName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        s.schoolCode.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (s.evaluatorName && s.evaluatorName.toLowerCase().includes(searchQuery.toLowerCase()));
-
-      return matchDir && matchType && matchSearch;
-    });
-  }, [schools, selectedDirectorateId, typeFilter, searchQuery]);
 
   const selectedDirName = selectedDirectorateId
     ? directorates.find((d) => d.directorateId === selectedDirectorateId)?.directorateName || ''
@@ -338,8 +290,48 @@ export const SchoolsDirectory: React.FC<SchoolsDirectoryProps> = ({ onNavigate, 
               >
                 <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
               </button>
+
+              <span style={{ fontSize: theme.typography.fontSizes.xs, color: theme.colors.neutral[400] }}>
+                عرض {filteredSchools.length} من {schools.length}
+              </span>
             </div>
           </div>
+
+          {/* Error Fallback Prompt */}
+          {error && (
+            <div
+              style={{
+                backgroundColor: '#FEF2F2',
+                border: '1px solid #FCA5A5',
+                borderRadius: theme.radii.lg,
+                padding: '12px 16px',
+                marginBottom: '16px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#991B1B', fontSize: theme.typography.fontSizes.sm }}>
+                <ShieldAlert size={18} />
+                <span>{error}</span>
+              </div>
+              <button
+                onClick={() => void fetchData()}
+                style={{
+                  backgroundColor: '#DC2626',
+                  color: '#FFFFFF',
+                  border: 'none',
+                  borderRadius: theme.radii.md,
+                  padding: '6px 14px',
+                  fontSize: theme.typography.fontSizes.xs,
+                  cursor: 'pointer',
+                  fontWeight: 600,
+                }}
+              >
+                إعادة المحاولة
+              </button>
+            </div>
+          )}
 
           {/* Schools Table */}
           <div
@@ -372,7 +364,31 @@ export const SchoolsDirectory: React.FC<SchoolsDirectoryProps> = ({ onNavigate, 
                 </tr>
               </thead>
               <tbody>
-                {filteredSchools.length === 0 ? (
+                {loading ? (
+                  Array.from({ length: 4 }).map((_, i) => (
+                    <tr key={`school-skel-${i}`} className="animate-pulse" style={{ borderBottom: `1px solid ${theme.colors.neutral[100]}` }}>
+                      <td style={{ padding: '16px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <div style={{ width: '60px', height: '20px', backgroundColor: '#E5E7EB', borderRadius: '4px' }} />
+                          <div style={{ width: '140px', height: '16px', backgroundColor: '#E5E7EB', borderRadius: '4px' }} />
+                        </div>
+                      </td>
+                      <td style={{ padding: '16px' }}>
+                        <div style={{ width: '100px', height: '14px', backgroundColor: '#E5E7EB', borderRadius: '4px', marginBottom: '4px' }} />
+                        <div style={{ width: '70px', height: '12px', backgroundColor: '#F3F4F6', borderRadius: '4px' }} />
+                      </td>
+                      <td style={{ padding: '16px' }}>
+                        <div style={{ width: '110px', height: '14px', backgroundColor: '#E5E7EB', borderRadius: '4px' }} />
+                      </td>
+                      <td style={{ padding: '16px' }}>
+                        <div style={{ width: '80px', height: '22px', backgroundColor: '#E5E7EB', borderRadius: '12px' }} />
+                      </td>
+                      <td style={{ padding: '16px', textAlign: 'center' }}>
+                        <div style={{ width: '60px', height: '26px', backgroundColor: '#E5E7EB', borderRadius: '6px', margin: '0 auto' }} />
+                      </td>
+                    </tr>
+                  ))
+                ) : filteredSchools.length === 0 ? (
                   <tr>
                     <td colSpan={5} style={{ padding: '40px', textAlign: 'center', color: theme.colors.neutral[400] }}>
                       لا توجد مدارس مسجلة في هذا النطاق بالمعايير المحددة

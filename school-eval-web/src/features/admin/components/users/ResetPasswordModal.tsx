@@ -1,7 +1,7 @@
-﻿import React, { useState } from 'react';
+import React, { useState } from 'react';
 import { X, KeyRound, Copy, CheckCircle2 } from 'lucide-react';
 import { theme } from '../../theme';
-import { mockAdminService } from '../../services/mockAdminData';
+import { usersApi } from '../../api/usersApi';
 import type { User } from '../../types/admin.types';
 
 interface ResetPasswordModalProps {
@@ -26,7 +26,7 @@ export const ResetPasswordModal: React.FC<ResetPasswordModalProps> = ({
   const handleReset = async () => {
     setLoading(true);
     try {
-      const res = await mockAdminService.resetPassword(user.userId);
+      const res = await usersApi.resetPassword(user.userId);
       if (res.data) {
         setGeneratedPassword(res.data.tempPassword);
         addToast('success', `تم توليد كلمة مرور جديدة لحساب ${user.fullName}`);

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Bot, HardDrive, Mail, Power, Check, Send } from 'lucide-react';
 import { theme } from '../../theme';
+import { backupApi } from '../../api/backupApi';
 import { mockAdminService } from '../../services/mockAdminData';
 import type { SystemSettings } from '../../types/admin.types';
 
@@ -37,7 +38,7 @@ export const IntegrationSettingsForm: React.FC<IntegrationSettingsFormProps> = (
     e.preventDefault();
     setIsSaving(true);
     try {
-      const res = await mockAdminService.saveSystemSettings(form);
+      const res = await backupApi.saveSystemSettings(form);
       if (res.data) {
         onSave(res.data);
         addToast('success', 'تم حفظ وتطبيق إعدادات النظام المركزية بنجاح ✓');

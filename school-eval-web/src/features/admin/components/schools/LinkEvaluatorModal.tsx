@@ -1,8 +1,10 @@
-﻿import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, UserCheck } from 'lucide-react';
 import { theme } from '../../theme';
-import { mockAdminService, MOCK_USERS } from '../../services/mockAdminData';
-import type { School } from '../../types/admin.types';
+import { schoolsApi } from '../../api/schoolsApi';
+import { usersApi } from '../../api/usersApi';
+import { MOCK_USERS } from '../../services/mockAdminData';
+import type { School, User } from '../../types/admin.types';
 
 interface LinkEvaluatorModalProps {
   isOpen: boolean;
@@ -20,13 +22,28 @@ export const LinkEvaluatorModal: React.FC<LinkEvaluatorModalProps> = ({
   addToast,
 }) => {
   const [selectedUserId, setSelectedUserId] = useState<number | ''>('');
+  const [evaluatorsList, setEvaluatorsList] = useState<User[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    let ignore = false;
+    usersApi.getUsers({ userType: 'school' }).then((res) => {
+      if (!ignore && res.data) {
+        setEvaluatorsList(res.data);
+      }
+    }).catch(() => {
+      if (!ignore) {
+        setEvaluatorsList(MOCK_USERS.filter((u) => u.userType === 'school'));
+      }
+    });
+    return () => { ignore = true; };
+  }, []);
 
   if (!isOpen || !school) return null;
 
   // Available school evaluators
-  const availableEvaluators = MOCK_USERS.filter((u) => u.userType === 'school');
+  const availableEvaluators = evaluatorsList.length > 0 ? evaluatorsList : MOCK_USERS.filter((u) => u.userType === 'school');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -36,13 +53,13 @@ export const LinkEvaluatorModal: React.FC<LinkEvaluatorModalProps> = ({
     }
     setLoading(true);
     try {
-      await mockAdminService.linkEvaluator(school.schoolId, Number(selectedUserId));
-      const user = MOCK_USERS.find((u) => u.userId === Number(selectedUserId));
-      addToast('success', `تم ربط المستخدم "${user?.fullName}" بـ "${school.schoolName}" بنجاح`);
+      await schoolsApi.assignEvaluator(school.schoolId, Number(selectedUserId));
+      const user = availableEvaluators.find((u) => u.userId === Number(selectedUserId));
+      addToast('success', `تم ربط المستخدم "${user?.fullName || ''}" بـ "${school.schoolName}" بنجاح`);
       onSuccess();
       onClose();
-    } catch {
-      addToast('error', 'فشل في ربط مسؤول التقييم، يرجى المحاولة لاحقاً');
+    } catch (err: any) {
+      addToast('error', err?.message || 'فشل في ربط مسؤول التقييم، يرجى المحاولة لاحقاً');
     } finally {
       setLoading(false);
     }

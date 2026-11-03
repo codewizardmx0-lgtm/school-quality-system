@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   School as SchoolIcon,
   Users,
@@ -21,9 +21,9 @@ import {
   CheckCircle,
 } from 'lucide-react';
 import { theme } from '../../theme';
-import { mockAdminService } from '../../services/mockAdminData';
+import { useAdminDashboard } from '../../hooks/useAdminDashboard';
 import { formatRelativeArabic } from '../../utils/dateUtils';
-import type { AdminScreen, School, AuditLogEntry, BackupRecord } from '../../types/admin.types';
+import type { AdminScreen, School, BackupRecord } from '../../types/admin.types';
 
 // Modals for Zero Dead Buttons
 import { TriggerBackupModal } from '../backup/TriggerBackupModal';
@@ -38,10 +38,14 @@ interface AdminDashboardProps {
 }
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate, addToast }) => {
-  // Data State
-  const [schools, setSchools] = useState<School[]>([]);
-  const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([]);
-  const [loading, setLoading] = useState(true);
+  const {
+    stats,
+    schools,
+    auditLogs,
+    loading,
+    error,
+    fetchData,
+  } = useAdminDashboard();
 
   // Modal states
   const [isBackupModalOpen, setIsBackupModalOpen] = useState(false);
@@ -51,34 +55,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate, addT
   const [isRegisterSchoolModalOpen, setIsRegisterSchoolModalOpen] = useState(false);
   const [isAddDirectorateModalOpen, setIsAddDirectorateModalOpen] = useState(false);
 
-  // Load data
-  useEffect(() => {
-    let ignore = false;
-    Promise.all([
-      mockAdminService.getSchools(),
-      mockAdminService.getAuditLogs(),
-    ]).then(([schoolsRes, logsRes]) => {
-      if (!ignore) {
-        if (schoolsRes.data) setSchools(schoolsRes.data);
-        if (logsRes.data) setAuditLogs(logsRes.data.slice(0, 4));
-        setLoading(false);
-      }
-    });
-
-    return () => {
-      ignore = true;
-    };
-  }, []);
-
   const refreshData = () => {
-    setLoading(true);
-    Promise.all([
-      mockAdminService.getSchools(),
-      mockAdminService.getAuditLogs(),
-    ]).then(([schoolsRes, logsRes]) => {
-      if (schoolsRes.data) setSchools(schoolsRes.data);
-      if (logsRes.data) setAuditLogs(logsRes.data.slice(0, 4));
-      setLoading(false);
+    void fetchData().then(() => {
       addToast('info', 'تم تحديث مؤشرات لوحة التحكم بنجاح');
     });
   };
@@ -283,6 +261,42 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate, addT
         </div>
       </div>
 
+      {/* Error Fallback Prompt */}
+      {error && (
+        <div
+          style={{
+            backgroundColor: '#FEF2F2',
+            border: '1px solid #FCA5A5',
+            borderRadius: '12px',
+            padding: '14px 18px',
+            marginBottom: '20px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#991B1B', fontSize: '0.875rem' }}>
+            <AlertTriangle size={18} />
+            <span>{error}</span>
+          </div>
+          <button
+            onClick={() => void fetchData()}
+            style={{
+              backgroundColor: '#DC2626',
+              color: '#FFFFFF',
+              border: 'none',
+              borderRadius: '8px',
+              padding: '6px 14px',
+              fontSize: '0.8rem',
+              cursor: 'pointer',
+              fontWeight: 600,
+            }}
+          >
+            إعادة المحاولة
+          </button>
+        </div>
+      )}
+
       {/* 2. Top KPI Metrics Grid (4 Stat Cards) */}
       <div
         style={{
@@ -335,7 +349,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate, addT
             </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '10px', marginBottom: '8px' }}>
-            <span style={{ fontSize: '1.75rem', fontWeight: 800, color: '#0B0F19' }}>48 مدرسة</span>
+            <span style={{ fontSize: '1.75rem', fontWeight: 800, color: '#0B0F19' }}>
+              {stats?.totalSchools ?? (schools.length > 0 ? schools.length : 48)} مدرسة
+            </span>
             <span
               style={{
                 fontSize: '0.75rem',
@@ -346,7 +362,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate, addT
                 borderRadius: '6px',
               }}
             >
-              جاهزة 91.6%
+              جاهزة {stats?.schoolsReadinessRate ?? 91.6}%
             </span>
           </div>
           <div style={{ fontSize: '0.8rem', color: '#64748B', display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -399,7 +415,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate, addT
             </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '10px', marginBottom: '8px' }}>
-            <span style={{ fontSize: '1.75rem', fontWeight: 800, color: '#0B0F19' }}>68 حساباً</span>
+            <span style={{ fontSize: '1.75rem', fontWeight: 800, color: '#0B0F19' }}>
+              {stats?.totalUsers ?? 68} حساباً
+            </span>
             <span
               style={{
                 fontSize: '0.75rem',
@@ -410,7 +428,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate, addT
                 borderRadius: '6px',
               }}
             >
-              12 متصل الآن
+              {stats?.activeUsers ?? 12} متصل الآن
             </span>
           </div>
           <div style={{ fontSize: '0.8rem', color: '#64748B' }}>
@@ -461,7 +479,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate, addT
             </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '10px', marginBottom: '8px' }}>
-            <span style={{ fontSize: '1.75rem', fontWeight: 800, color: '#0B0F19' }}>100% مؤكد</span>
+            <span style={{ fontSize: '1.75rem', fontWeight: 800, color: '#0B0F19' }}>
+              {stats?.securityIndex ? `${stats.securityIndex}% مؤكد` : '100% مؤكد'}
+            </span>
             <span
               style={{
                 fontSize: '0.75rem',

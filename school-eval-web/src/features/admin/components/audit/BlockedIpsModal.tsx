@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { X, ShieldX, Unlock } from 'lucide-react';
 import { theme } from '../../theme';
-import { mockAdminService } from '../../services/mockAdminData';
+import { auditApi } from '../../api/auditApi';
 import { formatRelativeArabic } from '../../utils/dateUtils';
 import type { BlockedIp } from '../../types/admin.types';
 
@@ -27,7 +27,7 @@ export const BlockedIpsModal: React.FC<BlockedIpsModalProps> = ({
   const handleUnblock = async (ip: BlockedIp) => {
     setUnblockingId(ip.ipId);
     try {
-      await mockAdminService.unblockIp(ip.ipId);
+      await auditApi.unblockIp({ ipId: ip.ipId, ip: ip.ipAddress });
       addToast('success', `تم إلغاء حظر عنوان IP (${ip.ipAddress}) بنجاح`);
       onSuccess();
     } catch {

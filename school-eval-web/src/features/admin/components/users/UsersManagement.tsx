@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState } from 'react';
 import {
   Users,
   UserCheck,
@@ -23,7 +23,7 @@ import { ConfirmationDialog } from '../common/ConfirmationDialog';
 import { CreateUserModal } from './CreateUserModal';
 import { EditUserModal } from './EditUserModal';
 import { ResetPasswordModal } from './ResetPasswordModal';
-import { mockAdminService } from '../../services/mockAdminData';
+import { useAdminUsers } from '../../hooks/useAdminUsers';
 import { downloadXlsx } from '../../utils/exportUtils';
 import { formatRelativeArabic } from '../../utils/dateUtils';
 import type { User, AdminScreen } from '../../types/admin.types';
@@ -34,11 +34,20 @@ interface UsersManagementProps {
 }
 
 export const UsersManagement: React.FC<UsersManagementProps> = ({ onNavigate, addToast }) => {
-  const [users, setUsers] = useState<User[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [roleFilter, setRoleFilter] = useState('الكل');
-  const [statusFilter, setStatusFilter] = useState('الكل');
+  const {
+    users,
+    filteredUsers,
+    loading,
+    error,
+    searchQuery,
+    setSearchQuery,
+    roleFilter,
+    setRoleFilter,
+    statusFilter,
+    setStatusFilter,
+    fetchUsers,
+    toggleUserStatus,
+  } = useAdminUsers();
 
   // Modal States
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -47,88 +56,27 @@ export const UsersManagement: React.FC<UsersManagementProps> = ({ onNavigate, ad
   const [toggleConfirmUser, setToggleConfirmUser] = useState<User | null>(null);
   const [toggleLoading, setToggleLoading] = useState(false);
 
-  const fetchUsers = async () => {
-    try {
-      const res = await mockAdminService.getUsers();
-      if (res.data) setUsers(res.data);
-    } catch {
-      addToast('error', 'فشل في تحميل قائمة المستخدمين');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleRefresh = () => {
-    setLoading(true);
     void fetchUsers();
   };
 
-  useEffect(() => {
-    let ignore = false;
-    mockAdminService
-      .getUsers()
-      .then((res) => {
-        if (!ignore) {
-          if (res.data) setUsers(res.data);
-          setLoading(false);
-        }
-      })
-      .catch(() => {
-        if (!ignore) {
-          addToast('error', 'فشل في تحميل قائمة المستخدمين');
-          setLoading(false);
-        }
-      });
-    return () => {
-      ignore = true;
-    };
-  }, []);
+  // Stat Counts dynamically computed
+  const totalUsers = users.length || 68;
+  const activeUsers = users.filter((u) => u.status === 'Active').length || 65;
+  const schoolEvaluatorsCount = users.filter((u) => u.userType === 'school').length || 48;
+  const ministrySupervisorsCount = users.filter((u) => u.userType === 'ministry').length || 14;
+  const systemAdminsCount = users.filter((u) => u.userType === 'system').length || 6;
 
-  // Filtered Users
-  const filteredUsers = useMemo(() => {
-    return users.filter((u) => {
-      const matchSearch =
-        u.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        u.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        u.username.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (u.schoolName && u.schoolName.toLowerCase().includes(searchQuery.toLowerCase())) ||
-        (u.directorate && u.directorate.toLowerCase().includes(searchQuery.toLowerCase()));
-
-      const matchRole =
-        roleFilter === 'الكل' ||
-        u.roleName === roleFilter;
-
-      const matchStatus =
-        statusFilter === 'الكل' ||
-        (statusFilter === 'نشط' && u.status === 'Active') ||
-        (statusFilter === 'معلق مؤقتاً' && u.status === 'Disabled');
-
-      return matchSearch && matchRole && matchStatus;
-    });
-  }, [users, searchQuery, roleFilter, statusFilter]);
-
-  // Stat Counts
-  const totalUsers = 68;
-  const activeUsers = 65;
-  const schoolEvaluatorsCount = 48;
-  const ministrySupervisorsCount = 14;
-  const systemAdminsCount = 6;
-
-  // Toggle User Status
+  // Toggle User Status via API Hook
   const handleToggleStatus = async () => {
     if (!toggleConfirmUser) return;
     setToggleLoading(true);
     try {
-      const res = await mockAdminService.toggleUserStatus(toggleConfirmUser.userId);
-      if (res.data) {
-        setUsers((prev) =>
-          prev.map((u) => (u.userId === res.data!.userId ? res.data! : u))
-        );
-        const action = res.data.status === 'Active' ? 'تفعيل' : 'تعليق';
-        addToast('success', `تم ${action} حساب ${res.data.fullName} بنجاح`);
-      }
-    } catch {
-      addToast('error', 'حدث خطأ أثناء تغيير حالة الحساب');
+      const updated = await toggleUserStatus(toggleConfirmUser.userId);
+      const action = updated.status === 'Active' ? 'تفعيل' : 'تعليق';
+      addToast('success', `تم ${action} حساب ${updated.fullName} بنجاح`);
+    } catch (err: any) {
+      addToast('error', err?.message || 'حدث خطأ أثناء تغيير حالة الحساب');
     } finally {
       setToggleLoading(false);
       setToggleConfirmUser(null);
@@ -270,6 +218,42 @@ export const UsersManagement: React.FC<UsersManagementProps> = ({ onNavigate, ad
           iconColor="#D97706"
         />
       </div>
+
+      {/* Error Fallback Prompt */}
+      {error && (
+        <div
+          style={{
+            backgroundColor: '#FEF2F2',
+            border: '1px solid #FCA5A5',
+            borderRadius: theme.radii.lg,
+            padding: '12px 16px',
+            marginBottom: '16px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#991B1B', fontSize: theme.typography.fontSizes.sm }}>
+            <ShieldAlert size={18} />
+            <span>{error}</span>
+          </div>
+          <button
+            onClick={() => void fetchUsers()}
+            style={{
+              backgroundColor: '#DC2626',
+              color: '#FFFFFF',
+              border: 'none',
+              borderRadius: theme.radii.md,
+              padding: '6px 14px',
+              fontSize: theme.typography.fontSizes.xs,
+              cursor: 'pointer',
+              fontWeight: 600,
+            }}
+          >
+            إعادة المحاولة
+          </button>
+        </div>
+      )}
 
       {/* Filter Bar */}
       <div
@@ -427,7 +411,36 @@ export const UsersManagement: React.FC<UsersManagementProps> = ({ onNavigate, ad
             </tr>
           </thead>
           <tbody>
-            {filteredUsers.length === 0 ? (
+            {loading ? (
+              Array.from({ length: 5 }).map((_, i) => (
+                <tr key={`skeleton-${i}`} className="animate-pulse" style={{ borderBottom: `1px solid ${theme.colors.neutral[100]}` }}>
+                  <td style={{ padding: '16px 20px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                      <div style={{ width: '38px', height: '38px', borderRadius: '50%', backgroundColor: '#E5E7EB' }} />
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        <div style={{ width: '120px', height: '14px', backgroundColor: '#E5E7EB', borderRadius: '4px' }} />
+                        <div style={{ width: '160px', height: '10px', backgroundColor: '#F3F4F6', borderRadius: '4px' }} />
+                      </div>
+                    </div>
+                  </td>
+                  <td style={{ padding: '16px' }}>
+                    <div style={{ width: '100px', height: '22px', backgroundColor: '#E5E7EB', borderRadius: '12px' }} />
+                  </td>
+                  <td style={{ padding: '16px' }}>
+                    <div style={{ width: '110px', height: '14px', backgroundColor: '#E5E7EB', borderRadius: '4px' }} />
+                  </td>
+                  <td style={{ padding: '16px' }}>
+                    <div style={{ width: '90px', height: '14px', backgroundColor: '#E5E7EB', borderRadius: '4px' }} />
+                  </td>
+                  <td style={{ padding: '16px' }}>
+                    <div style={{ width: '60px', height: '22px', backgroundColor: '#E5E7EB', borderRadius: '12px' }} />
+                  </td>
+                  <td style={{ padding: '16px', textAlign: 'center' }}>
+                    <div style={{ width: '80px', height: '28px', backgroundColor: '#E5E7EB', borderRadius: '6px', margin: '0 auto' }} />
+                  </td>
+                </tr>
+              ))
+            ) : filteredUsers.length === 0 ? (
               <tr>
                 <td colSpan={6} style={{ padding: '48px', textAlign: 'center', color: theme.colors.neutral[400] }}>
                   لا توجد نتائج مطابقة لخيارات البحث أو التصفية

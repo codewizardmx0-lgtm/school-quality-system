@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Download, ShieldCheck, RotateCcw } from 'lucide-react';
 import { theme } from '../../theme';
 import { StatusBadge } from '../common/StatusBadge';
+import { backupApi } from '../../api/backupApi';
 import { formatRelativeArabic, formatFileSize } from '../../utils/dateUtils';
 import type { BackupRecord } from '../../types/admin.types';
 
@@ -33,16 +34,20 @@ export const BackupArchiveTable: React.FC<BackupArchiveTableProps> = ({
     addToast('success', `بدأ تنزيل ملف النسخة الاحتياطية (${backup.fileName})`);
   };
 
-  const handleTestHash = (backup: BackupRecord) => {
+  const handleTestHash = async (backup: BackupRecord) => {
     setTestingHashId(backup.backupId);
-    setTimeout(() => {
-      setTestingHashId(null);
-      if (backup.status === 'failed') {
+    try {
+      const res = await backupApi.verifyBackup(backup.backupId);
+      if (backup.status === 'failed' || !res.data?.verified) {
         addToast('warning', `فشل اختبار سلامة الملف: البصمة الرقمية لا تطابق الأصل للملف ${backup.fileName}`);
       } else {
         addToast('info', `تم فحص النزاهة بنجاح: البصمة الرقمية SHA-256 متطابقة بنسبة 100%`);
       }
-    }, 1200);
+    } catch {
+      addToast('warning', `تعذر التحقق من البصمة الرقمية للملف`);
+    } finally {
+      setTestingHashId(null);
+    }
   };
 
   return (

@@ -22,6 +22,20 @@ export { ToastNotification } from './components/common/ToastNotification';
 export { useToast } from './components/common/useToast';
 export { ConfirmationDialog } from './components/common/ConfirmationDialog';
 
+// Live API Services (§2 & §3)
+export { usersApi } from './api/usersApi';
+export { schoolsApi } from './api/schoolsApi';
+export { auditApi } from './api/auditApi';
+export { backupApi } from './api/backupApi';
+export { dashboardApi } from './api/dashboardApi';
+
+// Live React Hooks
+export { useAdminUsers } from './hooks/useAdminUsers';
+export { useAdminSchools } from './hooks/useAdminSchools';
+export { useAdminAudit } from './hooks/useAdminAudit';
+export { useAdminBackup } from './hooks/useAdminBackup';
+export { useAdminDashboard } from './hooks/useAdminDashboard';
+
 // Types & DTOs
 export * from './types/admin.types';
 

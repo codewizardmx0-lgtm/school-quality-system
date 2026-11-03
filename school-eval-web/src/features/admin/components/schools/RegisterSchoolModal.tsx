@@ -1,7 +1,8 @@
-﻿import React, { useState } from 'react';
+import React, { useState } from 'react';
 import { X, School as SchoolIcon } from 'lucide-react';
 import { theme } from '../../theme';
-import { mockAdminService, MOCK_DIRECTORATES } from '../../services/mockAdminData';
+import { schoolsApi } from '../../api/schoolsApi';
+import { MOCK_DIRECTORATES } from '../../services/mockAdminData';
 import type { RegisterSchoolDto, SchoolType } from '../../types/admin.types';
 
 interface RegisterSchoolModalProps {
@@ -52,12 +53,20 @@ export const RegisterSchoolModal: React.FC<RegisterSchoolModalProps> = ({
     }
     setLoading(true);
     try {
-      await mockAdminService.createSchool(form);
+      await schoolsApi.registerSchool(form);
       addToast('success', `تم تسجيل مدرسة "${form.schoolName}" بنجاح في النظام`);
       onSuccess();
       onClose();
-    } catch {
-      addToast('error', 'فشل في تسجيل المدرسة، يرجى المحاولة لاحقاً');
+    } catch (err: any) {
+      if (err?.errors) {
+        const mappedErrors: Record<string, string> = {};
+        Object.entries(err.errors).forEach(([field, msgs]) => {
+          mappedErrors[field] = Array.isArray(msgs) ? (msgs as string[])[0] : String(msgs);
+        });
+        setErrors(mappedErrors);
+      } else {
+        addToast('error', err?.message || 'فشل في تسجيل المدرسة، يرجى المحاولة لاحقاً');
+      }
     } finally {
       setLoading(false);
     }
