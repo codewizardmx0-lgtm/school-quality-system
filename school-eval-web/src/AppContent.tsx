@@ -4,14 +4,13 @@ import { LoginPage } from './features/auth/LoginPage';
 import { Sidebar } from './components/Sidebar';
 import { TopNavbar } from './components/TopNavbar';
 import { DashboardPage } from './components/DashboardPage';
-import { AdminDashboardOverview } from './features/admin/AdminDashboardOverview';
-import { SchoolsManagementPage } from './features/admin/SchoolsManagementPage';
-import { UsersManagementPage } from './features/admin/UsersManagementPage';
+import { AdminLayout } from './features/admin';
+import type { AdminScreen } from './features/admin';
 import { theme } from './styles/theme';
 import { Loader2 } from 'lucide-react';
 
 export const AppContent: React.FC = () => {
-  const { user, isAuthenticated, isLoading } = useAuth();
+  const { user, isAuthenticated, isLoading, logout } = useAuth();
   const [activeTab, setActiveTab] = useState('dashboard');
 
   if (isLoading) {
@@ -48,21 +47,30 @@ export const AppContent: React.FC = () => {
 
   const isAdmin = user?.roles?.some((r) => r.roleName === 'admin');
 
+  // إذا كان المستخدم مسؤول نظام، يتم توجيهه مباشرة إلى بوابة مسؤول النظام المركزية
+  if (isAdmin) {
+    return <AdminLayout onLogout={logout} />;
+  }
+
+  // إذا كان التبويب هو بوابة إدارة النظام المركزية (ارتقاء) أو شاشات الإدارة للمخولين
+  if (activeTab === 'admin-suite' || activeTab === 'schools' || activeTab === 'users') {
+    const screenMap: Record<string, AdminScreen> = {
+      schools: 'schools',
+      users: 'users',
+      'admin-suite': 'dashboard',
+    };
+    return (
+      <AdminLayout
+        initialScreen={screenMap[activeTab] || 'dashboard'}
+        onLogout={() => setActiveTab('dashboard')}
+      />
+    );
+  }
+
   // اختيار المحتوى بحسب التبويب النشط ودور المستخدم
   const renderMainContent = () => {
     if (activeTab === 'dashboard') {
-      if (isAdmin) {
-        return <AdminDashboardOverview onNavigate={setActiveTab} />;
-      }
       return <DashboardPage />;
-    }
-
-    if (activeTab === 'schools') {
-      return <SchoolsManagementPage />;
-    }
-
-    if (activeTab === 'users') {
-      return <UsersManagementPage />;
     }
 
     return (
