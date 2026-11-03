@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Evaluation;
 use App\Models\EvaluationResult;
+use App\Models\EvidenceLink;
 use App\Models\Indicator;
 use App\Models\IndicatorEvidenceRequirement;
 use App\Models\Standard;
@@ -31,26 +32,41 @@ class EvidenceSufficiencyService
      * @param Indicator $indicator
      * @param EvaluationResult|null $result
      * @param Collection<int, IndicatorEvidenceRequirement> $requirements
+     * @param Collection<int, EvidenceLink>|null $evidenceLinks
      * @return array<string, mixed>
      */
-    public function evaluateIndicator(Indicator $indicator, ?EvaluationResult $result, Collection $requirements): array
+    public function evaluateIndicator(Indicator $indicator, ?EvaluationResult $result, Collection $requirements, ?Collection $evidenceLinks = null): array
     {
         $mandatoryReqs = $requirements->where('required', true);
         $mandatoryCount = $mandatoryReqs->count();
         $totalReqCount = $requirements->count();
 
-        $evidences = $result ? $result->evidences : collect();
-        $uploadedCount = $evidences->count();
+        // إعطاء الأولوية لمعمارية الشواهد الجديدة (evidence_links)
+        $links = $evidenceLinks;
+        if ($links === null && $result) {
+            $links = $result->evidenceLinks;
+        }
 
-        $validEvidences = $evidences->filter(function ($ev) {
-            return in_array($ev->status, ['Completed', 'Audited'], true);
-        });
-        $validCount = $validEvidences->count();
+        if ($links !== null && $links->isNotEmpty()) {
+            $uploadedCount = $links->count();
 
-        $draftEvidences = $evidences->filter(function ($ev) {
-            return ($ev->status === 'Draft' || empty($ev->status));
-        });
-        $draftCount = $draftEvidences->count();
+            // القرار 3: حالة الشاهد الصالحة لحساب الكفاية هي completed فقط. حالة draft لا تُحسب شاهدًا مستوفيًا.
+            $validLinks = $links->filter(function ($link) {
+                return strtolower($link->status ?? '') === 'completed';
+            });
+            $validCount = $validLinks->count();
+
+            $draftLinks = $links->filter(function ($link) {
+                return strtolower($link->status ?? '') === 'draft' || empty($link->status);
+            });
+            $draftCount = $draftLinks->count();
+            $sourceEvidences = $links;
+        } else {
+            $uploadedCount = 0;
+            $validCount = 0;
+            $draftCount = 0;
+            $sourceEvidences = collect();
+        }
 
         // القاعدة: إذا كان له متطلبات إلزامية، يجب استيفاؤها بالشواهد الصالحة
         // وإذا لم يكن له متطلبات إلزامية، لا يُعدّ ناقصاً أبداً
@@ -79,7 +95,7 @@ class EvidenceSufficiencyService
             'missing_count'            => $missingCount,
             'status'                   => $status,
             'completion_rate'          => $completionRate,
-            'evidences'                => $evidences,
+            'evidences'                => $sourceEvidences,
         ];
     }
 
@@ -110,12 +126,14 @@ class EvidenceSufficiencyService
             ->get()
             ->groupBy('indicator_id');
 
+        $evidenceLinksMap = EvidenceLink::query()
+            ->where('evaluation_id', $evaluation->evaluation_id)
+            ->with(['documentVersion.document'])
+            ->get()
+            ->groupBy('indicator_id');
+
         $resultsMap = EvaluationResult::query()
             ->where('evaluation_id', $evaluation->evaluation_id)
-            ->with([
-                'evidences.versions.attachments',
-                'evidences.reviewer',
-            ])
             ->get()
             ->keyBy('indicator_id');
 
@@ -171,8 +189,9 @@ class EvidenceSufficiencyService
 
                     $reqs = $requirementsMap->get($ind->indicator_id, collect());
                     $result = $resultsMap->get($ind->indicator_id);
+                    $linksForInd = $evidenceLinksMap->get($ind->indicator_id, collect());
 
-                    $evaluatedInd = $this->evaluateIndicator($ind, $result, $reqs);
+                    $evaluatedInd = $this->evaluateIndicator($ind, $result, $reqs, $linksForInd);
 
                     $totalMandatoryRequired += $evaluatedInd['mandatory_required_count'];
                     $stdMandatoryRequired += $evaluatedInd['mandatory_required_count'];
@@ -217,14 +236,21 @@ class EvidenceSufficiencyService
 
                     // تجميع التصنيفات والحالات
                     foreach ($evaluatedInd['evidences'] as $ev) {
-                        $t = $ev->evidence_type ?: 'other';
+                        if ($ev instanceof EvidenceLink) {
+                            $doc = $ev->documentVersion?->document;
+                            $t = $doc?->document_type ?: 'other';
+                            $s = strtolower($ev->status ?? '') === 'completed' ? 'Completed' : 'Draft';
+                        } else {
+                            $t = $ev->evidence_type ?: 'other';
+                            $s = in_array(strtolower($ev->status ?? ''), ['completed', 'audited'], true) ? 'Completed' : 'Draft';
+                        }
+
                         if (isset($byType[$t])) {
                             $byType[$t]++;
                         } else {
                             $byType['other']++;
                         }
 
-                        $s = $ev->status ?: 'Draft';
                         if (isset($byStatus[$s])) {
                             $byStatus[$s]++;
                         } else {

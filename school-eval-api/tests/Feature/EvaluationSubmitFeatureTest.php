@@ -4,15 +4,16 @@ namespace Tests\Feature;
 
 use App\Events\EvaluationSubmitted;
 use App\Models\Attachment;
+use App\Models\DocumentVersion;
 use App\Models\Evaluation;
 use App\Models\EvaluationCycle;
 use App\Models\EvaluationResult;
-use App\Models\Evidence;
-use App\Models\EvidenceVersion;
+use App\Models\EvidenceLink;
 use App\Models\Indicator;
 use App\Models\IndicatorEvidenceRequirement;
 use App\Models\IndicatorScoreDescriptor;
 use App\Models\School;
+use App\Models\SchoolDocument;
 use App\Models\StandardVersion;
 use App\Models\User;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
@@ -133,6 +134,8 @@ class EvaluationSubmitFeatureTest extends TestCase
             ->get()
             ->groupBy('indicator_id');
 
+        EvidenceLink::where('evaluation_id', $this->evaluationBelqees->evaluation_id)->delete();
+
         foreach ($requirements as $indicatorId => $reqList) {
             if ($exceptIndicatorId && (int) $indicatorId === (int) $exceptIndicatorId) {
                 continue;
@@ -143,27 +146,34 @@ class EvaluationSubmitFeatureTest extends TestCase
                 ->first();
 
             if ($result) {
-                // حذف الشواهد السابقة للمؤشر لتجنب التكرار
-                $existingEvidences = Evidence::where('result_id', $result->result_id)->get();
-                foreach ($existingEvidences as $oldEv) {
-                    EvidenceVersion::where('evidence_id', $oldEv->evidence_id)->delete();
-                    $oldEv->delete();
-                }
-
                 foreach ($reqList as $req) {
-                    $evidence = Evidence::create([
-                        'result_id'     => $result->result_id,
-                        'indicator_id'  => $indicatorId,
-                        'title'         => 'شاهد معتمد للمتطلب ' . $req->requirement_id,
-                        'description'   => 'وصف الشاهد المعتمد للتحقق',
-                        'justification' => 'مبررات ودلالات الشاهد',
-                        'status'        => 'Completed',
+                    $doc = SchoolDocument::create([
+                        'school_id'          => $this->schoolBelqees->school_id,
+                        'title'              => 'شاهد معتمد للمتطلب ' . $req->requirement_id,
+                        'description'        => 'وصف الشاهد المعتمد للتحقق',
+                        'document_type'      => 'other',
+                        'created_by_user_id' => $this->evaluatorBelqees->user_id,
                     ]);
 
-                    EvidenceVersion::create([
-                        'evidence_id' => $evidence->evidence_id,
-                        'version_no'  => 1,
-                        'current'     => true,
+                    $version = DocumentVersion::create([
+                        'school_id'          => $this->schoolBelqees->school_id,
+                        'school_document_id' => $doc->id,
+                        'version_no'         => 1,
+                        'is_current'         => true,
+                        'file_name'          => 'doc_' . $req->requirement_id . '.pdf',
+                        'storage_uri'        => 'school_documents/' . $this->schoolBelqees->school_id . '/doc_' . $req->requirement_id . '.pdf',
+                        'file_size'          => 1024,
+                        'mime_type'          => 'application/pdf',
+                    ]);
+
+                    EvidenceLink::create([
+                        'school_id'            => $this->schoolBelqees->school_id,
+                        'evaluation_id'        => $this->evaluationBelqees->evaluation_id,
+                        'evaluation_result_id' => $result->result_id,
+                        'indicator_id'         => $indicatorId,
+                        'document_version_id'  => $version->id,
+                        'justification'        => 'مبررات ودلالات الشاهد',
+                        'status'               => 'completed',
                     ]);
                 }
             }
@@ -262,8 +272,8 @@ class EvaluationSubmitFeatureTest extends TestCase
     }
 
     /**
-     * 5. نجاح إغلاق وتقديم التقييم عند استيفاء كافة المؤشرات والحد الأدنى من الشواهد (200 OK)
-     * وإطلاق حدث EvaluationSubmitted وتحديث الحالة إلى Completed.
+     * 5. نجاح تسليم ملف التقييم عند استيفاء كافة المؤشرات والحد الأدنى من الشواهد (200 OK)
+     * وإطلاق حدث EvaluationSubmitted وتحديث الحالة إلى Submitted وإنشاء التقرير ومحاولة التسليم الأولى.
      */
     public function test_submit_succeeds_when_all_requirements_met(): void
     {
@@ -280,15 +290,28 @@ class EvaluationSubmitFeatureTest extends TestCase
         $response = $this->postJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/submit");
 
         $response->assertStatus(200)
-            ->assertJsonPath('message', 'تم إغلاق التقييم الذاتي واعتماده بنجاح وقفل العمليات التعديلية (BR-SCH-03).')
-            ->assertJsonPath('data.status', 'Completed')
+            ->assertJsonPath('message', 'تم تسليم ملف التقييم الذاتي بنجاح والانتقال إلى مرحلة المراجعة الإشرافية (Submitted) وقفل العمليات التعديلية (BR-SCH-03).')
+            ->assertJsonPath('data.status', 'Submitted')
+            ->assertJsonPath('data.attemptNo', 1)
             ->assertJsonPath('data.isLocked', true)
             ->assertJsonPath('data.evaluationId', $this->evaluationBelqees->evaluation_id)
             ->assertJsonPath('data.schoolId', $this->schoolBelqees->school_id)
             ->assertJsonPath('data.submittedByUser.userId', $this->evaluatorBelqees->user_id);
 
         // التحقق من تحديث حالة السجل في قاعدة البيانات
-        $this->assertEquals('Completed', $this->evaluationBelqees->fresh()->status);
+        $this->assertEquals('Submitted', $this->evaluationBelqees->fresh()->status);
+
+        // التحقق من إنشاء مسودة التقرير وسجل محاولة التسليم برقم 1
+        $this->assertDatabaseHas('reports', [
+            'evaluation_id' => $this->evaluationBelqees->evaluation_id,
+            'status' => 'Draft',
+        ]);
+
+        $this->assertDatabaseHas('evaluation_submissions', [
+            'attempt_no' => 1,
+            'status' => 'Submitted',
+            'submitted_by_user_id' => $this->evaluatorBelqees->user_id,
+        ]);
 
         // التحقق من إطلاق الحدث
         Event::assertDispatched(EvaluationSubmitted::class, function ($event) {
@@ -298,7 +321,7 @@ class EvaluationSubmitFeatureTest extends TestCase
     }
 
     /**
-     * 6. رفض الإغلاق المتكرر لتقييم مكتمل مسبقاً (422).
+     * 6. رفض الإرسال المتكرر لتقييم مسلّم مسبقاً (422).
      */
     public function test_submit_fails_when_already_completed(): void
     {
@@ -308,18 +331,18 @@ class EvaluationSubmitFeatureTest extends TestCase
         $this->scoreAllIndicators(3);
         $this->attachEvidenceToRequiredIndicators();
 
-        // الإغلاق الأول بنجاح
+        // الإرسال الأول بنجاح
         $response1 = $this->postJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/submit");
         $response1->assertStatus(200);
 
-        // محاولة الإغلاق مرة أخرى
+        // محاولة الإرسال مرة أخرى
         $response2 = $this->postJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/submit");
         $response2->assertStatus(422)
-            ->assertJsonPath('message', 'ملف التقييم مكتمل ومقفل مسبقاً ولا يمكن إعادة تقديمه.');
+            ->assertJsonPath('message', 'ملف التقييم مسلّم وبانتظار المراجعة الإشرافية ولا يمكن إعادة تقديمه من هذا المسار.');
     }
 
     /**
-     * 7. بعد الإغلاق: حظر تعديل الدرجات وإرفاق الشواهد بسبب قفل التقييم (BR-SCH-03).
+     * 7. بعد الإرسال: حظر تعديل الدرجات وإرفاق الشواهد بسبب قفل التقييم (BR-SCH-03).
      */
     public function test_modifications_are_locked_after_submission(): void
     {
@@ -328,23 +351,23 @@ class EvaluationSubmitFeatureTest extends TestCase
         $this->scoreAllIndicators(3);
         $this->attachEvidenceToRequiredIndicators();
 
-        // إغلاق التقييم
+        // إرسال التقييم
         $submitResp = $this->postJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/submit");
         $submitResp->assertStatus(200);
 
         $indicator = Indicator::where('status', 'Active')->firstOrFail();
 
-        // محاولة رصد أو تعديل درجة مؤشر بعد الإغلاق -> 422 BR-SCH-03
+        // محاولة رصد أو تعديل درجة مؤشر بعد الإرسال -> 422 BR-SCH-03
         $scoreResp = $this->putJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$indicator->indicator_id}/score", [
             'score' => 2,
         ]);
 
         $scoreResp->assertStatus(422)
-            ->assertJsonPath('message', 'ملف التقييم مكتمل ومقفل نهائياً (BR-SCH-03).');
+            ->assertJsonPath('message', 'ملف التقييم مسلّم وبانتظار المراجعة الوزارية ولا يمكن تعديله (BR-SCH-03).');
     }
 
     /**
-     * 8. بعد الإغلاق: تعمل خدمات الشريحة 4 (حساب النتائج، وتصدير JSON، ولوحة المعلومات) من البداية إلى النهاية.
+     * 8. بعد الإرسال: تعمل خدمات الشريحة 4 (حساب النتائج، وتصدير JSON، ولوحة المعلومات) من البداية إلى النهاية.
      */
     public function test_slice4_reports_work_end_to_end_after_submission(): void
     {
@@ -353,7 +376,7 @@ class EvaluationSubmitFeatureTest extends TestCase
         $this->scoreAllIndicators(3);
         $this->attachEvidenceToRequiredIndicators();
 
-        // إغلاق التقييم
+        // إرسال التقييم
         $submitResp = $this->postJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/submit");
         $submitResp->assertStatus(200);
 
@@ -368,12 +391,12 @@ class EvaluationSubmitFeatureTest extends TestCase
         $exportResp = $this->getJson("/api/v1/schools/{$this->schoolBelqees->school_id}/assessments/{$this->evaluationBelqees->evaluation_id}/export");
         $exportResp->assertStatus(200)
             ->assertJsonPath('message', 'تم تصدير تقرير التقييم بنجاح.')
-            ->assertJsonPath('data.evaluation_context.status', 'Completed');
+            ->assertJsonPath('data.evaluation_context.status', 'Submitted');
 
         // 3. لوحة المعلومات
         $dashboardResp = $this->getJson("/api/v1/schools/{$this->schoolBelqees->school_id}/dashboard");
         $dashboardResp->assertStatus(200)
-            ->assertJsonPath('data.assessment.status', 'Completed');
+            ->assertJsonPath('data.assessment.status', 'Submitted');
     }
 
     /**
@@ -390,7 +413,7 @@ class EvaluationSubmitFeatureTest extends TestCase
         $response = $this->postJson("/api/v1/schools/{$this->schoolBelqees->school_id}/assessments/{$this->evaluationBelqees->evaluation_id}/submit");
 
         $response->assertStatus(200)
-            ->assertJsonPath('data.status', 'Completed')
+            ->assertJsonPath('data.status', 'Submitted')
             ->assertJsonPath('data.isLocked', true);
     }
 }

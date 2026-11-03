@@ -129,13 +129,13 @@ class Indicator extends Model
     }
 
     /**
-     * الشواهد والوثائق المرفوعة لدعم هذا المؤشر.
+     * روابط الشواهد والوثائق المعتمدة لهذا المؤشر (U-24).
      *
      * @return HasMany
      */
-    public function evidences(): HasMany
+    public function evidenceLinks(): HasMany
     {
-        return $this->hasMany(Evidence::class, 'indicator_id', 'indicator_id');
+        return $this->hasMany(EvidenceLink::class, 'indicator_id', 'indicator_id');
     }
 
     /**

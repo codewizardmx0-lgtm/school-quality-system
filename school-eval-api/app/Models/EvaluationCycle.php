@@ -40,6 +40,7 @@ class EvaluationCycle extends Model
      * @var array<int, string>
      */
     protected $fillable = [
+        'name',
         'version_id',
         'academic_year',
         'start_date',
@@ -61,6 +62,23 @@ class EvaluationCycle extends Model
             'created_at' => 'datetime',
             'updated_at' => 'datetime',
         ];
+    }
+
+    /**
+     * خطاف التحقق الحتمي لمنع ربط دورة تقييم بإصدار ليس Approved (مُقرّ).
+     */
+    protected static function booted(): void
+    {
+        static::creating(function (EvaluationCycle $cycle) {
+            if ($cycle->version_id) {
+                $version = StandardVersion::find($cycle->version_id);
+                if (!$version || !$version->isApproved()) {
+                    throw \Illuminate\Validation\ValidationException::withMessages([
+                        'version_id' => ['لا يمكن ربط دورة تقييم بإصدار غير مُقرّ.'],
+                    ]);
+                }
+            }
+        });
     }
 
     /**

@@ -37,6 +37,19 @@ class ApiResponse
     }
 
     /**
+     * استجابة إنشاء مورد بنجاح 201 Created.
+     *
+     * @param mixed $data
+     * @param string|null $message
+     * @param array<string, mixed>|null $meta
+     * @return JsonResponse
+     */
+    public static function created(mixed $data = null, ?string $message = null, ?array $meta = null): JsonResponse
+    {
+        return self::success($data, $message, $meta, 201);
+    }
+
+    /**
      * استجابة خطأ تحقق مدخلات 422 Unprocessable Entity.
      *
      * @param array<string, array<int, string>> $errors

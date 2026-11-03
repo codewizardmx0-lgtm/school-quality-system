@@ -23,6 +23,8 @@ Route::prefix('v1')->group(function () {
     // --------------------------------------------------------------------------
     Route::prefix('auth')->group(function () {
         Route::post('/login', [AuthController::class, 'login'])->name('api.v1.auth.login');
+        Route::post('/password/forgot', [\App\Http\Controllers\Api\V1\PasswordResetController::class, 'forgotPassword'])->name('api.v1.auth.password.forgot');
+        Route::post('/password/reset', [\App\Http\Controllers\Api\V1\PasswordResetController::class, 'resetPassword'])->name('api.v1.auth.password.reset');
     });
 
     // --------------------------------------------------------------------------
@@ -34,7 +36,11 @@ Route::prefix('v1')->group(function () {
         Route::prefix('auth')->group(function () {
             Route::post('/logout', [AuthController::class, 'logout'])->name('api.v1.auth.logout');
             Route::get('/me', [AuthController::class, 'me'])->name('api.v1.auth.me');
+            Route::post('/password/change', [AuthController::class, 'changePassword'])->name('api.v1.auth.password.change');
         });
+
+        // سجل التدقيق للعمليات الحساسة (Audit Logs)
+        Route::get('/audit-logs', [\App\Http\Controllers\Api\V1\AuditLogController::class, 'index'])->name('api.v1.audit-logs.index');
 
         // المدارس مع العزل المؤسسي والتحقق من الصلاحيات (Schools)
         Route::prefix('schools')->group(function () {
@@ -101,42 +107,95 @@ Route::prefix('v1')->group(function () {
             Route::get('/dashboard-stats', [\App\Http\Controllers\Api\V1\AdminController::class, 'dashboardStats'])->name('api.v1.admin.dashboard-stats');
         });
 
-        // الإصدارات المعيارية وشجرة المعايير والمؤشرات (Standard Versions)
+        // الإصدارات المعيارية وإدارة معايير الاعتماد المدرسي (Standard Versions Management - الشريحة 7)
         Route::prefix('standard-versions')->group(function () {
+            Route::get('/', [\App\Http\Controllers\Api\V1\StandardManagementController::class, 'index'])->name('api.v1.standard-versions.index');
+            Route::post('/', [\App\Http\Controllers\Api\V1\StandardManagementController::class, 'store'])->name('api.v1.standard-versions.store');
             Route::get('/{id}', [\App\Http\Controllers\Api\V1\StandardVersionController::class, 'show'])->name('api.v1.standard-versions.show');
+            Route::put('/{id}', [\App\Http\Controllers\Api\V1\StandardManagementController::class, 'update'])->name('api.v1.standard-versions.update');
+            Route::post('/{id}/clone', [\App\Http\Controllers\Api\V1\StandardManagementController::class, 'clone'])->name('api.v1.standard-versions.clone');
+            Route::put('/{id}/weights', [\App\Http\Controllers\Api\V1\StandardManagementController::class, 'updateWeights'])->name('api.v1.standard-versions.weights.update');
+            Route::post('/{id}/approve', [\App\Http\Controllers\Api\V1\StandardManagementController::class, 'approve'])->name('api.v1.standard-versions.approve');
+            Route::post('/{id}/archive', [\App\Http\Controllers\Api\V1\StandardManagementController::class, 'archive'])->name('api.v1.standard-versions.archive');
+            Route::post('/{id}/standards', [\App\Http\Controllers\Api\V1\StandardManagementController::class, 'storeStandard'])->name('api.v1.standard-versions.standards.store');
+        });
+
+        // إدارة نصوص وأوزان المعايير والمجالات والمؤشرات ومتطلبات الشواهد في المسودة (الشريحة 7)
+        Route::prefix('standards')->group(function () {
+            Route::put('/{id}', [\App\Http\Controllers\Api\V1\StandardManagementController::class, 'updateStandard'])->name('api.v1.standards.update');
+            Route::delete('/{id}', [\App\Http\Controllers\Api\V1\StandardManagementController::class, 'deleteStandard'])->name('api.v1.standards.delete');
+            Route::post('/{id}/sub-standards', [\App\Http\Controllers\Api\V1\StandardManagementController::class, 'storeSubStandard'])->name('api.v1.standards.sub-standards.store');
+        });
+
+        Route::prefix('sub-standards')->group(function () {
+            Route::put('/{id}', [\App\Http\Controllers\Api\V1\StandardManagementController::class, 'updateSubStandard'])->name('api.v1.sub-standards.update');
+            Route::delete('/{id}', [\App\Http\Controllers\Api\V1\StandardManagementController::class, 'deleteSubStandard'])->name('api.v1.sub-standards.delete');
+            Route::post('/{id}/indicators', [\App\Http\Controllers\Api\V1\StandardManagementController::class, 'storeIndicator'])->name('api.v1.sub-standards.indicators.store');
+        });
+
+        Route::prefix('indicators')->group(function () {
+            Route::put('/{id}', [\App\Http\Controllers\Api\V1\StandardManagementController::class, 'updateIndicator'])->name('api.v1.indicators.update');
+            Route::delete('/{id}', [\App\Http\Controllers\Api\V1\StandardManagementController::class, 'deleteIndicator'])->name('api.v1.indicators.delete');
+            Route::put('/{id}/descriptors', [\App\Http\Controllers\Api\V1\StandardManagementController::class, 'updateIndicatorDescriptors'])->name('api.v1.indicators.descriptors.update');
+            Route::post('/{id}/requirements', [\App\Http\Controllers\Api\V1\StandardManagementController::class, 'storeRequirement'])->name('api.v1.indicators.requirements.store');
+            Route::put('/{indicatorId}/requirements/{requirementId}', [\App\Http\Controllers\Api\V1\StandardManagementController::class, 'updateRequirement'])->name('api.v1.indicators.requirements.update');
+            Route::delete('/{indicatorId}/requirements/{requirementId}', [\App\Http\Controllers\Api\V1\StandardManagementController::class, 'deleteRequirement'])->name('api.v1.indicators.requirements.delete');
+        });
+
+        // إدارة دورات التقييم المركزية وتسجيل مشاركة المدارس (Evaluation Cycles - الشريحة 10)
+        Route::prefix('evaluation-cycles')->group(function () {
+            Route::get('/', [\App\Http\Controllers\Api\V1\EvaluationCycleController::class, 'index'])->name('api.v1.evaluation-cycles.index');
+            Route::post('/', [\App\Http\Controllers\Api\V1\EvaluationCycleController::class, 'store'])->name('api.v1.evaluation-cycles.store');
+            Route::get('/{id}', [\App\Http\Controllers\Api\V1\EvaluationCycleController::class, 'show'])->name('api.v1.evaluation-cycles.show');
+            Route::patch('/{id}', [\App\Http\Controllers\Api\V1\EvaluationCycleController::class, 'update'])->name('api.v1.evaluation-cycles.update');
+            Route::post('/{id}/participations', [\App\Http\Controllers\Api\V1\EvaluationCycleController::class, 'enrollSchools'])->name('api.v1.evaluation-cycles.participations.store');
         });
 
         // عمليات التقييم المدرسي مع العزل المؤسسي ورصد الدرجات (Evaluations)
         Route::prefix('evaluations')->group(function () {
             Route::get('/', [\App\Http\Controllers\Api\V1\EvaluationController::class, 'index'])->name('api.v1.evaluations.index');
+            Route::post('/', [\App\Http\Controllers\Api\V1\EvaluationController::class, 'store'])->name('api.v1.evaluations.store');
             Route::get('/{id}', [\App\Http\Controllers\Api\V1\EvaluationController::class, 'show'])->name('api.v1.evaluations.show');
             Route::get('/{id}/standards-tree', [\App\Http\Controllers\Api\V1\EvaluationController::class, 'standardsTree'])->name('api.v1.evaluations.standards-tree');
             Route::get('/{id}/improvement-suggestions', [\App\Http\Controllers\Api\V1\ImprovementSuggestionController::class, 'index'])->name('api.v1.evaluations.improvement-suggestions');
             Route::put('/{evaluationId}/indicators/{indicatorId}/score', [\App\Http\Controllers\Api\V1\EvaluationController::class, 'scoreIndicator'])->name('api.v1.evaluations.indicators.score');
             Route::post('/{id}/submit', [\App\Http\Controllers\Api\V1\EvaluationController::class, 'submit'])->name('api.v1.evaluations.submit');
+            Route::post('/{id}/close', [\App\Http\Controllers\Api\V1\EvaluationController::class, 'directClose'])->name('api.v1.evaluations.close');
+            Route::get('/{id}/completion-requests', [\App\Http\Controllers\Api\V1\CompletionRequestController::class, 'index'])->name('api.v1.evaluations.completion-requests.index');
+            Route::post('/{id}/completion-requests', [\App\Http\Controllers\Api\V1\CompletionRequestController::class, 'store'])->name('api.v1.evaluations.completion-requests.store');
             Route::post('/{id}/dev-reset', [\App\Http\Controllers\Api\V1\EvaluationController::class, 'devReset'])->name('api.v1.evaluations.dev-reset');
             Route::get('/{id}/indicators-context', [\App\Http\Controllers\Api\V1\EvaluationController::class, 'indicatorsContext'])->name('api.v1.evaluations.indicators-context');
             Route::get('/{id}/evidence-inventory', [\App\Http\Controllers\Api\V1\EvidenceController::class, 'inventory'])->name('api.v1.evaluations.evidence-inventory');
-            Route::get('/{id}/indicators/{indicatorId}/evidences', [\App\Http\Controllers\Api\V1\EvidenceController::class, 'indexByIndicator'])->name('api.v1.evaluations.indicators.evidences.index');
-            Route::post('/{id}/indicators/{indicatorId}/evidences', [\App\Http\Controllers\Api\V1\EvidenceController::class, 'storeByIndicator'])->name('api.v1.evaluations.indicators.evidences.store');
+            Route::get('/{id}/export-pdf', [\App\Http\Controllers\Api\V1\EvaluationController::class, 'exportPdf'])->name('api.v1.evaluations.export-pdf');
+            Route::get('/{id}/export-excel', [\App\Http\Controllers\Api\V1\EvaluationController::class, 'exportExcel'])->name('api.v1.evaluations.export-excel');
+            Route::get('/{id}/trend', [\App\Http\Controllers\Api\V1\EvaluationController::class, 'trend'])->name('api.v1.evaluations.trend');
+            Route::get('/{id}/action-recommendations', [\App\Http\Controllers\Api\V1\EvaluationController::class, 'actionRecommendations'])->name('api.v1.evaluations.action-recommendations');
         });
 
-        // نتائج التقييم: الملاحظات وإدارة الشواهد (Evaluation Results)
+        // نتائج التقييم: الملاحظات (Evaluation Results)
         Route::prefix('evaluation-results')->group(function () {
             Route::post('/{id}/notes', [\App\Http\Controllers\Api\V1\EvaluationController::class, 'addNote'])->name('api.v1.evaluation-results.notes.store');
-            Route::get('/{id}/evidences', [\App\Http\Controllers\Api\V1\EvidenceController::class, 'indexByResult'])->name('api.v1.evaluation-results.evidences.index');
-            Route::post('/{id}/evidences', [\App\Http\Controllers\Api\V1\EvidenceController::class, 'store'])->name('api.v1.evaluation-results.evidences.store');
         });
 
-        // الشواهد: التنظيم والتصنيف والربط والنسخ التاريخية والمرفقات (Evidence Organization & Versions)
-        Route::prefix('evidences')->group(function () {
-            Route::patch('/{id}/classify', [\App\Http\Controllers\Api\V1\EvidenceController::class, 'classify'])->name('api.v1.evidences.classify');
-            Route::match(['post', 'patch'], '/{id}/link-indicator', [\App\Http\Controllers\Api\V1\EvidenceController::class, 'linkIndicator'])->name('api.v1.evidences.link-indicator');
-            Route::patch('/{id}/status', [\App\Http\Controllers\Api\V1\EvidenceController::class, 'updateStatus'])->name('api.v1.evidences.status.update');
-            Route::match(['post', 'patch'], '/{id}/review-notes', [\App\Http\Controllers\Api\V1\EvidenceController::class, 'addReviewNote'])->name('api.v1.evidences.review-notes.store');
-            Route::post('/{id}/versions', [\App\Http\Controllers\Api\V1\EvidenceController::class, 'addVersion'])->name('api.v1.evidences.versions.store');
-            Route::get('/{id}/versions/{versionId}/download', [\App\Http\Controllers\Api\V1\EvidenceController::class, 'downloadVersion'])->name('api.v1.evidences.versions.download');
+        // إدارة طلبات الاستكمال والمهل وسجل محاولات التسليم (U-03, U-11, U-29)
+        Route::prefix('completion-requests')->group(function () {
+            Route::get('/{id}', [\App\Http\Controllers\Api\V1\CompletionRequestController::class, 'show'])->name('api.v1.completion-requests.show');
+            Route::patch('/{id}/deadline', [\App\Http\Controllers\Api\V1\CompletionRequestController::class, 'extendDeadline'])->name('api.v1.completion-requests.deadline');
+            Route::post('/{id}/resubmit', [\App\Http\Controllers\Api\V1\CompletionRequestController::class, 'resubmit'])->name('api.v1.completion-requests.resubmit');
+            Route::post('/{id}/close', [\App\Http\Controllers\Api\V1\CompletionRequestController::class, 'close'])->name('api.v1.completion-requests.close');
         });
+
+        // معمارية الشواهد النظيفة ثلاثية المستويات (U-24 Step 2: Clean Evidence Architecture)
+        Route::get('/schools/{schoolId}/documents', [\App\Http\Controllers\Api\V1\EvidenceController::class, 'schoolDocuments'])->name('api.v1.schools.documents.index');
+
+        Route::prefix('evaluations/{id}/indicators/{indicatorId}/evidence-links')->group(function () {
+            Route::get('/', [\App\Http\Controllers\Api\V1\EvidenceController::class, 'indexEvidenceLinks'])->name('api.v1.evaluations.indicators.evidence-links.index');
+            Route::post('/', [\App\Http\Controllers\Api\V1\EvidenceController::class, 'linkExistingDocument'])->name('api.v1.evaluations.indicators.evidence-links.store');
+            Route::post('/upload', [\App\Http\Controllers\Api\V1\EvidenceController::class, 'uploadAndLinkDocument'])->name('api.v1.evaluations.indicators.evidence-links.upload');
+        });
+
+        Route::delete('/evidence-links/{linkId}', [\App\Http\Controllers\Api\V1\EvidenceController::class, 'unlinkEvidence'])->name('api.v1.evidence-links.destroy');
+        Route::get('/document-versions/{versionId}/download', [\App\Http\Controllers\Api\V1\EvidenceController::class, 'downloadDocumentVersion'])->name('api.v1.document-versions.download');
 
         // مجالات التحسين المستخلصة من نتائج التقييم (Improvement Areas)
         Route::prefix('improvement-areas')->group(function () {
@@ -145,15 +204,27 @@ Route::prefix('v1')->group(function () {
             Route::patch('/{id}', [\App\Http\Controllers\Api\V1\ImprovementAreaController::class, 'update'])->name('api.v1.improvement-areas.update');
         });
 
-        // خطط التحسين المدرسي وإجراءاتها وملاحظات المراجعة (Improvement Plans, Actions, Review Notes)
+        // خطط التحسين المدرسي والتطوير المهني وإجراءاتها وملاحظات المراجعة (الشريحة 3 والشريحة 8)
         Route::prefix('improvement-plans')->group(function () {
+            Route::get('/action-catalog', [\App\Http\Controllers\Api\V1\ImprovementPlanController::class, 'actionCatalog'])->name('api.v1.improvement-plans.action-catalog');
             Route::get('/', [\App\Http\Controllers\Api\V1\ImprovementPlanController::class, 'index'])->name('api.v1.improvement-plans.index');
             Route::post('/', [\App\Http\Controllers\Api\V1\ImprovementPlanController::class, 'store'])->name('api.v1.improvement-plans.store');
             Route::get('/{id}', [\App\Http\Controllers\Api\V1\ImprovementPlanController::class, 'show'])->name('api.v1.improvement-plans.show');
             Route::patch('/{id}', [\App\Http\Controllers\Api\V1\ImprovementPlanController::class, 'update'])->name('api.v1.improvement-plans.update');
             Route::post('/{id}/actions', [\App\Http\Controllers\Api\V1\ImprovementPlanController::class, 'storeAction'])->name('api.v1.improvement-plans.actions.store');
             Route::patch('/{id}/actions/{actionId}', [\App\Http\Controllers\Api\V1\ImprovementPlanController::class, 'updateAction'])->name('api.v1.improvement-plans.actions.update');
+            Route::delete('/{id}/actions/{actionId}', [\App\Http\Controllers\Api\V1\ImprovementPlanController::class, 'deleteAction'])->name('api.v1.improvement-plans.actions.delete');
+            Route::post('/{id}/actions/{actionId}/evidences', [\App\Http\Controllers\Api\V1\ImprovementPlanController::class, 'attachActionEvidence'])->name('api.v1.improvement-plans.actions.evidences.store');
+            Route::delete('/{id}/actions/{actionId}/evidences/{evidenceLinkId}', [\App\Http\Controllers\Api\V1\ImprovementPlanController::class, 'detachActionEvidence'])->name('api.v1.improvement-plans.actions.evidences.delete');
             Route::post('/{id}/review-notes', [\App\Http\Controllers\Api\V1\ImprovementPlanController::class, 'storeReviewNote'])->name('api.v1.improvement-plans.review-notes.store');
+        });
+
+        // سجل الإشعارات الدائم والتنبيهات النظامية (Notifications - الشريحة 10)
+        Route::prefix('notifications')->group(function () {
+            Route::get('/', [\App\Http\Controllers\Api\V1\NotificationController::class, 'index'])->name('api.v1.notifications.index');
+            Route::get('/unread-count', [\App\Http\Controllers\Api\V1\NotificationController::class, 'unreadCount'])->name('api.v1.notifications.unread-count');
+            Route::patch('/{id}/read', [\App\Http\Controllers\Api\V1\NotificationController::class, 'markAsRead'])->name('api.v1.notifications.mark-as-read');
+            Route::post('/mark-all-read', [\App\Http\Controllers\Api\V1\NotificationController::class, 'markAllAsRead'])->name('api.v1.notifications.mark-all-read');
         });
 
         // --------------------------------------------------------------------------
@@ -172,10 +243,6 @@ Route::prefix('v1')->group(function () {
                 ->name('api.v1.schools.assessments.evidence-summary');
             Route::get('/assessments/{assessment}/evidence-inventory', [\App\Http\Controllers\Api\V1\EvidenceController::class, 'inventory'])
                 ->name('api.v1.schools.assessments.evidence-inventory');
-            Route::get('/assessments/{assessment}/indicators/{indicatorId}/evidences', [\App\Http\Controllers\Api\V1\EvidenceController::class, 'indexByIndicator'])
-                ->name('api.v1.schools.assessments.indicators.evidences.index');
-            Route::post('/assessments/{assessment}/indicators/{indicatorId}/evidences', [\App\Http\Controllers\Api\V1\EvidenceController::class, 'storeByIndicator'])
-                ->name('api.v1.schools.assessments.indicators.evidences.store');
             Route::get('/assessments/{assessment}/indicators-context', [\App\Http\Controllers\Api\V1\EvaluationController::class, 'indicatorsContextBySchool'])
                 ->name('api.v1.schools.assessments.indicators-context');
             Route::get('/assessments/{assessment}/export', [\App\Http\Controllers\Api\V1\ReportsAnalyticsController::class, 'exportAssessment'])
@@ -195,8 +262,6 @@ Route::middleware(['auth:sanctum', 'session.timeout'])->group(function () {
         Route::get('/assessments/{assessment}/standards/{standard}/results', [\App\Http\Controllers\Api\V1\ReportsAnalyticsController::class, 'standardResults'])->name('api.schools.assessments.standards.results');
         Route::get('/assessments/{assessment}/evidence-summary', [\App\Http\Controllers\Api\V1\ReportsAnalyticsController::class, 'evidenceSummary'])->name('api.schools.assessments.evidence-summary');
         Route::get('/assessments/{assessment}/evidence-inventory', [\App\Http\Controllers\Api\V1\EvidenceController::class, 'inventory'])->name('api.schools.assessments.evidence-inventory');
-        Route::get('/assessments/{assessment}/indicators/{indicatorId}/evidences', [\App\Http\Controllers\Api\V1\EvidenceController::class, 'indexByIndicator'])->name('api.schools.assessments.indicators.evidences.index');
-        Route::post('/assessments/{assessment}/indicators/{indicatorId}/evidences', [\App\Http\Controllers\Api\V1\EvidenceController::class, 'storeByIndicator'])->name('api.schools.assessments.indicators.evidences.store');
         Route::get('/assessments/{assessment}/indicators-context', [\App\Http\Controllers\Api\V1\EvaluationController::class, 'indicatorsContextBySchool'])->name('api.schools.assessments.indicators-context');
         Route::get('/assessments/{assessment}/export', [\App\Http\Controllers\Api\V1\ReportsAnalyticsController::class, 'exportAssessment'])->name('api.schools.assessments.export');
         Route::post('/assessments/{assessment}/submit', [\App\Http\Controllers\Api\V1\EvaluationController::class, 'submitBySchool'])->name('api.schools.assessments.submit');

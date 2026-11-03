@@ -135,7 +135,7 @@ class StandardsAndSeedersIntegrityTest extends TestCase
 
             foreach ($standard->subStandards as $subStandard) {
                 $subIndicatorsSum = round($subStandard->indicators->sum('weight'), 2);
-                $expectedSubWeight = round((float) $subStandard->indicators()->first()?->subStandard?->sub_standard_id ? 
+                $expectedSubWeight = round((float) $subStandard->indicators()->first()?->subStandard?->sub_standard_id ?
                     // نقارن بمجموع المؤشرات مع وزن المعيار الفرعي المجدول
                     $subStandard->indicators->sum('weight') : 0, 2);
 
@@ -424,7 +424,7 @@ class StandardsAndSeedersIntegrityTest extends TestCase
             'sub_standards'                  => SubStandard::count(),
             'indicators'                     => Indicator::count(),
             'indicator_score_descriptors'    => IndicatorScoreDescriptor::count(),
-            'indicator_evidence_requirements'=> IndicatorEvidenceRequirement::count(),
+            'indicator_evidence_requirements' => IndicatorEvidenceRequirement::count(),
             'indicator_verification_methods' => IndicatorVerificationMethod::count(),
             'verification_tools'             => VerificationTool::count(),
             'score_levels'                   => ScoreLevel::count(),
@@ -450,7 +450,7 @@ class StandardsAndSeedersIntegrityTest extends TestCase
                 'sub_standards'                  => SubStandard::class,
                 'indicators'                     => Indicator::class,
                 'indicator_score_descriptors'    => IndicatorScoreDescriptor::class,
-                'indicator_evidence_requirements'=> IndicatorEvidenceRequirement::class,
+                'indicator_evidence_requirements' => IndicatorEvidenceRequirement::class,
                 'indicator_verification_methods' => IndicatorVerificationMethod::class,
                 'verification_tools'             => VerificationTool::class,
                 'score_levels'                   => ScoreLevel::class,

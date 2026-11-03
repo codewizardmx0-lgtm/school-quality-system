@@ -5,6 +5,9 @@
  */
 
 const App = {
+  get apiBaseUrl() {
+    return this.state.apiUrl;
+  },
   state: {
     apiUrl: 'http://127.0.0.1:8000/api/v1',
     token: localStorage.getItem('eval_token') || null,
@@ -93,7 +96,15 @@ const App = {
   // ---------------------------------------------------------------------------
   // 2. طلبات الشبكة (HTTP Requests Helper with Unified Error Handling & Spinner)
   // ---------------------------------------------------------------------------
-  async request(endpoint, options = {}) {
+  async request(endpoint, options = {}, bodyPayload = null) {
+    // دعم الاستدعاء بالصيغة المختصرة: request('/path', 'POST', body)
+    if (typeof options === 'string') {
+      options = {
+        method: options.toUpperCase(),
+        body: bodyPayload
+      };
+    }
+
     const url = `${this.state.apiUrl}${endpoint.startsWith('/') ? '' : '/'}${endpoint}`;
     const headers = options.headers || {};
 
@@ -314,8 +325,14 @@ const App = {
   },
 
   async ensureCurrentEvaluation() {
+    // التحقق من صلاحية التقييم المخزن وتطابقه مع مدرسة المستخدم الحالي (منع تداخل الجلسات والعزل المؤسسي)
     if (this.state.currentEvaluation && (this.state.currentEvaluation.evaluationId || this.state.currentEvaluation.evaluation_id)) {
-      return this.state.currentEvaluation;
+      const evalSchoolId = this.state.currentEvaluation.schoolId || this.state.currentEvaluation.school?.schoolId;
+      const userSchoolId = this.state.user?.schoolId || this.state.user?.school?.schoolId;
+      if (!userSchoolId || !evalSchoolId || String(evalSchoolId) === String(userSchoolId)) {
+        return this.state.currentEvaluation;
+      }
+      this.state.currentEvaluation = null;
     }
 
     if (this.state.user && this.state.user.userType !== 'system' && this.hasPermission('evaluations.view')) {
@@ -333,14 +350,20 @@ const App = {
 
   updateUserNav() {
     const badge = document.getElementById('user-badge');
+    const bellBtn = document.getElementById('btn-notifications-bell');
     if (!badge) return;
 
     if (!this.state.user) {
       badge.classList.add('hidden');
+      if (bellBtn) bellBtn.classList.add('hidden');
       return;
     }
 
     badge.classList.remove('hidden');
+    if (bellBtn) {
+      bellBtn.classList.remove('hidden');
+      this.loadNotificationsCount();
+    }
     document.getElementById('user-name').textContent = this.state.user.fullName || this.state.user.username;
     document.getElementById('user-school').textContent = this.state.user.school?.schoolName || (this.state.user.ministry?.ministryName || 'إدارة النظام');
 
@@ -387,7 +410,6 @@ const App = {
         { id: 'admin-schools', label: '🏫 إدارة المدارس', screen: 'admin', tab: 'schools' },
         { id: 'admin-users', label: '👥 إدارة الحسابات', screen: 'admin', tab: 'users' },
         { id: 'admin-roles', label: '🛡️ الأدوار والصلاحيات', screen: 'admin', tab: 'roles' },
-        { id: 'admin-cycles', label: '📋 ملفات التقييم', screen: 'cycles' },
         { id: 'admin-standards', label: '📖 معايير الاعتماد المدرسي', screen: 'standards-review' },
       ];
     } else if (this.hasRole('school_principal')) {
@@ -401,8 +423,8 @@ const App = {
       ];
     } else if (this.hasRole('school_evaluator')) {
       items = [
+        { id: 'eval-cycles', label: '📋 دورات وملفات التقييم', screen: 'cycles' },
         { id: 'eval-tree', label: '📝 استمارة التقييم الذاتي', screen: 'standards-tree' },
-        { id: 'eval-cycles', label: '📋 ملفات التقييم', screen: 'cycles' },
         { id: 'eval-results', label: '🎯 نتائج الرصد', screen: 'assessment-results' },
         { id: 'eval-evinv', label: '📑 جرد وحصر الشواهد', screen: 'evidence-inventory' },
         { id: 'eval-sugg', label: '💡 مجالات واقتراحات التحسين', screen: 'suggestions' },
@@ -411,14 +433,14 @@ const App = {
       ];
     } else if (this.hasRole('ministry_supervisor')) {
       items = [
-        { id: 'sup-hub', label: '👁️ المتابعة الإشرافية', screen: 'supervision' },
+        { id: 'sup-hub', label: '👁️ المتابعة الإشرافية وإدارة الدورات', screen: 'supervision' },
         { id: 'sup-cycles', label: '📋 استعراض تقييمات المدارس', screen: 'cycles' },
         { id: 'sup-std', label: '📖 معايير الاعتماد المدرسي', screen: 'standards-review' },
       ];
     } else if (this.hasRole('ministry_standards_manager')) {
       items = [
-        { id: 'std-hub', label: '📑 مركز معايير الاعتماد المدرسي', screen: 'standards-manager' },
-        { id: 'std-review', label: '📖 دليل المعايير والمؤشرات', screen: 'standards-review' },
+        { id: 'std-hub', label: '📑 لوحة إدارة الإصدارات', screen: 'standards-manager' },
+        { id: 'std-review', label: '📖 محرر ومصفوفة المعايير', screen: 'standards-review' },
       ];
     } else {
       items = [
@@ -537,6 +559,9 @@ const App = {
 
     this.state.token = res.data.token;
     this.state.user = res.data.user;
+    this.state.currentEvaluation = null;
+    this.state.currentPlan = null;
+    this.state.evaluations = [];
     localStorage.setItem('eval_token', this.state.token);
     localStorage.setItem('eval_user', JSON.stringify(this.state.user));
 
@@ -593,20 +618,48 @@ const App = {
   // ---------------------------------------------------------------------------
   // 5. الشاشة 2: لوحة الدورات والتقييمات (Screen 2: Cycles & Evaluations)
   // ---------------------------------------------------------------------------
+  // الشاشة 2: استعراض التقييمات والدورات (مع إمكانية بدء تقييم جديد G-26)
+  // ---------------------------------------------------------------------------
   async loadEvaluations() {
     const tbody = document.getElementById('evaluations-table-body');
+    const ctaContainer = document.getElementById('active-cycle-cta-container');
     if (!tbody) return;
-    tbody.innerHTML = '<tr><td colspan="6" style="text-align: center;">جارِ جلب التقييمات...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align: center;">جارِ جلب التقييمات والدورات...</td></tr>';
 
-    const res = await this.request('/evaluations');
-    if (!res.ok) {
-      tbody.innerHTML = `<tr><td colspan="6" style="color: red; text-align: center;">${res.message}</td></tr>`;
+    const [evalsRes, cyclesRes] = await Promise.all([
+      this.request('/evaluations'),
+      this.request('/evaluation-cycles')
+    ]);
+
+    // معالجة بطاقة الحث على بدء تقييم جديد لمدرستك (G-26)
+    if (ctaContainer) {
+      ctaContainer.innerHTML = '';
+      if (cyclesRes.ok && Array.isArray(cyclesRes.data)) {
+        const startableCycle = cyclesRes.data.find(c => c.schoolContext?.canStartEvaluation);
+        if (startableCycle && this.hasRole('school_evaluator')) {
+          ctaContainer.innerHTML = `
+            <div class="cta-start-evaluation-card">
+              <div>
+                <h4>🌱 دورة تقييمية نشطة متاحة لمدرستك: ${startableCycle.name} (${startableCycle.academicYear})</h4>
+                <p>مدرستك مسجلة رسمياً بالدورة، ويمكنك الآن فتح ملف التقييم الذاتي وبدء رصد درجات المؤشرات ورفع الشواهد.</p>
+              </div>
+              <button class="btn btn-primary" style="background: #059669; border-color: #047857; font-size: 0.95rem; font-weight: 700;" onclick="App.startNewEvaluation(${startableCycle.cycleId})">
+                🌱 بدء ملف تقييم ذاتي جديد
+              </button>
+            </div>
+          `;
+        }
+      }
+    }
+
+    if (!evalsRes.ok) {
+      tbody.innerHTML = `<tr><td colspan="6" style="color: red; text-align: center;">${evalsRes.message}</td></tr>`;
       return;
     }
 
-    this.state.evaluations = res.data || [];
+    this.state.evaluations = evalsRes.data || [];
     if (this.state.evaluations.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="6" style="text-align: center;">لا توجد تقييمات مسجلة لهذه المدرسة.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align: center;">لا توجد تقييمات سابقة مسجلة لهذه المدرسة. استخدم زر بدء التقييم أعلاه لبدء ملف جديد.</td></tr>';
       return;
     }
 
@@ -642,11 +695,31 @@ const App = {
     `).join('');
   },
 
+  async startNewEvaluation(cycleId) {
+    if (!confirm('هل تريد تأكيد بدء ملف التقييم الذاتي لمدرستك ضمن هذه الدورة التقييمية؟')) return;
+    const res = await this.request('/evaluations', {
+      method: 'POST',
+      body: JSON.stringify({ cycle_id: cycleId })
+    });
+
+    if (!res.ok) {
+      alert(res.message || 'تعذر بدء ملف التقييم الذاتي.');
+      return;
+    }
+
+    alert('تم فتح وبدء ملف التقييم الذاتي للمدرسة بنجاح!');
+    await this.loadEvaluations();
+    if (res.data?.evaluationId) {
+      this.selectEvaluation(res.data.evaluationId);
+    }
+  },
+
   selectEvaluation(evalId) {
-    const ev = this.state.evaluations.find(e => e.evaluationId === evalId);
+    const ev = (this.state.evaluations || []).find(e => (e.evaluationId || e.evaluation_id) == evalId);
     if (!ev) return;
     this.state.currentEvaluation = ev;
     this.navTo('standards-tree');
+    this.loadStandardsTree(evalId);
   },
 
   // ---------------------------------------------------------------------------
@@ -695,6 +768,9 @@ const App = {
     } catch (e) {
       this.state.indicatorsContext = {};
     }
+
+    // مقارنة الأداء مع الدورة السابقة (الشريحة 9)
+    this.loadEvaluationTrend(evalId, 'tree');
 
     // تحديث ترويسة الشجرة والإنجاز الإجمالي من بيانات الـ API (قراءة schoolName و academicYear مباشرة من الاستجابة)
     const schoolName = data.schoolName || this.state.currentEvaluation?.school?.schoolName || this.state.user?.school?.schoolName || 'المدرسة';
@@ -979,6 +1055,14 @@ const App = {
       ctxCard.classList.add('hidden');
     }
 
+    // بطاقة التوصيات من بنك التدخلات للمؤشرات ذات الأداء المتدني (الشريحة 9)
+    const recCard = document.getElementById('indicator-action-recommendations-card');
+    if (currentScore !== null && currentScore <= 1) {
+      this.loadActionRecommendations(currentScore);
+    } else if (recCard) {
+      recCard.classList.add('hidden');
+    }
+
     modal.classList.remove('hidden');
   },
 
@@ -994,6 +1078,14 @@ const App = {
     document.getElementById('selected-score-value').value = scoreVal;
     document.getElementById('selected-descriptor-id').value = descriptorId || '';
     this.clearErrors(['score']);
+
+    // عرض أو إخفاء بطاقة التوصيات من بنك التدخلات بناءً على الدرجة (الشريحة 9)
+    if (scoreVal <= 1) {
+      this.loadActionRecommendations(scoreVal);
+    } else {
+      const recCard = document.getElementById('indicator-action-recommendations-card');
+      if (recCard) recCard.classList.add('hidden');
+    }
   },
 
   closeScoringModal() {
@@ -2088,12 +2180,36 @@ const App = {
   },
 
   // ---------------------------------------------------------------------------
-  // 10. الشاشة 7: خطط التحسين المدرسي (Screen 7: Plans)
+  // 10. خطط التحسين المدرسي والتطوير المهني ومتابعة التنفيذ (الشريحة 8)
   // ---------------------------------------------------------------------------
+  filterPlansByType(type) {
+    this.state.plansFilterType = type;
+
+    // تحديث حالة أزرار التبويبات
+    const tabs = [
+      { id: 'btn-filter-plan-all', val: '' },
+      { id: 'btn-filter-plan-quality', val: 'QualityImprovement' },
+      { id: 'btn-filter-plan-staff', val: 'StaffProfessionalDevelopment' },
+      { id: 'btn-filter-plan-operational', val: 'AnnualOperational' },
+    ];
+    tabs.forEach(t => {
+      const btn = document.getElementById(t.id);
+      if (btn) {
+        if (t.val === type) {
+          btn.className = 'btn btn-sm btn-primary';
+        } else {
+          btn.className = 'btn btn-sm btn-outline-primary';
+        }
+      }
+    });
+
+    this.loadPlans();
+  },
+
   async loadPlans() {
     const tbody = document.getElementById('plans-table-body');
     if (!tbody) return;
-    tbody.innerHTML = '<tr><td colspan="10" style="text-align: center;">جارِ جلب الخطط...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="11" style="text-align: center;">جارِ جلب الخطط...</td></tr>';
 
     // ضبط ظهور زر إنشاء الخطة لمن يملك صلاحية plans.manage فقط
     const btnCreatePlan = document.getElementById('btn-show-create-plan');
@@ -2101,40 +2217,64 @@ const App = {
       btnCreatePlan.style.display = this.hasPermission('plans.manage') ? 'inline-flex' : 'none';
     }
 
-    const res = await this.request('/improvement-plans');
+    let url = '/improvement-plans';
+    if (this.state.plansFilterType) {
+      url += `?plan_type=${encodeURIComponent(this.state.plansFilterType)}`;
+    }
+
+    const res = await this.request(url);
     if (!res.ok) {
-      tbody.innerHTML = `<tr><td colspan="10" style="color: red; text-align: center;">${res.message}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="11" style="color: red; text-align: center;">${res.message}</td></tr>`;
       return;
     }
 
     this.state.plans = res.data || [];
     if (this.state.plans.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="10" style="text-align: center;">لا توجد خطط تحسين منشأة لهذه المدرسة بعد.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="11" style="text-align: center; color: var(--text-muted);">لا توجد خطط منشأة مطابقة لهذا التصنيف بعد.</td></tr>';
       return;
     }
 
-    tbody.innerHTML = this.state.plans.map(p => `
-      <tr>
-        <td><strong>#${p.planId}</strong></td>
-        <td>${p.title}</td>
-        <td>${p.academicYear || p.cycleName || '-'}</td>
-        <td style="font-size: 0.8rem;">${p.startDate} إلى ${p.endDate}</td>
-        <td><span class="badge ${p.status === 'Active' ? 'badge-green' : (p.status === 'Draft' ? 'badge-yellow' : 'badge-blue')}">${p.statusLabel || p.status}</span></td>
-        <td><span class="badge badge-gray">${p.overallProgressLabel || p.overallProgress}</span></td>
-        <td><span class="badge badge-gray">${p.areasCount}</span></td>
-        <td><span class="badge badge-gray">${p.totalActions}</span></td>
-        <td>
-          ${p.delayedActions > 0 
-            ? `<span class="badge badge-red">${p.delayedActions} متأخر</span>` 
-            : '<span class="badge badge-green">0</span>'}
-        </td>
-        <td>
-          <button class="btn btn-sm btn-primary" onclick="App.showPlanDetails(${p.planId})">
-            عرض التفاصيل
-          </button>
-        </td>
-      </tr>
-    `).join('');
+    const typeBadges = {
+      'QualityImprovement': '<span class="badge badge-blue">📘 جودة مدرسية</span>',
+      'StaffProfessionalDevelopment': '<span class="badge badge-purple" style="background: #f3e8ff; color: #7e22ce;">🧑‍🏫 تطوير مهني</span>',
+      'AnnualOperational': '<span class="badge badge-green" style="background: #ecfdf5; color: #047857;">📋 خطة تشغيلية</span>',
+    };
+
+    tbody.innerHTML = this.state.plans.map(p => {
+      const progressPct = p.overallProgressPercentage || 0;
+      const pctColor = progressPct === 100 ? '#10b981' : (progressPct > 50 ? '#3b82f6' : '#f59e0b');
+
+      return `
+        <tr>
+          <td><strong>#${p.planId}</strong></td>
+          <td><strong>${p.title}</strong></td>
+          <td>${typeBadges[p.planType] || `<span class="badge badge-gray">${p.planTypeLabel || p.planType}</span>`}</td>
+          <td>${p.academicYear || p.cycleName || '-'}</td>
+          <td style="font-size: 0.8rem;">${p.startDate} إلى ${p.endDate}</td>
+          <td><span class="badge ${p.status === 'Active' ? 'badge-green' : (p.status === 'Draft' ? 'badge-yellow' : 'badge-blue')}">${p.statusLabel || p.status}</span></td>
+          <td>
+            <div style="display: flex; align-items: center; gap: 0.35rem;">
+              <div style="background: #e2e8f0; width: 60px; height: 8px; border-radius: 4px; overflow: hidden;">
+                <div style="background: ${pctColor}; width: ${progressPct}%; height: 100%;"></div>
+              </div>
+              <span style="font-weight: 700; font-size: 0.8rem;">${progressPct}%</span>
+            </div>
+          </td>
+          <td><span class="badge badge-gray">${p.areasCount}</span></td>
+          <td><span class="badge badge-gray">${p.totalActions}</span></td>
+          <td>
+            ${p.delayedActions > 0 
+              ? `<span class="badge badge-red">${p.delayedActions} متأخر</span>` 
+              : '<span class="badge badge-green">0</span>'}
+          </td>
+          <td>
+            <button class="btn btn-sm btn-primary" onclick="App.showPlanDetails(${p.planId})">
+              عرض التفاصيل
+            </button>
+          </td>
+        </tr>
+      `;
+    }).join('');
   },
 
   async toggleCreatePlanForm() {
@@ -2169,6 +2309,7 @@ const App = {
     this.clearErrors(['plan-title', 'plan-start-date', 'plan-end-date', 'plan-areaIds']);
 
     const title = document.getElementById('plan-title').value.trim();
+    const planType = document.getElementById('plan-type-select').value;
     const startDate = document.getElementById('plan-start-date').value;
     const endDate = document.getElementById('plan-end-date').value;
     const cycleId = this.state.currentEvaluation?.cycleId || 1;
@@ -2189,6 +2330,7 @@ const App = {
       body: {
         cycleId,
         title,
+        planType,
         startDate,
         endDate,
         areaIds,
@@ -2206,7 +2348,7 @@ const App = {
       return;
     }
 
-    this.showAlert('تم إنشاء مسودة خطة التحسين بنجاح.', 'success');
+    this.showAlert('تم إنشاء مسودة الخطة بنجاح.', 'success');
     document.getElementById('card-create-plan').classList.add('hidden');
     document.getElementById('form-create-plan').reset();
     this.loadPlans();
@@ -2228,7 +2370,35 @@ const App = {
     const p = res.data;
 
     document.getElementById('plan-det-title').textContent = `خطة: ${p.title}`;
+    
+    // شارة نوع الخطة
+    const typeBadge = document.getElementById('plan-det-type-badge');
+    if (typeBadge) {
+      typeBadge.textContent = p.planTypeLabel || p.planType || 'خطة تحسين';
+      if (p.planType === 'StaffProfessionalDevelopment') {
+        typeBadge.className = 'badge badge-purple';
+        typeBadge.style.background = '#f3e8ff';
+        typeBadge.style.color = '#7e22ce';
+      } else if (p.planType === 'AnnualOperational') {
+        typeBadge.className = 'badge badge-green';
+        typeBadge.style.background = '#ecfdf5';
+        typeBadge.style.color = '#047857';
+      } else {
+        typeBadge.className = 'badge badge-blue';
+      }
+    }
+
     document.getElementById('plan-det-meta').textContent = `العام الدراسي: ${p.academicYear || p.cycleName || '-'} | المدرسة: ${p.schoolName || '-'} | الفترة: من ${p.startDate} إلى ${p.endDate}`;
+
+    // شريط ونسبة التقدم التراكمي الإجمالية
+    const progressPct = p.overallProgressPercentage || 0;
+    const pctEl = document.getElementById('plan-det-progress-percent');
+    const barEl = document.getElementById('plan-det-progress-bar');
+    if (pctEl) pctEl.textContent = `${progressPct}%`;
+    if (barEl) {
+      barEl.style.width = `${progressPct}%`;
+      barEl.style.background = progressPct === 100 ? '#10b981' : (progressPct > 50 ? '#3b82f6' : '#f59e0b');
+    }
 
     // المؤشرات السريعة ونظرة التقدم
     document.getElementById('plan-det-status-badge').textContent = p.statusLabel || p.status;
@@ -2267,21 +2437,31 @@ const App = {
     `).join('');
 
     // الإجراءات
-    this.renderPlanActions(p.actions || []);
+    this.renderPlanActions(p.actions || [], p.status);
 
-    // زر إضافة إجراء تنفيذي لمن يملك plans.manage فقط
+    // زر إضافة إجراء تنفيذي وبنك الإجراءات
     const btnAddAct = document.getElementById('btn-open-add-action');
-    if (btnAddAct) {
-      btnAddAct.style.display = this.hasPermission('plans.manage') ? 'inline-flex' : 'none';
-    }
+    const btnCatalog = document.getElementById('btn-open-catalog-modal');
+    const canManagePlans = this.hasPermission('plans.manage');
+    if (btnAddAct) btnAddAct.style.display = canManagePlans ? 'inline-flex' : 'none';
+    if (btnCatalog) btnCatalog.style.display = canManagePlans ? 'inline-flex' : 'none';
 
-    // ملاحظات المراجعة
-    this.renderReviewNotes(p.reviewNotes || []);
+    // ملاحظات المراجعة المزدوجة (داخلية وخارجية)
+    this.renderReviewNotes(p.internalNotes || [], p.externalNotes || [], p.reviewNotes || []);
 
-    // إخفاء أو إظهار نموذج مراجعة المدير لمن يملك reviews.write فقط
-    const formReview = document.getElementById('principal-review-form-container');
+    // إظهار نموذج الملاحظة لمن يملك reviews.write أو supervision.review
+    const formReview = document.getElementById('review-form-container');
+    const reviewLabel = document.getElementById('review-note-label');
+    const canReview = this.hasPermission('reviews.write') || this.hasPermission('supervision.review');
     if (formReview) {
-      formReview.style.display = this.hasPermission('reviews.write') ? 'block' : 'none';
+      formReview.style.display = canReview ? 'block' : 'none';
+      if (reviewLabel) {
+        if (this.hasRole('ministry_supervisor') || this.hasPermission('supervision.review')) {
+          reviewLabel.textContent = 'تدوين ملاحظة مراجعة خارجية (إشراف وزاري):';
+        } else {
+          reviewLabel.textContent = 'تدوين ملاحظة مراجعة داخلية (مدير المدرسة):';
+        }
+      }
     }
 
     // التمرير للتفاصيل
@@ -2313,19 +2493,27 @@ const App = {
   },
 
   // ---------------------------------------------------------------------------
-  // 11. الشاشة 8: إدارة الإجراءات التنفيذية (Screen 8: Actions)
+  // 11. إدارة الإجراءات التنفيذية ونسب الإنجاز التراكمية (Actions & Completion)
   // ---------------------------------------------------------------------------
-  renderPlanActions(actions) {
+  renderPlanActions(actions, planStatus = 'Draft') {
     const tbody = document.getElementById('plan-det-actions-body');
     if (!tbody) return;
 
     if (!actions || actions.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="10" style="text-align: center; color: var(--text-muted);">لا توجد إجراءات تنفيذية مضافة للخطة بعد.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="11" style="text-align: center; color: var(--text-muted);">لا توجد إجراءات تنفيذية مضافة للخطة بعد.</td></tr>';
       return;
     }
 
     tbody.innerHTML = actions.map(act => {
       const statusCls = act.status === 'Done' ? 'badge-green' : (act.status === 'InProgress' ? 'badge-blue' : (act.status === 'Cancelled' ? 'badge-gray' : 'badge-yellow'));
+      const pct = act.completionPercentage ?? 0;
+      const barColor = pct === 100 ? '#10b981' : (pct > 0 ? '#3b82f6' : '#94a3b8');
+
+      // الشواهد المرتبطة
+      const evidencesHtml = (act.evidences && act.evidences.length > 0)
+        ? act.evidences.map(ev => `<span class="badge badge-green" style="font-size: 0.72rem; display: inline-block; margin: 1px;">📎 ${ev.title}</span>`).join('')
+        : '<span style="font-size: 0.75rem; color: var(--text-muted);">لا توجد شواهد</span>';
+
       return `
         <tr>
           <td><strong>#${act.actionId}</strong></td>
@@ -2334,8 +2522,27 @@ const App = {
           <td>${act.responsiblePersonDescription}</td>
           <td style="font-size: 0.8rem;">${act.startDate}</td>
           <td style="font-size: 0.8rem;">${act.dueDate}</td>
+          <td>
+            <div style="display: flex; align-items: center; gap: 0.35rem;">
+              <div style="background: #e2e8f0; width: 60px; height: 8px; border-radius: 4px; overflow: hidden;">
+                <div style="background: ${barColor}; width: ${pct}%; height: 100%;"></div>
+              </div>
+              <span style="font-weight: 700; font-size: 0.82rem; color: ${barColor};">${pct}%</span>
+            </div>
+          </td>
           <td><span class="badge ${statusCls}">${act.statusLabel || act.status}</span></td>
-          <td><span class="badge badge-gray">${act.progressLabel || act.progress}</span></td>
+          <td>
+            <div style="max-width: 140px;">
+              ${evidencesHtml}
+              ${this.hasPermission('plans.manage') ? `
+                <div style="margin-top: 2px;">
+                  <button class="btn btn-sm btn-outline-primary" style="font-size: 0.7rem; padding: 1px 4px;" onclick="App.openAttachEvidenceModal(${act.actionId}, '${encodeURIComponent(act.title)}')">
+                    + ربط شاهد
+                  </button>
+                </div>
+              ` : ''}
+            </div>
+          </td>
           <td>
             ${act.isDelayed 
               ? '<span class="badge badge-red">⚠️ متأخر</span>' 
@@ -2343,9 +2550,22 @@ const App = {
           </td>
           <td>
             ${this.hasPermission('plans.manage') ? `
-              <button class="btn btn-sm btn-secondary" onclick="App.quickUpdateAction(${act.actionId})">
-                تحديث الحالة
-              </button>
+              <div style="display: flex; gap: 0.25rem; flex-wrap: wrap;">
+                <button class="btn btn-sm btn-secondary" style="font-size: 0.75rem; padding: 2px 6px;" onclick="App.openQuickUpdateProgress(${act.actionId}, ${pct}, '${act.status}', '${encodeURIComponent(act.title)}')">
+                  تحديث الإنجاز %
+                </button>
+                ${planStatus === 'Draft' ? `
+                  <button class="btn btn-sm btn-outline-danger" style="font-size: 0.75rem; padding: 2px 6px;" onclick="App.handleDeleteAction(${act.actionId})">
+                    حذف
+                  </button>
+                ` : `
+                  ${act.status !== 'Cancelled' && act.status !== 'Done' ? `
+                    <button class="btn btn-sm btn-outline-secondary" style="font-size: 0.72rem; padding: 2px 5px;" onclick="App.handleCancelAction(${act.actionId})">
+                      إلغاء
+                    </button>
+                  ` : ''}
+                `}
+              </div>
             ` : '<span style="font-size: 0.75rem; color: var(--text-muted);">عرض فقط</span>'}
           </td>
         </tr>
@@ -2367,6 +2587,12 @@ const App = {
     selectArea.innerHTML = (p.areas || []).map(a => `
       <option value="${a.areaId}">${a.name} [${a.priorityLabel || a.priority}]</option>
     `).join('');
+
+    // ضبط القيم الافتراضية
+    document.getElementById('action-completion-percentage').value = 0;
+    document.getElementById('action-percentage-disp').textContent = '0%';
+    document.getElementById('action-status').value = 'Pending';
+    document.getElementById('action-progress').value = 'NotStarted';
 
     modal.classList.remove('hidden');
   },
@@ -2394,6 +2620,7 @@ const App = {
     const responsible = document.getElementById('action-responsible').value.trim();
     const startDate = document.getElementById('action-start-date').value;
     const dueDate = document.getElementById('action-due-date').value;
+    const completionPercentage = parseInt(document.getElementById('action-completion-percentage').value) || 0;
     const status = document.getElementById('action-status').value;
     const progress = document.getElementById('action-progress').value;
 
@@ -2405,6 +2632,7 @@ const App = {
         responsiblePersonDescription: responsible,
         startDate,
         dueDate,
+        completionPercentage,
         status,
         progress,
       },
@@ -2429,69 +2657,334 @@ const App = {
     this.loadPlans();
   },
 
-  async quickUpdateAction(actionId) {
-    if (!this.hasPermission('plans.manage')) {
-      this.showAlert('غير مصرح لك بتعديل الإجراء (تتطلب plans.manage).', 'error');
+  // بنك الإجراءات النموذجية (Action Catalog)
+  async openActionCatalogModal() {
+    const modal = document.getElementById('modal-action-catalog');
+    if (!modal) return;
+    modal.classList.remove('hidden');
+
+    // ضبط فلتر نوع الخطة تلقائياً ليطابق نوع الخطة الحالية إن وجد
+    const filterSelect = document.getElementById('catalog-plan-type-filter');
+    if (filterSelect && this.state.currentPlan?.planType) {
+      filterSelect.value = this.state.currentPlan.planType;
+    }
+
+    await this.loadActionCatalog();
+  },
+
+  closeActionCatalogModal() {
+    const modal = document.getElementById('modal-action-catalog');
+    if (modal) modal.classList.add('hidden');
+  },
+
+  async loadActionCatalog() {
+    const filterSelect = document.getElementById('catalog-plan-type-filter');
+    const planType = filterSelect ? filterSelect.value : '';
+
+    let url = '/improvement-plans/action-catalog';
+    if (planType) {
+      url += `?plan_type=${encodeURIComponent(planType)}`;
+    }
+
+    const res = await this.request(url);
+    if (res.ok && res.data) {
+      this.state.actionCatalog = res.data;
+      this.renderActionCatalogList();
+    }
+  },
+
+  filterCatalog() {
+    this.loadActionCatalog();
+  },
+
+  renderActionCatalogList() {
+    const container = document.getElementById('catalog-items-container');
+    if (!container) return;
+
+    const query = (document.getElementById('catalog-search')?.value || '').trim().toLowerCase();
+    let items = this.state.actionCatalog || [];
+
+    if (query) {
+      items = items.filter(i => 
+        i.title.toLowerCase().includes(query) || 
+        i.sub_standard_code.toLowerCase().includes(query) || 
+        i.suggested_responsible_description.toLowerCase().includes(query)
+      );
+    }
+
+    if (items.length === 0) {
+      container.innerHTML = '<span style="text-align: center; color: var(--text-muted); padding: 1.5rem;">لا توجد إجراءات مطابقة لبحثك.</span>';
       return;
     }
+
+    container.innerHTML = items.map(item => `
+      <div style="background: #fff; border: 1px solid var(--border); border-radius: 6px; padding: 0.75rem; display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; hover: border-color: var(--primary);">
+        <div style="flex: 1;">
+          <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.25rem;">
+            <span class="badge badge-gray" style="font-size: 0.75rem;">${item.sub_standard_code}</span>
+            <span class="badge badge-blue" style="font-size: 0.75rem;">${item.plan_type}</span>
+            <span style="font-size: 0.75rem; color: var(--text-muted);">⏱️ المدة المقترحة: ${item.suggested_duration_days} يوماً</span>
+          </div>
+          <strong style="color: #1e293b; font-size: 0.92rem;">${item.title}</strong>
+          <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.2rem;">
+            المسؤول المقترح: ${item.suggested_responsible_description}
+          </div>
+        </div>
+        <div>
+          <button class="btn btn-sm btn-primary" onclick="App.selectCatalogAction(${item.catalog_id})">
+            اختيار وتبني ➕
+          </button>
+        </div>
+      </div>
+    `).join('');
+  },
+
+  selectCatalogAction(catalogId) {
+    const item = (this.state.actionCatalog || []).find(i => i.catalog_id === catalogId);
+    if (!item) return;
+
+    this.closeActionCatalogModal();
+
+    // فتح نافذة الإجراء إن لم تكن مفتوحة وتعبئة الحقول
+    const titleInput = document.getElementById('action-title');
+    const respInput = document.getElementById('action-responsible');
+    const startDateInput = document.getElementById('action-start-date');
+    const dueDateInput = document.getElementById('action-due-date');
+
+    if (titleInput) titleInput.value = item.title;
+    if (respInput) respInput.value = item.suggested_responsible_description;
+
+    // حساب تاريخ الاستحقاق المقترح
+    const today = new Date();
+    const dueDate = new Date();
+    dueDate.setDate(today.getDate() + (item.suggested_duration_days || 30));
+
+    if (startDateInput && !startDateInput.value) {
+      startDateInput.value = today.toISOString().split('T')[0];
+    }
+    if (dueDateInput) {
+      dueDateInput.value = dueDate.toISOString().split('T')[0];
+    }
+
+    this.openAddActionModal();
+    this.showAlert(`تم اختيار الإجراء النموذجي: "${item.title}". يرجى اختيار مجال التحسين وحفظ الإجراء.`, 'info');
+  },
+
+  // نافذة تحديث نسبة الإنجاز السريع
+  openQuickUpdateProgress(actionId, currentPct, currentStatus, encodedTitle) {
+    this.state.quickUpdateActionId = actionId;
+    const modal = document.getElementById('modal-quick-update-progress');
+    if (!modal) return;
+
+    const titleEl = document.getElementById('quick-update-action-title');
+    const pctInput = document.getElementById('quick-action-percentage');
+    const pctVal = document.getElementById('quick-percentage-val');
+    const statusSelect = document.getElementById('quick-action-status');
+
+    if (titleEl) titleEl.textContent = decodeURIComponent(encodedTitle || '');
+    if (pctInput) pctInput.value = currentPct;
+    if (pctVal) pctVal.textContent = `${currentPct}%`;
+    if (statusSelect) statusSelect.value = currentStatus;
+
+    modal.classList.remove('hidden');
+  },
+
+  closeQuickUpdateModal() {
+    const modal = document.getElementById('modal-quick-update-progress');
+    if (modal) modal.classList.add('hidden');
+  },
+
+  async handleSaveQuickProgress(event) {
+    event.preventDefault();
     const p = this.state.currentPlan;
-    if (!p) return;
+    const actionId = this.state.quickUpdateActionId;
+    if (!p || !actionId) return;
 
-    // نافذة اختيار سريعة للحالة والتقدم
-    const act = (p.actions || []).find(a => a.actionId === actionId);
-    if (!act) return;
-
-    const newStatus = prompt('اختر حالة الإجراء (Pending, InProgress, Done, Cancelled):', act.status);
-    if (!newStatus) return;
-
-    const newProgress = prompt('اختر مستوى التقدم (NotStarted, Limited, Moderate, Significant, Complete):', act.progress);
-    if (!newProgress) return;
+    const percentage = parseInt(document.getElementById('quick-action-percentage').value) || 0;
+    const status = document.getElementById('quick-action-status').value;
 
     const res = await this.request(`/improvement-plans/${p.planId}/actions/${actionId}`, {
       method: 'PATCH',
       body: {
-        status: newStatus.trim(),
-        progress: newProgress.trim(),
+        completionPercentage: percentage,
+        status: status,
       },
     });
 
     if (!res.ok) {
-      this.showAlert(res.message || 'فشل تحديث الإجراء.', 'error');
+      this.showAlert(res.message || 'فشل تحديث نسبة الإنجاز.', 'error');
       return;
     }
 
-    this.showAlert('تم تحديث حالة وتقدم الإجراء بنجاح.', 'success');
+    this.showAlert('تم تحديث نسبة الإنجاز وحالة الإجراء بنجاح.', 'success');
+    this.closeQuickUpdateModal();
+    this.showPlanDetails(p.planId);
+    this.loadPlans();
+  },
+
+  // نافذة ربط شاهد تنفيذ بالإجراء
+  async openAttachEvidenceModal(actionId, encodedTitle) {
+    this.state.attachEvidenceActionId = actionId;
+    const modal = document.getElementById('modal-attach-evidence');
+    if (!modal) return;
+
+    const titleEl = document.getElementById('attach-evidence-action-title');
+    if (titleEl) titleEl.textContent = `الإجراء: ${decodeURIComponent(encodedTitle || '')}`;
+
+    const selectEl = document.getElementById('attach-evidence-select');
+    selectEl.innerHTML = '<option value="">جارِ جلب شواهد المدرسة...</option>';
+
+    modal.classList.remove('hidden');
+
+    // جلب شواهد المدرسة
+    const evalId = this.state.currentPlan?.cycleId ? (this.state.currentEvaluation?.evaluationId || 1) : 1;
+    const res = await this.request(`/evaluations/${evalId}/evidence-inventory`);
+
+    if (res.ok && res.data) {
+      const evidences = res.data.evidences || res.data || [];
+      if (evidences.length === 0) {
+        selectEl.innerHTML = '<option value="">لا توجد شواهد مرفوعة للمدرسة بعد.</option>';
+      } else {
+        selectEl.innerHTML = '<option value="">-- اختر شاهداً للربط --</option>' + evidences.map(ev => `
+          <option value="${ev.evidenceId || ev.id}">[#${ev.evidenceId || ev.id}] ${ev.title} (${ev.statusLabel || ev.status})</option>
+        `).join('');
+      }
+    } else {
+      selectEl.innerHTML = '<option value="">تعذر جلب الشواهد.</option>';
+    }
+  },
+
+  closeAttachEvidenceModal() {
+    const modal = document.getElementById('modal-attach-evidence');
+    if (modal) modal.classList.add('hidden');
+  },
+
+  async handleSaveAttachEvidence(event) {
+    event.preventDefault();
+    const p = this.state.currentPlan;
+    const actionId = this.state.attachEvidenceActionId;
+    const evidenceId = parseInt(document.getElementById('attach-evidence-select').value);
+
+    if (!p || !actionId || !evidenceId) {
+      this.showAlert('يرجى اختيار شاهد لربطه بالإجراء.', 'error');
+      return;
+    }
+
+    const res = await this.request(`/improvement-plans/${p.planId}/actions/${actionId}/evidences`, {
+      method: 'POST',
+      body: { evidenceId },
+    });
+
+    if (!res.ok) {
+      this.showAlert(res.message || 'فشل ربط الشاهد بالإجراء.', 'error');
+      return;
+    }
+
+    this.showAlert('تم ربط شاهد التنفيذ بالإجراء بنجاح.', 'success');
+    this.closeAttachEvidenceModal();
+    this.showPlanDetails(p.planId);
+  },
+
+  async handleDeleteAction(actionId) {
+    if (!confirm('هل أنت متأكد من حذف هذا الإجراء من مسودة الخطة؟')) return;
+    const p = this.state.currentPlan;
+    if (!p) return;
+
+    const res = await this.request(`/improvement-plans/${p.planId}/actions/${actionId}`, {
+      method: 'DELETE',
+    });
+
+    if (!res.ok) {
+      this.showAlert(res.message || 'فشل حذف الإجراء.', 'error');
+      return;
+    }
+
+    this.showAlert('تم حذف الإجراء بنجاح.', 'success');
+    this.showPlanDetails(p.planId);
+    this.loadPlans();
+  },
+
+  async handleCancelAction(actionId) {
+    if (!confirm('هل تريد إلغاء هذا الإجراء وتحويل حالته إلى Cancelled؟')) return;
+    const p = this.state.currentPlan;
+    if (!p) return;
+
+    const res = await this.request(`/improvement-plans/${p.planId}/actions/${actionId}`, {
+      method: 'PATCH',
+      body: { status: 'Cancelled' },
+    });
+
+    if (!res.ok) {
+      this.showAlert(res.message || 'فشل إلغاء الإجراء.', 'error');
+      return;
+    }
+
+    this.showAlert('تم إلغاء الإجراء بنجاح.', 'success');
     this.showPlanDetails(p.planId);
     this.loadPlans();
   },
 
   // ---------------------------------------------------------------------------
-  // 12. الشاشة 9: ملاحظات مراجعة مدير المدرسة (Screen 9: Review Notes)
+  // 12. المراجعة المزدوجة: داخلية (مدير المدرسة) وخارجية (مشرف وزاري)
   // ---------------------------------------------------------------------------
-  renderReviewNotes(notes) {
-    const listEl = document.getElementById('plan-det-notes-list');
-    if (!listEl) return;
+  renderReviewNotes(internalNotes = [], externalNotes = [], allNotes = []) {
+    const internalList = document.getElementById('plan-det-internal-notes-list');
+    const externalList = document.getElementById('plan-det-external-notes-list');
+    const boxInternal = document.getElementById('box-internal-reviews');
+    const boxExternal = document.getElementById('box-external-reviews');
 
-    if (!notes || notes.length === 0) {
-      listEl.innerHTML = '<span style="font-size: 0.85rem; color: var(--text-muted);">لا توجد ملاحظات مراجعة مسجلة على هذه الخطة بعد.</span>';
-      return;
+    // قاعدة الفصل المؤسسي (كل دور يرى ويكتب في قسمه فقط):
+    // مدير المدرسة يرى الملاحظات الداخلية فقط. المشرف الوزاري يرى الملاحظات الخارجية فقط.
+    // مقيّم المدرسة ومسؤول النظام يريان القسمين معاً للمتابعة الشاملة.
+    const isPrincipal = this.hasRole('school_principal');
+    const isSupervisor = this.hasRole('ministry_supervisor');
+
+    if (boxInternal) {
+      boxInternal.style.display = isSupervisor ? 'none' : 'block';
+    }
+    if (boxExternal) {
+      boxExternal.style.display = isPrincipal ? 'none' : 'block';
     }
 
-    listEl.innerHTML = notes.map(n => `
-      <div style="background: #fff; border: 1px solid var(--border); border-right: 4px solid #16a34a; border-radius: 4px; padding: 0.5rem 0.75rem; margin-bottom: 0.5rem;">
-        <div style="display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.25rem;">
-          <strong>🎓 ${n.authorName || 'مدير المدرسة'}</strong>
-          <span>${n.createdAt ? new Date(n.createdAt).toLocaleString('ar') : ''}</span>
-        </div>
-        <div style="font-size: 0.85rem; color: #1e293b;">${n.text}</div>
-      </div>
-    `).join('');
+    // الملاحظات الداخلية
+    if (internalList) {
+      if (!internalNotes || internalNotes.length === 0) {
+        internalList.innerHTML = '<span style="font-size: 0.8rem; color: var(--text-muted);">لا توجد ملاحظات داخلية من مدير المدرسة بعد.</span>';
+      } else {
+        internalList.innerHTML = internalNotes.map(n => `
+          <div style="background: #fff; border: 1px solid #bbf7d0; border-right: 4px solid #16a34a; border-radius: 4px; padding: 0.5rem 0.75rem; margin-bottom: 0.5rem;">
+            <div style="display: flex; justify-content: space-between; font-size: 0.75rem; color: #166534; margin-bottom: 0.25rem;">
+              <strong>🎓 ${n.authorName || 'مدير المدرسة'}</strong>
+              <span>${n.createdAt ? new Date(n.createdAt).toLocaleString('ar') : ''}</span>
+            </div>
+            <div style="font-size: 0.85rem; color: #1e293b;">${n.text}</div>
+          </div>
+        `).join('');
+      }
+    }
+
+    // الملاحظات الخارجية
+    if (externalList) {
+      if (!externalNotes || externalNotes.length === 0) {
+        externalList.innerHTML = '<span style="font-size: 0.8rem; color: var(--text-muted);">لا توجد ملاحظات خارجية من الإشراف الوزاري بعد.</span>';
+      } else {
+        externalList.innerHTML = externalNotes.map(n => `
+          <div style="background: #fff; border: 1px solid #bfdbfe; border-right: 4px solid #2563eb; border-radius: 4px; padding: 0.5rem 0.75rem; margin-bottom: 0.5rem;">
+            <div style="display: flex; justify-content: space-between; font-size: 0.75rem; color: #1e40af; margin-bottom: 0.25rem;">
+              <strong>🏛️ ${n.authorName || 'المشرف الوزاري'}</strong>
+              <span>${n.createdAt ? new Date(n.createdAt).toLocaleString('ar') : ''}</span>
+            </div>
+            <div style="font-size: 0.85rem; color: #1e293b;">${n.text}</div>
+          </div>
+        `).join('');
+      }
+    }
   },
 
   async handleSaveReviewNote(event) {
     event.preventDefault();
-    if (!this.hasPermission('reviews.write')) {
-      this.showAlert('غير مصرح لك بتدوين ملاحظة مراجعة (تتطلب reviews.write).', 'error');
+    if (!this.hasPermission('reviews.write') && !this.hasPermission('supervision.review')) {
+      this.showAlert('غير مصرح لك بتدوين ملاحظات المراجعة.', 'error');
       return;
     }
     const p = this.state.currentPlan;
@@ -2501,9 +2994,16 @@ const App = {
     const text = input.value.trim();
     if (!text) return;
 
+    const reviewerRole = (this.hasRole('ministry_supervisor') || this.hasPermission('supervision.review')) 
+      ? 'ministry_supervisor' 
+      : 'school_principal';
+
     const res = await this.request(`/improvement-plans/${p.planId}/review-notes`, {
       method: 'POST',
-      body: { text },
+      body: { 
+        text,
+        reviewerRole,
+      },
     });
 
     if (!res.ok) {
@@ -2538,40 +3038,819 @@ const App = {
   // ---------------------------------------------------------------------------
   // شاشة مراجعة المعايير والمؤشرات والواصفات (Standards Review Screen - Read Only)
   // ---------------------------------------------------------------------------
+  // الشريحة 7: إدارة معايير الاعتماد المدرسي وإصداراتها ودورة حياتها الرسمية
+  // ---------------------------------------------------------------------------
   async loadStandardsReview() {
     const container = document.getElementById('standards-review-content');
     if (!container) return;
 
-    if (!this.state.standardsTree) {
-      container.innerHTML = '<div class="card" style="text-align: center;">جارِ جلب شجرة المعايير والمؤشرات والواصفات...</div>';
-      
-      const ev = await this.ensureCurrentEvaluation();
-      if (ev && (ev.evaluationId || ev.evaluation_id)) {
-        const evalId = ev.evaluationId || ev.evaluation_id;
-        const treeRes = await this.request(`/evaluations/${evalId}/standards-tree`);
-        if (treeRes.ok && treeRes.data) {
-          this.state.standardsTree = treeRes.data;
-          this.renderStandardsReview();
-          return;
-        }
-      }
+    const isStandardsManager = this.hasRole('ministry_standards_manager') || this.hasRole('admin') || this.hasPermission('standards.manage');
 
-      // في حال لم يتوفر تقييم (مثل مسؤول المعايير أو النظام)، جلب الإصدار المرجعي الوطني مباشرة
-      const verRes = await this.request('/standard-versions/1');
-      if (verRes.ok && verRes.data) {
-        this.state.standardsTree = verRes.data;
-        this.renderStandardsReview();
-        return;
-      }
+    // 1. جلب قائمة الإصدارات المعيارية
+    const verListRes = await this.request('/standard-versions');
+    let versions = [];
+    if (verListRes.ok && verListRes.data) {
+      versions = verListRes.data;
+      this.state.standardsVersions = versions;
+    }
 
-      container.innerHTML = '<div class="card" style="color: red; text-align: center;">تعذر جلب وثيقة المعايير والمؤشرات. يرجى التحقق من اتصال الخادم والصلاحيات.</div>';
+    // تحديد الإصدار المختار افتراضياً
+    if (!this.state.selectedVersionId) {
+      const approvedVer = versions.find(v => v.status === 'Approved' || v.status === 'Active');
+      this.state.selectedVersionId = approvedVer ? approvedVer.version_id : (versions[0]?.version_id || 1);
+    }
+
+    this.renderStandardsVersionBar(versions, isStandardsManager);
+    await this.fetchAndRenderSelectedVersion();
+  },
+
+  async handleVersionChange(versionId) {
+    this.state.selectedVersionId = parseInt(versionId);
+    await this.fetchAndRenderSelectedVersion();
+  },
+
+  renderStandardsVersionBar(versions, isStandardsManager) {
+    const select = document.getElementById('standards-version-select');
+    if (select) {
+      select.innerHTML = (versions || []).map(v => {
+        const statusLabel = (v.status === 'Draft') ? 'مسودة (Draft)' : ((v.status === 'Archived' || v.status === 'Retired') ? 'مؤرشف (Archived)' : 'مُقرّ (Approved)');
+        const selected = (v.version_id === this.state.selectedVersionId) ? 'selected' : '';
+        return `<option value="${v.version_id}" ${selected}>${v.version_no} — [${statusLabel}]</option>`;
+      }).join('');
+    }
+
+    const currentVer = (versions || []).find(v => v.version_id === this.state.selectedVersionId);
+    const badge = document.getElementById('standards-version-badge');
+    const notice = document.getElementById('standards-version-notice');
+    const actions = document.getElementById('standards-version-actions');
+    const controlCard = document.getElementById('standards-version-control-card');
+
+    if (!isStandardsManager) {
+      if (actions) actions.style.display = 'none';
+      if (controlCard) controlCard.style.display = 'none';
+      return;
+    } else {
+      if (actions) actions.style.display = 'flex';
+      if (controlCard) controlCard.style.display = 'block';
+    }
+
+    const isDraft = currentVer && currentVer.status === 'Draft';
+    const isApproved = currentVer && (currentVer.status === 'Approved' || currentVer.status === 'Active');
+    const isArchived = currentVer && (currentVer.status === 'Archived' || currentVer.status === 'Retired');
+
+    if (badge) {
+      if (isDraft) {
+        badge.className = 'badge badge-yellow';
+        badge.textContent = 'مسودة (Draft)';
+      } else if (isArchived) {
+        badge.className = 'badge badge-gray';
+        badge.textContent = 'مؤرشف (Archived)';
+      } else {
+        badge.className = 'badge badge-green';
+        badge.textContent = 'مُقرّ (Approved)';
+      }
+    }
+
+    if (notice) {
+      if (isDraft) {
+        notice.className = 'alert alert-info';
+        notice.style.background = '#fef3c7';
+        notice.style.color = '#92400e';
+        notice.innerHTML = '⚠️ <strong>مسودة قيد التطوير:</strong> يحق لك تعديل نصوص المعايير والمؤشرات والواصفات ومتطلبات الشواهد وضبط الأوزان. شرط الإقرار: مجموع الأوزان = 100.00%.';
+      } else if (isArchived) {
+        notice.className = 'alert alert-info';
+        notice.style.background = '#f1f5f9';
+        notice.style.color = '#475569';
+        notice.innerHTML = '📁 <strong>إصدار مؤرشف ومنتهي السريان:</strong> للقراءة والاطلاع التاريخي فقط ولا يمكن تعديله أو ربط دورات تقييم جديدة به.';
+      } else {
+        notice.className = 'alert alert-info';
+        notice.style.background = '#ecfdf5';
+        notice.style.color = '#065f46';
+        notice.innerHTML = `
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
+            <div>
+              🔒 <strong>إصدار مُقرّ وساري المفعول (محمي ضد التعديل):</strong>
+              كافة نصوص المعايير والمؤشرات والواصفات والأوزان مجمدة لضمان نزاهة تقييمات المدارس. لتعديل أي عنصر، انقر على زر الاستنساخ لفتح مسودة عمل مستقلة.
+            </div>
+            <button class="btn btn-sm btn-primary" onclick="App.openCloneVersionModal()" style="font-weight: 700;">
+              📋 استنساخ كمسودة جديدة لفتح أزرار التعديل
+            </button>
+          </div>
+        `;
+      }
+    }
+
+    const btnClone = document.getElementById('btn-clone-version');
+    const btnApprove = document.getElementById('btn-approve-version');
+    const btnArchive = document.getElementById('btn-archive-version');
+    const btnEditMeta = document.getElementById('btn-edit-version-meta');
+
+    if (btnClone) {
+      btnClone.style.display = 'inline-block';
+      btnClone.disabled = isDraft;
+      btnClone.title = isDraft ? 'لا يمكن استنساخ مسودة، الاستنساخ متاح للإصدارات المُقرّة فقط' : 'استنساخ هذا الإصدار كمسودة جديدة';
+    }
+
+    if (btnApprove) {
+      btnApprove.style.display = 'inline-block';
+      if (isDraft) {
+        btnApprove.disabled = false;
+        btnApprove.className = 'btn btn-sm btn-success';
+        btnApprove.innerHTML = '✅ إقرار المسودة';
+        btnApprove.title = 'إقرار المسودة رسميًا كإصدار نافذ';
+      } else {
+        btnApprove.disabled = true;
+        btnApprove.className = 'btn btn-sm btn-secondary';
+        btnApprove.innerHTML = 'مُقرّ رسمياً ✅';
+        btnApprove.title = 'هذا الإصدار مُقرّ مسبقاً وساري المفعول';
+      }
+    }
+
+    if (btnEditMeta) {
+      btnEditMeta.style.display = 'inline-block';
+      btnEditMeta.disabled = !isDraft;
+      btnEditMeta.title = isDraft ? 'تعديل البيانات التعريفية للإصدار' : 'البيانات التعريفية مجمدة للإصدار المُقرّ';
+    }
+
+    if (btnArchive) {
+      btnArchive.style.display = 'inline-block';
+      btnArchive.disabled = !isApproved;
+      btnArchive.title = isApproved ? 'أرشفة هذا الإصدار' : 'الأرشفة متاحة للإصدارات المُقرّة فقط';
+    }
+  },
+
+  async fetchAndRenderSelectedVersion() {
+    const vId = this.state.selectedVersionId;
+    const container = document.getElementById('standards-review-content');
+    if (!container) return;
+
+    container.innerHTML = '<div class="card" style="text-align: center;">جارِ تحميل شجرة المعايير والمؤشرات...</div>';
+
+    const res = await this.request(`/standard-versions/${vId}`);
+    if (!res.ok || !res.data) {
+      container.innerHTML = '<div class="card alert alert-error">تعذر تحميل بيانات الإصدار المعياري.</div>';
       return;
     }
 
-    this.renderStandardsReview();
+    this.state.standardsTree = res.data;
+    const versions = this.state.standardsVersions || [];
+    const currentVer = versions.find(v => v.version_id === vId) || { status: res.data.status || 'Approved' };
+    const isStandardsManager = this.hasRole('ministry_standards_manager') || this.hasRole('admin') || this.hasPermission('standards.manage');
+
+    this.renderStandardsVersionBar(versions, isStandardsManager);
+    this.renderWeightsMatrix(res.data.standards || [], currentVer.status === 'Draft', isStandardsManager);
+    this.renderStandardsReview(currentVer.status === 'Draft', isStandardsManager);
   },
 
-  renderStandardsReview() {
+  renderWeightsMatrix(standards, isDraft, isStandardsManager) {
+    const tbody = document.getElementById('standards-weights-tbody');
+    const weightsCard = document.getElementById('standards-weights-card');
+    const btnSave = document.getElementById('btn-save-weights');
+    const btnAddStd = document.getElementById('btn-add-standard-weights');
+    if (!tbody) return;
+
+    if (!isStandardsManager) {
+      if (weightsCard) weightsCard.style.display = 'none';
+      return;
+    } else {
+      if (weightsCard) weightsCard.style.display = 'block';
+    }
+
+    if (btnAddStd) {
+      btnAddStd.style.display = (isDraft && isStandardsManager) ? 'inline-block' : 'none';
+    }
+
+    this.state.weightsDraft = {};
+    let totalSum = 0;
+
+    standards.forEach(std => {
+      const w = parseFloat(std.weight) || 0;
+      this.state.weightsDraft[std.standardId] = w;
+      totalSum += w;
+    });
+
+    totalSum = Math.round(totalSum * 100) / 100;
+    this.updateWeightsTotalDisplay(totalSum, isDraft);
+
+    if (btnSave) {
+      btnSave.style.display = isStandardsManager ? 'inline-block' : 'none';
+      if (isDraft) {
+        btnSave.disabled = false;
+        btnSave.className = 'btn btn-sm btn-primary';
+        btnSave.innerHTML = '💾 حفظ الأوزان';
+        btnSave.title = 'حفظ مصفوفة الأوزان (بشرط المجموع = 100.00%)';
+      } else {
+        btnSave.disabled = true;
+        btnSave.className = 'btn btn-sm btn-secondary';
+        btnSave.innerHTML = '🔒 الأوزان مجمدة ومقرة';
+        btnSave.title = 'لا يمكن تعديل أوزان إصدار مُقرّ. انقر على استنساخ مسودة لتعديل الأوزان.';
+      }
+    }
+
+    tbody.innerHTML = standards.map(std => {
+      const w = parseFloat(std.weight) || 0;
+      return `
+        <tr>
+          <td style="padding: 0.5rem; font-weight: 700; color: var(--primary);">${std.code}</td>
+          <td style="padding: 0.5rem; font-weight: 600;">${std.name}</td>
+          <td style="padding: 0.5rem;">
+            ${(isDraft && isStandardsManager)
+              ? `<input type="number" step="0.5" min="0" max="100" class="form-control" style="width: 100px; padding: 0.25rem 0.5rem; font-weight: 700;" value="${w}" oninput="App.handleWeightInputChange(${std.standardId}, this.value)">`
+              : `<span class="badge badge-blue" style="font-size: 0.9rem; font-weight: 700;">${w}%</span>`
+            }
+          </td>
+          <td style="padding: 0.5rem; color: var(--text-muted); font-size: 0.8rem;">${std.description || 'لا يوجد وصف محدد'}</td>
+        </tr>
+      `;
+    }).join('');
+  },
+
+  handleWeightInputChange(standardId, val) {
+    const num = parseFloat(val) || 0;
+    this.state.weightsDraft[standardId] = num;
+
+    let sum = 0;
+    for (const sid in this.state.weightsDraft) {
+      sum += this.state.weightsDraft[sid];
+    }
+    sum = Math.round(sum * 100) / 100;
+    this.updateWeightsTotalDisplay(sum, true);
+  },
+
+  updateWeightsTotalDisplay(sum, isDraft) {
+    const totalDisplay = document.getElementById('weights-total-display');
+    const btnApprove = document.getElementById('btn-approve-version');
+    const btnSave = document.getElementById('btn-save-weights');
+    if (!totalDisplay) return;
+
+    const isExact100 = Math.abs(sum - 100.0) < 0.01;
+    totalDisplay.textContent = `${sum.toFixed(2)}% ${isExact100 ? '✅ متزن' : '⚠️ غير متزن'}`;
+    totalDisplay.className = isExact100 ? 'badge badge-green' : 'badge badge-red';
+
+    if (btnApprove && isDraft) {
+      btnApprove.disabled = !isExact100;
+      btnApprove.title = isExact100 ? 'إقرار الإصدار وتجميده' : 'يجب أن يساوي مجموع الأوزان 100.00% للإقرار';
+    }
+    if (btnSave && isDraft) {
+      btnSave.disabled = !isExact100;
+      btnSave.title = isExact100 ? 'حفظ الأوزان' : 'يجب أن يساوي مجموع الأوزان 100.00% لحفظ الأوزان';
+    }
+  },
+
+  async handleSaveWeights() {
+    const vId = this.state.selectedVersionId;
+    const weightsArr = [];
+    for (const sid in this.state.weightsDraft) {
+      weightsArr.push({
+        standard_id: parseInt(sid),
+        weight: this.state.weightsDraft[sid],
+      });
+    }
+
+    const res = await this.request(`/standard-versions/${vId}/weights`, 'PUT', {
+      standards_weights: weightsArr,
+    });
+
+    if (res.ok) {
+      alert('تم حفظ أوزان المعايير بنجاح واستيفاء شرط المجموع 100%!');
+      await this.fetchAndRenderSelectedVersion();
+    } else {
+      alert('فشل حفظ الأوزان: ' + (res.message || 'يجب أن يساوي المجموع 100.00%'));
+    }
+  },
+
+  // نوافذ دورة حياة الإصدار
+  openCreateVersionModal() {
+    const modal = document.getElementById('modal-create-version');
+    if (!modal) return;
+    document.getElementById('newver-number').value = '';
+    document.getElementById('newver-date').value = new Date().toISOString().split('T')[0];
+    document.getElementById('newver-desc').value = '';
+    document.getElementById('create-version-alert').classList.add('hidden');
+    modal.classList.remove('hidden');
+  },
+
+  closeCreateVersionModal() {
+    const modal = document.getElementById('modal-create-version');
+    if (modal) modal.classList.add('hidden');
+  },
+
+  async handleSaveCreateVersion(event) {
+    event.preventDefault();
+    const versionNo = document.getElementById('newver-number').value.trim();
+    const issueDate = document.getElementById('newver-date').value;
+    const org = document.getElementById('newver-org').value.trim();
+    const desc = document.getElementById('newver-desc').value.trim();
+    const alertEl = document.getElementById('create-version-alert');
+
+    const res = await this.request('/standard-versions', 'POST', {
+      version_no: versionNo,
+      issue_date: issueDate || null,
+      source_organization: org || null,
+      source_description: desc || null,
+    });
+
+    if (res.ok && res.data) {
+      this.closeCreateVersionModal();
+      this.state.selectedVersionId = res.data.version_id;
+      await this.loadStandardsReview();
+    } else {
+      alertEl.textContent = res.message || 'فشل إنشاء المسودة.';
+      alertEl.classList.remove('hidden');
+    }
+  },
+
+  openCloneVersionModal(sourceId = null, sourceNo = '') {
+    const modal = document.getElementById('modal-clone-version');
+    if (!modal) return;
+    this.state.cloneSourceVersionId = sourceId || this.state.selectedVersionId;
+    document.getElementById('clonever-number').value = sourceNo ? `${sourceNo}-draft` : '';
+    document.getElementById('clone-version-alert').classList.add('hidden');
+    modal.classList.remove('hidden');
+  },
+
+  closeCloneVersionModal() {
+    const modal = document.getElementById('modal-clone-version');
+    if (modal) modal.classList.add('hidden');
+  },
+
+  async handleSaveCloneVersion(event) {
+    event.preventDefault();
+    const versionNo = document.getElementById('clonever-number').value.trim();
+    const alertEl = document.getElementById('clone-version-alert');
+    const vId = this.state.cloneSourceVersionId || this.state.selectedVersionId;
+
+    const res = await this.request(`/standard-versions/${vId}/clone`, 'POST', {
+      version_no: versionNo,
+    });
+
+    if (res.ok && res.data) {
+      this.closeCloneVersionModal();
+      this.state.selectedVersionId = res.data.version_id;
+      this.showAlert(`تم استنساخ الإصدار كمسودة جديدة (${res.data.version_no}) بنجاح!`, 'success');
+      if (this.state.currentScreen === 'standards-manager') {
+        await this.loadStandardsManagerData();
+      } else {
+        await this.loadStandardsReview();
+      }
+    } else {
+      alertEl.textContent = res.message || 'فشل استنساخ الإصدار.';
+      alertEl.classList.remove('hidden');
+    }
+  },
+
+  async handleApproveVersion(targetVersionId = null) {
+    const vId = targetVersionId || this.state.selectedVersionId;
+    if (!confirm('هل أنت متأكد من إقرار هذا الإصدار المعياري رسميًا؟ سيتم تجميده ضد أي تعديل لاحق وأرشفة الإصدار السابق تلقائيًا.')) {
+      return;
+    }
+
+    const res = await this.request(`/standard-versions/${vId}/approve`, 'POST');
+    if (res.ok) {
+      this.showAlert('تم إقرار الإصدار بنجاح وأصبح ساري المفعول للدورات والتقييمات!', 'success');
+      if (this.state.currentScreen === 'standards-manager') {
+        await this.loadStandardsManagerData();
+      } else {
+        await this.loadStandardsReview();
+      }
+    } else {
+      alert('فشل إقرار الإصدار: ' + (res.message || 'يرجى مراجعة الأوزان النسبية'));
+    }
+  },
+
+  async handleArchiveVersion(targetVersionId = null) {
+    const vId = targetVersionId || this.state.selectedVersionId;
+    if (!confirm('هل أنت متأكد من أرشفة هذا الإصدار المعياري؟')) return;
+
+    const res = await this.request(`/standard-versions/${vId}/archive`, 'POST');
+    if (res.ok) {
+      this.showAlert('تمت أرشفة الإصدار بنجاح.', 'info');
+      if (this.state.currentScreen === 'standards-manager') {
+        await this.loadStandardsManagerData();
+      } else {
+        await this.loadStandardsReview();
+      }
+    } else {
+      alert('فشل أرشفة الإصدار: ' + (res.message || 'خطأ في عملية الأرشفة'));
+    }
+  },
+
+  // تعديل المعيار
+  // إنشاء معيار جديد (معيار 8 فأكثر)
+  openCreateStandardModal() {
+    document.getElementById('create-std-code').value = '';
+    document.getElementById('create-std-name').value = '';
+    document.getElementById('create-std-weight').value = '0';
+    document.getElementById('create-std-desc').value = '';
+    document.getElementById('create-std-alert').classList.add('hidden');
+    document.getElementById('modal-create-standard').classList.remove('hidden');
+  },
+
+  closeCreateStandardModal() {
+    const modal = document.getElementById('modal-create-standard');
+    if (modal) modal.classList.add('hidden');
+  },
+
+  async handleSaveCreateStandard(event) {
+    event.preventDefault();
+    const vId = this.state.selectedStandardVersionId;
+    if (!vId) {
+      alert('لم يتم تحديد إصدار معياري.');
+      return;
+    }
+
+    const code = document.getElementById('create-std-code').value.trim();
+    const name = document.getElementById('create-std-name').value.trim();
+    const weight = parseFloat(document.getElementById('create-std-weight').value) || 0;
+    const desc = document.getElementById('create-std-desc').value.trim();
+    const alertEl = document.getElementById('create-std-alert');
+
+    const res = await this.request(`/standard-versions/${vId}/standards`, 'POST', {
+      code,
+      name,
+      weight,
+      description: desc,
+    });
+
+    if (res.ok) {
+      this.closeCreateStandardModal();
+      await this.fetchAndRenderSelectedVersion();
+    } else {
+      alertEl.textContent = res.message || 'فشل إنشاء المعيار.';
+      alertEl.classList.remove('hidden');
+    }
+  },
+
+  async handleDeleteStandard(stdId) {
+    if (!confirm('هل أنت متأكد من حذف هذا المعيار وكافة المجالات والمؤشرات التابعة له في هذه المسودة؟\n\nتنبيه: سيطلب منك النظام إعادة موازنة الأوزان ليصبح المجموع 100%.')) return;
+    const res = await this.request(`/standards/${stdId}`, 'DELETE');
+    if (res.ok) {
+      await this.fetchAndRenderSelectedVersion();
+    } else {
+      alert('فشل حذف المعيار: ' + (res.message || 'خطأ غير متوقع'));
+    }
+  },
+
+  // إنشاء مجال فرعي جديد
+  openCreateSubStandardModal(parentStandardId) {
+    document.getElementById('create-sub-parent-id').value = parentStandardId;
+    document.getElementById('create-sub-code').value = '';
+    document.getElementById('create-sub-name').value = '';
+    document.getElementById('create-sub-desc').value = '';
+    document.getElementById('create-sub-alert').classList.add('hidden');
+    document.getElementById('modal-create-substandard').classList.remove('hidden');
+  },
+
+  closeCreateSubStandardModal() {
+    const modal = document.getElementById('modal-create-substandard');
+    if (modal) modal.classList.add('hidden');
+  },
+
+  async handleSaveCreateSubStandard(event) {
+    event.preventDefault();
+    const stdId = document.getElementById('create-sub-parent-id').value;
+    const code = document.getElementById('create-sub-code').value.trim();
+    const name = document.getElementById('create-sub-name').value.trim();
+    const desc = document.getElementById('create-sub-desc').value.trim();
+    const alertEl = document.getElementById('create-sub-alert');
+
+    const res = await this.request(`/standards/${stdId}/sub-standards`, 'POST', {
+      code,
+      name,
+      description: desc,
+    });
+
+    if (res.ok) {
+      this.closeCreateSubStandardModal();
+      await this.fetchAndRenderSelectedVersion();
+    } else {
+      alertEl.textContent = res.message || 'فشل إنشاء المجال الفرعي.';
+      alertEl.classList.remove('hidden');
+    }
+  },
+
+  async handleDeleteSubStandard(subId) {
+    if (!confirm('هل أنت متأكد من حذف هذا المجال الفرعي وكافة المؤشرات ومتطلبات الشواهد التابعة له؟')) return;
+    const res = await this.request(`/sub-standards/${subId}`, 'DELETE');
+    if (res.ok) {
+      await this.fetchAndRenderSelectedVersion();
+    } else {
+      alert('فشل حذف المجال الفرعي: ' + (res.message || 'خطأ غير متوقع'));
+    }
+  },
+
+  // إنشاء مؤشر تفصيلي جديد
+  openCreateIndicatorModal(parentSubStandardId) {
+    document.getElementById('create-ind-parent-id').value = parentSubStandardId;
+    document.getElementById('create-ind-code').value = '';
+    document.getElementById('create-ind-name').value = '';
+    document.getElementById('create-ind-weight').value = '1.0';
+    document.getElementById('create-ind-desc').value = '';
+    document.getElementById('create-ind-alert').classList.add('hidden');
+    document.getElementById('modal-create-indicator').classList.remove('hidden');
+  },
+
+  closeCreateIndicatorModal() {
+    const modal = document.getElementById('modal-create-indicator');
+    if (modal) modal.classList.add('hidden');
+  },
+
+  async handleSaveCreateIndicator(event) {
+    event.preventDefault();
+    const subId = document.getElementById('create-ind-parent-id').value;
+    const code = document.getElementById('create-ind-code').value.trim();
+    const name = document.getElementById('create-ind-name').value.trim();
+    const weight = parseFloat(document.getElementById('create-ind-weight').value) || 1.0;
+    const desc = document.getElementById('create-ind-desc').value.trim();
+    const alertEl = document.getElementById('create-ind-alert');
+
+    const res = await this.request(`/sub-standards/${subId}/indicators`, 'POST', {
+      code,
+      name,
+      weight,
+      description: desc,
+      status: 'Active',
+    });
+
+    if (res.ok) {
+      this.closeCreateIndicatorModal();
+      await this.fetchAndRenderSelectedVersion();
+    } else {
+      alertEl.textContent = res.message || 'فشل إنشاء المؤشر.';
+      alertEl.classList.remove('hidden');
+    }
+  },
+
+  async handleDeleteIndicator(indId) {
+    if (!confirm('هل أنت متأكد من حذف هذا المؤشر وواصفاته وشواهده؟')) return;
+    const res = await this.request(`/indicators/${indId}`, 'DELETE');
+    if (res.ok) {
+      await this.fetchAndRenderSelectedVersion();
+    } else {
+      alert('فشل حذف المؤشر: ' + (res.message || 'خطأ غير متوقع'));
+    }
+  },
+
+  // تعديل المعيار
+  openEditStandardModal(stdId) {
+    const std = (this.state.standardsTree?.standards || []).find(s => s.standardId === stdId);
+    if (!std) return;
+    document.getElementById('edit-std-id').value = stdId;
+    document.getElementById('edit-std-name').value = std.name;
+    document.getElementById('edit-std-desc').value = std.description || '';
+    document.getElementById('edit-std-alert').classList.add('hidden');
+    document.getElementById('modal-edit-standard').classList.remove('hidden');
+  },
+
+  closeEditStandardModal() {
+    const modal = document.getElementById('modal-edit-standard');
+    if (modal) modal.classList.add('hidden');
+  },
+
+  async handleSaveEditStandard(event) {
+    event.preventDefault();
+    const id = document.getElementById('edit-std-id').value;
+    const name = document.getElementById('edit-std-name').value.trim();
+    const desc = document.getElementById('edit-std-desc').value.trim();
+    const alertEl = document.getElementById('edit-std-alert');
+
+    const res = await this.request(`/standards/${id}`, 'PUT', { name, description: desc });
+    if (res.ok) {
+      this.closeEditStandardModal();
+      await this.fetchAndRenderSelectedVersion();
+    } else {
+      alertEl.textContent = res.message || 'فشل التعديل.';
+      alertEl.classList.remove('hidden');
+    }
+  },
+
+  // تعديل المعيار الفرعي
+  openEditSubStandardModal(subId) {
+    let targetSub = null;
+    for (const std of (this.state.standardsTree?.standards || [])) {
+      const found = (std.subStandards || []).find(s => s.subStandardId === subId);
+      if (found) { targetSub = found; break; }
+    }
+    if (!targetSub) return;
+
+    document.getElementById('edit-sub-id').value = subId;
+    document.getElementById('edit-sub-name').value = targetSub.name;
+    document.getElementById('edit-sub-desc').value = targetSub.description || '';
+    document.getElementById('edit-sub-alert').classList.add('hidden');
+    document.getElementById('modal-edit-substandard').classList.remove('hidden');
+  },
+
+  closeEditSubStandardModal() {
+    const modal = document.getElementById('modal-edit-substandard');
+    if (modal) modal.classList.add('hidden');
+  },
+
+  async handleSaveEditSubStandard(event) {
+    event.preventDefault();
+    const id = document.getElementById('edit-sub-id').value;
+    const name = document.getElementById('edit-sub-name').value.trim();
+    const desc = document.getElementById('edit-sub-desc').value.trim();
+    const alertEl = document.getElementById('edit-sub-alert');
+
+    const res = await this.request(`/sub-standards/${id}`, 'PUT', { name, description: desc });
+    if (res.ok) {
+      this.closeEditSubStandardModal();
+      await this.fetchAndRenderSelectedVersion();
+    } else {
+      alertEl.textContent = res.message || 'فشل التعديل.';
+      alertEl.classList.remove('hidden');
+    }
+  },
+
+  // تعديل المؤشر
+  openEditIndicatorModal(indId) {
+    let targetInd = null;
+    for (const std of (this.state.standardsTree?.standards || [])) {
+      for (const sub of (std.subStandards || [])) {
+        const found = (sub.indicators || []).find(i => i.indicatorId === indId);
+        if (found) { targetInd = found; break; }
+      }
+      if (targetInd) break;
+    }
+    if (!targetInd) return;
+
+    document.getElementById('edit-ind-id').value = indId;
+    document.getElementById('edit-ind-name').value = targetInd.name;
+    document.getElementById('edit-ind-desc').value = targetInd.description || '';
+    document.getElementById('edit-ind-weight').value = targetInd.weight || 1;
+    document.getElementById('edit-ind-status').value = targetInd.status || 'Active';
+    document.getElementById('edit-ind-alert').classList.add('hidden');
+    document.getElementById('modal-edit-indicator').classList.remove('hidden');
+  },
+
+  closeEditIndicatorModal() {
+    const modal = document.getElementById('modal-edit-indicator');
+    if (modal) modal.classList.add('hidden');
+  },
+
+  async handleSaveEditIndicator(event) {
+    event.preventDefault();
+    const id = document.getElementById('edit-ind-id').value;
+    const name = document.getElementById('edit-ind-name').value.trim();
+    const desc = document.getElementById('edit-ind-desc').value.trim();
+    const weight = parseFloat(document.getElementById('edit-ind-weight').value) || 1;
+    const status = document.getElementById('edit-ind-status').value;
+    const alertEl = document.getElementById('edit-ind-alert');
+
+    const res = await this.request(`/indicators/${id}`, 'PUT', { name, description: desc, weight, status });
+    if (res.ok) {
+      this.closeEditIndicatorModal();
+      await this.fetchAndRenderSelectedVersion();
+    } else {
+      alertEl.textContent = res.message || 'فشل التعديل.';
+      alertEl.classList.remove('hidden');
+    }
+  },
+
+  // تعديل الواصفات
+  openEditDescriptorsModal(indId) {
+    let targetInd = null;
+    for (const std of (this.state.standardsTree?.standards || [])) {
+      for (const sub of (std.subStandards || [])) {
+        const found = (sub.indicators || []).find(i => i.indicatorId === indId);
+        if (found) { targetInd = found; break; }
+      }
+      if (targetInd) break;
+    }
+    if (!targetInd) return;
+
+    document.getElementById('edit-desc-ind-id').value = indId;
+    const container = document.getElementById('descriptors-form-container');
+    const descriptors = (targetInd.scoreDescriptors || []).sort((a,b) => (a.scoreValue??a.displayOrder) - (b.scoreValue??b.displayOrder));
+
+    container.innerHTML = descriptors.map((d, idx) => `
+      <div style="background: var(--bg-card-header); padding: 0.5rem 0.75rem; border-radius: 4px; border: 1px solid var(--border);">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">
+          <strong style="color: var(--primary);">المستوى ${d.scoreValue}: ${d.label}</strong>
+          <input type="hidden" class="desc-item-id" value="${d.descriptorId || ''}">
+          <input type="hidden" class="desc-item-level" value="${d.scoreLevelId || ''}">
+        </div>
+        <textarea class="form-control desc-item-text" rows="2" required placeholder="نص الواصفة...">${d.description || ''}</textarea>
+      </div>
+    `).join('');
+
+    document.getElementById('edit-desc-alert').classList.add('hidden');
+    document.getElementById('modal-edit-descriptors').classList.remove('hidden');
+  },
+
+  closeEditDescriptorsModal() {
+    const modal = document.getElementById('modal-edit-descriptors');
+    if (modal) modal.classList.add('hidden');
+  },
+
+  async handleSaveEditDescriptors(event) {
+    event.preventDefault();
+    const indId = document.getElementById('edit-desc-ind-id').value;
+    const items = [];
+    const rows = document.querySelectorAll('#descriptors-form-container > div');
+
+    rows.forEach(r => {
+      const id = r.querySelector('.desc-item-id')?.value;
+      const levelId = r.querySelector('.desc-item-level')?.value;
+      const text = r.querySelector('.desc-item-text')?.value.trim();
+      items.push({
+        descriptor_id: id ? parseInt(id) : null,
+        score_level_id: levelId ? parseInt(levelId) : null,
+        description: text,
+      });
+    });
+
+    const alertEl = document.getElementById('edit-desc-alert');
+    const res = await this.request(`/indicators/${indId}/descriptors`, 'PUT', { descriptors: items });
+
+    if (res.ok) {
+      this.closeEditDescriptorsModal();
+      await this.fetchAndRenderSelectedVersion();
+    } else {
+      alertEl.textContent = res.message || 'فشل التعديل.';
+      alertEl.classList.remove('hidden');
+    }
+  },
+
+  // متطلبات الشواهد
+  openAddRequirementModal(indId) {
+    document.getElementById('edit-req-ind-id').value = indId;
+    document.getElementById('edit-req-id').value = '';
+    document.getElementById('edit-req-modal-title').textContent = '➕ إضافة متطلب شاهد جديد';
+    document.getElementById('edit-req-title').value = '';
+    document.getElementById('edit-req-desc').value = '';
+    document.getElementById('edit-req-required').checked = true;
+    document.getElementById('edit-req-alert').classList.add('hidden');
+    document.getElementById('modal-edit-requirement').classList.remove('hidden');
+  },
+
+  openEditRequirementModal(indId, reqId) {
+    let targetReq = null;
+    for (const std of (this.state.standardsTree?.standards || [])) {
+      for (const sub of (std.subStandards || [])) {
+        for (const ind of (sub.indicators || [])) {
+          if (ind.indicatorId === indId) {
+            const found = (ind.evidenceRequirements || []).find(r => (r.requirementId === reqId || r.id === reqId));
+            if (found) { targetReq = found; break; }
+          }
+        }
+        if (targetReq) break;
+      }
+      if (targetReq) break;
+    }
+    if (!targetReq) return;
+
+    document.getElementById('edit-req-ind-id').value = indId;
+    document.getElementById('edit-req-id').value = reqId;
+    document.getElementById('edit-req-modal-title').textContent = '✏️ تعديل متطلب الشاهد';
+    document.getElementById('edit-req-title').value = targetReq.title;
+    document.getElementById('edit-req-desc').value = targetReq.description || '';
+    document.getElementById('edit-req-required').checked = targetReq.required !== false;
+    document.getElementById('edit-req-alert').classList.add('hidden');
+    document.getElementById('modal-edit-requirement').classList.remove('hidden');
+  },
+
+  closeEditRequirementModal() {
+    const modal = document.getElementById('modal-edit-requirement');
+    if (modal) modal.classList.add('hidden');
+  },
+
+  async handleSaveEditRequirement(event) {
+    event.preventDefault();
+    const indId = document.getElementById('edit-req-ind-id').value;
+    const reqId = document.getElementById('edit-req-id').value;
+    const title = document.getElementById('edit-req-title').value.trim();
+    const desc = document.getElementById('edit-req-desc').value.trim();
+    const required = document.getElementById('edit-req-required').checked;
+    const alertEl = document.getElementById('edit-req-alert');
+
+    let res;
+    if (reqId) {
+      res = await this.request(`/indicators/${indId}/requirements/${reqId}`, 'PUT', { title, description: desc, required });
+    } else {
+      res = await this.request(`/indicators/${indId}/requirements`, 'POST', { title, description: desc, required });
+    }
+
+    if (res.ok) {
+      this.closeEditRequirementModal();
+      await this.fetchAndRenderSelectedVersion();
+    } else {
+      alertEl.textContent = res.message || 'فشل حفظ متطلب الشاهد.';
+      alertEl.classList.remove('hidden');
+    }
+  },
+
+  async handleDeleteRequirement(indId, reqId) {
+    if (!confirm('هل أنت متأكد من حذف هذا المتطلب الإثباتي؟')) return;
+    const res = await this.request(`/indicators/${indId}/requirements/${reqId}`, 'DELETE');
+    if (res.ok) {
+      await this.fetchAndRenderSelectedVersion();
+    } else {
+      alert('فشل حذف المتطلب: ' + res.message);
+    }
+  },
+
+  renderStandardsReview(isDraft, isStandardsManager) {
     const container = document.getElementById('standards-review-content');
     if (!container || !this.state.standardsTree) return;
 
@@ -2583,14 +3862,33 @@ const App = {
       return;
     }
 
-    container.innerHTML = standards.map((std, sIdx) => `
+    container.innerHTML = `
+      ${(isDraft && isStandardsManager) ? `
+        <div style="display: flex; justify-content: space-between; align-items: center; background: #ecfdf5; border: 1px solid #a7f3d0; padding: 0.75rem 1rem; border-radius: 6px; margin-bottom: 1rem;">
+          <div>
+            <strong style="color: #065f46;">المسودة مفتوحة للتطوير والتوسع الهيكلي</strong>
+            <div style="font-size: 0.8rem; color: #047857;">يمكنك إضافة معيار ثامن أو أكثر، مجالات فرعية، مؤشرات جديدة، أو طبقات ممارسات ذرية تحت المؤشرات.</div>
+          </div>
+          <button class="btn btn-sm btn-success" onclick="App.openCreateStandardModal()">➕ إضافة معيار جديد (8 فأكثر)</button>
+        </div>
+      ` : ''}
+      ${standards.map((std, sIdx) => `
       <div class="review-standard-card" id="rev-std-card-${sIdx}">
         <div class="review-standard-header" onclick="App.toggleAccordion('rev-std-body-${sIdx}')">
-          <div>
-            <span>${std.code} — ${std.name}</span>
+          <div style="flex: 1;">
+            <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+              <span>${std.code} — ${std.name}</span>
+              ${(isDraft && isStandardsManager) 
+                ? `
+                  <button class="btn btn-sm btn-outline-primary" style="padding: 0.15rem 0.5rem; font-size: 0.75rem;" onclick="event.stopPropagation(); App.openEditStandardModal(${std.standardId})">✏️ تعديل</button>
+                  <button class="btn btn-sm btn-outline-success" style="padding: 0.15rem 0.5rem; font-size: 0.75rem;" onclick="event.stopPropagation(); App.openCreateSubStandardModal(${std.standardId})">➕ إضافة مجال فرعي</button>
+                  <button class="btn btn-sm btn-outline-danger" style="padding: 0.15rem 0.5rem; font-size: 0.75rem;" onclick="event.stopPropagation(); App.handleDeleteStandard(${std.standardId})">🗑️ حذف</button>
+                ` 
+                : (isStandardsManager ? `<span class="badge badge-gray" style="font-size: 0.72rem; padding: 2px 6px;" title="محمي ضد التعديل لأنه إصدار مُقرّ. استنسخ كمسودة للتعديل.">🔒 محمي (مُقرّ)</span>` : '')}
+            </div>
             ${std.description ? `<div style="font-size: 0.8rem; font-weight: normal; color: var(--text-muted); margin-top: 0.2rem;">${std.description}</div>` : ''}
           </div>
-          <div style="font-size: 0.8rem; color: var(--text-muted);">
+          <div style="font-size: 0.8rem; color: var(--text-muted); white-space: nowrap;">
             الوزن: ${std.weight}% | ${std.subStandards?.length || 0} مجالات فرعية ▾
           </div>
         </div>
@@ -2599,11 +3897,20 @@ const App = {
           ${(std.subStandards || []).map((sub, subIdx) => `
             <div style="border-bottom: 1px solid var(--border);" id="rev-sub-card-${sIdx}-${subIdx}">
               <div class="review-substandard-header" onclick="App.toggleAccordion('rev-sub-body-${sIdx}-${subIdx}')">
-                <div>
-                  <span>${sub.code} — ${sub.name}</span>
+                <div style="flex: 1;">
+                  <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+                    <span>${sub.code} — ${sub.name}</span>
+                    ${(isDraft && isStandardsManager)
+                      ? `
+                        <button class="btn btn-sm btn-outline-secondary" style="padding: 0.15rem 0.45rem; font-size: 0.7rem;" onclick="event.stopPropagation(); App.openEditSubStandardModal(${sub.subStandardId})">✏️ تعديل</button>
+                        <button class="btn btn-sm btn-outline-success" style="padding: 0.15rem 0.45rem; font-size: 0.7rem;" onclick="event.stopPropagation(); App.openCreateIndicatorModal(${sub.subStandardId})">➕ إضافة مؤشر</button>
+                        <button class="btn btn-sm btn-outline-danger" style="padding: 0.15rem 0.45rem; font-size: 0.7rem;" onclick="event.stopPropagation(); App.handleDeleteSubStandard(${sub.subStandardId})">🗑️ حذف</button>
+                      `
+                      : (isStandardsManager ? `<span class="badge badge-gray" style="font-size: 0.7rem; padding: 2px 6px;" title="المجال محمي ضد التعديل في الإصدار المُقرّ.">🔒 محمي</span>` : '')}
+                  </div>
                   ${sub.description ? `<div style="font-size: 0.75rem; font-weight: normal; color: var(--text-muted);">${sub.description}</div>` : ''}
                 </div>
-                <div style="font-size: 0.75rem; color: var(--text-muted);">
+                <div style="font-size: 0.75rem; color: var(--text-muted); white-space: nowrap;">
                   ${sub.indicators?.length || 0} مؤشرات ▾
                 </div>
               </div>
@@ -2616,22 +3923,33 @@ const App = {
                        data-name="${ind.name}" 
                        data-desc="${ind.description || ''}">
                     <!-- رأس المؤشر -->
-                    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.5rem;">
-                      <div>
-                        <strong style="color: var(--primary); font-size: 0.95rem;">${ind.code} — ${ind.name}</strong>
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.5rem; flex-wrap: wrap; gap: 0.5rem;">
+                      <div style="flex: 1;">
+                        <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+                          <strong style="color: var(--primary); font-size: 0.95rem;">${ind.code} — ${ind.name}</strong>
+                          ${(isDraft && isStandardsManager)
+                            ? `
+                              <button class="btn btn-sm btn-outline-primary" style="padding: 0.1rem 0.4rem; font-size: 0.7rem;" onclick="App.openEditIndicatorModal(${ind.indicatorId})">✏️ تعديل المؤشر</button>
+                              <button class="btn btn-sm btn-outline-danger" style="padding: 0.1rem 0.4rem; font-size: 0.7rem;" onclick="App.handleDeleteIndicator(${ind.indicatorId})">🗑️ حذف المؤشر</button>
+                            `
+                            : (isStandardsManager ? `<button class="btn btn-sm btn-outline-secondary" style="padding: 0.1rem 0.45rem; font-size: 0.72rem;" onclick="App.openCloneVersionModal()" title="لا يمكن تعديل مؤشر في إصدار مُقرّ. انقر هنا لاستنساخ هذا الإصدار كمسودة وتعديل المؤشرات فوراً!">🔒 تعديل (يتطلب مسودة)</button>` : '')}
+                        </div>
                         <div style="font-size: 0.85rem; color: #475569; margin-top: 0.25rem; line-height: 1.4;">
                           ${ind.description || 'لا يوجد وصف للمؤشر'}
                         </div>
                       </div>
                       <div style="text-align: left; font-size: 0.75rem; color: var(--text-muted); white-space: nowrap;">
-                        الوزن: ${ind.weight || 1} | الحالة: <span class="badge badge-green">${ind.status}</span>
+                        الوزن: ${ind.weight || 1} | الحالة: <span class="badge ${ind.status === 'Active' ? 'badge-green' : 'badge-gray'}">${ind.status}</span>
                       </div>
                     </div>
 
                     <!-- الواصفات الأربع كاملة -->
                     <div style="margin-top: 0.75rem;">
-                      <div style="font-size: 0.8rem; font-weight: 700; color: #334155; margin-bottom: 0.35rem;">
-                        سلم الواصفات المعيارية الأربع (0 - 3):
+                      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">
+                        <span style="font-size: 0.8rem; font-weight: 700; color: #334155;">سلم الواصفات المعيارية الأربع (0 - 3):</span>
+                        ${(isDraft && isStandardsManager)
+                          ? `<button class="btn btn-sm btn-outline-secondary" style="padding: 0.1rem 0.4rem; font-size: 0.7rem;" onclick="App.openEditDescriptorsModal(${ind.indicatorId})">📝 تعديل الواصفات</button>`
+                          : (isStandardsManager ? `<button class="btn btn-sm btn-outline-secondary" style="padding: 0.1rem 0.45rem; font-size: 0.7rem;" onclick="App.openCloneVersionModal()" title="الواصفات محصنة في الإصدار المُقرّ. انقر للاستنساخ كمسودة وتعديلها">🔒 الواصفات مجمدة</button>` : '')}
                       </div>
                       <div class="descriptor-cards-grid">
                         ${(ind.scoreDescriptors || []).sort((a,b)=>(a.scoreValue??a.displayOrder)-(b.scoreValue??b.displayOrder)).map(d => `
@@ -2646,46 +3964,33 @@ const App = {
                       </div>
                     </div>
 
-                    <!-- أدوات التحقق ومتطلبات الشواهد -->
-                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 0.75rem; margin-top: 0.75rem; padding-top: 0.6rem; border-top: 1px dashed var(--border);">
-                      <!-- أدوات التحقق -->
-                      <div>
-                        <div style="font-size: 0.8rem; font-weight: 700; color: #334155; margin-bottom: 0.35rem;">
-                          أدوات التحقق الرسمية:
-                        </div>
-                        <div style="display: flex; flex-direction: column; gap: 0.35rem;">
-                          ${(ind.verificationTools || []).length > 0 
-                            ? (ind.verificationTools || []).map(t => `
-                              <div class="tool-item-row" style="font-size: 0.8rem;">
-                                <div style="display: flex; justify-content: space-between;">
-                                  <strong>${t.name} (${t.toolType})</strong>
-                                  <span class="badge ${t.required ? 'badge-red' : 'badge-gray'}" style="font-size: 0.65rem;">${t.required ? 'إلزامية *' : 'اختيارية'}</span>
-                                </div>
-                                ${t.usageGuidance ? `<div class="tool-item-guidance">💡 ${t.usageGuidance}</div>` : ''}
-                              </div>
-                            `).join('')
-                            : '<span style="font-size: 0.75rem; color: var(--text-muted);">لا توجد أدوات تحقق مقررة.</span>'}
-                        </div>
+                    <!-- متطلبات الشواهد (الطبقة الذرية للمؤشر) -->
+                    <div style="margin-top: 0.75rem; padding-top: 0.6rem; border-top: 1px dashed var(--border);">
+                      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">
+                        <span style="font-size: 0.8rem; font-weight: 700; color: #334155;">متطلبات الشواهد والممارسات الذرية:</span>
+                        ${(isDraft && isStandardsManager)
+                          ? `<button class="btn btn-sm btn-outline-primary" style="padding: 0.1rem 0.4rem; font-size: 0.7rem;" onclick="App.openAddRequirementModal(${ind.indicatorId})">➕ إضافة متطلب شاهد / ممارسة ذرية</button>`
+                          : (isStandardsManager ? `<button class="btn btn-sm btn-outline-secondary" style="padding: 0.1rem 0.45rem; font-size: 0.7rem;" onclick="App.openCloneVersionModal()" title="المتطلبات محصنة في الإصدار المُقرّ. انقر للاستنساخ كمسودة">🔒 الشواهد مجمدة</button>` : '')}
                       </div>
-
-                      <!-- متطلبات الشواهد -->
-                      <div>
-                        <div style="font-size: 0.8rem; font-weight: 700; color: #334155; margin-bottom: 0.35rem;">
-                          متطلبات الشواهد والأدلة الرسمية:
-                        </div>
-                        <div style="display: flex; flex-direction: column; gap: 0.35rem;">
-                          ${(ind.evidenceRequirements || []).length > 0
-                            ? (ind.evidenceRequirements || []).map(r => `
-                              <div class="evidence-req-item" style="font-size: 0.8rem;">
-                                <div>
-                                  <strong>${r.title}</strong>
-                                  ${r.description ? `<div style="font-size: 0.7rem; color: var(--text-muted);">${r.description}</div>` : ''}
-                                </div>
-                                <span class="badge ${r.required ? 'badge-yellow' : 'badge-gray'}" style="font-size: 0.65rem;">${r.required ? 'إلزامي' : 'اختياري'}</span>
+                      <div style="display: flex; flex-direction: column; gap: 0.35rem;">
+                        ${(ind.evidenceRequirements || []).length > 0
+                          ? (ind.evidenceRequirements || []).map(r => `
+                            <div class="evidence-req-item" style="font-size: 0.8rem; display: flex; justify-content: space-between; align-items: center; gap: 0.5rem;">
+                              <div style="flex: 1;">
+                                <strong>${r.title}</strong>
+                                ${r.description ? `<div style="font-size: 0.7rem; color: var(--text-muted);">${r.description}</div>` : ''}
                               </div>
-                            `).join('')
-                            : '<span style="font-size: 0.75rem; color: var(--text-muted);">لا توجد متطلبات شواهد مسجلة.</span>'}
-                        </div>
+                              <div style="display: flex; align-items: center; gap: 0.35rem;">
+                                <span class="badge ${r.required ? 'badge-yellow' : 'badge-gray'}" style="font-size: 0.65rem;">${r.required ? 'إلزامي' : 'اختياري'}</span>
+                                ${(isDraft && isStandardsManager)
+                                  ? `
+                                    <button class="btn btn-sm btn-outline-secondary" style="padding: 0.1rem 0.35rem; font-size: 0.7rem;" onclick="App.openEditRequirementModal(${ind.indicatorId}, ${r.requirementId || r.id})">✏️</button>
+                                    <button class="btn btn-sm btn-outline-danger" style="padding: 0.1rem 0.35rem; font-size: 0.7rem;" onclick="App.handleDeleteRequirement(${ind.indicatorId}, ${r.requirementId || r.id})">🗑️</button>
+                                  ` : ''}
+                              </div>
+                            </div>
+                          `).join('')
+                          : '<span style="font-size: 0.75rem; color: var(--text-muted);">لا توجد متطلبات شواهد مسجلة.</span>'}
                       </div>
                     </div>
 
@@ -2696,7 +4001,7 @@ const App = {
           `).join('')}
         </div>
       </div>
-    `).join('');
+    `).join('')}`;
   },
 
   filterStandardsReview(query) {
@@ -2962,6 +4267,9 @@ const App = {
     const finalScore = data.final_score || 0;
     const perfLabel = data.performance_level?.label || 'متميز';
     const perfBadge = finalScore >= 90 ? 'badge-green' : (finalScore >= 75 ? 'badge-blue' : (finalScore >= 50 ? 'badge-yellow' : 'badge-red'));
+
+    // مقارنة الأداء مع الدورة السابقة في شاشة النتائج (الشريحة 9)
+    this.loadEvaluationTrend(evalId, 'results');
 
     bannerBox.innerHTML = `
       <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
@@ -3499,6 +4807,253 @@ const App = {
       console.error(err);
       this.showAlert('تعذر النسخ تلقائياً، يرجى النسخ اليدوي.', 'error');
     });
+  },
+
+  // =========================================================================
+  // الشريحة 9: تصدير بطاقة التقويم الرسمية (PDF) ومصنف التقييم (Excel) ومقارنة الأداء (Trend)
+  // =========================================================================
+
+  async exportEvaluationPdf(evalId) {
+    evalId = evalId || this.getEvaluationId();
+    if (!evalId) {
+      this.showAlert('لم يتم العثور على ملف تقييم نشط للتصدير.', 'error');
+      return;
+    }
+    this.showAlert('جارِ إنشاء وتحميل بطاقة التقويم الرسمية (PDF)...', 'info');
+    try {
+      const token = this.state.token;
+      const res = await fetch(`${this.state.apiUrl}/evaluations/${evalId}/export-pdf`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/pdf, application/json',
+        }
+      });
+
+      if (!res.ok) {
+        let errData = {};
+        try { errData = await res.json(); } catch(e){}
+        this.showAlert(errData.message || `فشل تصدير ملف PDF (رمز الخطأ: ${res.status}).`, 'error');
+        return;
+      }
+
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `evaluation_card_${evalId}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+      this.showAlert('تم تحميل بطاقة التقويم الرسمية (PDF) بنجاح.', 'success');
+    } catch (err) {
+      this.showAlert('تعذر الاتصال بالخادم لتصدير ملف PDF: ' + err.message, 'error');
+    }
+  },
+
+  async exportEvaluationExcel(evalId) {
+    evalId = evalId || this.getEvaluationId();
+    if (!evalId) {
+      this.showAlert('لم يتم العثور على ملف تقييم نشط للتصدير.', 'error');
+      return;
+    }
+    this.showAlert('جارِ إنشاء وتحميل مصنف التقييم الشامل (Excel)...', 'info');
+    try {
+      const token = this.state.token;
+      const res = await fetch(`${this.state.apiUrl}/evaluations/${evalId}/export-excel`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/json',
+        }
+      });
+
+      if (!res.ok) {
+        let errData = {};
+        try { errData = await res.json(); } catch(e){}
+        this.showAlert(errData.message || `فشل تصدير مصنف Excel (رمز الخطأ: ${res.status}).`, 'error');
+        return;
+      }
+
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `school_evaluation_${evalId}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+      this.showAlert('تم تحميل مصنف البيانات الشامل (Excel) بنجاح.', 'success');
+    } catch (err) {
+      this.showAlert('تعذر الاتصال بالخادم لتصدير ملف Excel: ' + err.message, 'error');
+    }
+  },
+
+  async loadEvaluationTrend(evalId, context = 'tree') {
+    evalId = evalId || this.getEvaluationId();
+    if (!evalId) return;
+
+    const targetId = context === 'tree' ? 'tree-trend-card' : 'res-trend-card';
+    const cardEl = document.getElementById(targetId);
+    if (!cardEl) return;
+
+    try {
+      const res = await this.request(`/evaluations/${evalId}/trend`);
+      if (!res.ok || !res.data) {
+        cardEl.classList.add('hidden');
+        return;
+      }
+
+      const trend = res.data;
+      cardEl.classList.remove('hidden');
+
+      if (!trend.has_previous_cycle) {
+        cardEl.style.background = '#f8fafc';
+        cardEl.style.border = '1px solid #e2e8f0';
+        cardEl.innerHTML = `
+          <div style="display: flex; align-items: center; gap: 0.5rem; color: #475569; font-size: 0.85rem;">
+            <span style="font-size: 1.1rem;">🌱</span>
+            <div>
+              <strong>التقييم التأسيسي الأول للمدرسة:</strong>
+              <span style="margin-right: 0.35rem;">${trend.notice || 'لا توجد دورة تقييم سابقة مكتملة للمقارنة معها.'}</span>
+            </div>
+          </div>
+        `;
+        return;
+      }
+
+      const delta = trend.score_delta ?? 0;
+      const isImproved = delta > 0;
+      const isRegressed = delta < 0;
+      const deltaSign = delta > 0 ? `+${delta}%` : `${delta}%`;
+      const deltaColor = isImproved ? '#16a34a' : (isRegressed ? '#dc2626' : '#64748b');
+      const deltaBg = isImproved ? '#f0fdf4' : (isRegressed ? '#fef2f2' : '#f8fafc');
+      const deltaBorder = isImproved ? '#bbf7d0' : (isRegressed ? '#fecaca' : '#e2e8f0');
+
+      const prevCycle = trend.previous_cycle || {};
+      const breakdown = trend.breakdown || {};
+
+      cardEl.style.background = deltaBg;
+      cardEl.style.border = `1px solid ${deltaBorder}`;
+      cardEl.innerHTML = `
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
+          <div>
+            <span style="font-weight: 700; color: #1e293b; font-size: 0.95rem;">📈 مقارنة الأداء مع الدورة السابقة:</span>
+            <span style="font-size: 0.85rem; color: #475569; margin-right: 0.5rem;">
+              (${prevCycle.academic_year || ''} - ${prevCycle.name || 'الدورة السابقة'})
+            </span>
+          </div>
+          <div style="font-size: 1rem; font-weight: 800; color: ${deltaColor};">
+            فارق النتيجة الإجمالية: ${deltaSign}
+          </div>
+        </div>
+        <div style="display: flex; gap: 1rem; flex-wrap: wrap; margin-top: 0.5rem; font-size: 0.85rem;">
+          <span class="badge badge-green" style="font-size: 0.8rem;">
+            🟢 مؤشرات تحسنت: ${breakdown.improved_count ?? 0}
+          </span>
+          <span class="badge badge-red" style="font-size: 0.8rem;">
+            🔴 مؤشرات تراجعت: ${breakdown.regressed_count ?? 0}
+          </span>
+          <span class="badge badge-gray" style="font-size: 0.8rem;">
+            ⚪ مؤشرات مستقرة: ${breakdown.maintained_count ?? 0}
+          </span>
+          <span style="font-size: 0.8rem; color: #64748b; margin-right: auto;">
+            الدرجة السابقة: ${trend.previous_score ?? 0}% &larr; الحالية: ${trend.current_score ?? 0}%
+          </span>
+        </div>
+      `;
+    } catch (err) {
+      cardEl.classList.add('hidden');
+    }
+  },
+
+  async loadActionRecommendations(scoreVal) {
+    const evalId = this.state.currentEvaluation?.evaluationId || this.getEvaluationId();
+    const ind = this.state.currentIndicator;
+    const cardEl = document.getElementById('indicator-action-recommendations-card');
+    const listEl = document.getElementById('indicator-action-recommendations-list');
+    if (!cardEl || !listEl || !evalId || !ind) return;
+
+    const indCode = ind.code || ind.indicatorCode;
+    if (!indCode) return;
+
+    cardEl.classList.remove('hidden');
+    listEl.innerHTML = '<span style="font-size: 0.8rem; color: #9a3412;">جارِ جلب التوصيات والإجراءات المقترحة من بنك التدخلات...</span>';
+
+    try {
+      const res = await this.request(`/evaluations/${evalId}/action-recommendations?indicator_code=${encodeURIComponent(indCode)}`);
+      if (!res.ok || !res.data || res.data.length === 0) {
+        listEl.innerHTML = '<span style="font-size: 0.8rem; color: #9a3412;">لا توجد إجراءات نموذجية مسجلة في البنك لهذا المؤشر حالياً.</span>';
+        return;
+      }
+
+      const items = res.data;
+      listEl.innerHTML = items.map((item, idx) => `
+        <div style="background: white; border: 1px solid #fed7aa; border-radius: 6px; padding: 0.6rem; display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+          <div style="flex: 1; min-width: 250px;">
+            <div style="font-weight: 700; color: #9a3412; font-size: 0.85rem;">${item.title_ar || item.title}</div>
+            <div style="font-size: 0.78rem; color: #475569; margin-top: 0.2rem;">${item.description_ar || item.description || ''}</div>
+            <div style="font-size: 0.73rem; color: #64748b; margin-top: 0.25rem;">
+              الفئة المستهدفة: <strong>${item.target_group_ar || item.target_group || 'غير محدد'}</strong> | 
+              المدة المقترحة: <strong>${item.default_timeline_days || 30} يوماً</strong>
+            </div>
+          </div>
+          <div>
+            <button type="button" class="btn btn-sm btn-outline-warning" style="background: #fff7ed; border-color: #ea580c; color: #c2410c; font-weight: 600;" 
+                    onclick='App.adoptActionRecommendation(${JSON.stringify(item).replace(/'/g, "&apos;")})'>
+              ➕ إضافة للخطة
+            </button>
+          </div>
+        </div>
+      `).join('');
+    } catch (err) {
+      listEl.innerHTML = '<span style="font-size: 0.8rem; color: #dc2626;">تعذر جلب التوصيات من البنك.</span>';
+    }
+  },
+
+  async adoptActionRecommendation(item) {
+    this.closeScoringModal();
+    this.navTo('plans');
+
+    setTimeout(async () => {
+      if (!this.state.plans || this.state.plans.length === 0) {
+        await this.loadPlans();
+      }
+      const plans = this.state.plans || [];
+      if (plans.length === 0) {
+        this.showAlert('لا توجد خطة تحسين بعد. يرجى إنشاء خطة أولاً ثم إضافة الإجراء المقترح.', 'warning');
+        this.toggleCreatePlanForm(true);
+        const titleInput = document.getElementById('plan-title');
+        if (titleInput) {
+          titleInput.value = `خطة تطوير: ${item.title_ar || item.title}`;
+        }
+        return;
+      }
+
+      const firstPlan = plans[0];
+      await this.showPlanDetails(firstPlan.planId);
+      this.openActionModal();
+
+      setTimeout(() => {
+        const titleEl = document.getElementById('action-title');
+        const respEl = document.getElementById('action-responsible');
+        const startEl = document.getElementById('action-start-date');
+        const dueEl = document.getElementById('action-due-date');
+
+        if (titleEl) titleEl.value = item.title_ar || item.title;
+        if (respEl) respEl.value = item.target_group_ar || item.target_group || 'فريق التطوير المدرسي';
+
+        const today = new Date();
+        if (startEl) startEl.value = today.toISOString().split('T')[0];
+
+        const days = item.default_timeline_days || 30;
+        const dueDate = new Date();
+        dueDate.setDate(dueDate.getDate() + days);
+        if (dueEl) dueEl.value = dueDate.toISOString().split('T')[0];
+
+        this.showAlert(`تم تحضير الإجراء المقترح (${item.title_ar || item.title}). يرجى حفظه.`, 'info');
+      }, 250);
+    }, 200);
   },
 
   showSubmitErrorsModal(res) {
@@ -4578,17 +6133,21 @@ const App = {
     const btnSchools = document.getElementById('tab-btn-admin-schools');
     const btnUsers = document.getElementById('tab-btn-admin-users');
     const btnRoles = document.getElementById('tab-btn-admin-roles');
+    const btnCycles = document.getElementById('tab-btn-admin-cycles');
     const paneSchools = document.getElementById('admin-tab-schools');
     const paneUsers = document.getElementById('admin-tab-users');
     const paneRoles = document.getElementById('admin-tab-roles');
+    const paneCycles = document.getElementById('admin-tab-cycles');
 
     if (btnSchools) btnSchools.classList.toggle('active', tabName === 'schools');
     if (btnUsers) btnUsers.classList.toggle('active', tabName === 'users');
     if (btnRoles) btnRoles.classList.toggle('active', tabName === 'roles');
+    if (btnCycles) btnCycles.classList.toggle('active', tabName === 'cycles');
 
     if (paneSchools) paneSchools.classList.toggle('hidden', tabName !== 'schools');
     if (paneUsers) paneUsers.classList.toggle('hidden', tabName !== 'users');
     if (paneRoles) paneRoles.classList.toggle('hidden', tabName !== 'roles');
+    if (paneCycles) paneCycles.classList.toggle('hidden', tabName !== 'cycles');
 
     if (tabName === 'schools') {
       this.loadAdminSchools();
@@ -4597,6 +6156,10 @@ const App = {
     } else if (tabName === 'roles') {
       this.loadAdminRoles();
     }
+  },
+
+  handleCreateEvaluationCycle() {
+    this.showAlert('تنبيه هندسي (فجوة معمارية مسجلة G-24): لا يوجد Endpoint في الـ API الخلفي لإنشاء دورات تقييم evaluation_cycles حالياً. يتم إنشاء الدورات مركزياً بالـ Seeder.', 'warning', 8000);
   },
 
   async loadAdminRoles() {
@@ -5240,10 +6803,673 @@ const App = {
   },
 
   // ---------------------------------------------------------------------------
-  // 22. مركز معايير الاعتماد المدرسي (Standards Hub) لمسؤول المعايير
+  // الشريحة 10: إدارة دورات التقييم المركزية (Supervision Evaluation Cycles)
   // ---------------------------------------------------------------------------
-  loadStandardsManagerData() {
-    // صفحة عرض هيكل ومصفوفة المعايير
+  switchSupervisionTab(tab) {
+    const tabSchools = document.getElementById('supervision-tab-schools');
+    const tabCycles = document.getElementById('supervision-tab-cycles');
+    const btnSchools = document.getElementById('tab-btn-supervision-schools');
+    const btnCycles = document.getElementById('tab-btn-supervision-cycles');
+
+    if (tab === 'cycles') {
+      if (tabSchools) tabSchools.classList.add('hidden');
+      if (tabCycles) tabCycles.classList.remove('hidden');
+      if (btnSchools) btnSchools.classList.remove('active');
+      if (btnCycles) btnCycles.classList.add('active');
+      this.loadSupervisionCycles();
+    } else {
+      if (tabSchools) tabSchools.classList.remove('hidden');
+      if (tabCycles) tabCycles.classList.add('hidden');
+      if (btnSchools) btnSchools.classList.add('active');
+      if (btnCycles) btnCycles.classList.remove('active');
+      this.loadSupervisionData();
+    }
+  },
+
+  async loadSupervisionCycles() {
+    const tbody = document.getElementById('supervision-cycles-tbody');
+    if (!tbody) return;
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align: center;">جارِ جلب دورات التقييم المركزية...</td></tr>';
+
+    const res = await this.request('/evaluation-cycles');
+    if (!res.ok) {
+      tbody.innerHTML = `<tr><td colspan="8" style="color: red; text-align: center;">${res.message}</td></tr>`;
+      return;
+    }
+
+    const cycles = res.data || [];
+    if (cycles.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="8" style="text-align: center;">لا توجد دورات تقييم منشأة حتى الآن. يمكنك إطلاق دورة جديدة باستخدام الزر أعلاه.</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = cycles.map(c => {
+      const isAct = c.status === 'Active';
+      const statusBadge = isAct
+        ? '<span class="badge badge-green">نشطة (Active)</span>'
+        : '<span class="badge badge-gray">مغلقة (Closed)</span>';
+
+      const versionInfo = c.version
+        ? `${c.version.versionName || 'معايير الاعتماد المدرسي'} (v${c.version.versionNumber || '1.0'})`
+        : 'إصدار معايير معتمد';
+
+      const dateRange = `${c.startDate || '-'} إلى ${c.endDate || '-'}`;
+      const closeBtn = isAct
+        ? `<button class="btn btn-sm btn-outline-danger" onclick="App.closeEvaluationCycle(${c.cycleId})">🔒 إغلاق الدورة</button>`
+        : '<span style="font-size: 0.8rem; color: var(--text-muted);">مغلقة</span>';
+
+      const enrollBtn = isAct
+        ? `<button class="btn btn-sm btn-secondary" onclick="App.openEnrollSchoolsModal(${c.cycleId})">🏫 إلحاق مدارس</button>`
+        : '';
+
+      return `
+        <tr>
+          <td><strong>#${c.cycleId}</strong></td>
+          <td><strong>${c.name || 'دورة التقييم'}</strong></td>
+          <td>${c.academicYear}</td>
+          <td><span class="badge badge-blue">${versionInfo}</span></td>
+          <td style="font-size: 0.82rem;">${dateRange}</td>
+          <td><span class="badge badge-purple">${c.participationsCount || 0} مدرسة</span></td>
+          <td>${statusBadge}</td>
+          <td>
+            <div style="display: flex; gap: 0.35rem; flex-wrap: wrap;">
+              ${enrollBtn}
+              ${closeBtn}
+            </div>
+          </td>
+        </tr>
+      `;
+    }).join('');
+  },
+
+  openLaunchCycleModal() {
+    const nameEl = document.getElementById('cycle-name');
+    const yearEl = document.getElementById('cycle-academic-year');
+    const startEl = document.getElementById('cycle-start-date');
+    const endEl = document.getElementById('cycle-end-date');
+    const alertEl = document.getElementById('launch-cycle-alert');
+
+    if (alertEl) alertEl.classList.add('hidden');
+    if (nameEl) nameEl.value = 'الدورة التقييمية لمدارس التعليم العام 2026-2027';
+    if (yearEl) yearEl.value = '2026/2027';
+
+    const today = new Date().toISOString().split('T')[0];
+    const sixMonthsLater = new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    if (startEl) startEl.value = today;
+    if (endEl) endEl.value = sixMonthsLater;
+
+    const modal = document.getElementById('modal-launch-cycle');
+    if (modal) modal.classList.remove('hidden');
+  },
+
+  closeLaunchCycleModal() {
+    const modal = document.getElementById('modal-launch-cycle');
+    if (modal) modal.classList.add('hidden');
+  },
+
+  async handleSaveLaunchCycle(event) {
+    event.preventDefault();
+    const name = document.getElementById('cycle-name')?.value;
+    const academic_year = document.getElementById('cycle-academic-year')?.value;
+    const start_date = document.getElementById('cycle-start-date')?.value;
+    const end_date = document.getElementById('cycle-end-date')?.value;
+    const enroll_all_schools = document.getElementById('cycle-enroll-all')?.checked;
+    const alertEl = document.getElementById('launch-cycle-alert');
+
+    const res = await this.request('/evaluation-cycles', {
+      method: 'POST',
+      body: JSON.stringify({
+        name,
+        academic_year,
+        start_date,
+        end_date,
+        enroll_all_schools
+      })
+    });
+
+    if (!res.ok) {
+      if (alertEl) {
+        alertEl.textContent = res.message || 'تعذر إطلاق الدورة.';
+        alertEl.classList.remove('hidden');
+      } else {
+        alert(res.message);
+      }
+      return;
+    }
+
+    alert('تم إطلاق دورة التقييم الجديدة بنجاح وربطها تلقائياً بالإصدار المُقرّ!');
+    this.closeLaunchCycleModal();
+    this.loadSupervisionCycles();
+  },
+
+  async closeEvaluationCycle(cycleId) {
+    if (!confirm('هل أنت متأكد من إغلاق هذه الدورة التقييمية؟ لن تتمكن المدارس من فتح تقييمات جديدة بعدها.')) return;
+    const res = await this.request(`/evaluation-cycles/${cycleId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status: 'Closed' })
+    });
+
+    if (!res.ok) {
+      alert(res.message || 'تعذر إغلاق الدورة.');
+      return;
+    }
+
+    alert('تم إغلاق دورة التقييم بنجاح.');
+    this.loadSupervisionCycles();
+  },
+
+  async openEnrollSchoolsModal(cycleId) {
+    document.getElementById('enroll-cycle-id').value = cycleId;
+    const listEl = document.getElementById('enroll-schools-list');
+    const alertEl = document.getElementById('enroll-schools-alert');
+    if (alertEl) alertEl.classList.add('hidden');
+    if (listEl) listEl.innerHTML = '<div style="text-align: center;">جارِ جلب قائمة المدارس...</div>';
+
+    const modal = document.getElementById('modal-enroll-schools');
+    if (modal) modal.classList.remove('hidden');
+
+    const res = await this.request('/schools');
+    if (!res.ok || !Array.isArray(res.data)) {
+      if (listEl) listEl.innerHTML = '<div style="color: red;">تعذر جلب المدارس.</div>';
+      return;
+    }
+
+    listEl.innerHTML = res.data.map(s => `
+      <label style="display: flex; align-items: center; gap: 0.5rem; padding: 0.3rem 0; font-size: 0.88rem; cursor: pointer;">
+        <input type="checkbox" name="enroll-school-ids" value="${s.schoolId}">
+        <span><strong>${s.schoolName}</strong> (${s.educationalStage || 'عام'}) - ${s.governorate || ''}</span>
+      </label>
+    `).join('');
+  },
+
+  closeEnrollSchoolsModal() {
+    const modal = document.getElementById('modal-enroll-schools');
+    if (modal) modal.classList.add('hidden');
+  },
+
+  async handleSaveEnrollSchools(event) {
+    event.preventDefault();
+    const cycleId = document.getElementById('enroll-cycle-id')?.value;
+    const checkboxes = document.querySelectorAll('input[name="enroll-school-ids"]:checked');
+    const school_ids = Array.from(checkboxes).map(cb => parseInt(cb.value));
+
+    if (school_ids.length === 0) {
+      alert('يرجى تحديد مدرسة واحدة على الأقل.');
+      return;
+    }
+
+    const res = await this.request(`/evaluation-cycles/${cycleId}/participations`, {
+      method: 'POST',
+      body: JSON.stringify({ school_ids })
+    });
+
+    if (!res.ok) {
+      alert(res.message || 'تعذر تسجيل المدارس.');
+      return;
+    }
+
+    alert('تم تسجيل المدارس بنجاح وإرسال الإشعارات لهم!');
+    this.closeEnrollSchoolsModal();
+    this.loadSupervisionCycles();
+  },
+
+  // ---------------------------------------------------------------------------
+  // الشريحة 10: منظومة الإشعارات والتنبيهات (In-App Notifications)
+  // ---------------------------------------------------------------------------
+  async loadNotificationsCount() {
+    if (!this.state.user) return;
+    const res = await this.request('/notifications/unread-count');
+    const badge = document.getElementById('notifications-unread-badge');
+    if (res.ok && badge) {
+      const count = res.data?.unreadCount || 0;
+      this.state.unreadNotificationsCount = count;
+      badge.textContent = count;
+      if (count > 0) {
+        badge.classList.remove('hidden');
+      } else {
+        badge.classList.add('hidden');
+      }
+    }
+  },
+
+  async loadNotifications() {
+    const container = document.getElementById('notifications-modal-list');
+    if (!container) return;
+    container.innerHTML = '<div style="text-align: center; color: var(--text-muted); padding: 1.5rem;">جارِ تحميل التنبيهات...</div>';
+
+    const res = await this.request('/notifications?limit=50');
+    if (!res.ok) {
+      container.innerHTML = `<div style="color: red; text-align: center; padding: 1rem;">${res.message}</div>`;
+      return;
+    }
+
+    const notifs = res.data || [];
+    this.state.notifications = notifs;
+
+    if (notifs.length === 0) {
+      container.innerHTML = '<div style="text-align: center; color: var(--text-muted); padding: 2rem;">📭 لا توجد إشعارات مسجلة لحسابك حالياً.</div>';
+      return;
+    }
+
+    container.innerHTML = notifs.map(n => {
+      const unreadCls = !n.isRead ? 'unread' : '';
+      const dateStr = n.createdAt ? new Date(n.createdAt).toLocaleString('ar-YE') : '';
+      const dot = !n.isRead ? '<span style="color: var(--primary); font-size: 1.2rem; line-height: 1;">●</span>' : '';
+
+      return `
+        <div class="notification-item ${unreadCls}" onclick="App.markNotificationRead(${n.notificationId})">
+          <div class="notification-header">
+            <div style="display: flex; align-items: center; gap: 0.35rem;">
+              ${dot}
+              <span class="notification-title">${n.title || 'إشعار نظامي'}</span>
+            </div>
+            <span class="notification-time">${dateStr}</span>
+          </div>
+          <div class="notification-body">${n.message || ''}</div>
+        </div>
+      `;
+    }).join('');
+  },
+
+  toggleNotificationsModal() {
+    const modal = document.getElementById('modal-notifications');
+    if (!modal) return;
+    const isHidden = modal.classList.contains('hidden');
+    if (isHidden) {
+      modal.classList.remove('hidden');
+      this.loadNotifications();
+    } else {
+      modal.classList.add('hidden');
+    }
+  },
+
+  async markNotificationRead(id) {
+    const res = await this.request(`/notifications/${id}/read`, { method: 'PATCH' });
+    if (res.ok) {
+      await this.loadNotificationsCount();
+      await this.loadNotifications();
+    }
+  },
+
+  async markAllNotificationsRead() {
+    const res = await this.request('/notifications/mark-all-read', { method: 'POST' });
+    if (res.ok) {
+      await this.loadNotificationsCount();
+      await this.loadNotifications();
+    }
+  },
+
+  // ---------------------------------------------------------------------------
+  // الشريحة 10: استعادة كلمة المرور وإعادة التعيين (Password Recovery - G-05)
+  // ---------------------------------------------------------------------------
+  openForgotPasswordModal() {
+    const alertEl = document.getElementById('forgot-password-alert');
+    const formReq = document.getElementById('form-forgot-request');
+    const formReset = document.getElementById('form-forgot-reset');
+    const emailInput = document.getElementById('forgot-email');
+
+    if (alertEl) alertEl.classList.add('hidden');
+    if (formReq) formReq.classList.remove('hidden');
+    if (formReset) formReset.classList.add('hidden');
+    if (emailInput) emailInput.value = '';
+
+    const modal = document.getElementById('modal-forgot-password');
+    if (modal) modal.classList.remove('hidden');
+  },
+
+  closeForgotPasswordModal() {
+    const modal = document.getElementById('modal-forgot-password');
+    if (modal) modal.classList.add('hidden');
+  },
+
+  async handleForgotPassword(event) {
+    event.preventDefault();
+    const email = document.getElementById('forgot-email')?.value?.trim();
+    const alertEl = document.getElementById('forgot-password-alert');
+    if (!email) return;
+
+    const res = await this.request('/auth/password/forgot', {
+      method: 'POST',
+      body: JSON.stringify({ email })
+    });
+
+    if (!res.ok) {
+      if (alertEl) {
+        alertEl.textContent = res.message || 'تعذر إرسال طلب استعادة كلمة المرور.';
+        alertEl.className = 'alert alert-error';
+        alertEl.classList.remove('hidden');
+      }
+      return;
+    }
+
+    if (alertEl) {
+      alertEl.textContent = res.message || 'تم إرسال تعليمات الاستعادة بنجاح.';
+      alertEl.className = 'alert alert-info';
+      alertEl.classList.remove('hidden');
+    }
+
+    // الانتقال للخطوة 2
+    document.getElementById('form-forgot-request')?.classList.add('hidden');
+    const formReset = document.getElementById('form-forgot-reset');
+    if (formReset) {
+      formReset.classList.remove('hidden');
+      // إذا أعاد الباك إند الرمز في بيئة الاختبار/التطوير نملأه تلقائياً للتسهيل
+      if (res.data?.resetToken) {
+        const tokenInput = document.getElementById('reset-token');
+        if (tokenInput) tokenInput.value = res.data.resetToken;
+      }
+    }
+  },
+
+  async handleResetPassword(event) {
+    event.preventDefault();
+    const email = document.getElementById('forgot-email')?.value?.trim();
+    const token = document.getElementById('reset-token')?.value?.trim();
+    const password = document.getElementById('reset-password')?.value;
+    const password_confirmation = document.getElementById('reset-password-confirm')?.value;
+    const alertEl = document.getElementById('forgot-password-alert');
+
+    if (password !== password_confirmation) {
+      if (alertEl) {
+        alertEl.textContent = 'كلمة المرور وتأكيدها غير متطابقين.';
+        alertEl.className = 'alert alert-error';
+        alertEl.classList.remove('hidden');
+      }
+      return;
+    }
+
+    const res = await this.request('/auth/password/reset', {
+      method: 'POST',
+      body: JSON.stringify({
+        email,
+        token,
+        password,
+        password_confirmation
+      })
+    });
+
+    if (!res.ok) {
+      if (alertEl) {
+        alertEl.textContent = res.message || 'تعذر إعادة تعيين كلمة المرور.';
+        alertEl.className = 'alert alert-error';
+        alertEl.classList.remove('hidden');
+      }
+      return;
+    }
+
+    if (alertEl) {
+      alertEl.textContent = 'تمت إعادة تعيين كلمة المرور بنجاح! يمكنك الآن تسجيل الدخول بكلمة المرور الجديدة.';
+      alertEl.className = 'alert alert-info';
+      alertEl.classList.remove('hidden');
+    }
+
+    // تحديث حقل اسم المستخدم وتعيين كلمة المرور الجديدة في شاشة تسجيل الدخول
+    const loginUser = document.getElementById('login-username');
+    const loginPass = document.getElementById('login-password');
+    if (loginUser) loginUser.value = email;
+    if (loginPass) loginPass.value = password;
+
+    setTimeout(() => {
+      this.closeForgotPasswordModal();
+    }, 1800);
+  },
+
+  // ---------------------------------------------------------------------------
+  // 22. مركز معايير الاعتماد المدرسي (Standards Hub) لمسؤول المعايير (الشريحة 7)
+  // ---------------------------------------------------------------------------
+  async loadStandardsManagerData() {
+    const tbody = document.getElementById('hub-versions-tbody');
+    if (!tbody) return;
+
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="6" style="text-align: center; padding: 2rem; color: var(--text-muted);">
+          ⏳ جاري جلب سجل الإصدارات المعيارية من الخادم...
+        </td>
+      </tr>
+    `;
+
+    const res = await this.request('/standard-versions');
+    if (!res.ok || !Array.isArray(res.data)) {
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="6" style="text-align: center; padding: 2rem; color: var(--danger);">
+            ⚠️ تعذر تحميل سجل الإصدارات: ${res.message || 'خطأ في الاتصال بالخادم'}
+          </td>
+        </tr>
+      `;
+      return;
+    }
+
+    const versions = res.data;
+    this.state.standardsVersions = versions;
+
+    // 1. تحديث بطاقات المؤشرات (KPIs)
+    const approvedVer = versions.find(v => v.status === 'Approved' || v.status === 'Active');
+    const drafts = versions.filter(v => v.status === 'Draft');
+    const archived = versions.filter(v => v.status === 'Archived');
+
+    const kpiApprovedNo = document.getElementById('kpi-approved-version-no');
+    const kpiApprovedSub = document.getElementById('kpi-approved-version-sub');
+    const kpiDrafts = document.getElementById('kpi-drafts-count');
+    const kpiArchived = document.getElementById('kpi-archived-count');
+    const hubActiveBadge = document.getElementById('hub-active-ver-badge');
+
+    if (kpiApprovedNo) {
+      kpiApprovedNo.textContent = approvedVer ? approvedVer.version_no : 'لا يوجد';
+    }
+    if (kpiApprovedSub && approvedVer) {
+      kpiApprovedSub.textContent = approvedVer.issue_date ? `تاريخ الصدور: ${approvedVer.issue_date.split('T')[0]}` : 'إصدار رسمي معتمد';
+    }
+    if (hubActiveBadge) {
+      hubActiveBadge.textContent = approvedVer ? approvedVer.version_no : '--';
+    }
+    if (kpiDrafts) kpiDrafts.textContent = drafts.length;
+    if (kpiArchived) kpiArchived.textContent = archived.length;
+
+    // 2. رسم جدول الإصدارات
+    this.renderHubVersions(versions);
+
+    // 3. رسم أوزان الإصدار المعتمد
+    if (approvedVer) {
+      await this.renderHubActiveWeights(approvedVer.version_id);
+    }
+  },
+
+  renderHubVersions(versions) {
+    const tbody = document.getElementById('hub-versions-tbody');
+    if (!tbody) return;
+
+    if (!versions || versions.length === 0) {
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="6" style="text-align: center; padding: 2rem; color: var(--text-muted);">
+            لا توجد إصدارات معيارية مسجلة في هذا التصنيف.
+          </td>
+        </tr>
+      `;
+      return;
+    }
+
+    const isStandardsManager = this.hasRole('ministry_standards_manager') || this.hasRole('admin') || this.hasPermission('standards.manage');
+
+    tbody.innerHTML = versions.map(v => {
+      let badgeClass = 'badge-gray';
+      let statusText = 'مؤرشف';
+
+      if (v.status === 'Approved' || v.status === 'Active') {
+        badgeClass = 'badge-green';
+        statusText = 'مُقرّ رسميًا';
+      } else if (v.status === 'Draft') {
+        badgeClass = 'badge-warning';
+        statusText = 'مسودة عمل';
+      }
+
+      const isDraft = v.status === 'Draft';
+      const isApproved = v.status === 'Approved' || v.status === 'Active';
+      const isArchived = v.status === 'Archived';
+
+      const dateStr = v.issue_date ? v.issue_date.split('T')[0] : (v.created_at ? v.created_at.split('T')[0] : '--');
+
+      let actionButtons = `
+        <button class="btn btn-xs btn-primary" onclick="App.navigateToVersionInEditor(${v.version_id})" title="استعراض وتعديل بالمحرر">
+          📝 المحرر
+        </button>
+      `;
+
+      if (isStandardsManager) {
+        if (isApproved) {
+          actionButtons += `
+            <button class="btn btn-xs btn-outline-secondary" onclick="App.openCloneVersionModal(${v.version_id}, '${v.version_no}')" title="استنساخ كمسودة جديدة">
+              📋 استنساخ
+            </button>
+            <button class="btn btn-xs btn-outline-danger" onclick="App.handleArchiveVersion(${v.version_id})" title="أرشفة الإصدار">
+              📁 أرشفة
+            </button>
+          `;
+        } else if (isDraft) {
+          actionButtons += `
+            <button class="btn btn-xs btn-outline-primary" onclick="App.openEditVersionModal(${v.version_id})" title="تعديل البيانات التعريفية">
+              ✏️ تعديل
+            </button>
+            <button class="btn btn-xs btn-outline-secondary" onclick="App.navigateToVersionInEditor(${v.version_id}, true)" title="ضبط مصفوفة الأوزان">
+              ⚖️ الأوزان
+            </button>
+            <button class="btn btn-xs btn-success" onclick="App.handleApproveVersion(${v.version_id})" title="إقرار المسودة رسميًا">
+              ✅ إقرار
+            </button>
+          `;
+        }
+      }
+
+      return `
+        <tr style="${isApproved ? 'background: #f0fdf4;' : ''}">
+          <td style="padding: 0.65rem 0.75rem; font-weight: 700;">
+            <div style="font-size: 0.95rem; color: var(--primary);">${v.version_no}</div>
+            <div style="font-size: 0.75rem; color: var(--text-muted);">${v.version_name || 'وثيقة المعايير الوطنية'}</div>
+          </td>
+          <td style="padding: 0.65rem 0.75rem;">
+            <div style="font-weight: 600; color: #1e293b;">${v.source_organization || 'وزارة التربية والتعليم'}</div>
+            <div style="font-size: 0.78rem; color: var(--text-muted);">${v.source_number || 'بدون رقم قرار'}</div>
+          </td>
+          <td style="padding: 0.65rem 0.75rem; white-space: nowrap; color: #475569;">
+            ${dateStr}
+          </td>
+          <td style="padding: 0.65rem 0.75rem;">
+            <span class="badge ${badgeClass}">${statusText}</span>
+          </td>
+          <td style="padding: 0.65rem 0.75rem; text-align: center;">
+            <span style="font-size: 0.8rem; background: #f1f5f9; padding: 2px 8px; border-radius: 4px; font-weight: 600;">
+              7 معايير • 109 مؤشرات
+            </span>
+          </td>
+          <td style="padding: 0.65rem 0.75rem; text-align: center;">
+            <div style="display: flex; gap: 0.35rem; justify-content: center; flex-wrap: wrap;">
+              ${actionButtons}
+            </div>
+          </td>
+        </tr>
+      `;
+    }).join('');
+  },
+
+  filterHubVersions(filterStatus) {
+    const all = this.state.standardsVersions || [];
+    if (!filterStatus) {
+      this.renderHubVersions(all);
+      return;
+    }
+
+    const filtered = all.filter(v => {
+      if (filterStatus === 'Approved') {
+        return v.status === 'Approved' || v.status === 'Active';
+      }
+      return v.status === filterStatus;
+    });
+
+    this.renderHubVersions(filtered);
+  },
+
+  navigateToVersionInEditor(versionId, scrollToWeights = false) {
+    this.state.selectedVersionId = parseInt(versionId);
+    this.navTo('standards-review');
+    if (scrollToWeights) {
+      setTimeout(() => {
+        const el = document.getElementById('standards-weights-card');
+        if (el) el.scrollIntoView({ behavior: 'smooth' });
+      }, 350);
+    }
+  },
+
+  openEditVersionModal(versionId) {
+    const modal = document.getElementById('modal-edit-version');
+    if (!modal) return;
+    const v = (this.state.standardsVersions || []).find(item => item.version_id === versionId);
+    if (!v) return;
+
+    document.getElementById('editver-id').value = v.version_id;
+    document.getElementById('editver-org').value = v.source_organization || '';
+    document.getElementById('editver-number').value = v.source_number || '';
+    document.getElementById('editver-desc').value = v.source_description || '';
+    document.getElementById('edit-version-alert').classList.add('hidden');
+    modal.classList.remove('hidden');
+  },
+
+  closeEditVersionModal() {
+    const modal = document.getElementById('modal-edit-version');
+    if (modal) modal.classList.add('hidden');
+  },
+
+  async handleSaveEditVersion(event) {
+    event.preventDefault();
+    const vId = document.getElementById('editver-id').value;
+    const alertEl = document.getElementById('edit-version-alert');
+    const payload = {
+      source_organization: document.getElementById('editver-org').value.trim(),
+      source_number: document.getElementById('editver-number').value.trim(),
+      source_description: document.getElementById('editver-desc').value.trim(),
+    };
+
+    const res = await this.request(`/standard-versions/${vId}`, 'PUT', payload);
+    if (res.ok) {
+      this.closeEditVersionModal();
+      this.showAlert('تم تحديث البيانات التعريفية للإصدار بنجاح.', 'success');
+      if (this.state.currentScreen === 'standards-manager') {
+        await this.loadStandardsManagerData();
+      } else {
+        await this.loadStandardsReview();
+      }
+    } else {
+      alertEl.textContent = res.message || 'فشل تحديث بيانات الإصدار.';
+      alertEl.classList.remove('hidden');
+    }
+  },
+
+  async renderHubActiveWeights(activeVerId) {
+    const container = document.getElementById('hub-weights-grid');
+    if (!container) return;
+
+    const res = await this.request(`/standard-versions/${activeVerId}`);
+    if (!res.ok || !res.data || !Array.isArray(res.data.standards)) {
+      container.innerHTML = '<div style="color: var(--text-muted); font-size: 0.85rem;">تعذر تحميل مصفوفة الأوزان.</div>';
+      return;
+    }
+
+    const standards = res.data.standards;
+    container.innerHTML = standards.map(std => {
+      const weight = parseFloat(std.weight) || 0;
+      return `
+        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 0.65rem 0.85rem;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">
+            <strong style="font-size: 0.85rem; color: #1e293b;">${std.code} - ${std.name}</strong>
+            <span class="badge badge-green" style="font-size: 0.8rem; font-weight: 700;">${weight.toFixed(1)}%</span>
+          </div>
+          <div style="background: #e2e8f0; border-radius: 9999px; height: 6px; overflow: hidden;">
+            <div style="background: #16a34a; width: ${Math.min(weight * 3, 100)}%; height: 100%;"></div>
+          </div>
+        </div>
+      `;
+    }).join('');
   },
 
 };
