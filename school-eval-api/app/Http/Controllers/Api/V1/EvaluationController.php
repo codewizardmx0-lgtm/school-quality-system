@@ -10,6 +10,8 @@ use App\Models\EvaluationResult;
 use App\Models\Indicator;
 use App\Models\IndicatorScoreDescriptor;
 use App\Models\Note;
+use App\Models\Report;
+use App\Models\EvaluationSubmission;
 use App\Models\StandardVersion;
 use App\Models\User;
 use App\Models\CycleParticipation;
@@ -419,20 +421,12 @@ class EvaluationController extends Controller
             return ApiResponse::notFound('ملف التقييم المطلوب غير موجود.');
         }
 
-        if ($user->cannot('update', $evaluation)) {
-            // التحقق مما إذا كان المنع بسبب قفل التقييم أو إغلاق الدورة
-            $lockCheck = EvaluationLockChecker::canModifyIndicator($evaluation, $indicatorId);
-            if (!$lockCheck['allowed']) {
-                $key = $lockCheck['errorKey'] ?? 'evaluation';
-                return ApiResponse::validationError([
-                    $key => [$lockCheck['message']],
-                ], $lockCheck['message']);
-            }
-
-            return ApiResponse::forbidden('غير مصرح لك بتعديل هذا التقييم.');
+        // فحص الصلاحية الأساسية والعزل المؤسسي (القرار المعماري 9)
+        if ($user->user_type !== 'school' || (int) $user->school_id !== (int) $evaluation->school_id || !$user->hasPermission('evaluations.edit')) {
+            return ApiResponse::forbidden('غير مصرح لك برصد نتائج التقييم.');
         }
 
-        // فحص قفل التعديل الدقيق (BR-SCH-03 / FR-SCH-01)
+        // فحص قفل التعديل الدقيق (BR-SCH-03 / FR-SCH-01 / NeedsCompletion)
         $lockCheck = EvaluationLockChecker::canModifyIndicator($evaluation, $indicatorId);
         if (!$lockCheck['allowed']) {
             $key = $lockCheck['errorKey'] ?? 'evaluation';
@@ -732,6 +726,18 @@ class EvaluationController extends Controller
             ], 'ملف التقييم مكتمل ومقفل مسبقاً ولا يمكن إعادة تقديمه.');
         }
 
+        if (in_array($evaluation->status, ['Submitted', 'UnderReview'])) {
+            return ApiResponse::validationError([
+                'evaluation' => ['ملف التقييم مسلّم وبانتظار المراجعة الإشرافية ولا يمكن إعادة تقديمه من هذا المسار.'],
+            ], 'ملف التقييم مسلّم وبانتظار المراجعة الإشرافية ولا يمكن إعادة تقديمه من هذا المسار.');
+        }
+
+        if ($evaluation->status === 'NeedsCompletion') {
+            return ApiResponse::validationError([
+                'evaluation' => ['ملف التقييم يتطلب استكمال الملاحظات، ويجب تقديم الاستكمال عبر مسار resubmit المخصص.'],
+            ], 'ملف التقييم يتطلب استكمال الملاحظات، ويجب تقديم الاستكمال عبر مسار resubmit المخصص.');
+        }
+
         if (EvaluationLockChecker::isEvaluationLocked($evaluation)) {
             $lockStatus = EvaluationLockChecker::checkEvaluationGeneralStatus($evaluation);
             $reason = $lockStatus['reason'] ?? 'ملف التقييم مقفل حالياً.';
@@ -799,18 +805,45 @@ class EvaluationController extends Controller
             ], 'لا يمكن تقديم التقييم لعدم استيفاء الحد الأدنى من الشواهد المطلوبة.');
         }
 
-        // 5. التحديث داخل Transaction وإطلاق حدث القفل
-        DB::transaction(function () use ($evaluation, $user) {
+        // 5. التحديث داخل Transaction وإطلاق حدث القفل (الانتقال إلى Submitted وإنشاء التقرير ومحاولة التسليم الأولى)
+        $txResult = DB::transaction(function () use ($evaluation, $user) {
             // حفظ لقطة مجمدة من سياق وإحصاءات المدرسة والمرافق (الشريحة 6)
             $metricsService = app(\App\Services\SchoolMetricsService::class);
             $evaluation->school_context_snapshot = $metricsService->calculateIndicatorsContext($evaluation);
 
-            $evaluation->status = 'Completed';
+            $evaluation->status = 'Submitted';
             $evaluation->updated_at = now();
             $evaluation->save();
 
+            // إنشاء مسودة التقرير إن لم تكن موجودة
+            $report = Report::firstOrCreate(
+                ['evaluation_id' => $evaluation->evaluation_id],
+                [
+                    'status' => 'Draft',
+                    'generated_at' => now(),
+                ]
+            );
+
+            // إنشاء سجل محاولة التسليم الأولى (attempt_no = 1)
+            $submission = EvaluationSubmission::firstOrCreate(
+                [
+                    'report_id' => $report->report_id,
+                    'attempt_no' => 1,
+                ],
+                [
+                    'submitted_by_user_id' => $user->user_id,
+                    'submitted_at' => now(),
+                    'status' => 'Submitted',
+                ]
+            );
+
             event(new EvaluationSubmitted($evaluation, $user));
             app(NotificationService::class)->notifyEvaluationSubmitted($evaluation, $user);
+
+            return [
+                'report' => $report,
+                'submission' => $submission,
+            ];
         });
 
         return ApiResponse::success(
@@ -818,7 +851,9 @@ class EvaluationController extends Controller
                 'evaluationId' => $evaluation->evaluation_id,
                 'schoolId' => $evaluation->school_id,
                 'status' => $evaluation->status,
-                'completedAt' => $evaluation->updated_at?->toIso8601ZuluString(),
+                'reportId' => $txResult['report']->report_id,
+                'attemptNo' => $txResult['submission']->attempt_no,
+                'submittedAt' => $evaluation->updated_at?->toIso8601ZuluString(),
                 'submittedByUser' => [
                     'userId' => $user->user_id,
                     'name' => $user->full_name,
@@ -826,7 +861,76 @@ class EvaluationController extends Controller
                 ],
                 'isLocked' => true,
             ],
-            message: 'تم إغلاق التقييم الذاتي وتسليمه بنجاح وقفل العمليات التعديلية (BR-SCH-03).'
+            message: 'تم تسليم ملف التقييم الذاتي بنجاح والانتقال إلى مرحلة المراجعة الإشرافية (Submitted) وقفل العمليات التعديلية (BR-SCH-03).'
+        );
+    }
+
+    /**
+     * الإغلاق النهائي المباشر لملف التقييم من المشرف الوزاري دون طلب استكمال.
+     *
+     * POST /api/v1/evaluations/{id}/close
+     */
+    public function directClose(Request $request, int $id): JsonResponse
+    {
+        $user = $request->user();
+
+        $evaluation = Evaluation::with(['cycle', 'school'])->find($id);
+        if (!$evaluation) {
+            return ApiResponse::notFound('ملف التقييم المطلوب غير موجود.');
+        }
+
+        // فحص صلاحية المشرف الوزاري
+        if ($user->user_type !== 'ministry' || (!$user->hasRole('ministry_supervisor') && !$user->hasPermission('supervision.review'))) {
+            return ApiResponse::forbidden('غير مصرح لك بإغلاق ملف التقييم. هذه العملية مخصصة للمشرف الوزاري فقط.');
+        }
+
+        if ($evaluation->status === 'Completed') {
+            return ApiResponse::validationError([
+                'evaluation' => ['ملف التقييم مغلق ومكتمل نهائياً مسبقاً.'],
+            ], 'ملف التقييم مغلق ومكتمل نهائياً مسبقاً.');
+        }
+
+        if (!in_array($evaluation->status, ['Submitted', 'UnderReview'])) {
+            return ApiResponse::validationError([
+                'evaluation' => ["لا يمكن إغلاق التقييم إلا إذا كان بحالة مسلّم (Submitted) أو قيد المراجعة (UnderReview). الحالة الحالية: {$evaluation->status}"],
+            ], 'لا يمكن إغلاق ملف التقييم في حالته الحالية.');
+        }
+
+        DB::transaction(function () use ($evaluation, $user) {
+            $evaluation->status = 'Completed';
+            $evaluation->updated_at = now();
+            $evaluation->save();
+
+            // تحديث التقرير إلى Final
+            $report = Report::where('evaluation_id', $evaluation->evaluation_id)->first();
+            if ($report) {
+                $report->status = 'Final';
+                $report->save();
+
+                // تحديث آخر محاولة تسليم إلى Completed
+                EvaluationSubmission::where('report_id', $report->report_id)
+                    ->orderBy('attempt_no', 'desc')
+                    ->limit(1)
+                    ->update([
+                        'status' => 'Completed',
+                    ]);
+            }
+        });
+
+        return ApiResponse::success(
+            data: [
+                'evaluationId' => $evaluation->evaluation_id,
+                'schoolId' => $evaluation->school_id,
+                'status' => 'Completed',
+                'closedAt' => now()->toIso8601ZuluString(),
+                'closedByUser' => [
+                    'userId' => $user->user_id,
+                    'name' => $user->full_name,
+                    'role' => $user->roles->first()?->role_name,
+                ],
+                'isLocked' => true,
+            ],
+            message: 'تم الإغلاق النهائي لملف التقييم بنجاح واعتماده مكتملاً.'
         );
     }
 

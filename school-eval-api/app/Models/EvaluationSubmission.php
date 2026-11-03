@@ -117,4 +117,12 @@ class EvaluationSubmission extends Model
     {
         return $this->hasMany(CompletionRequest::class, 'submission_id', 'submission_id');
     }
+
+    /**
+     * أحدث طلب استكمال مرتبط بهذه المحاولة.
+     */
+    public function latestCompletionRequest(): ?CompletionRequest
+    {
+        return $this->completionRequests()->orderBy('request_id', 'desc')->first();
+    }
 }

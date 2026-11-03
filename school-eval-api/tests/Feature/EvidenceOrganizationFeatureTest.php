@@ -1000,10 +1000,10 @@ class EvidenceOrganizationFeatureTest extends TestCase
         }
         $this->assertTrue($indicatorFound);
 
-        // 2. محاولة تقديم التقييم: تنجح الآن برمز 200
+        // 2. محاولة تقديم التقييم: تنجح الآن برمز 200 والانتقال إلى Submitted
         $submitRes = $this->postJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/submit");
         $submitRes->assertStatus(200)
-            ->assertJsonPath('data.status', 'Completed');
+            ->assertJsonPath('data.status', 'Submitted');
     }
 
     /**
