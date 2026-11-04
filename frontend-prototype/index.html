@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>نموذج الواجهات التفاعلي — نظام الجودة المدرسية (الشرائح 1-6)</title>
+  <title>منصة إدارة وتقويم الجودة المدرسية</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -21,7 +21,7 @@
     <div class="header-container">
       <div class="brand">
         <h1>منصة الجودة المدرسية</h1>
-        <span>نموذج الشرائح 1-6 التفاعلي</span>
+        <span>نظام إدارة وتقويم الجودة المدرسية</span>
       </div>
 
       <div class="api-config">
@@ -43,7 +43,8 @@
           <span id="user-name">اسم المستخدم</span>
           <span id="user-school" class="badge badge-gray">المدرسة</span>
           <span id="user-role" class="role-tag">الدور</span>
-          <button id="btn-logout" class="btn btn-sm btn-secondary">خروج</button>
+          <button id="btn-change-password" class="btn btn-sm btn-outline-secondary" onclick="App.openChangePasswordModal()" title="تغيير كلمة المرور">🔑 كلمة المرور</button>
+          <button id="btn-logout" class="btn btn-sm btn-secondary" onclick="App.handleLogout()">خروج</button>
         </div>
       </div>
     </div>
@@ -72,7 +73,7 @@
     <section id="screen-login" class="card" style="max-width: 540px; margin: 2rem auto;">
       <h2 class="card-title">تسجيل الدخول للمنصة</h2>
       <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem;">
-        يدعم تسجيل الدخول مصادقة Bearer Token عبر Sanctum وتحديد الصلاحيات ونطاق المدرسة (الشرائح 1-6).
+        يدعم تسجيل الدخول مصادقة آمنة عبر Bearer Token وتحديد الصلاحيات والعزل المؤسسي للمدارس.
       </p>
 
       <form id="form-login" onsubmit="App.handleLogin(event)">
@@ -153,6 +154,7 @@
 
         <!-- منطقة إتاحة بدء تقييم جديد في دورة نشطة (G-26) -->
         <div id="active-cycle-cta-container"></div>
+        <div id="cycles-completion-alert" class="alert alert-warning hidden" style="margin-top: 0.75rem; margin-bottom: 1rem; border-right: 4px solid #d97706;"></div>
 
         <div class="table-responsive">
           <table>
@@ -1120,7 +1122,8 @@
             <button id="btn-create-version-draft" class="btn btn-sm btn-outline-primary" onclick="App.openCreateVersionModal()">➕ مسودة جديدة</button>
             <button id="btn-clone-version" class="btn btn-sm btn-outline-secondary" onclick="App.openCloneVersionModal()">📋 استنساخ مسودة</button>
             <button id="btn-edit-version-meta" class="btn btn-sm btn-outline-primary" onclick="App.openEditVersionModal(App.state.selectedVersionId)">✏️ تعديل بيانات الإصدار</button>
-            <button id="btn-approve-version" class="btn btn-sm btn-success" onclick="App.handleApproveVersion()">✅ إقرار الإصدار</button>
+            <button id="btn-approve-version" class="btn btn-sm btn-success" onclick="App.handleApproveVersion()">✅ اعتماد المسودة</button>
+          <button id="btn-activate-version" class="btn btn-sm btn-primary hidden" onclick="App.handleActivateVersion()" style="font-weight: 700;">⚡ تنشيط وسريان للمدارس</button>
             <button id="btn-archive-version" class="btn btn-sm btn-outline-danger" onclick="App.handleArchiveVersion()">📁 أرشفة</button>
           </div>
         </div>
@@ -1666,6 +1669,9 @@
         <button type="button" id="tab-btn-enrollment" class="tab-btn" onclick="App.switchSchoolTab('enrollment')">
           🎒 الطلاب والشعب
         </button>
+        <button type="button" id="tab-btn-school-docs" class="tab-btn" onclick="App.switchSchoolTab('docs')">
+          📁 مستودع الوثائق والشواهد (Documents)
+        </button>
         <button type="button" id="tab-btn-facilities" class="tab-btn" onclick="App.switchSchoolTab('facilities')">
           🏫 المرافق وتجهيزات السلامة
         </button>
@@ -2029,6 +2035,9 @@
         <button type="button" id="tab-btn-admin-users" class="tab-btn" onclick="App.switchAdminTab('users')">
           👥 إدارة الحسابات والمستخدمين (Users)
         </button>
+        <button type="button" id="tab-btn-admin-audit" class="tab-btn" onclick="App.switchAdminTab('audit')">
+          📋 سجل الرقابة والتدقيق (Audit Logs)
+        </button>
         <button type="button" id="tab-btn-admin-roles" class="tab-btn" onclick="App.switchAdminTab('roles')">
           🛡️ الأدوار والصلاحيات (Roles & Permissions)
         </button>
@@ -2151,19 +2160,24 @@
       <div id="supervision-tab-schools">
         <div class="supervision-stats-grid">
           <div class="supervision-stat-card">
-            <span style="font-size: 0.82rem; color: var(--text-muted);">إجمالي المدارس الخاضعة للإشراف</span>
+            <span style="font-size: 0.82rem; color: var(--text-muted);">إجمالي المدارس</span>
             <div class="val" id="sup-stat-total-schools" style="color: #4f46e5;">0</div>
-            <span style="font-size: 0.78rem; color: #64748b;">مدارس نطاق المحافظة</span>
+            <span style="font-size: 0.78rem; color: #64748b;">مدارس نطاق الإشراف</span>
           </div>
           <div class="supervision-stat-card">
-            <span style="font-size: 0.82rem; color: var(--text-muted);">تقييمات مكتملة ومقفلة</span>
+            <span style="font-size: 0.82rem; color: #4338ca;">📥 تقييمات مسلّمة للمراجعة</span>
+            <div class="val" id="sup-stat-submitted" style="color: #4338ca;">0</div>
+            <span style="font-size: 0.78rem; color: #4338ca;">بانتظار قرار المشرف</span>
+          </div>
+          <div class="supervision-stat-card">
+            <span style="font-size: 0.82rem; color: #d97706;">⚠️ بانتظار استكمال المدرسة</span>
+            <div class="val" id="sup-stat-needs-comp" style="color: #d97706;">0</div>
+            <span style="font-size: 0.78rem; color: #d97706;">تم إرسال ملاحظات</span>
+          </div>
+          <div class="supervision-stat-card">
+            <span style="font-size: 0.82rem; color: #16a34a;">✅ تقييمات معتمدة ومقفلة</span>
             <div class="val" id="sup-stat-locked" style="color: #16a34a;">0</div>
-            <span style="font-size: 0.78rem; color: #16a34a;">جاهزة للمراجعة والتدقيق</span>
-          </div>
-          <div class="supervision-stat-card">
-            <span style="font-size: 0.82rem; color: var(--text-muted);">تقييمات قيد الإنجاز (مسودة)</span>
-            <div class="val" id="sup-stat-draft" style="color: #d97706;">0</div>
-            <span style="font-size: 0.78rem; color: #d97706;">قيد الرصد وجمع الشواهد</span>
+            <span style="font-size: 0.78rem; color: #16a34a;">مكتملة رسمياً</span>
           </div>
         </div>
 
@@ -3074,6 +3088,133 @@
           <button type="submit" class="btn btn-primary">✓ تسجيل المدارس المحددة</button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- نافذة تغيير كلمة المرور للمستخدم المسجل (الشريحة 11 و U-40) -->
+  <div id="modal-change-password" class="modal-overlay hidden">
+    <div class="modal-content" style="max-width: 440px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 0.75rem; margin-bottom: 1rem;">
+        <h3 style="font-size: 1.15rem; color: var(--primary); margin: 0;">🔑 تغيير كلمة المرور</h3>
+        <button type="button" class="btn btn-sm btn-secondary" onclick="App.closeChangePasswordModal()">✕</button>
+      </div>
+
+      <div id="change-password-alert" class="alert hidden" style="margin-bottom: 1rem;"></div>
+
+      <form id="form-change-password" onsubmit="App.handleChangePassword(event)">
+        <div class="form-group">
+          <label class="form-label" for="chg-current-password">كلمة المرور الحالية:</label>
+          <input type="password" id="chg-current-password" class="form-control" required placeholder="أدخل كلمة المرور الحالية">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="chg-new-password">كلمة المرور الجديدة (8 أحرف فأكثر):</label>
+          <input type="password" id="chg-new-password" class="form-control" required minlength="8" placeholder="أدخل كلمة المرور الجديدة">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="chg-confirm-password">تأكيد كلمة المرور الجديدة:</label>
+          <input type="password" id="chg-confirm-password" class="form-control" required minlength="8" placeholder="أعد إدخال كلمة المرور">
+        </div>
+
+        <div style="font-size: 0.78rem; color: var(--text-muted); background: #f8fafc; padding: 0.5rem; border-radius: 4px; margin-bottom: 1rem; border: 1px solid var(--border);">
+          ℹ️ سيتم حفظ كلمة المرور الجديدة وتحديث الجلسة وإبطال كافة الجلسات النشطة الأخرى على الأجهزة المختلفة تلقائياً.
+        </div>
+
+        <div style="display: flex; justify-content: flex-end; gap: 0.5rem;">
+          <button type="button" class="btn btn-secondary" onclick="App.closeChangePasswordModal()">إلغاء</button>
+          <button type="submit" id="btn-save-change-password" class="btn btn-primary">🔒 حفظ كلمة المرور</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- نافذة إنشاء طلب استكمال التقييم للمشرف الوزاري (دورة الاستكمال والإغلاق) -->
+  <div id="modal-completion-request" class="modal-overlay hidden">
+    <div class="modal-content" style="max-width: 650px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 0.75rem; margin-bottom: 1rem;">
+        <h3 style="font-size: 1.15rem; color: #b45309; margin: 0;">📝 إنشاء طلب استكمال التقييم للمدرسة</h3>
+        <button type="button" class="btn btn-sm btn-secondary" onclick="App.closeCompletionRequestModal()">✕</button>
+      </div>
+
+      <div id="completion-req-alert" class="alert hidden" style="margin-bottom: 1rem;"></div>
+
+      <form id="form-completion-request" onsubmit="App.handleCreateCompletionRequest(event)">
+        <input type="hidden" id="completion-eval-id">
+
+        <div class="form-group">
+          <label class="form-label" for="completion-deadline">مهلة الاستكمال المحددة للمدرسة (إلزامي):</label>
+          <input type="date" id="completion-deadline" class="form-control" required style="font-weight: 600;">
+          <div style="font-size: 0.78rem; color: var(--text-muted); margin-top: 0.25rem;">
+            تحدد الفترة الزمنية المتاحة لفريق الجودة بالمدرسة لاستكمال النواقص وإعادة التسليم قبل إغلاق الطلب تلقائياً.
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="completion-notes">توجيهات وملاحظات المشرف العامة للمدرسة:</label>
+          <textarea id="completion-notes" class="form-control" rows="2" placeholder="ملاحظات توجيهية للمدرسة حول سبب طلب الاستكمال..."></textarea>
+        </div>
+
+        <div style="margin-top: 1rem; margin-bottom: 0.5rem; display: flex; justify-content: space-between; align-items: center;">
+          <label class="form-label" style="margin: 0; font-weight: 700; color: #1e293b;">بنود النواقص والمؤشرات المطلوب معالجتها:</label>
+          <button type="button" class="btn btn-xs btn-outline-primary" onclick="App.addCompletionItemRow()">+ إضافة مؤشر ناقص</button>
+        </div>
+
+        <div id="completion-items-list" style="max-height: 240px; overflow-y: auto; border: 1px solid var(--border); border-radius: 6px; padding: 0.5rem; margin-bottom: 1rem; background: #fafafa;">
+          <!-- بنود الاستكمال الديناميكية -->
+        </div>
+
+        <div style="display: flex; justify-content: flex-end; gap: 0.5rem;">
+          <button type="button" class="btn btn-secondary" onclick="App.closeCompletionRequestModal()">إلغاء</button>
+          <button type="submit" id="btn-submit-completion-req" class="btn btn-primary" style="background: #b45309; border-color: #92400e;">
+            📤 إرسال طلب الاستكمال للمدرسة
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- نافذة تمديد مهلة الاستكمال للمشرف الوزاري -->
+  <div id="modal-extend-deadline" class="modal-overlay hidden">
+    <div class="modal-content" style="max-width: 440px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 0.75rem; margin-bottom: 1rem;">
+        <h3 style="font-size: 1.15rem; color: #0284c7; margin: 0;">⏱️ تمديد مهلة استكمال التقييم</h3>
+        <button type="button" class="btn btn-sm btn-secondary" onclick="App.closeExtendDeadlineModal()">✕</button>
+      </div>
+
+      <div id="extend-deadline-alert" class="alert hidden" style="margin-bottom: 1rem;"></div>
+
+      <form id="form-extend-deadline" onsubmit="App.handleExtendDeadline(event)">
+        <input type="hidden" id="extend-request-id">
+
+        <div class="form-group">
+          <label class="form-label" for="extend-new-date">تاريخ المهلة الجديد:</label>
+          <input type="date" id="extend-new-date" class="form-control" required style="font-weight: 600;">
+        </div>
+
+        <div style="display: flex; justify-content: flex-end; gap: 0.5rem;">
+          <button type="button" class="btn btn-secondary" onclick="App.closeExtendDeadlineModal()">إلغاء</button>
+          <button type="submit" id="btn-save-extend-deadline" class="btn btn-primary">✓ حفظ تمديد المهلة</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- نافذة استعراض تفاصيل طلب الاستكمال -->
+  <div id="modal-completion-details" class="modal-overlay hidden">
+    <div class="modal-content" style="max-width: 620px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 0.75rem; margin-bottom: 1rem;">
+        <h3 style="font-size: 1.15rem; color: #1e293b; margin: 0;">📋 تفاصيل طلب استكمال التقييم</h3>
+        <button type="button" class="btn btn-sm btn-secondary" onclick="App.closeCompletionDetailsModal()">✕</button>
+      </div>
+
+      <div id="completion-details-content">
+        <!-- يُحقن بواسطة JS -->
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem;">
+        <button type="button" class="btn btn-secondary" onclick="App.closeCompletionDetailsModal()">إلغاء وإغلاق</button>
+      </div>
     </div>
   </div>
 

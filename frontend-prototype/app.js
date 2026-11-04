@@ -218,6 +218,12 @@ const App = {
   },
 
   navTo(screenName) {
+    if (screenName !== 'login' && (!this.state.token || !this.state.user)) {
+      this.showAlert('يرجى تسجيل الدخول أولاً للوصول إلى هذه الشاشة.', 'warning');
+      this.navTo('login');
+      return;
+    }
+
     const screens = [
       'login',
       'dashboard',
@@ -407,10 +413,10 @@ const App = {
 
     if (this.state.user.userType === 'system' || this.hasRole('admin')) {
       items = [
-        { id: 'admin-schools', label: '🏫 إدارة المدارس', screen: 'admin', tab: 'schools' },
-        { id: 'admin-users', label: '👥 إدارة الحسابات', screen: 'admin', tab: 'users' },
-        { id: 'admin-roles', label: '🛡️ الأدوار والصلاحيات', screen: 'admin', tab: 'roles' },
-        { id: 'admin-standards', label: '📖 معايير الاعتماد المدرسي', screen: 'standards-review' },
+        { id: 'admin-hub', label: '⚙️ لوحة إدارة النظام', screen: 'admin' },
+        { id: 'admin-supervision', label: '👁️ مركز الإشراف الوزاري', screen: 'supervision' },
+        { id: 'admin-standards', label: '📖 إدارة المعايير الوطنية', screen: 'standards-manager' },
+        { id: 'admin-cycles', label: '📋 دورات التقييم المركزي', screen: 'cycles' },
       ];
     } else if (this.hasRole('school_principal')) {
       items = [
@@ -598,14 +604,20 @@ const App = {
     return (this.state.user?.roles || []).some(r => (r.roleName || r.name || r) === roleName);
   },
 
-  handleLogout() {
+  async handleLogout() {
     if (this.state.token) {
-      this.request('/auth/logout', { method: 'POST' }).catch(() => {});
+      try {
+        await this.request('/auth/logout', 'POST');
+      } catch (e) {
+        console.warn('Logout API call failed:', e);
+      }
     }
     this.state.token = null;
     this.state.user = null;
     this.state.currentEvaluation = null;
     this.state.currentPlan = null;
+    this.state.cachedIndicatorsList = null;
+    this.state.schoolDocuments = null;
     localStorage.removeItem('eval_token');
     localStorage.removeItem('eval_user');
 
@@ -771,6 +783,76 @@ const App = {
 
     // مقارنة الأداء مع الدورة السابقة (الشريحة 9)
     this.loadEvaluationTrend(evalId, 'tree');
+
+    // فحص حالة التقييم وتنبيهات الاستكمال والإشراف الوزاري
+    const treeAlert = document.getElementById('tree-completion-alert');
+    if (treeAlert) {
+      const isSupervisor = this.hasRole('ministry_supervisor') || this.hasRole('admin');
+      const evalStatus = data.status || this.state.currentEvaluation?.status;
+
+      if (evalStatus === 'NeedsCompletion') {
+        const reqRes = await this.request(`/evaluations/${evalId}/completion-requests`, { silent: true });
+        const openReq = (reqRes.ok && Array.isArray(reqRes.data)) ? reqRes.data.find(r => r.status === 'Open') || reqRes.data[0] : null;
+        if (openReq) {
+          treeAlert.className = 'alert alert-warning';
+          treeAlert.style.borderRight = '4px solid #d97706';
+          treeAlert.innerHTML = `
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
+              <div>
+                <strong>⚠️ التقييم بحاجة لاستكمال: تم طلب استكمال النواقص من المدرسة</strong>
+                <div style="font-size: 0.83rem; margin-top: 0.25rem;">المهلة المحددة: <strong>${openReq.completionDeadline || openReq.completion_deadline || '-'}</strong> | الملاحظات: ${openReq.notes || 'استكمال الوثائق والشواهد'}</div>
+              </div>
+              <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                ${isSupervisor ? `
+                  <button class="btn btn-sm btn-outline-warning" onclick="App.openExtendDeadlineModal(${evalId})">
+                    ⏳ تمديد المهلة
+                  </button>
+                  <button class="btn btn-sm btn-outline-primary" onclick="App.openCompletionDetailsModal(${evalId})">
+                    📋 بنود النواقص
+                  </button>
+                ` : `
+                  <button class="btn btn-sm btn-primary" onclick="App.handleResubmitEvaluation(${openReq.id})">
+                    🔄 إعادة تسليم التقييم للمشرف
+                  </button>
+                `}
+              </div>
+            </div>
+          `;
+          treeAlert.classList.remove('hidden');
+        } else {
+          treeAlert.classList.add('hidden');
+        }
+      } else if (evalStatus === 'Submitted' && isSupervisor) {
+        treeAlert.className = 'alert alert-info';
+        treeAlert.style.background = '#eef2ff';
+        treeAlert.style.borderRight = '4px solid #4f46e5';
+        treeAlert.style.color = '#312e81';
+        treeAlert.innerHTML = `
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem;">
+            <div>
+              <strong style="font-size: 0.95rem;">📥 هذا التقييم مسلّم رسمياً وبانتظار المراجعة والقرار الإشرافي من قبلك</strong>
+              <div style="font-size: 0.83rem; margin-top: 0.25rem; color: #4338ca;">
+                المدرسة: <strong>${data.school?.schoolName || this.state.currentEvaluation?.school?.schoolName || 'مدرسة التقييم'}</strong> — تم رصد المؤشرات واستيفاء الشواهد، بانتظار قرارك الإشرافي.
+              </div>
+            </div>
+            <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+              <button class="btn btn-sm btn-warning" onclick="App.openCompletionRequestModal(${evalId})" style="background: #f59e0b; color: white; font-weight: 700;">
+                📋 طلب استكمال نواقص
+              </button>
+              <button class="btn btn-sm btn-success" onclick="App.handleDirectCloseEvaluation(${evalId})" style="background: #10b981; color: white; font-weight: 700;">
+                🔒 اعتماد وإغلاق التقييم نهائياً
+              </button>
+              <button class="btn btn-sm btn-secondary" onclick="App.navTo('supervision')">
+                🔙 العودة لمركز الإشراف
+              </button>
+            </div>
+          </div>
+        `;
+        treeAlert.classList.remove('hidden');
+      } else {
+        treeAlert.classList.add('hidden');
+      }
+    }
 
     // تحديث ترويسة الشجرة والإنجاز الإجمالي من بيانات الـ API (قراءة schoolName و academicYear مباشرة من الاستجابة)
     const schoolName = data.schoolName || this.state.currentEvaluation?.school?.schoolName || this.state.user?.school?.schoolName || 'المدرسة';
@@ -1272,16 +1354,12 @@ const App = {
       ? indicatorOrResultId
       : (this.state.currentIndicator || { indicatorId: indicatorOrResultId, resultId: indicatorOrResultId });
 
-    let url = '';
-    if (evalId && ind.indicatorId) {
-      url = `/evaluations/${evalId}/indicators/${ind.indicatorId}/evidences`;
-    } else if (ind.resultId) {
-      url = `/evaluation-results/${ind.resultId}/evidences`;
-    } else {
-      container.innerHTML = '<span style="font-size: 0.85rem; color: var(--text-muted);">لا يمكن تحديد مسار الشواهد.</span>';
+    if (!evalId || !ind.indicatorId) {
+      container.innerHTML = '<span style="font-size: 0.85rem; color: var(--text-muted);">لا يمكن تحديد مسار الشواهد (تتطلب evaluation_id و indicator_id).</span>';
       return;
     }
 
+    const url = `/evaluations/${evalId}/indicators/${ind.indicatorId}/evidence-links`;
     const res = await this.request(url);
     if (!res.ok) {
       container.innerHTML = `<span style="color: red; font-size: 0.85rem;">${res.message}</span>`;
@@ -1311,50 +1389,43 @@ const App = {
     };
 
     container.innerHTML = this.state.currentEvidences.map((ev, index) => {
-      const versions = ev.versions || [];
-      const currentVer = versions.find(v => v.current) || versions[0] || {};
-      const attachment = currentVer?.attachments?.[0];
-      const versionId = currentVer.evidenceVersionId || currentVer.versionId || 1;
+      const linkId = ev.id || ev.evidenceLinkId;
+      const doc = ev.document || {};
+      const ver = ev.version || {};
+      const docType = doc.documentType || ev.document_type || 'other';
+      const docTitle = doc.title || ev.title || 'مستند مدرسي';
+      const docDesc = doc.description || ev.description;
+      const justification = ev.justification;
+      const status = ev.status || 'Completed';
+      const fileName = ver.fileName || 'ملف المستند';
+      const fileSize = ver.fileSize ? `(${Math.round(ver.fileSize / 1024)} KB)` : '';
+      const versionNo = ver.versionNo || 1;
 
       return `
         <div class="card" style="margin-bottom: 0.75rem; padding: 0.85rem; background: #fff; border: 1px solid var(--border); box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem; flex-wrap: wrap; gap: 0.4rem;">
             <div>
               <span class="badge badge-gray" style="font-weight: 700; margin-left: 0.35rem;">#${index + 1}</span>
-              <strong style="color: #0f172a; font-size: 0.95rem;">📄 ${ev.title}</strong>
+              <strong style="color: #0f172a; font-size: 0.95rem;">📄 ${docTitle}</strong>
             </div>
             <div style="display: flex; gap: 0.35rem; align-items: center; flex-wrap: wrap;">
-              <span class="badge badge-gray" style="border: 1px solid #cbd5e1;">🏷️ ${typeLabels[ev.evidenceType] || ev.evidenceType || 'أخرى'}</span>
-              ${statusBadges[ev.status] || `<span class="badge badge-gray">${ev.status || 'Draft'}</span>`}
-              <span class="badge badge-blue">النسخة النشطة v${currentVer?.versionNo || 1}</span>
+              <span class="badge badge-gray" style="border: 1px solid #cbd5e1;">🏷️ ${typeLabels[docType] || docType}</span>
+              ${statusBadges[status] || `<span class="badge badge-gray">${status}</span>`}
+              <span class="badge badge-blue">النسخة v${versionNo}</span>
             </div>
           </div>
-          ${ev.description ? `<p style="font-size: 0.82rem; color: var(--text-muted); margin-bottom: 0.35rem;">${ev.description}</p>` : ''}
-          ${ev.justification ? `<p style="font-size: 0.82rem; color: var(--primary); margin-bottom: 0.35rem;"><strong>المبرر:</strong> ${ev.justification}</p>` : ''}
-
-          ${ev.reviewerNotes ? `
-            <div style="background: #f1f5f9; padding: 0.5rem 0.75rem; border-radius: 4px; border-right: 3px solid #0284c7; margin-top: 0.5rem; margin-bottom: 0.5rem; font-size: 0.8rem;">
-              <strong>📝 ملاحظات المراجع:</strong> ${ev.reviewerNotes}
-              ${ev.reviewedBy ? `<span style="color: var(--text-muted); font-size: 0.75rem;"> (بواسطة: ${ev.reviewedBy.fullName || ev.reviewedBy.userId})</span>` : ''}
-              ${ev.reviewedAt ? `<span style="color: var(--text-muted); font-size: 0.75rem;"> - ${new Date(ev.reviewedAt).toLocaleDateString('ar-EG')}</span>` : ''}
-            </div>
-          ` : ''}
+          ${docDesc ? `<p style="font-size: 0.82rem; color: var(--text-muted); margin-bottom: 0.35rem;">${docDesc}</p>` : ''}
+          ${justification ? `<p style="font-size: 0.82rem; color: var(--primary); margin-bottom: 0.35rem;"><strong>المبرر:</strong> ${justification}</p>` : ''}
           
           <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 0.5rem; flex-wrap: wrap; gap: 0.5rem;">
             <div style="font-size: 0.82rem; color: #334155;">
-              📎 الملف المرفق: <strong>${attachment?.fileName || 'وثيقة الشاهد'}</strong> 
-              ${attachment?.fileSize ? `<span style="color: var(--text-muted); font-size: 0.75rem;">(${Math.round(attachment.fileSize / 1024)} KB)</span>` : ''}
+              📎 الملف المرفق: <strong>${fileName}</strong> 
+              <span style="color: var(--text-muted); font-size: 0.75rem;">${fileSize}</span>
             </div>
             <div style="display: flex; gap: 0.35rem; flex-wrap: wrap;">
-              ${attachment ? `
-                <button class="btn btn-sm btn-secondary" onclick="App.downloadEvidenceVersion(${ev.evidenceId}, ${versionId}, '${attachment.fileName}')">
+              ${ver.id ? `
+                <button class="btn btn-sm btn-secondary" onclick="App.downloadEvidenceVersion(null, ${ver.id}, '${fileName}')">
                   ⬇️ تنزيل الملف
-                </button>
-              ` : ''}
-
-              ${canManageEvidence ? `
-                <button class="btn btn-sm btn-primary" onclick="App.triggerNewVersionUpload(${ev.evidenceId})">
-                  + رفع نسخة جديدة (Revision)
                 </button>
               ` : ''}
             </div>
@@ -1362,33 +1433,31 @@ const App = {
 
           ${canManageEvidence ? `
             <div style="display: flex; gap: 0.35rem; flex-wrap: wrap; margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px dashed var(--border);">
-              <button class="btn btn-sm btn-secondary" onclick="App.promptClassify(${ev.evidenceId}, '${ev.evidenceType || 'other'}')">
-                🏷️ تصنيف
+              <button class="btn btn-sm btn-secondary" onclick="App.promptLinkIndicator(${linkId}, ${doc.id || linkId}, ${ind.indicatorId})">
+                🔗 ربط بمؤشرات أخرى
               </button>
-              <button class="btn btn-sm btn-secondary" onclick="App.promptUpdateStatus(${ev.evidenceId}, '${ev.status || 'Draft'}')">
-                🔄 الحالة
+              <button class="btn btn-sm btn-danger" onclick="App.handleUnlinkEvidence(${linkId})">
+                ✂️ فك ارتباط الشاهد
               </button>
-              <button class="btn btn-sm btn-secondary" onclick="App.promptLinkIndicator(${ev.evidenceId}, ${ev.indicatorId})">
-                🔗 ربط بمؤشر
-              </button>
-              ${(this.hasPermission('reviews.write') || this.hasRole('school_principal') || this.hasRole('ministry_supervisor') || this.hasRole('admin')) ? `
-                <button class="btn btn-sm btn-secondary" onclick="App.promptReviewNotes(${ev.evidenceId})" title="تدوين ملاحظات وتوجيهات المراجع">
-                  📝 ملاحظة مراجع
-                </button>
-              ` : ''}
-            </div>
-          ` : ''}
-
-          <!-- تفاصيل النسخ التاريخية السابقة إن وجدت -->
-          ${versions.length > 1 ? `
-            <div style="margin-top: 0.5rem; font-size: 0.75rem; color: var(--text-muted); border-top: 1px solid var(--border); padding-top: 0.35rem;">
-              ⏳ النسخ التاريخية السابقة لهذا الشاهد: 
-              ${versions.filter(v => !v.current).map(v => `<span class="badge badge-gray" style="margin-left: 0.25rem;">v${v.versionNo}</span>`).join('')}
             </div>
           ` : ''}
         </div>
       `;
     }).join('');
+  },
+
+  async handleUnlinkEvidence(linkId) {
+    if (!confirm('هل أنت متأكد من فك ارتباط هذا الشاهد بالمؤشر؟ لن يتم حذف المستند الأصلي من مستودع المدرسة.')) return;
+    const res = await this.request(`/evidence-links/${linkId}`, {
+      method: 'DELETE',
+    });
+    if (res.ok) {
+      this.showAlert(res.message || 'تم فك ارتباط الشاهد بالمؤشر بنجاح دون حذف المستند.', 'success');
+      if (this.state.currentIndicator) this.loadEvidences(this.state.currentIndicator);
+      if (this.state.currentScreen === 'evidence-inventory') this.loadEvidenceInventory();
+    } else {
+      this.showAlert(res.message || 'فشل فك ارتباط الشاهد.', 'error');
+    }
   },
 
   async handleUploadEvidence(event) {
@@ -1419,22 +1488,18 @@ const App = {
     formData.append('title', title);
     if (description) formData.append('description', description);
     if (justification) formData.append('justification', justification);
-    formData.append('evidence_type', evidenceType);
+    formData.append('document_type', evidenceType);
+    formData.append('status', 'Completed');
     formData.append('file', fileInput.files[0]);
 
     const evalId = this.getEvaluationId();
-    let url = '';
-    if (evalId && ind.indicatorId) {
-      url = `/evaluations/${evalId}/indicators/${ind.indicatorId}/evidences`;
-    } else if (ind.resultId) {
-      url = `/evaluation-results/${ind.resultId}/evidences`;
-    } else {
+    if (!evalId || !ind.indicatorId) {
       alertEl.textContent = 'تعذر تحديد المؤشر أو ملف التقييم.';
       alertEl.classList.remove('hidden');
       return;
     }
 
-    const res = await this.request(url, {
+    const res = await this.request(`/evaluations/${evalId}/indicators/${ind.indicatorId}/evidence-links/upload`, {
       method: 'POST',
       body: formData,
       isFormData: true,
@@ -1459,7 +1524,7 @@ const App = {
     }
 
     document.getElementById('form-upload-evidence').reset();
-    this.showAlert('تم إضافة الشاهد ورفع نسخته الأولى بنجاح.', 'success');
+    this.showAlert('تم رفع المستند وربطه بالمؤشر بنجاح عبر المعمارية النظيفة.', 'success');
     this.loadEvidences(ind);
     if (this.state.currentEvaluation?.evaluationId) {
       this.loadStandardsTree(this.state.currentEvaluation.evaluationId);
@@ -1469,42 +1534,8 @@ const App = {
     }
   },
 
-  async triggerNewVersionUpload(evidenceId) {
-    if (!this.hasPermission('evidence.manage')) {
-      this.showAlert('غير مصرح لك برفع نسخ شواهد جديدة (تتطلب evidence.manage).', 'error');
-      return;
-    }
-    // فتح نافذة اختيار ملف لرفع نسخة جديدة
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.pdf,.png,.jpg,.jpeg,.docx,.xlsx';
-
-    input.onchange = async () => {
-      if (!input.files || input.files.length === 0) return;
-
-      const formData = new FormData();
-      formData.append('file', input.files[0]);
-
-      const res = await this.request(`/evidences/${evidenceId}/versions`, {
-        method: 'POST',
-        body: formData,
-        isFormData: true,
-      });
-
-      if (!res.ok) {
-        this.showAlert(res.message || 'فشل رفع النسخة الجديدة.', 'error');
-        return;
-      }
-
-      this.showAlert('تم رفع النسخة الجديدة بنجاح (v' + (res.data?.versionNo || '') + ').', 'success');
-      this.loadEvidences(this.state.currentIndicator);
-    };
-
-    input.click();
-  },
-
   async downloadEvidenceVersion(evidenceId, versionId, filename) {
-    const url = `${this.state.apiUrl}/evidences/${evidenceId}/versions/${versionId}/download`;
+    const url = `${this.state.apiUrl}/document-versions/${versionId}/download`;
     try {
       const response = await fetch(url, {
         headers: {
@@ -1532,99 +1563,36 @@ const App = {
     }
   },
 
-  // ---------------------------------------------------------------------------
-  // الشريحة 5: إدارة وتنظيم وتصنيف وتدقيق الشواهد (Evidence Organization Actions)
-  // ---------------------------------------------------------------------------
-  async promptClassify(evidenceId, currentType) {
-    const types = [
-      { id: 'minutes', label: 'محضر اجتماع / زيارة (Minutes)' },
-      { id: 'plan', label: 'خطة موثقة ورسمية (Plan)' },
-      { id: 'record', label: 'سجل رسمي / كشف (Record)' },
-      { id: 'report', label: 'تقرير دوري / ختامي (Report)' },
-      { id: 'board', label: 'لوحة إعلانية / إرشادية (Board)' },
-      { id: 'image', label: 'صورة ميدانية توثيقية (Image)' },
-      { id: 'other', label: 'أخرى (Other)' },
-    ];
-    const promptMsg = 'اختر رقم التصنيف اليدوي للشاهد:\n' + types.map((t, idx) => `${idx + 1}. ${t.label}`).join('\n');
-    const choice = prompt(promptMsg, '1');
-    if (!choice) return;
-    const selected = types[parseInt(choice) - 1];
-    if (!selected) {
-      alert('اختيار غير صالح.');
+  async promptLinkIndicator(evidenceLinkId, documentId, currentIndicatorId) {
+    if (!this.hasPermission('evidence.manage')) {
+      this.showAlert('عفواً: ربط الشواهد بالمؤشرات يتطلب صلاحية إدارة الشواهد.', 'warning');
       return;
     }
-    const res = await this.request(`/evidences/${evidenceId}/classify`, {
-      method: 'PATCH',
-      body: { evidence_type: selected.id },
-    });
-    if (res.ok) {
-      this.showAlert(`تم تصنيف الشاهد كـ [${selected.label}] بنجاح.`, 'success');
-      if (this.state.currentIndicator) {
-        this.loadEvidences(this.state.currentIndicator);
-      }
-      if (this.state.currentScreen === 'evidence-inventory') {
-        this.loadEvidenceInventory();
-      }
-    } else {
-      this.showAlert(res.message || 'فشل تصنيف الشاهد.', 'error');
-    }
+    this.openLinkEvidenceModal(evidenceLinkId, documentId, currentIndicatorId);
   },
 
-  async promptUpdateStatus(evidenceId, currentStatus) {
-    const statuses = [
-      { id: 'Draft', label: 'مسودة (Draft)' },
-      { id: 'Completed', label: 'مكتمل (Completed)' },
-      { id: 'Audited', label: 'مدقق ومقبول (Audited)' },
-    ];
-    const promptMsg = 'اختر رقم حالة تدقيق الشاهد:\n' + statuses.map((s, idx) => `${idx + 1}. ${s.label}`).join('\n');
-    const choice = prompt(promptMsg, '2');
-    if (!choice) return;
-    const selected = statuses[parseInt(choice) - 1];
-    if (!selected) {
-      alert('اختيار غير صالح.');
-      return;
-    }
-    const res = await this.request(`/evidences/${evidenceId}/status`, {
-      method: 'PATCH',
-      body: { status: selected.id },
-    });
-    if (res.ok) {
-      this.showAlert(`تم تحديث حالة الشاهد إلى [${selected.label}] بنجاح.`, 'success');
-      if (this.state.currentIndicator) {
-        this.loadEvidences(this.state.currentIndicator);
-      }
-      if (this.state.currentScreen === 'evidence-inventory') {
-        this.loadEvidenceInventory();
-      }
-    } else {
-      this.showAlert(res.message || 'فشل تحديث حالة الشاهد.', 'error');
-    }
-  },
-
-  async promptLinkIndicator(evidenceId, currentIndicatorId) {
-    this.openLinkEvidenceModal(evidenceId, currentIndicatorId);
-  },
-
-  async openLinkEvidenceModal(evidenceId, currentIndicatorId) {
+  async openLinkEvidenceModal(evidenceLinkId, documentId, currentIndicatorId) {
     const modal = document.getElementById('modal-link-evidence');
     if (!modal) return;
 
-    this.state.linkingEvidence = { evidenceId, currentIndicatorId };
+    this.state.linkingEvidence = {
+      evidenceLinkId,
+      documentId: documentId || evidenceLinkId,
+      currentIndicatorId,
+    };
     const alertEl = document.getElementById('link-ev-alert');
     if (alertEl) alertEl.classList.add('hidden');
 
     const searchInput = document.getElementById('link-ev-search');
     if (searchInput) searchInput.value = '';
 
-    // العثور على عنوان الشاهد الحالي
-    const ev = (this.state.currentEvidences || []).find(e => e.evidenceId === evidenceId);
+    const ev = (this.state.currentEvidences || []).find(e => (e.id === evidenceLinkId || e.evidenceLinkId === evidenceLinkId));
     const titleEl = document.getElementById('link-ev-title');
-    if (titleEl) titleEl.textContent = ev ? ev.title : `شاهد #${evidenceId}`;
+    if (titleEl) titleEl.textContent = ev ? (ev.document?.title || ev.title) : `شاهد #${evidenceLinkId}`;
 
     const currentIndEl = document.getElementById('link-ev-current-indicator');
     if (currentIndEl) currentIndEl.textContent = this.state.currentIndicator?.code ? `${this.state.currentIndicator.code}: ${this.state.currentIndicator.name}` : `مؤشر #${currentIndicatorId}`;
 
-    // جلب شجرة المؤشرات لملء القائمة المنسدلة
     const evalId = this.getEvaluationId();
     if (!this.state.cachedIndicatorsList) {
       const res = await this.request(`/evaluations/${evalId}/standards-tree`);
@@ -1693,7 +1661,9 @@ const App = {
   async submitLinkEvidence() {
     const alertEl = document.getElementById('link-ev-alert');
     if (!this.state.linkingEvidence) return;
-    const { evidenceId, currentIndicatorId } = this.state.linkingEvidence;
+    const { evidenceLinkId, documentId, currentIndicatorId } = this.state.linkingEvidence;
+    const evalId = this.getEvaluationId();
+    const docId = documentId || evidenceLinkId;
 
     if (this.state.linkEvidenceMode === 'multi') {
       const checkboxes = document.querySelectorAll('input[name="multiLinkIndicatorIds"]:checked');
@@ -1707,61 +1677,39 @@ const App = {
         return;
       }
 
-      const ev = (this.state.currentEvidences || []).find(e => e.evidenceId === evidenceId);
-      const evalId = this.getEvaluationId();
-
       let successCount = 0;
       for (const targetId of selectedIds) {
-        const formData = new FormData();
-        formData.append('title', ev ? ev.title : `شاهد مشترك #${evidenceId}`);
-        if (ev?.description) formData.append('description', ev.description);
-        if (ev?.justification) formData.append('justification', ev.justification);
-        formData.append('evidence_type', ev?.evidenceType || 'other');
-
-        const content = `شاهد مشترك ومربوط من المؤشر الأصل #${currentIndicatorId}\nالعنوان: ${ev?.title || ''}`;
-        const blob = new Blob([content], { type: 'text/plain' });
-        const file = new File([blob], `evidence_link_${targetId}.txt`, { type: 'text/plain' });
-        formData.append('file', file);
-
-        const res = await this.request(`/evaluations/${evalId}/indicators/${targetId}/evidences`, {
+        const res = await this.request(`/evaluations/${evalId}/indicators/${targetId}/evidence-links`, {
           method: 'POST',
-          body: formData,
-          isFormData: true,
+          body: { document_id: docId, status: 'Completed' },
         });
 
-        if (res.ok) {
-          successCount++;
-          if (ev?.status && res.data?.evidenceId) {
-            await this.request(`/evidences/${res.data.evidenceId}/status`, {
-              method: 'PATCH',
-              body: { status: ev.status },
-            });
-          }
-        }
+        if (res.ok) successCount++;
       }
 
       this.closeLinkEvidenceModal();
-      this.showAlert(`تم ربط الشاهد بنجاح بـ ${successCount} مؤشرات إضافية (Multi-link).`, 'success');
+      this.showAlert(`تم ربط المستند بنجاح بـ ${successCount} مؤشرات إضافية مع بقاء ارتباطه الحالي.`, 'success');
       if (this.state.currentIndicator) this.loadEvidences(this.state.currentIndicator);
       if (this.state.currentScreen === 'evidence-inventory') this.loadEvidenceInventory();
       return;
     }
 
-    // الوضع الفردي: نقل الشاهد لمؤشر آخر
+    // الوضع الفردي: نقل الارتباط إلى مؤشر آخر (Transfer Link)
     const select = document.getElementById('link-ev-target-select');
     const targetId = select ? parseInt(select.value) : null;
 
     if (!targetId || isNaN(targetId)) {
       if (alertEl) {
-        alertEl.textContent = 'يرجى اختيار المؤشر المستهدف من القائمة.';
+        alertEl.textContent = 'يرجى اختيار المؤشر المستهدف لنقل الشاهد إليه.';
         alertEl.classList.remove('hidden');
       }
       return;
     }
 
-    const res = await this.request(`/evidences/${evidenceId}/link-indicator`, {
+    // 1. ربط المستند بالمؤشر المستهدف
+    const res = await this.request(`/evaluations/${evalId}/indicators/${targetId}/evidence-links`, {
       method: 'POST',
-      body: { indicator_id: targetId },
+      body: { document_id: docId, status: 'Completed' },
     });
 
     if (!res.ok) {
@@ -1772,8 +1720,15 @@ const App = {
       return;
     }
 
+    // 2. فك ارتباط الشاهد من المؤشر السابق (إن وجد)
+    if (evidenceLinkId) {
+      await this.request(`/evidence-links/${evidenceLinkId}`, {
+        method: 'DELETE',
+      });
+    }
+
     this.closeLinkEvidenceModal();
-    this.showAlert(res.message || 'تم نقل وربط الشاهد بالمؤشر المستهدف بنجاح.', 'success');
+    this.showAlert('تم نقل ارتباط الشاهد للمؤشر المستهدف بنجاح وفك ارتباطه من المؤشر الحالي دون حذف المستند الأصلي.', 'success');
 
     if (this.state.currentIndicator) {
       this.loadEvidences(this.state.currentIndicator);
@@ -1783,29 +1738,78 @@ const App = {
     }
   },
 
-  async promptReviewNotes(evidenceId) {
-    const canReview = this.hasPermission('reviews.write') || this.hasRole('school_principal') || this.hasRole('ministry_supervisor') || this.hasRole('admin');
-    if (!canReview) {
-      this.showAlert('عفواً: تدوين ملاحظات وتوجيهات المراجع خاص بمدير المدرسة (المراجع الداخلي) أو المشرف الوزاري فقط.', 'warning');
+  // ---------------------------------------------------------------------------
+  // دعم ربط مستند موجود من مستودع وثائق المدرسة (School Document Linking)
+  // ---------------------------------------------------------------------------
+  switchEvidenceInputMode(mode) {
+    const btnUpload = document.getElementById('btn-ev-tab-upload');
+    const btnRepo = document.getElementById('btn-ev-tab-repo');
+    const panelUpload = document.getElementById('panel-upload-new-doc');
+    const panelRepo = document.getElementById('panel-link-repo-doc');
+
+    if (mode === 'repo') {
+      if (btnUpload) btnUpload.classList.remove('active');
+      if (btnRepo) btnRepo.classList.add('active');
+      if (panelUpload) panelUpload.classList.add('hidden');
+      if (panelRepo) panelRepo.classList.remove('hidden');
+      this.loadSchoolRepoDocumentsForIndicator();
+    } else {
+      if (btnUpload) btnUpload.classList.add('active');
+      if (btnRepo) btnRepo.classList.remove('active');
+      if (panelUpload) panelUpload.classList.remove('hidden');
+      if (panelRepo) panelRepo.classList.add('hidden');
+    }
+  },
+
+  async loadSchoolRepoDocumentsForIndicator() {
+    const select = document.getElementById('select-repo-document');
+    if (!select) return;
+    const schoolId = this.state.user?.schoolId || this.state.currentEvaluation?.schoolId || 1;
+
+    select.innerHTML = '<option value="">جارِ تحميل مستندات المدرسة...</option>';
+    const res = await this.request(`/schools/${schoolId}/documents`);
+
+    if (!res.ok || !Array.isArray(res.data) || res.data.length === 0) {
+      select.innerHTML = '<option value="">لا توجد مستندات مسجلة في مستودع المدرسة حتى الآن</option>';
       return;
     }
 
-    const note = prompt('أدخل ملاحظات وتوجيهات المراجع على كفاية الشاهد:');
-    if (!note || note.trim() === '') return;
-    const res = await this.request(`/evidences/${evidenceId}/review-notes`, {
+    select.innerHTML = '<option value="">-- اختر مستنداً من المستودع --</option>' + res.data.map(d => {
+      const v = d.currentVersion || {};
+      const sizeStr = v.fileSize ? `(${Math.round(v.fileSize / 1024)} KB)` : '';
+      return `<option value="${d.documentId}">📄 ${d.title} [${d.documentType || 'وثيقة'}] ${sizeStr}</option>`;
+    }).join('');
+  },
+
+  async handleLinkExistingSchoolDoc() {
+    const select = document.getElementById('select-repo-document');
+    const docId = select ? parseInt(select.value) : null;
+    const evalId = this.getEvaluationId();
+    const ind = this.state.currentIndicator;
+
+    if (!docId || isNaN(docId)) {
+      this.showAlert('يرجى اختيار مستند من القائمة المنسدلة أولاً.', 'warning');
+      return;
+    }
+
+    if (!evalId || !ind?.indicatorId) {
+      this.showAlert('تعذر تحديد المؤشر أو ملف التقييم.', 'error');
+      return;
+    }
+
+    const res = await this.request(`/evaluations/${evalId}/indicators/${ind.indicatorId}/evidence-links`, {
       method: 'POST',
-      body: { notes: note.trim() },
+      body: { document_id: docId, status: 'Completed' },
     });
+
     if (res.ok) {
-      this.showAlert('تمت إضافة ملاحظات وتوجيهات المراجع بنجاح.', 'success');
-      if (this.state.currentIndicator) {
-        this.loadEvidences(this.state.currentIndicator);
-      }
-      if (this.state.currentScreen === 'evidence-inventory') {
-        this.loadEvidenceInventory();
+      this.showAlert('تم ربط المستند من مستودع المدرسة بالمؤشر بنجاح!', 'success');
+      this.loadEvidences(ind);
+      if (this.state.currentEvaluation?.evaluationId) {
+        this.loadStandardsTree(this.state.currentEvaluation.evaluationId);
       }
     } else {
-      this.showAlert(res.message || 'فشل تسجيل ملاحظات المراجع.', 'error');
+      this.showAlert(res.message || 'فشل ربط المستند.', 'error');
     }
   },
 
@@ -3073,7 +3077,10 @@ const App = {
     const select = document.getElementById('standards-version-select');
     if (select) {
       select.innerHTML = (versions || []).map(v => {
-        const statusLabel = (v.status === 'Draft') ? 'مسودة (Draft)' : ((v.status === 'Archived' || v.status === 'Retired') ? 'مؤرشف (Archived)' : 'مُقرّ (Approved)');
+        let statusLabel = 'مسودة (Draft)';
+        if (v.status === 'Active') statusLabel = 'نشط وسارٍ للمدارس 🟢';
+        else if (v.status === 'Approved') statusLabel = 'معتمد (Approved) ⚡';
+        else if (v.status === 'Archived' || v.status === 'Retired') statusLabel = 'مؤرشف (Archived)';
         const selected = (v.version_id === this.state.selectedVersionId) ? 'selected' : '';
         return `<option value="${v.version_id}" ${selected}>${v.version_no} — [${statusLabel}]</option>`;
       }).join('');
@@ -3094,20 +3101,25 @@ const App = {
       if (controlCard) controlCard.style.display = 'block';
     }
 
-    const isDraft = currentVer && currentVer.status === 'Draft';
-    const isApproved = currentVer && (currentVer.status === 'Approved' || currentVer.status === 'Active');
-    const isArchived = currentVer && (currentVer.status === 'Archived' || currentVer.status === 'Retired');
+    const statusVal = currentVer?.status || 'Draft';
+    const isDraft = statusVal === 'Draft';
+    const isApproved = statusVal === 'Approved';
+    const isActive = statusVal === 'Active';
+    const isArchived = statusVal === 'Archived' || statusVal === 'Retired';
 
     if (badge) {
       if (isDraft) {
         badge.className = 'badge badge-yellow';
-        badge.textContent = 'مسودة (Draft)';
-      } else if (isArchived) {
+        badge.textContent = 'مسودة عمل (Draft)';
+      } else if (isApproved) {
+        badge.className = 'badge badge-blue';
+        badge.textContent = 'معتمد (Approved) ⚡ بانتظار التنشيط';
+      } else if (isActive) {
+        badge.className = 'badge badge-green';
+        badge.textContent = 'نشط وسارٍ للمدارس 🟢';
+      } else {
         badge.className = 'badge badge-gray';
         badge.textContent = 'مؤرشف (Archived)';
-      } else {
-        badge.className = 'badge badge-green';
-        badge.textContent = 'مُقرّ (Approved)';
       }
     }
 
@@ -3116,66 +3128,87 @@ const App = {
         notice.className = 'alert alert-info';
         notice.style.background = '#fef3c7';
         notice.style.color = '#92400e';
-        notice.innerHTML = '⚠️ <strong>مسودة قيد التطوير:</strong> يحق لك تعديل نصوص المعايير والمؤشرات والواصفات ومتطلبات الشواهد وضبط الأوزان. شرط الإقرار: مجموع الأوزان = 100.00%.';
-      } else if (isArchived) {
+        notice.innerHTML = '⚠️ <strong>مسودة قيد التطوير (Draft):</strong> يحق لك تعديل نصوص المعايير والمؤشرات والواصفات ومتطلبات الشواهد وضبط الأوزان. شرط الاعتماد: مجموع الأوزان = 100.00%.';
+      } else if (isApproved) {
         notice.className = 'alert alert-info';
-        notice.style.background = '#f1f5f9';
-        notice.style.color = '#475569';
-        notice.innerHTML = '📁 <strong>إصدار مؤرشف ومنتهي السريان:</strong> للقراءة والاطلاع التاريخي فقط ولا يمكن تعديله أو ربط دورات تقييم جديدة به.';
-      } else {
+        notice.style.background = '#eff6ff';
+        notice.style.color = '#1e40af';
+        notice.innerHTML = `
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
+            <div>
+              ⚡ <strong>إصدار معتمد رسميًا بانتظار التنشيط (Approved):</strong>
+              تم تجميد الإصدار واكتمال أوزانه بنجاح. انقر على زر «⚡ تنشيط وسريان للمدارس» لبدء تطبيقه فعليًا وأرشفة الإصدار السابق تلقائياً.
+            </div>
+            <button class="btn btn-sm btn-primary" onclick="App.handleActivateVersion(${currentVer?.version_id})" style="font-weight: 700;">
+              ⚡ تنشيط وسريان للمدارس الآن
+            </button>
+          </div>
+        `;
+      } else if (isActive) {
         notice.className = 'alert alert-info';
         notice.style.background = '#ecfdf5';
         notice.style.color = '#065f46';
         notice.innerHTML = `
           <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
             <div>
-              🔒 <strong>إصدار مُقرّ وساري المفعول (محمي ضد التعديل):</strong>
-              كافة نصوص المعايير والمؤشرات والواصفات والأوزان مجمدة لضمان نزاهة تقييمات المدارس. لتعديل أي عنصر، انقر على زر الاستنساخ لفتح مسودة عمل مستقلة.
+              🟢 <strong>الإصدار النشط والساري على كافة المدارس حالياً (Active):</strong>
+              كافة المعايير والمؤشرات سارية على تقييمات المدارس ومحمية ضد التعديل. لتعديل أي عنصر، انقر على زر الاستنساخ لفتح مسودة عمل مستقلة.
             </div>
-            <button class="btn btn-sm btn-primary" onclick="App.openCloneVersionModal()" style="font-weight: 700;">
-              📋 استنساخ كمسودة جديدة لفتح أزرار التعديل
+            <button class="btn btn-sm btn-outline-secondary" onclick="App.openCloneVersionModal()" style="font-weight: 700;">
+              📋 استنساخ كمسودة جديدة
             </button>
           </div>
         `;
+      } else {
+        notice.className = 'alert alert-info';
+        notice.style.background = '#f1f5f9';
+        notice.style.color = '#475569';
+        notice.innerHTML = '📁 <strong>إصدار مؤرشف ومنتهي السريان (Archived):</strong> للقراءة والاطلاع التاريخي فقط ولا يمكن تعديله أو ربط دورات تقييم جديدة به.';
       }
     }
 
     const btnClone = document.getElementById('btn-clone-version');
     const btnApprove = document.getElementById('btn-approve-version');
+    const btnActivate = document.getElementById('btn-activate-version');
     const btnArchive = document.getElementById('btn-archive-version');
     const btnEditMeta = document.getElementById('btn-edit-version-meta');
 
     if (btnClone) {
       btnClone.style.display = 'inline-block';
       btnClone.disabled = isDraft;
-      btnClone.title = isDraft ? 'لا يمكن استنساخ مسودة، الاستنساخ متاح للإصدارات المُقرّة فقط' : 'استنساخ هذا الإصدار كمسودة جديدة';
+      btnClone.title = isDraft ? 'لا يمكن استنساخ مسودة، الاستنساخ متاح للإصدارات المعتمدة والنشطة' : 'استنساخ هذا الإصدار كمسودة جديدة';
     }
 
     if (btnApprove) {
-      btnApprove.style.display = 'inline-block';
+      btnApprove.style.display = isDraft ? 'inline-block' : 'none';
       if (isDraft) {
         btnApprove.disabled = false;
         btnApprove.className = 'btn btn-sm btn-success';
-        btnApprove.innerHTML = '✅ إقرار المسودة';
-        btnApprove.title = 'إقرار المسودة رسميًا كإصدار نافذ';
-      } else {
-        btnApprove.disabled = true;
-        btnApprove.className = 'btn btn-sm btn-secondary';
-        btnApprove.innerHTML = 'مُقرّ رسمياً ✅';
-        btnApprove.title = 'هذا الإصدار مُقرّ مسبقاً وساري المفعول';
+        btnApprove.innerHTML = '✅ اعتماد المسودة (Approve)';
+        btnApprove.title = 'اعتماد المسودة وتجميدها بعد اكتمال الأوزان';
+      }
+    }
+
+    if (btnActivate) {
+      btnActivate.style.display = isApproved ? 'inline-block' : 'none';
+      if (isApproved) {
+        btnActivate.disabled = false;
+        btnActivate.className = 'btn btn-sm btn-primary';
+        btnActivate.innerHTML = '⚡ تنشيط وسريان للمدارس (Activate)';
+        btnActivate.title = 'تنشيط الإصدار وسريانه للمدارس وأرشفة الإصدار السابق تلقائياً';
       }
     }
 
     if (btnEditMeta) {
       btnEditMeta.style.display = 'inline-block';
       btnEditMeta.disabled = !isDraft;
-      btnEditMeta.title = isDraft ? 'تعديل البيانات التعريفية للإصدار' : 'البيانات التعريفية مجمدة للإصدار المُقرّ';
+      btnEditMeta.title = isDraft ? 'تعديل البيانات التعريفية للإصدار' : 'البيانات التعريفية مجمدة للإصدار المعتمد أو النشط';
     }
 
     if (btnArchive) {
-      btnArchive.style.display = 'inline-block';
-      btnArchive.disabled = !isApproved;
-      btnArchive.title = isApproved ? 'أرشفة هذا الإصدار' : 'الأرشفة متاحة للإصدارات المُقرّة فقط';
+      btnArchive.style.display = (isApproved || isActive) ? 'inline-block' : 'none';
+      btnArchive.disabled = false;
+      btnArchive.title = 'أرشفة هذا الإصدار';
     }
   },
 
@@ -3401,20 +3434,20 @@ const App = {
 
   async handleApproveVersion(targetVersionId = null) {
     const vId = targetVersionId || this.state.selectedVersionId;
-    if (!confirm('هل أنت متأكد من إقرار هذا الإصدار المعياري رسميًا؟ سيتم تجميده ضد أي تعديل لاحق وأرشفة الإصدار السابق تلقائيًا.')) {
+    if (!confirm('هل أنت متأكد من اعتماد هذه المسودة المعيارية؟ سيتم تجميدها تمهيداً لتنشيطها وسريانها للمدارس.')) {
       return;
     }
 
     const res = await this.request(`/standard-versions/${vId}/approve`, 'POST');
     if (res.ok) {
-      this.showAlert('تم إقرار الإصدار بنجاح وأصبح ساري المفعول للدورات والتقييمات!', 'success');
+      this.showAlert('تم اعتماد المسودة بنجاح! أصبحت الآن بحالة (Approved) وجاهزة لزر «تنشيط وسريان للمدارس».', 'success');
       if (this.state.currentScreen === 'standards-manager') {
         await this.loadStandardsManagerData();
       } else {
         await this.loadStandardsReview();
       }
     } else {
-      alert('فشل إقرار الإصدار: ' + (res.message || 'يرجى مراجعة الأوزان النسبية'));
+      this.showAlert('فشل اعتماد الإصدار: ' + (res.message || 'يرجى مراجعة الأوزان النسبية'), 'error');
     }
   },
 
@@ -5204,49 +5237,64 @@ const App = {
         throw new Error('لا توجد مؤشرات في ملف التقييم.');
       }
 
+      // محتوى ملف PDF صالح ومطابق لمواصفة PDF 1.4 لاجتياز فحص الـ MIME الحقيقي
+      const dummyPdfContent = '%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n3 0 obj<</Type/Page/MediaBox[0 0 612 792]/Parent 2 0 R/Resources<<>>>>endobj\nxref\n0 4\n0000000000 65535 f\n0000000010 00000 n\n0000000060 00000 n\n0000000118 00000 n\ntrailer<</Size 4/Root 1 0 R>>\nstartxref\n200\n%%EOF';
+
       for (let i = 0; i < total; i++) {
         const ind = allIndicators[i];
         const pct = Math.round(((i + 1) / total) * 100);
 
         if (progressBar) progressBar.style.width = `${pct}%`;
         if (progressPercent) progressPercent.textContent = `${pct}% (${i + 1} / ${total})`;
-        if (progressStatus) progressStatus.textContent = `جارِ تعبئة المؤشر [${ind.code}]: ${ind.name.substring(0, 35)}...`;
+        if (progressStatus) progressStatus.textContent = `جارِ رصد ورفع شواهد المؤشر [${ind.code}]: ${ind.name.substring(0, 32)}...`;
 
-        // 1. رصد الدرجة (Score = 3)
-        const toolIds = (ind.verificationTools || []).map(t => t.id || t.toolId || t.tool_id).filter(Boolean);
+        // 1. رصد الدرجة بدرجة واقعية (3 أو 2) متوافقة مع الـ API
+        const assignedScore = (i % 7 === 0) ? 2 : 3;
+        const toolIds = (ind.verificationTools || []).map(t => parseInt(t.id || t.toolId || t.tool_id)).filter(id => !isNaN(id) && id > 0);
+        
         const scoreBody = {
-          score: 3,
-          textualResult: `تم استيفاء متطلبات المؤشر ${ind.code} ضمن بيانات الاختبار التجريبي.`,
-          verificationToolIds: toolIds.length > 0 ? toolIds : undefined,
+          score: assignedScore,
+          textualResult: `تم استيفاء وتطبيق ممارسات المؤشر ${ind.code} وفق الأدلة الموثقة.`,
         };
+        if (toolIds.length > 0) {
+          scoreBody.verificationToolIds = toolIds;
+        }
 
-        await this.request(`/evaluations/${evalId}/indicators/${ind.indicatorId}/score`, {
+        const scoreRes = await this.request(`/evaluations/${evalId}/indicators/${ind.indicatorId}/score`, {
           method: 'PUT',
           body: scoreBody,
         });
 
-        // 2. رفع الشاهد بصيغة FormData
-        const dummyContent = `ملف شاهد تجريبي للمؤشر ${ind.code}\nتاريخ الإنشاء: ${new Date().toISOString()}\nالغرض: الاختبار والتطوير الآلي.`;
-        const blob = new Blob([dummyContent], { type: 'text/plain' });
-        const file = new File([blob], `evidence_${ind.code}.txt`, { type: 'text/plain' });
+        if (!scoreRes.ok) {
+          console.warn('Score save warning for', ind.code, scoreRes.message);
+        }
 
-        const formData = new FormData();
-        formData.append('title', `شاهد تجريبي مكتمل للمؤشر ${ind.code}`);
-        formData.append('evidence_type', 'report');
-        formData.append('file', file);
+        // 2. فحص عدد المتطلبات الإلزامية لهذا المؤشر لضمان كفايته 100%
+        const mandatoryReqs = (ind.evidenceRequirements || []).filter(r => r.required);
+        const neededEvidenceCount = Math.max(1, mandatoryReqs.length);
 
-        const evRes = await this.request(`/evaluations/${evalId}/indicators/${ind.indicatorId}/evidences`, {
-          method: 'POST',
-          body: formData,
-          isFormData: true,
-        });
+        for (let rIdx = 0; rIdx < neededEvidenceCount; rIdx++) {
+          const reqItem = mandatoryReqs[rIdx];
+          const reqTitle = reqItem?.title || `وثيقة إثبات ${rIdx + 1}`;
+          
+          const blob = new Blob([dummyPdfContent], { type: 'application/pdf' });
+          const file = new File([blob], `evidence_${ind.code}_${rIdx + 1}.pdf`, { type: 'application/pdf' });
 
-        // 3. ضبط حالة الشاهد لتكون Completed
-        if (evRes.ok && evRes.data?.evidenceId) {
-          await this.request(`/evidences/${evRes.data.evidenceId}/status`, {
-            method: 'PATCH',
-            body: { status: 'Completed' },
+          const formData = new FormData();
+          formData.append('title', `شاهد ${ind.code}: ${reqTitle}`);
+          formData.append('document_type', reqItem?.evidence_type || 'report');
+          formData.append('status', 'Completed');
+          formData.append('file', file);
+
+          const upRes = await this.request(`/evaluations/${evalId}/indicators/${ind.indicatorId}/evidence-links/upload`, {
+            method: 'POST',
+            body: formData,
+            isFormData: true,
           });
+
+          if (!upRes.ok) {
+            console.warn('Evidence upload warning for', ind.code, upRes.message);
+          }
         }
       }
 
@@ -6729,15 +6777,18 @@ const App = {
     const evals = evalsRes.ok ? (evalsRes.data || []) : [];
 
     const totalSchoolsEl = document.getElementById('sup-stat-total-schools');
+    const submittedEl = document.getElementById('sup-stat-submitted');
+    const needsCompEl = document.getElementById('sup-stat-needs-comp');
     const lockedEl = document.getElementById('sup-stat-locked');
-    const draftEl = document.getElementById('sup-stat-draft');
+
+    const submittedCount = evals.filter(e => e.status === 'Submitted' || e.status === 'UnderReview').length;
+    const needsCompCount = evals.filter(e => e.status === 'NeedsCompletion').length;
+    const lockedCount = evals.filter(e => e.status === 'Completed').length;
 
     if (totalSchoolsEl) totalSchoolsEl.textContent = schools.length;
-    const lockedCount = evals.filter(e => e.status === 'Completed').length;
-    const draftCount = evals.filter(e => e.status !== 'Completed').length;
-
+    if (submittedEl) submittedEl.textContent = submittedCount;
+    if (needsCompEl) needsCompEl.textContent = needsCompCount;
     if (lockedEl) lockedEl.textContent = lockedCount;
-    if (draftEl) draftEl.textContent = draftCount;
 
     if (schools.length === 0) {
       tbody.innerHTML = '<tr><td colspan="7" style="text-align: center;">لا توجد مدارس مسجلة تحت نطاق الإشراف.</td></tr>';
@@ -6745,24 +6796,71 @@ const App = {
     }
 
     tbody.innerHTML = schools.map(sch => {
-      const schEvals = evals.filter(e => (e.school?.schoolId === sch.schoolId) || (e.schoolId === sch.schoolId));
+      const schEvals = evals.filter(e => String(e.school?.schoolId || e.schoolId) === String(sch.schoolId));
       const latestEval = schEvals[0] || null;
-      const statusBadge = latestEval 
-        ? (latestEval.status === 'Completed' 
-            ? '<span class="badge badge-green">مكتمل ومقفل</span>' 
-            : '<span class="badge badge-yellow">مسودة (قيد الرصد)</span>')
-        : '<span class="badge badge-gray">لا يوجد تقييم</span>';
-
       const year = latestEval ? (latestEval.academicYear || latestEval.cycle?.academicYear || '2025/2026') : '-';
 
-      const actionButtons = latestEval ? `
-        <button class="btn btn-sm btn-secondary" onclick="App.openSupervisionEval(${latestEval.evaluationId})">
-          🔍 استعراض التقييم
-        </button>
-        <button class="btn btn-sm btn-secondary" onclick="App.openSupervisionInventory(${latestEval.evaluationId})">
-          📑 جرد الشواهد
-        </button>
-      ` : '<span style="font-size: 0.8rem; color: var(--text-muted);">بانتظار تدشين دورة</span>';
+      let statusBadge = '<span class="badge badge-gray">لا يوجد تقييم</span>';
+      let actionButtons = '<span style="font-size: 0.8rem; color: var(--text-muted);">بانتظار تدشين دورة</span>';
+
+      if (latestEval) {
+        const evId = latestEval.evaluationId || latestEval.evaluation_id;
+        const st = latestEval.status;
+
+        if (st === 'Submitted' || st === 'UnderReview') {
+          statusBadge = '<span class="badge badge-purple" style="font-weight: 700; background: #e0e7ff; color: #3730a3; border: 1px solid #c7d2fe;">📥 مسلّم للمراجعة الوزارية</span>';
+          actionButtons = `
+            <button class="btn btn-sm btn-primary" onclick="App.openSupervisionEval(${evId})" title="استعراض وفحص درجات وشواهد التقييم">
+              🔍 فحص التقييم
+            </button>
+            <button class="btn btn-sm btn-warning" onclick="App.openCompletionRequestModal(${evId})" style="background: #f59e0b; color: white;" title="إرسال طلب استكمال نواقص للمدرسة">
+              📋 طلب استكمال
+            </button>
+            <button class="btn btn-sm btn-success" onclick="App.handleDirectCloseEvaluation(${evId})" style="background: #10b981; color: white;" title="اعتماد وإغلاق التقييم نهائياً">
+              🔒 اعتماد وإغلاق
+            </button>
+            <button class="btn btn-sm btn-secondary" onclick="App.openSupervisionInventory(${evId})">
+              📑 جرد الشواهد
+            </button>
+          `;
+        } else if (st === 'NeedsCompletion') {
+          statusBadge = '<span class="badge badge-warning" style="font-weight: 700;">⚠️ بانتظار استكمال المدرسة</span>';
+          actionButtons = `
+            <button class="btn btn-sm btn-primary" onclick="App.openSupervisionEval(${evId})">
+              🔍 فحص التقييم
+            </button>
+            <button class="btn btn-sm btn-outline-primary" onclick="App.openCompletionDetailsModal(${evId})" title="استعراض بنود النواقص المرسلة">
+              📋 بنود النواقص
+            </button>
+            <button class="btn btn-sm btn-outline-warning" onclick="App.openExtendDeadlineModal(${evId})" title="تمديد مهلة الاستكمال">
+              ⏳ تمديد المهلة
+            </button>
+            <button class="btn btn-sm btn-secondary" onclick="App.openSupervisionInventory(${evId})">
+              📑 جرد الشواهد
+            </button>
+          `;
+        } else if (st === 'Completed') {
+          statusBadge = '<span class="badge badge-green" style="font-weight: 700;">✅ معتمد ومغلق رسمياً</span>';
+          actionButtons = `
+            <button class="btn btn-sm btn-secondary" onclick="App.openSupervisionEval(${evId})">
+              🔍 استعراض التقييم
+            </button>
+            <button class="btn btn-sm btn-secondary" onclick="App.openSupervisionInventory(${evId})">
+              📑 جرد الشواهد
+            </button>
+          `;
+        } else {
+          statusBadge = '<span class="badge badge-yellow">✏️ مسودة (قيد الرصد الذاتي)</span>';
+          actionButtons = `
+            <button class="btn btn-sm btn-secondary" onclick="App.openSupervisionEval(${evId})">
+              🔍 معاينة التقدم
+            </button>
+            <button class="btn btn-sm btn-secondary" onclick="App.openSupervisionInventory(${evId})">
+              📑 جرد الشواهد
+            </button>
+          `;
+        }
+      }
 
       return `
         <tr>
@@ -7295,18 +7393,22 @@ const App = {
 
     tbody.innerHTML = versions.map(v => {
       let badgeClass = 'badge-gray';
-      let statusText = 'مؤرشف';
+      let statusText = 'مؤرشف (Archived)';
 
-      if (v.status === 'Approved' || v.status === 'Active') {
+      if (v.status === 'Active') {
         badgeClass = 'badge-green';
-        statusText = 'مُقرّ رسميًا';
+        statusText = 'نشط وسارٍ للمدارس 🟢';
+      } else if (v.status === 'Approved') {
+        badgeClass = 'badge-blue';
+        statusText = 'معتمد (Approved)';
       } else if (v.status === 'Draft') {
         badgeClass = 'badge-warning';
-        statusText = 'مسودة عمل';
+        statusText = 'مسودة عمل (Draft)';
       }
 
       const isDraft = v.status === 'Draft';
-      const isApproved = v.status === 'Approved' || v.status === 'Active';
+      const isApproved = v.status === 'Approved';
+      const isActive = v.status === 'Active';
       const isArchived = v.status === 'Archived';
 
       const dateStr = v.issue_date ? v.issue_date.split('T')[0] : (v.created_at ? v.created_at.split('T')[0] : '--');
@@ -7318,7 +7420,31 @@ const App = {
       `;
 
       if (isStandardsManager) {
-        if (isApproved) {
+        if (isDraft) {
+          actionButtons += `
+            <button class="btn btn-xs btn-outline-primary" onclick="App.openEditVersionModal(${v.version_id})" title="تعديل البيانات التعريفية">
+              ✏️ تعديل
+            </button>
+            <button class="btn btn-xs btn-outline-secondary" onclick="App.navigateToVersionInEditor(${v.version_id}, true)" title="ضبط مصفوفة الأوزان">
+              ⚖️ الأوزان
+            </button>
+            <button class="btn btn-xs btn-success" onclick="App.handleApproveVersion(${v.version_id})" title="اعتماد المسودة رسميًا">
+              ✅ اعتماد
+            </button>
+          `;
+        } else if (isApproved) {
+          actionButtons += `
+            <button class="btn btn-xs btn-primary" onclick="App.handleActivateVersion(${v.version_id})" title="تنشيط الإصدار وسريانه فوراً للمدارس" style="font-weight: 700;">
+              ⚡ تنشيط وسريان
+            </button>
+            <button class="btn btn-xs btn-outline-secondary" onclick="App.openCloneVersionModal(${v.version_id}, '${v.version_no}')" title="استنساخ كمسودة جديدة">
+              📋 استنساخ
+            </button>
+            <button class="btn btn-xs btn-outline-danger" onclick="App.handleArchiveVersion(${v.version_id})" title="أرشفة الإصدار">
+              📁 أرشفة
+            </button>
+          `;
+        } else if (isActive) {
           actionButtons += `
             <button class="btn btn-xs btn-outline-secondary" onclick="App.openCloneVersionModal(${v.version_id}, '${v.version_no}')" title="استنساخ كمسودة جديدة">
               📋 استنساخ
@@ -7327,23 +7453,17 @@ const App = {
               📁 أرشفة
             </button>
           `;
-        } else if (isDraft) {
+        } else if (isArchived) {
           actionButtons += `
-            <button class="btn btn-xs btn-outline-primary" onclick="App.openEditVersionModal(${v.version_id})" title="تعديل البيانات التعريفية">
-              ✏️ تعديل
-            </button>
-            <button class="btn btn-xs btn-outline-secondary" onclick="App.navigateToVersionInEditor(${v.version_id}, true)" title="ضبط مصفوفة الأوزان">
-              ⚖️ الأوزان
-            </button>
-            <button class="btn btn-xs btn-success" onclick="App.handleApproveVersion(${v.version_id})" title="إقرار المسودة رسميًا">
-              ✅ إقرار
+            <button class="btn btn-xs btn-outline-secondary" onclick="App.openCloneVersionModal(${v.version_id}, '${v.version_no}')" title="استنساخ كمسودة جديدة">
+              📋 استنساخ كمسودة
             </button>
           `;
         }
       }
 
       return `
-        <tr style="${isApproved ? 'background: #f0fdf4;' : ''}">
+        <tr style="${isActive ? 'background: #f0fdf4;' : (isApproved ? 'background: #eff6ff;' : '')}">
           <td style="padding: 0.65rem 0.75rem; font-weight: 700;">
             <div style="font-size: 0.95rem; color: var(--primary);">${v.version_no}</div>
             <div style="font-size: 0.75rem; color: var(--text-muted);">${v.version_name || 'وثيقة المعايير الوطنية'}</div>
@@ -7470,6 +7590,526 @@ const App = {
         </div>
       `;
     }).join('');
+  },
+
+
+  // ---------------------------------------------------------------------------
+  // تغيير كلمة المرور للمستخدم المسجل (الشريحة 11 و U-40)
+  // ---------------------------------------------------------------------------
+  openChangePasswordModal() {
+    const modal = document.getElementById('modal-change-password');
+    if (!modal) return;
+    const alertEl = document.getElementById('change-password-alert');
+    if (alertEl) {
+      alertEl.classList.add('hidden');
+      alertEl.textContent = '';
+    }
+    const form = document.getElementById('form-change-password');
+    if (form) form.reset();
+    modal.classList.remove('hidden');
+  },
+
+  closeChangePasswordModal() {
+    const modal = document.getElementById('modal-change-password');
+    if (modal) modal.classList.add('hidden');
+  },
+
+  async handleChangePassword(event) {
+    event.preventDefault();
+    const alertEl = document.getElementById('change-password-alert');
+    if (alertEl) alertEl.classList.add('hidden');
+
+    const cur = document.getElementById('chg-current-password')?.value || '';
+    const newPass = document.getElementById('chg-new-password')?.value || '';
+    const confirmPass = document.getElementById('chg-confirm-password')?.value || '';
+
+    if (newPass !== confirmPass) {
+      if (alertEl) {
+        alertEl.textContent = 'كلمة المرور الجديدة وتأكيدها غير متطابقين.';
+        alertEl.className = 'alert alert-error';
+        alertEl.classList.remove('hidden');
+      }
+      return;
+    }
+
+    const res = await this.request('/auth/password/change', {
+      method: 'POST',
+      body: {
+        current_password: cur,
+        new_password: newPass,
+        new_password_confirmation: confirmPass
+      }
+    });
+
+    if (res.ok) {
+      this.showAlert(res.message || 'تم تغيير كلمة المرور بنجاح وإبطال الجلسات الأخرى.', 'success');
+      this.closeChangePasswordModal();
+    } else {
+      let errMsg = res.message || 'فشل تغيير كلمة المرور.';
+      if (res.errors) {
+        const firstErr = Object.values(res.errors)[0];
+        if (Array.isArray(firstErr)) errMsg = firstErr[0];
+      }
+      if (alertEl) {
+        alertEl.textContent = errMsg;
+        alertEl.className = 'alert alert-error';
+        alertEl.classList.remove('hidden');
+      }
+    }
+  },
+
+  async handleUnlinkEvidence(linkId) {
+    if (!linkId) return;
+    if (!confirm('هل أنت متأكد من فك ربط هذا الشاهد عن المؤشر الحالي؟ لن يتم حذف المستند من مستودع المدرسة.')) {
+      return;
+    }
+
+    const res = await this.request(`/evidence-links/${linkId}`, 'DELETE');
+    if (res.ok) {
+      this.showAlert('تم فك ربط الشاهد عن هذا المؤشر بنجاح.', 'success');
+      if (this.state.currentIndicator) {
+        this.loadEvidences(this.state.currentIndicator);
+      }
+      const evalId = this.getEvaluationId();
+      if (evalId) {
+        this.loadStandardsTree(evalId);
+      }
+    } else {
+      this.showAlert(res.message || 'فشل فك ربط الشاهد.', 'error');
+    }
+  },
+
+  async handleActivateVersion(targetVersionId = null) {
+    const vId = targetVersionId || this.state.selectedVersionId;
+    if (!confirm('هل أنت متأكد من تنشيط هذا الإصدار المعياري؟ سيصبح الإصدار النشط الرسمي لكافة المدارس والدورات، وسيتم أرشفة أي إصدار نشط سابق تلقائياً داخل معاملة ذرية (ضابط G-23).')) {
+      return;
+    }
+
+    const res = await this.request(`/standard-versions/${vId}/activate`, 'POST');
+    if (res.ok) {
+      this.showAlert('تم تنشيط الإصدار المعياري بنجاح وأصبح نافذاً لكافة المدارس، وأرشفة الإصدار النشط السابق تلقائياً!', 'success');
+      if (this.state.currentScreen === 'standards-manager') {
+        await this.loadStandardsManagerData();
+      } else {
+        await this.loadStandardsReview();
+      }
+    } else {
+      this.showAlert('فشل تنشيط الإصدار: ' + (res.message || 'خطأ في عملية التنشيط'), 'error');
+    }
+  },
+
+  // ---------------------------------------------------------------------------
+  // دورة الاستكمال والإغلاق الوزاري (Completion Requests & Evaluation Closure)
+  // ---------------------------------------------------------------------------
+  openCompletionRequestModal(evalId) {
+    const modal = document.getElementById('modal-completion-request');
+    if (!modal) return;
+
+    document.getElementById('completion-eval-id').value = evalId;
+    const alertEl = document.getElementById('completion-req-alert');
+    if (alertEl) alertEl.classList.add('hidden');
+
+    // تاريخ افتراضي: بعد أسبوعين من الآن
+    const defaultDate = new Date();
+    defaultDate.setDate(defaultDate.getDate() + 14);
+    const dateInput = document.getElementById('completion-deadline');
+    if (dateInput) dateInput.value = defaultDate.toISOString().split('T')[0];
+
+    document.getElementById('completion-notes').value = '';
+
+    // تصفير وإضافة سطر أولي لبنود الاستكمال
+    const itemsList = document.getElementById('completion-items-list');
+    if (itemsList) {
+      itemsList.innerHTML = '';
+      this.addCompletionItemRow();
+    }
+
+    modal.classList.remove('hidden');
+  },
+
+  closeCompletionRequestModal() {
+    const modal = document.getElementById('modal-completion-request');
+    if (modal) modal.classList.add('hidden');
+  },
+
+  addCompletionItemRow() {
+    const itemsList = document.getElementById('completion-items-list');
+    if (!itemsList) return;
+
+    const indicators = this.state.cachedIndicatorsList || [];
+    const optionsHtml = indicators.map(ind => 
+      `<option value="${ind.indicatorId}">[${ind.code}] ${ind.name}</option>`
+    ).join('') || '<option value="1">مؤشر الجودة</option>';
+
+    const rowId = 'comp-item-' + Date.now() + '-' + Math.floor(Math.random() * 1000);
+    const div = document.createElement('div');
+    div.id = rowId;
+    div.style.cssText = 'background: #fff; border: 1px solid var(--border); padding: 0.65rem; border-radius: 6px; margin-bottom: 0.5rem;';
+    div.innerHTML = `
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">
+        <span style="font-size: 0.8rem; font-weight: 700; color: #b45309;">بند استكمال ناقص:</span>
+        <button type="button" class="btn btn-xs btn-outline-danger" onclick="document.getElementById('${rowId}').remove()">✕ حذف</button>
+      </div>
+      <div style="margin-bottom: 0.4rem;">
+        <select class="form-control comp-item-indicator" style="font-size: 0.82rem;" required>
+          <option value="">-- اختر المؤشر المطلوب استكماله --</option>
+          ${optionsHtml}
+        </select>
+      </div>
+      <div>
+        <input type="text" class="form-control comp-item-desc" placeholder="وصف النقص المطلوب استكماله من المدرسة..." required style="font-size: 0.82rem;">
+      </div>
+    `;
+    itemsList.appendChild(div);
+  },
+
+  async handleCreateCompletionRequest(event) {
+    event.preventDefault();
+    const alertEl = document.getElementById('completion-req-alert');
+    if (alertEl) alertEl.classList.add('hidden');
+
+    const evalId = document.getElementById('completion-eval-id')?.value;
+    const deadline = document.getElementById('completion-deadline')?.value;
+    const notes = document.getElementById('completion-notes')?.value || '';
+
+    const rows = document.querySelectorAll('#completion-items-list > div');
+    const items = [];
+    rows.forEach(r => {
+      const indId = r.querySelector('.comp-item-indicator')?.value;
+      const desc = r.querySelector('.comp-item-desc')?.value?.trim();
+      if (indId && desc) {
+        items.push({
+          indicator_id: parseInt(indId, 10),
+          missing_description: desc
+        });
+      }
+    });
+
+    if (items.length === 0) {
+      if (alertEl) {
+        alertEl.textContent = 'يجب إضافة بند استكمال ومؤشر ناقص واحد على الأقل.';
+        alertEl.className = 'alert alert-error';
+        alertEl.classList.remove('hidden');
+      }
+      return;
+    }
+
+    const res = await this.request(`/evaluations/${evalId}/completion-requests`, {
+      method: 'POST',
+      body: {
+        completion_deadline: deadline,
+        notes: notes,
+        items: items
+      }
+    });
+
+    if (res.ok) {
+      this.showAlert('تم إرسال طلب استكمال التقييم للمدرسة بنجاح وتحديث حالته إلى (NeedsCompletion).', 'success');
+      this.closeCompletionRequestModal();
+      this.loadSupervisionData();
+    } else {
+      let errMsg = res.message || 'فشل إرسال طلب الاستكمال.';
+      if (res.errors) {
+        const first = Object.values(res.errors)[0];
+        if (Array.isArray(first)) errMsg = first[0];
+      }
+      if (alertEl) {
+        alertEl.textContent = errMsg;
+        alertEl.className = 'alert alert-error';
+        alertEl.classList.remove('hidden');
+      }
+    }
+  },
+
+  openExtendDeadlineModal(requestId) {
+    const modal = document.getElementById('modal-extend-deadline');
+    if (!modal) return;
+    document.getElementById('extend-request-id').value = requestId;
+    const alertEl = document.getElementById('extend-deadline-alert');
+    if (alertEl) alertEl.classList.add('hidden');
+
+    const defaultDate = new Date();
+    defaultDate.setDate(defaultDate.getDate() + 7);
+    const dateInput = document.getElementById('extend-new-date');
+    if (dateInput) dateInput.value = defaultDate.toISOString().split('T')[0];
+
+    modal.classList.remove('hidden');
+  },
+
+  closeExtendDeadlineModal() {
+    const modal = document.getElementById('modal-extend-deadline');
+    if (modal) modal.classList.add('hidden');
+  },
+
+  async handleExtendDeadline(event) {
+    event.preventDefault();
+    const alertEl = document.getElementById('extend-deadline-alert');
+    if (alertEl) alertEl.classList.add('hidden');
+
+    const reqId = document.getElementById('extend-request-id')?.value;
+    const newDate = document.getElementById('extend-new-date')?.value;
+
+    const res = await this.request(`/completion-requests/${reqId}/deadline`, {
+      method: 'PATCH',
+      body: { new_deadline: newDate }
+    });
+
+    if (res.ok) {
+      this.showAlert('تم تمديد مهلة الاستكمال بنجاح.', 'success');
+      this.closeExtendDeadlineModal();
+      this.loadSupervisionData();
+    } else {
+      if (alertEl) {
+        alertEl.textContent = res.message || 'فشل تمديد المهلة.';
+        alertEl.className = 'alert alert-error';
+        alertEl.classList.remove('hidden');
+      }
+    }
+  },
+
+  async handleDirectCloseEvaluation(evalId) {
+    if (!confirm('هل أنت متأكد من إغلاق التقييم واعتماده نهائياً؟ بعد الإغلاق يصبح التقييم مكتملاً ومقفلاً نهائياً.')) {
+      return;
+    }
+
+    const res = await this.request(`/evaluations/${evalId}/close`, 'POST');
+    if (res.ok) {
+      this.showAlert('تم إغلاق التقييم واعتماده نهائياً بنجاح (Completed).', 'success');
+      this.loadSupervisionData();
+    } else {
+      this.showAlert(res.message || 'فشل إغلاق التقييم.', 'error');
+    }
+  },
+
+  async handleCloseCompletionRequest(requestId) {
+    if (!confirm('هل أنت متأكد من قبول استكمال المدرسة وإغلاق التقييم نهائياً؟')) {
+      return;
+    }
+
+    const res = await this.request(`/completion-requests/${requestId}/close`, {
+      method: 'POST',
+      body: { decision: 'approved' }
+    });
+
+    if (res.ok) {
+      this.showAlert('تم اعتماد الاستكمال وإغلاق ملف التقييم بنجاح.', 'success');
+      this.loadSupervisionData();
+    } else {
+      this.showAlert(res.message || 'فشل إغلاق طلب الاستكمال.', 'error');
+    }
+  },
+
+  async handleResubmitEvaluation(requestId) {
+    if (!confirm('هل أنت متأكد من إعادة تسليم التقييم للمشرف الوزاري بعد استكمال النواقص والملاحظات؟')) {
+      return;
+    }
+
+    const res = await this.request(`/completion-requests/${requestId}/resubmit`, {
+      method: 'POST',
+      body: { notes: 'تم استكمال كافة المتطلبات والشواهد المطلوبة.' }
+    });
+
+    if (res.ok) {
+      this.showAlert('تمت إعادة تسليم التقييم بنجاح وأصبح جاهزاً للمراجعة الوزارية!', 'success');
+      const evalId = this.getEvaluationId();
+      if (evalId) {
+        this.loadStandardsTree(evalId);
+      }
+      this.navTo('cycles');
+    } else {
+      this.showAlert(res.message || 'فشل إعادة تسليم التقييم.', 'error');
+    }
+  },
+
+  async openCompletionDetailsModal(requestId) {
+    const modal = document.getElementById('modal-completion-details');
+    const container = document.getElementById('completion-details-content');
+    if (!modal || !container) return;
+
+    container.innerHTML = '<div style="padding: 1rem; text-align: center; color: var(--text-muted);">جارِ جلب تفاصيل طلب الاستكمال...</div>';
+    modal.classList.remove('hidden');
+
+    const res = await this.request(`/completion-requests/${requestId}`);
+    if (!res.ok) {
+      container.innerHTML = `<div class="alert alert-error">${res.message || 'تعذر تحميل التفاصيل'}</div>`;
+      return;
+    }
+
+    const req = res.data;
+    const items = req.items || [];
+    container.innerHTML = `
+      <div style="background: #f8fafc; border: 1px solid var(--border); padding: 0.75rem; border-radius: 6px; margin-bottom: 1rem; font-size: 0.85rem;">
+        <div><strong>حالة الطلب:</strong> <span class="badge ${req.status === 'Open' ? 'badge-warning' : 'badge-green'}">${req.status}</span></div>
+        <div style="margin-top: 0.35rem;"><strong>المهلة المحددة:</strong> ${req.completionDeadline || req.completion_deadline || '-'}</div>
+        <div style="margin-top: 0.35rem;"><strong>توجيهات المشرف:</strong> ${req.notes || 'لا توجد ملاحظات عامة'}</div>
+      </div>
+      <h4 style="font-size: 0.9rem; margin-bottom: 0.5rem; color: #b45309;">البنود والمؤشرات المطلوب استكمالها (${items.length}):</h4>
+      <div style="max-height: 220px; overflow-y: auto;">
+        ${items.map((it, idx) => `
+          <div style="background: #fff; border: 1px solid var(--border); padding: 0.5rem 0.75rem; border-radius: 4px; margin-bottom: 0.35rem; font-size: 0.82rem;">
+            <div><strong>#${idx + 1} المؤشر:</strong> ${it.indicator?.code || ''} - ${it.indicator?.name || ''}</div>
+            <div style="color: #b45309; margin-top: 0.2rem;"><strong>النقص المطلوب:</strong> ${it.missingDescription || it.missing_description || ''}</div>
+            <div style="margin-top: 0.2rem; font-size: 0.78rem;"><strong>حالة المعالجة:</strong> <span class="badge ${it.resolutionStatus === 'Resolved' ? 'badge-green' : 'badge-gray'}">${it.resolutionStatus || 'Pending'}</span></div>
+          </div>
+        `).join('')}
+      </div>
+    `;
+  },
+  closeCompletionDetailsModal() {
+    const modal = document.getElementById('modal-completion-details');
+    if (modal) modal.classList.add('hidden');
+  },
+
+  // ---------------------------------------------------------------------------
+  // سجل التدقيق والرقابة المؤسسية (Audit Logs - الشريحة 11 و U-08)
+  // ---------------------------------------------------------------------------
+  async loadAdminAuditLogs(page = 1) {
+    const tbody = document.getElementById('admin-audit-table-body');
+    const pagination = document.getElementById('admin-audit-pagination');
+    if (!tbody) return;
+
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 1.5rem;">جارِ جلب سجل التدقيق والرقابة...</td></tr>';
+
+    const action = document.getElementById('audit-filter-action')?.value || '';
+    let url = `/audit-logs?page=${page}&per_page=15`;
+    if (action) url += `&action=${encodeURIComponent(action)}`;
+
+    const res = await this.request(url);
+    if (!res.ok) {
+      tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--danger); padding: 1.5rem;">${res.message || 'تعذر تحميل سجل التدقيق.'}</td></tr>`;
+      return;
+    }
+
+    const logs = Array.isArray(res.data) ? res.data : (res.data?.data || []);
+    const meta = res.meta || res.data?.meta || {};
+
+    if (logs.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 1.5rem; color: var(--text-muted);">لا توجد حركات مسجلة مطابقة في سجل التدقيق.</td></tr>';
+      if (pagination) pagination.innerHTML = '';
+      return;
+    }
+
+    tbody.innerHTML = logs.map(log => {
+      const userStr = log.user?.fullName || log.user?.full_name || log.user?.username || 'مستخدم غير معروف';
+      const schoolStr = log.school?.schoolName || log.school?.school_name || '-';
+      const actionBadge = `<span class="badge badge-blue">${log.action}</span>`;
+      const targetStr = `${log.targetType || log.target_type || '-'}: #${log.targetId || log.target_id || '-'}`;
+      const dateStr = log.createdAt || log.created_at || '';
+      const formattedDate = dateStr ? new Date(dateStr).toLocaleString('ar-YE') : '-';
+
+      // عرض التغييرات النظيفة
+      let diffHtml = '<span style="color: var(--text-muted); font-size: 0.78rem;">-</span>';
+      if (log.newValues || log.new_values) {
+        const newVal = log.newValues || log.new_values;
+        diffHtml = `<code style="font-size: 0.75rem; background: #f1f5f9; padding: 2px 4px; border-radius: 4px; display: block; max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title='${JSON.stringify(newVal)}'>${JSON.stringify(newVal)}</code>`;
+      }
+
+      return `
+        <tr>
+          <td style="font-size: 0.82rem; white-space: nowrap;">${formattedDate}</td>
+          <td><strong>${userStr}</strong></td>
+          <td style="font-size: 0.85rem;">${schoolStr}</td>
+          <td>${actionBadge}</td>
+          <td style="font-size: 0.82rem;">${targetStr}</td>
+          <td>${diffHtml}</td>
+        </tr>
+      `;
+    }).join('');
+
+    // ترقيم الصفحات
+    if (pagination && meta.last_page > 1) {
+      pagination.innerHTML = `
+        <div>الصفحة ${meta.current_page || page} من ${meta.last_page || 1} (إجمالي السجلات: ${meta.total || logs.length})</div>
+        <div style="display: flex; gap: 0.35rem;">
+          <button class="btn btn-xs btn-secondary" ${(meta.current_page <= 1) ? 'disabled' : ''} onclick="App.loadAdminAuditLogs(${(meta.current_page || 1) - 1})">السابق</button>
+          <button class="btn btn-xs btn-secondary" ${(meta.current_page >= meta.last_page) ? 'disabled' : ''} onclick="App.loadAdminAuditLogs(${(meta.current_page || 1) + 1})">التالي</button>
+        </div>
+      `;
+    } else if (pagination) {
+      pagination.innerHTML = `<div style="font-size: 0.8rem; color: var(--text-muted);">إجمالي العمليات: ${meta.total || logs.length}</div>`;
+    }
+  },
+
+  // ---------------------------------------------------------------------------
+  // مستودع وثائق المدرسة (School Documents Repository)
+  // ---------------------------------------------------------------------------
+  async loadSchoolDocuments(schoolId = null) {
+    schoolId = schoolId || this.getSchoolId();
+    const tbody = document.getElementById('sch-docs-tbody');
+    if (!tbody) return;
+
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 1.5rem;">جارِ جلب وثائق ومستندات المدرسة...</td></tr>';
+
+    const res = await this.request(`/schools/${schoolId}/documents`);
+    if (!res.ok) {
+      tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--danger); padding: 1.5rem;">${res.message || 'تعذر تحميل وثائق المدرسة.'}</td></tr>`;
+      return;
+    }
+
+    const docs = Array.isArray(res.data) ? res.data : (res.data?.data || []);
+    this.state.cachedSchoolDocuments = docs;
+    this.renderSchoolDocumentsTable(docs);
+  },
+
+  renderSchoolDocumentsTable(docs) {
+    const tbody = document.getElementById('sch-docs-tbody');
+    if (!tbody) return;
+
+    if (!docs || docs.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 1.5rem; color: var(--text-muted);">لا توجد وثائق مرفوعة في مستودع المدرسة حتى الآن.</td></tr>';
+      return;
+    }
+
+    const typeLabels = {
+      minutes: 'محضر',
+      plan: 'خطة',
+      record: 'سجل',
+      report: 'تقرير',
+      board: 'لوحة',
+      image: 'صورة',
+      other: 'أخرى',
+    };
+
+    tbody.innerHTML = docs.map(doc => {
+      const curVer = doc.current_version || doc.currentVersion || (doc.versions && doc.versions[0]) || {};
+      const versionNo = curVer.version_no || curVer.versionNo || 1;
+      const fileName = curVer.file_name || curVer.fileName || 'document.pdf';
+      const fileSize = curVer.file_size ? (Math.round(curVer.file_size / 1024) + ' KB') : '-';
+      const versionId = curVer.id;
+      const linksCount = doc.links_count ?? doc.linksCount ?? 0;
+
+      return `
+        <tr>
+          <td><strong style="color: var(--primary);">📄 ${doc.title}</strong></td>
+          <td><span class="badge badge-gray">${typeLabels[doc.document_type || doc.documentType] || 'أخرى'}</span></td>
+          <td style="font-size: 0.82rem; color: var(--text-muted); max-width: 200px;">${doc.description || '-'}</td>
+          <td><span class="badge badge-blue">v${versionNo}</span></td>
+          <td style="font-size: 0.82rem;">${fileSize}</td>
+          <td><span class="badge ${linksCount > 0 ? 'badge-green' : 'badge-gray'}">${linksCount} مؤشرات</span></td>
+          <td>
+            ${versionId ? `
+              <button class="btn btn-xs btn-outline-primary" onclick="App.downloadEvidenceVersion(${versionId}, '${fileName}')">
+                📥 تنزيل
+              </button>
+            ` : '-'}
+          </td>
+        </tr>
+      `;
+    }).join('');
+  },
+
+  filterSchoolDocuments(query) {
+    const term = (query || '').toLowerCase().trim();
+    const docs = this.state.cachedSchoolDocuments || [];
+    if (!term) {
+      this.renderSchoolDocumentsTable(docs);
+      return;
+    }
+    const filtered = docs.filter(d => 
+      (d.title || '').toLowerCase().includes(term) ||
+      (d.description || '').toLowerCase().includes(term)
+    );
+    this.renderSchoolDocumentsTable(filtered);
   },
 
 };
