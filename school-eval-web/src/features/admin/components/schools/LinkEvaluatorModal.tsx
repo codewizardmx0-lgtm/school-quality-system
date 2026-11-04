@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { X, UserCheck } from 'lucide-react';
+import { X, UserCheck, AlertCircle } from 'lucide-react';
 import { theme } from '../../theme';
 import { schoolsApi } from '../../api/schoolsApi';
 import { usersApi } from '../../api/usersApi';
-import { MOCK_USERS } from '../../services/mockAdminData';
 import type { School, User } from '../../types/admin.types';
 
 interface LinkEvaluatorModalProps {
@@ -23,27 +22,34 @@ export const LinkEvaluatorModal: React.FC<LinkEvaluatorModalProps> = ({
 }) => {
   const [selectedUserId, setSelectedUserId] = useState<number | ''>('');
   const [evaluatorsList, setEvaluatorsList] = useState<User[]>([]);
+  const [loadingUsers, setLoadingUsers] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
+    if (!isOpen) return;
     let ignore = false;
-    usersApi.getUsers({ userType: 'school' }).then((res) => {
+    setLoadingUsers(true);
+    usersApi.getUsers().then((res) => {
       if (!ignore && res.data) {
-        setEvaluatorsList(res.data);
+        // Filter users who have role 'school_evaluator' or roleCode 'S1' or userType 'school'
+        const schoolEvaluators = res.data.filter((u) => 
+          u.roleName === 'school_evaluator' || u.roleCode === 'S1' || (u.userType === 'school' && !u.roleName?.includes('principal'))
+        );
+        setEvaluatorsList(schoolEvaluators);
       }
-    }).catch(() => {
-      if (!ignore) {
-        setEvaluatorsList(MOCK_USERS.filter((u) => u.userType === 'school'));
-      }
+    }).catch((err) => {
+      console.warn('Failed to load real evaluators:', err);
+    }).finally(() => {
+      if (!ignore) setLoadingUsers(false);
     });
     return () => { ignore = true; };
-  }, []);
+  }, [isOpen]);
 
   if (!isOpen || !school) return null;
 
-  // Available school evaluators
-  const availableEvaluators = evaluatorsList.length > 0 ? evaluatorsList : MOCK_USERS.filter((u) => u.userType === 'school');
+  // Real evaluators currently linked to this school
+  const currentEvaluators = evaluatorsList.filter((u) => u.schoolId === school.schoolId);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -54,8 +60,8 @@ export const LinkEvaluatorModal: React.FC<LinkEvaluatorModalProps> = ({
     setLoading(true);
     try {
       await schoolsApi.assignEvaluator(school.schoolId, Number(selectedUserId));
-      const user = availableEvaluators.find((u) => u.userId === Number(selectedUserId));
-      addToast('success', `تم ربط المستخدم "${user?.fullName || ''}" بـ "${school.schoolName}" بنجاح`);
+      const user = evaluatorsList.find((u) => u.userId === Number(selectedUserId));
+      addToast('success', `تم ربط مسؤول التقييم "${user?.fullName || ''}" بـ "${school.schoolName}" بنجاح`);
       onSuccess();
       onClose();
     } catch (err: any) {
@@ -86,7 +92,7 @@ export const LinkEvaluatorModal: React.FC<LinkEvaluatorModalProps> = ({
           backgroundColor: theme.colors.neutral.white,
           borderRadius: theme.radii.xl,
           width: '90%',
-          maxWidth: '480px',
+          maxWidth: '520px',
           overflow: 'hidden',
           display: 'flex',
           flexDirection: 'column',
@@ -122,10 +128,10 @@ export const LinkEvaluatorModal: React.FC<LinkEvaluatorModalProps> = ({
             </div>
             <div>
               <h2 style={{ fontSize: theme.typography.fontSizes.base, fontWeight: theme.typography.fontWeights.bold, color: '#fff', margin: 0 }}>
-                ربط مسؤول تقييم بالمدرسة
+                إسناد وربط مقيّم جودة بالمدرسة
               </h2>
-              <p style={{ fontSize: theme.typography.fontSizes.xs, color: '#94A3B8', marginTop: '2px' }}>
-                تفعيل الحساب الإداري المسؤول عن دورة التقييم
+              <p style={{ fontSize: theme.typography.fontSizes.xs, color: '#94A3B8', marginTop: '2px', margin: '2px 0 0' }}>
+                المستخدم المقيم ينتمي لمدرسة واحدة فقط عبر users.school_id
               </p>
             </div>
           </div>
@@ -138,24 +144,47 @@ export const LinkEvaluatorModal: React.FC<LinkEvaluatorModalProps> = ({
           {/* School Info Box */}
           <div
             style={{
-              padding: '12px 16px',
+              padding: '14px 16px',
               backgroundColor: '#F5F3FF',
               borderRadius: theme.radii.lg,
               border: '1px solid #DDD6FE',
             }}
           >
-            <div style={{ fontSize: theme.typography.fontSizes.xs, color: '#6D28D9', fontWeight: 600 }}>المدرسة المحددة:</div>
+            <div style={{ fontSize: theme.typography.fontSizes.xs, color: '#6D28D9', fontWeight: 600 }}>المدرسة المستهدفة:</div>
             <div style={{ fontSize: theme.typography.fontSizes.sm, fontWeight: 700, color: '#2E1065', marginTop: '2px' }}>
               {school.schoolName} ({school.schoolCode})
             </div>
-            <div style={{ fontSize: theme.typography.fontSizes.xs, color: '#7C3AED', marginTop: '2px' }}>
-              {school.directorate} • {school.educationalStage}
+            <div style={{ fontSize: theme.typography.fontSizes.xs, color: '#7C3AED', marginTop: '4px' }}>
+              المديرية: {school.directorate} • المرحلة: {school.educationalStage}
             </div>
+          </div>
+
+          {/* Currently linked evaluators */}
+          <div style={{ padding: '12px 14px', borderRadius: theme.radii.md, backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0' }}>
+            <div style={{ fontSize: '0.8rem', fontWeight: 600, color: '#475569', marginBottom: '6px' }}>
+              المقيّمون المرتبطون حالياً بهذه المدرسة في قاعدة البيانات:
+            </div>
+            {currentEvaluators.length > 0 ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                {currentEvaluators.map((ev) => (
+                  <div key={ev.userId} style={{ fontSize: '0.8rem', color: '#0F172A', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span style={{ color: '#10B981', fontWeight: 'bold' }}>✓</span>
+                    <span style={{ fontWeight: 600 }}>{ev.fullName}</span>
+                    <span style={{ color: '#64748B', fontSize: '0.75rem' }}>({ev.username} - {ev.email})</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div style={{ fontSize: '0.8rem', color: '#DC2626', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <AlertCircle size={14} />
+                لا يوجد مقيّم مرتبط بهذه المدرسة حالياً (غير مهيأة)
+              </div>
+            )}
           </div>
 
           <div>
             <label style={{ fontSize: theme.typography.fontSizes.sm, fontWeight: 600, color: theme.colors.neutral[700], marginBottom: '6px', display: 'block' }}>
-              اختر مسؤول التقييم من الحسابات المسجلة: *
+              اختر مقيّم الجودة المراد إسناده: *
             </label>
             <select
               value={selectedUserId}
@@ -163,6 +192,7 @@ export const LinkEvaluatorModal: React.FC<LinkEvaluatorModalProps> = ({
                 setSelectedUserId(e.target.value ? Number(e.target.value) : '');
                 setError('');
               }}
+              disabled={loadingUsers}
               style={{
                 width: '100%',
                 padding: '10px 12px',
@@ -174,12 +204,23 @@ export const LinkEvaluatorModal: React.FC<LinkEvaluatorModalProps> = ({
                 fontFamily: theme.typography.fontFamily.sans,
               }}
             >
-              <option value="">-- اختر المستخدم المراد ربطه --</option>
-              {availableEvaluators.map((u) => (
-                <option key={u.userId} value={u.userId}>
-                  {u.fullName} ({u.email}) - {u.status === 'Active' ? 'نشط' : 'معلق'}
-                </option>
-              ))}
+              <option value="">
+                {loadingUsers ? 'جاري تحميل قائمة المقيمين...' : '-- اختر مقيّم الجودة --'}
+              </option>
+              {evaluatorsList.map((u) => {
+                const isThisSchool = u.schoolId === school.schoolId;
+                const hasOtherSchool = Boolean(u.schoolId && u.schoolId !== school.schoolId);
+                const affiliationNote = isThisSchool 
+                  ? '(مسند لهذه المدرسة حالياً)' 
+                  : hasOtherSchool 
+                  ? `(مرتبط بمدرسة أخرى: ${u.schoolName || u.schoolId})` 
+                  : '(غير مسند لأي مدرسة)';
+                return (
+                  <option key={u.userId} value={u.userId}>
+                    {u.fullName} ({u.username}) {affiliationNote}
+                  </option>
+                );
+              })}
             </select>
             {error && <p style={{ fontSize: '0.7rem', color: '#EF4444', marginTop: '4px' }}>{error}</p>}
           </div>
@@ -212,7 +253,7 @@ export const LinkEvaluatorModal: React.FC<LinkEvaluatorModalProps> = ({
             </button>
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || loadingUsers}
               style={{
                 padding: '9px 24px',
                 borderRadius: theme.radii.lg,
@@ -226,7 +267,7 @@ export const LinkEvaluatorModal: React.FC<LinkEvaluatorModalProps> = ({
                 fontFamily: theme.typography.fontFamily.sans,
               }}
             >
-              {loading ? 'جاري الربط...' : 'ربط الحساب وتفعيل المدرسة ✓'}
+              {loading ? 'جاري الربط...' : 'إسناد المقيّم للمدرسة ✓'}
             </button>
           </div>
         </form>

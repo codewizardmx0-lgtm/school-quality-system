@@ -35,6 +35,7 @@ export const SchoolsDirectory: React.FC<SchoolsDirectoryProps> = ({ onNavigate, 
     schools,
     filteredSchools,
     directorates,
+    users,
     loading,
     error,
     selectedDirectorateId,
@@ -59,20 +60,49 @@ export const SchoolsDirectory: React.FC<SchoolsDirectoryProps> = ({ onNavigate, 
     ? directorates.find((d) => d.directorateId === selectedDirectorateId)?.directorateName || ''
     : 'كافة المديريات';
 
-  // Export to CSV
+  // Dynamic statistics
+  const totalGov = schools.filter((s) => s.schoolType === 'government').length;
+  const totalPrivate = schools.filter((s) => s.schoolType === 'private').length;
+  const govPercentage = schools.length > 0 ? Math.round((totalGov / schools.length) * 100) : 0;
+  const privatePercentage = schools.length > 0 ? Math.round((totalPrivate / schools.length) * 100) : 0;
+
+  // Export to CSV with real users and roles
   const handleExport = () => {
-    const headers = ['كود المدرسة', 'اسم المدرسة', 'النوع', 'المرحلة', 'المديرية', 'المحافظة', 'حالة الربط', 'مسؤول التقييم', 'بريد المسؤول'];
-    const rows = filteredSchools.map((s) => [
-      s.schoolCode,
-      s.schoolName,
-      s.schoolType === 'government' ? 'حكومية' : 'أهلية / خاصة',
-      s.educationalStage,
-      s.directorate,
-      s.governorate,
-      s.isLinked ? 'مرتبط ونشط' : 'غير مهيأة',
-      s.evaluatorName || 'لم يُعين',
-      s.evaluatorEmail || '---',
-    ]);
+    const headers = [
+      'كود المدرسة',
+      'اسم المدرسة',
+      'النوع',
+      'المرحلة',
+      'المديرية',
+      'المحافظة',
+      'حالة الجاهزية',
+      'مدير المدرسة',
+      'مسؤولو التقييم',
+    ];
+    const rows = filteredSchools.map((s) => {
+      const schoolEvaluators = (users || []).filter(
+        (u) => u.schoolId === s.schoolId && (u.roleName === 'school_evaluator' || u.roleCode === 'S1' || u.roleId === 2)
+      );
+      const schoolPrincipal = (users || []).find(
+        (u) => u.schoolId === s.schoolId && (u.roleName === 'school_principal' || u.roleCode === 'S2' || u.roleId === 3)
+      );
+      const evalNames =
+        schoolEvaluators.map((e) => e.fullName || e.username).join(' - ') || s.evaluatorName || 'لم يُعين';
+      const princName = schoolPrincipal?.fullName || schoolPrincipal?.username || 'لم يُعين';
+      const isReady = schoolEvaluators.length > 0 || !!s.evaluatorName;
+
+      return [
+        s.schoolCode,
+        s.schoolName,
+        s.schoolType === 'government' ? 'حكومية' : 'أهلية / خاصة',
+        s.educationalStage,
+        s.directorate,
+        s.governorate,
+        isReady ? 'جاهزة ومرتبطة' : 'غير مهيأة',
+        princName,
+        evalNames,
+      ];
+    });
     downloadCsv('erteqa_schools_directory.csv', headers, rows);
     addToast('success', 'تم تصدير دليل المدارس بنجاح بصيغة CSV');
   };
@@ -135,7 +165,7 @@ export const SchoolsDirectory: React.FC<SchoolsDirectoryProps> = ({ onNavigate, 
         </button>
       </div>
 
-      {/* 4 Stat Cards */}
+      {/* 4 Dynamic Stat Cards */}
       <div
         style={{
           display: 'grid',
@@ -146,32 +176,32 @@ export const SchoolsDirectory: React.FC<SchoolsDirectoryProps> = ({ onNavigate, 
       >
         <StatCard
           title="إجمالي المدارس بالنظام"
-          value="48 مدرسة"
-          subtitle="مرتبطة بحسابات تقييم"
+          value={`${schools.length} مدرسة`}
+          subtitle="المسجلة في قاعدة البيانات"
           icon={<SchoolIcon size={24} />}
           iconBgColor="#EFF6FF"
           iconColor="#2563EB"
         />
         <StatCard
           title="المدارس الحكومية"
-          value="32 مدرسة"
-          subtitle="نسبة 67% من الإجمالي"
+          value={`${totalGov} مدرسة`}
+          subtitle={`نسبة ${govPercentage}% من الإجمالي`}
           icon={<Building2 size={24} />}
           iconBgColor="#ECFDF5"
           iconColor="#059669"
         />
         <StatCard
           title="المدارس الأهلية / الخاصة"
-          value="16 مدرسة"
-          subtitle="نسبة 33% من الإجمالي"
+          value={`${totalPrivate} مدرسة`}
+          subtitle={`نسبة ${privatePercentage}% من الإجمالي`}
           icon={<Building size={24} />}
           iconBgColor="#FEF3C7"
           iconColor="#D97706"
         />
         <StatCard
           title="المديريات التعليمية النشطة"
-          value="10 مديريات"
-          subtitle="نطاق أمانة العاصمة"
+          value={`${directorates.length} مديريات`}
+          subtitle="المتاحة بالنظام"
           icon={<MapPin size={24} />}
           iconBgColor="#EDE9FE"
           iconColor="#7C3AED"
@@ -353,10 +383,13 @@ export const SchoolsDirectory: React.FC<SchoolsDirectoryProps> = ({ onNavigate, 
                     المرحلة والنوع
                   </th>
                   <th style={{ padding: '14px 16px', fontSize: theme.typography.fontSizes.xs, fontWeight: 700, color: theme.colors.neutral[600] }}>
-                    مسؤول التقييم المرتبط
+                    مدير المدرسة
                   </th>
                   <th style={{ padding: '14px 16px', fontSize: theme.typography.fontSizes.xs, fontWeight: 700, color: theme.colors.neutral[600] }}>
-                    حالة الربط
+                    مسؤول/فريق التقييم
+                  </th>
+                  <th style={{ padding: '14px 16px', fontSize: theme.typography.fontSizes.xs, fontWeight: 700, color: theme.colors.neutral[600] }}>
+                    حالة الجاهزية
                   </th>
                   <th style={{ padding: '14px 16px', fontSize: theme.typography.fontSizes.xs, fontWeight: 700, color: theme.colors.neutral[600], textAlign: 'center' }}>
                     إجراء
@@ -381,6 +414,9 @@ export const SchoolsDirectory: React.FC<SchoolsDirectoryProps> = ({ onNavigate, 
                         <div style={{ width: '110px', height: '14px', backgroundColor: '#E5E7EB', borderRadius: '4px' }} />
                       </td>
                       <td style={{ padding: '16px' }}>
+                        <div style={{ width: '110px', height: '14px', backgroundColor: '#E5E7EB', borderRadius: '4px' }} />
+                      </td>
+                      <td style={{ padding: '16px' }}>
                         <div style={{ width: '80px', height: '22px', backgroundColor: '#E5E7EB', borderRadius: '12px' }} />
                       </td>
                       <td style={{ padding: '16px', textAlign: 'center' }}>
@@ -390,128 +426,152 @@ export const SchoolsDirectory: React.FC<SchoolsDirectoryProps> = ({ onNavigate, 
                   ))
                 ) : filteredSchools.length === 0 ? (
                   <tr>
-                    <td colSpan={5} style={{ padding: '40px', textAlign: 'center', color: theme.colors.neutral[400] }}>
+                    <td colSpan={6} style={{ padding: '40px', textAlign: 'center', color: theme.colors.neutral[400] }}>
                       لا توجد مدارس مسجلة في هذا النطاق بالمعايير المحددة
                     </td>
                   </tr>
                 ) : (
-                  filteredSchools.map((school, idx) => (
-                    <tr
-                      key={school.schoolId}
-                      style={{
-                        borderBottom: idx < filteredSchools.length - 1 ? `1px solid ${theme.colors.neutral[100]}` : 'none',
-                        backgroundColor: idx % 2 === 0 ? theme.colors.neutral.white : '#FAFAFA',
-                      }}
-                    >
-                      {/* Name & Code */}
-                      <td style={{ padding: '14px 16px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <span
-                            style={{
-                              padding: '2px 8px',
-                              borderRadius: '6px',
-                              backgroundColor: school.schoolType === 'government' ? '#EFF6FF' : '#FEF3C7',
-                              color: school.schoolType === 'government' ? '#1D4ED8' : '#92400E',
-                              fontSize: '0.7rem',
-                              fontWeight: 700,
-                              fontFamily: 'monospace',
-                            }}
-                          >
-                            {school.schoolCode}
-                          </span>
-                          <span style={{ fontSize: theme.typography.fontSizes.sm, fontWeight: 700, color: theme.colors.neutral[900] }}>
-                            {school.schoolName}
-                          </span>
-                        </div>
-                      </td>
+                  filteredSchools.map((school, idx) => {
+                    const schoolEvaluators = (users || []).filter(
+                      (u) =>
+                        u.schoolId === school.schoolId &&
+                        (u.roleName === 'school_evaluator' || u.roleCode === 'S1' || u.roleId === 2)
+                    );
+                    const schoolPrincipal = (users || []).find(
+                      (u) =>
+                        u.schoolId === school.schoolId &&
+                        (u.roleName === 'school_principal' || u.roleCode === 'S2' || u.roleId === 3)
+                    );
+                    const hasEvaluator = schoolEvaluators.length > 0 || !!school.evaluatorName;
 
-                      {/* Stage & Type */}
-                      <td style={{ padding: '14px 16px' }}>
-                        <div style={{ fontSize: theme.typography.fontSizes.sm, color: theme.colors.neutral[700] }}>
-                          {school.educationalStage}
-                        </div>
-                        <div style={{ fontSize: '0.75rem', color: theme.colors.neutral[400] }}>
-                          {school.schoolType === 'government' ? 'مدرسة حكومية' : 'مدرسة أهلية'}
-                        </div>
-                      </td>
-
-                      {/* Evaluator */}
-                      <td style={{ padding: '14px 16px' }}>
-                        {school.evaluatorName ? (
-                          <div>
-                            <div style={{ fontSize: theme.typography.fontSizes.sm, fontWeight: 600, color: theme.colors.neutral[800] }}>
-                              {school.evaluatorName}
-                            </div>
-                            <div style={{ fontSize: '0.75rem', color: theme.colors.neutral[400], direction: 'ltr', textAlign: 'right' }}>
-                              {school.evaluatorEmail}
-                            </div>
+                    return (
+                      <tr
+                        key={school.schoolId}
+                        style={{
+                          borderBottom: idx < filteredSchools.length - 1 ? `1px solid ${theme.colors.neutral[100]}` : 'none',
+                          backgroundColor: idx % 2 === 0 ? theme.colors.neutral.white : '#FAFAFA',
+                        }}
+                      >
+                        {/* Name & Code */}
+                        <td style={{ padding: '14px 16px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span
+                              style={{
+                                padding: '2px 8px',
+                                borderRadius: '6px',
+                                backgroundColor: school.schoolType === 'government' ? '#EFF6FF' : '#FEF3C7',
+                                color: school.schoolType === 'government' ? '#1D4ED8' : '#92400E',
+                                fontSize: '0.7rem',
+                                fontWeight: 700,
+                                fontFamily: 'monospace',
+                              }}
+                            >
+                              {school.schoolCode}
+                            </span>
+                            <span style={{ fontSize: theme.typography.fontSizes.sm, fontWeight: 700, color: theme.colors.neutral[900] }}>
+                              {school.schoolName}
+                            </span>
                           </div>
-                        ) : (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#DC2626', fontSize: '0.75rem', fontWeight: 600 }}>
-                            <AlertTriangle size={14} />
-                            لم يُعين مسؤول تقييم - الحساب غير مفعل
+                        </td>
+
+                        {/* Stage & Type */}
+                        <td style={{ padding: '14px 16px' }}>
+                          <div style={{ fontSize: theme.typography.fontSizes.sm, color: theme.colors.neutral[700] }}>
+                            {school.educationalStage}
                           </div>
-                        )}
-                      </td>
+                          <div style={{ fontSize: '0.75rem', color: theme.colors.neutral[400] }}>
+                            {school.schoolType === 'government' ? 'مدرسة حكومية' : 'مدرسة أهلية'}
+                          </div>
+                        </td>
 
-                      {/* Link Status */}
-                      <td style={{ padding: '14px 16px' }}>
-                        <StatusBadge
-                          variant={school.isLinked ? 'linked' : 'unlinked'}
-                          label={school.isLinked ? 'مرتبط ونشط ✓' : 'غير مهيأة ⚠'}
-                          size="md"
-                        />
-                      </td>
+                        {/* Principal */}
+                        <td style={{ padding: '14px 16px' }}>
+                          {schoolPrincipal ? (
+                            <div>
+                              <div style={{ fontSize: theme.typography.fontSizes.sm, fontWeight: 600, color: theme.colors.neutral[800] }}>
+                                {schoolPrincipal.fullName || schoolPrincipal.username}
+                              </div>
+                              <div style={{ fontSize: '0.75rem', color: theme.colors.neutral[400], direction: 'ltr', textAlign: 'right' }}>
+                                {schoolPrincipal.email}
+                              </div>
+                            </div>
+                          ) : (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#D97706', fontSize: '0.75rem', fontWeight: 600 }}>
+                              <AlertTriangle size={14} />
+                              غير مرتبط بمدير
+                            </div>
+                          )}
+                        </td>
 
-                      {/* Actions */}
-                      <td style={{ padding: '14px 16px', textAlign: 'center' }}>
-                        {!school.isLinked ? (
+                        {/* Evaluators */}
+                        <td style={{ padding: '14px 16px' }}>
+                          {schoolEvaluators.length > 0 ? (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                              {schoolEvaluators.map((ev) => (
+                                <div key={ev.userId} style={{ fontSize: theme.typography.fontSizes.sm, fontWeight: 600, color: theme.colors.neutral[800] }}>
+                                  {ev.fullName || ev.username}
+                                  <span style={{ fontSize: '0.7rem', color: theme.colors.neutral[400], marginRight: '4px' }}>
+                                    ({ev.email})
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          ) : school.evaluatorName ? (
+                            <div>
+                              <div style={{ fontSize: theme.typography.fontSizes.sm, fontWeight: 600, color: theme.colors.neutral[800] }}>
+                                {school.evaluatorName}
+                              </div>
+                              <div style={{ fontSize: '0.75rem', color: theme.colors.neutral[400], direction: 'ltr', textAlign: 'right' }}>
+                                {school.evaluatorEmail || '---'}
+                              </div>
+                            </div>
+                          ) : (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#DC2626', fontSize: '0.75rem', fontWeight: 600 }}>
+                              <AlertTriangle size={14} />
+                              غير مرتبط بمقيم
+                            </div>
+                          )}
+                        </td>
+
+                        {/* Link Status */}
+                        <td style={{ padding: '14px 16px' }}>
+                          <StatusBadge
+                            variant={hasEvaluator ? 'linked' : 'unlinked'}
+                            label={hasEvaluator ? 'جاهزة ومرتبطة ✓' : 'غير مهيأة ⚠'}
+                            size="md"
+                          />
+                        </td>
+
+                        {/* Actions */}
+                        <td style={{ padding: '14px 16px', textAlign: 'center' }}>
                           <button
                             onClick={() => setLinkingSchool(school)}
+                            title={hasEvaluator ? 'إسناد / تغيير مسؤول التقييم' : 'ربط مسؤول تقييم بالمدرسة'}
                             style={{
                               padding: '6px 14px',
                               borderRadius: theme.radii.md,
-                              border: 'none',
-                              background: 'linear-gradient(90deg, #7C3AED, #8B5CF6)',
-                              color: '#fff',
+                              border: hasEvaluator ? `1px solid ${theme.colors.neutral[200]}` : 'none',
+                              background: hasEvaluator
+                                ? theme.colors.neutral.white
+                                : 'linear-gradient(90deg, #7C3AED, #8B5CF6)',
+                              color: hasEvaluator ? theme.colors.neutral[700] : '#fff',
                               fontSize: theme.typography.fontSizes.xs,
                               fontWeight: 700,
                               cursor: 'pointer',
                               display: 'inline-flex',
                               alignItems: 'center',
                               gap: '4px',
-                              boxShadow: '0 2px 6px rgba(124, 58, 237, 0.3)',
+                              boxShadow: hasEvaluator ? 'none' : '0 2px 6px rgba(124, 58, 237, 0.3)',
                               fontFamily: theme.typography.fontFamily.sans,
                             }}
                           >
-                            <LinkIcon size={12} />
-                            ربط
+                            {hasEvaluator ? <Edit size={12} /> : <LinkIcon size={12} />}
+                            {hasEvaluator ? 'تعديل / إضافة' : 'ربط مقيم'}
                           </button>
-                        ) : (
-                          <button
-                            onClick={() => setLinkingSchool(school)}
-                            title="تغيير مسؤول التقييم"
-                            style={{
-                              padding: '6px 12px',
-                              borderRadius: theme.radii.md,
-                              border: `1px solid ${theme.colors.neutral[200]}`,
-                              backgroundColor: theme.colors.neutral.white,
-                              color: theme.colors.neutral[700],
-                              fontSize: theme.typography.fontSizes.xs,
-                              cursor: 'pointer',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '4px',
-                              fontFamily: theme.typography.fontFamily.sans,
-                            }}
-                          >
-                            <Edit size={12} />
-                            تعديل
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  ))
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>
@@ -536,10 +596,10 @@ export const SchoolsDirectory: React.FC<SchoolsDirectoryProps> = ({ onNavigate, 
         <ShieldAlert size={20} color="#10B981" style={{ flexShrink: 0, marginTop: '2px' }} />
         <div>
           <div style={{ fontSize: theme.typography.fontSizes.sm, fontWeight: 700, color: '#1E293B', marginBottom: '4px' }}>
-            قاعدة التسكين الجغرافي الإلزامي
+            قاعدة التسكين الجغرافي والكادر المدرسي
           </div>
           <div style={{ fontSize: theme.typography.fontSizes.xs, color: '#64748B', lineHeight: 1.6 }}>
-            تُسكن كل مدرسة تحت مديرية ومحافظة محددة لتمكين المشرف الوزاري المسؤول من متابعتها آلياً. لا يمكن إدراج المدرسة في أي دورة تقييمية جديدة ما لم يكن كودها مرتبطاً بحساب مستخدم تقييم نشط ومفعل.
+            تُسكن كل مدرسة تحت مديرية ومحافظة محددة. لتمكين المدرسة من استكمال دورات التقييم، يجب أن تشتمل على مدير مدرسة واحد على الأقل، ومقيم مدرسي واحد على الأقل. كل مقيم ينتمي لمدرسة واحدة فقط، بينما يمكن للمدرسة أن تحتضن أكثر من مقيم في فريق التقييم الداخلي.
           </div>
         </div>
       </div>
@@ -621,6 +681,7 @@ export const SchoolsDirectory: React.FC<SchoolsDirectoryProps> = ({ onNavigate, 
       {/* Modals */}
       <RegisterSchoolModal
         isOpen={isRegisterOpen}
+        directorates={directorates}
         onClose={() => setIsRegisterOpen(false)}
         onSuccess={fetchData}
         addToast={addToast}

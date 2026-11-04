@@ -5,16 +5,18 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { schoolsApi } from '../api/schoolsApi';
-import type { School, Directorate, RegisterSchoolDto, AddDirectorateDto } from '../types/admin.types';
+import { usersApi } from '../api/usersApi';
+import type { School, Directorate, User, RegisterSchoolDto, AddDirectorateDto } from '../types/admin.types';
 
 export function useAdminSchools() {
   const [schools, setSchools] = useState<School[]>([]);
   const [directorates, setDirectorates] = useState<Directorate[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Filters
-  const [selectedDirectorateId, setSelectedDirectorateId] = useState<number | null>(1);
+  // Filters: default to null to show all schools across all directorates
+  const [selectedDirectorateId, setSelectedDirectorateId] = useState<number | null>(null);
   const [typeFilter, setTypeFilter] = useState<'all' | 'government' | 'private'>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
 
@@ -22,12 +24,14 @@ export function useAdminSchools() {
     setLoading(true);
     setError(null);
     try {
-      const [schoolsRes, dirRes] = await Promise.all([
+      const [schoolsRes, dirRes, usersRes] = await Promise.all([
         schoolsApi.getSchools(),
         schoolsApi.getDirectorates(),
+        usersApi.getUsers(),
       ]);
       if (schoolsRes.data) setSchools(schoolsRes.data);
       if (dirRes.data) setDirectorates(dirRes.data);
+      if (usersRes.data) setUsers(usersRes.data);
     } catch (err: any) {
       setError(err?.message || 'فشل في تحميل بيانات المدارس والمديريات');
     } finally {
@@ -70,6 +74,8 @@ export function useAdminSchools() {
     }
     const updated = res.data;
     setSchools((prev) => prev.map((s) => (s.schoolId === schoolId ? updated : s)));
+    // Also update users state to reflect new school affiliation
+    setUsers((prev) => prev.map((u) => u.userId === userId ? { ...u, schoolId } : u));
     return updated;
   }, []);
 
@@ -107,6 +113,7 @@ export function useAdminSchools() {
     schools,
     filteredSchools,
     directorates,
+    users,
     loading,
     error,
     selectedDirectorateId,

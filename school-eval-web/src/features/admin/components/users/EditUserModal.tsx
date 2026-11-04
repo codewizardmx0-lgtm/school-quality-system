@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
 import { theme } from '../../theme';
 import { usersApi } from '../../api/usersApi';
-import { MOCK_ROLES, MOCK_SCHOOLS, MOCK_DIRECTORATES } from '../../services/mockAdminData';
-import type { User, EditUserDto, UserType } from '../../types/admin.types';
+import { schoolsApi } from '../../api/schoolsApi';
+import type { User, EditUserDto, UserType, Role, Directorate } from '../../types/admin.types';
 
 interface EditUserModalProps {
   isOpen: boolean;
@@ -13,10 +13,12 @@ interface EditUserModalProps {
   addToast: (type: 'success' | 'error', msg: string) => void;
 }
 
-const ROLES_BY_TYPE: Record<UserType, number[]> = {
-  school: [1],
-  ministry: [2],
-  system: [3, 4],
+const ROLE_ARABIC_NAMES: Record<string, string> = {
+  admin: 'مدير النظام المركزي',
+  school_evaluator: 'مقيّم جودة بالمدرسة',
+  school_principal: 'مدير مدرسة / مراجع داخلي',
+  ministry_standards_manager: 'مسؤول المعايير بالوزارة',
+  ministry_supervisor: 'مشرف ومراجع وزاري',
 };
 
 export const EditUserModal: React.FC<EditUserModalProps> = ({
@@ -31,13 +33,33 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
     fullName: user?.fullName || '',
     email: user?.email || '',
     userType: user?.userType || 'school',
-    roleId: user?.roleId || 1,
+    roleId: user?.roleId || 2,
     schoolId: user?.schoolId || null,
     directorateId: user?.directorateId || null,
     status: user?.status || 'Active',
   }));
+  const [roles, setRoles] = useState<Role[]>([]);
+  const [schools, setSchools] = useState<Array<{ schoolId: number; schoolName: string; schoolCode: string }>>([]);
+  const [directorates, setDirectorates] = useState<Directorate[]>([]);
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    if (!isOpen) return;
+    let ignore = false;
+    usersApi.getUsersMeta().then((res) => {
+      if (!ignore && res.data) {
+        if (res.data.roles?.length) setRoles(res.data.roles);
+        if (res.data.schools?.length) setSchools(res.data.schools);
+      }
+    }).catch((err) => console.warn('Failed to load users meta:', err));
+
+    schoolsApi.getDirectorates().then((res) => {
+      if (!ignore && res.data?.length) setDirectorates(res.data);
+    }).catch((err) => console.warn('Failed to load directorates:', err));
+
+    return () => { ignore = true; };
+  }, [isOpen]);
 
   if (user && user.userId !== prevUserId) {
     setPrevUserId(user.userId);
@@ -55,16 +77,29 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
 
   if (!isOpen || !user) return null;
 
-  const filteredRoles = MOCK_ROLES.filter((r) =>
-    ROLES_BY_TYPE[form.userType].includes(r.roleId)
-  );
+  const filteredRoles = roles.filter((r) => {
+    if (form.userType === 'school') {
+      return r.roleName === 'school_evaluator' || r.roleName === 'school_principal' || r.roleName.includes('school');
+    }
+    if (form.userType === 'ministry') {
+      return r.roleName === 'ministry_supervisor' || r.roleName === 'ministry_standards_manager' || r.roleName.includes('ministry');
+    }
+    if (form.userType === 'system') {
+      return r.roleName === 'admin' || r.roleName.includes('admin') || r.roleName.includes('system');
+    }
+    return true;
+  });
 
   const handleChange = (field: keyof EditUserDto, value: string | number | null) => {
     setForm((prev) => {
       const next = { ...prev, [field]: value };
       if (field === 'userType') {
-        const allowed = ROLES_BY_TYPE[value as UserType];
-        next.roleId = allowed[0];
+        const allowed = roles.filter((r) => {
+          if (value === 'school') return r.roleName.includes('school');
+          if (value === 'ministry') return r.roleName.includes('ministry');
+          return r.roleName === 'admin';
+        });
+        next.roleId = allowed[0]?.roleId || (value === 'school' ? 2 : value === 'ministry' ? 4 : 1);
         next.schoolId = null;
         next.directorateId = null;
       }
@@ -92,7 +127,7 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
     setLoading(true);
     try {
       await usersApi.updateUser(user.userId, form);
-      addToast('success', `تم تحديث بيانات ${form.fullName} بنجاح`);
+      addToast('success', `تم تحديث بيانات المستخدم "${form.fullName}" بنجاح`);
       onSuccess();
       onClose();
     } catch (err: any) {
@@ -103,36 +138,38 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
         });
         setErrors(mappedErrors);
       } else {
-        addToast('error', err?.message || 'فشل تحديث البيانات، يرجى المحاولة لاحقاً');
+        addToast('error', err?.message || 'فشل تحديث بيانات المستخدم');
       }
     } finally {
       setLoading(false);
     }
   };
 
-  const inputStyle = (hasError?: boolean): React.CSSProperties => ({
+  const inputStyle = (hasErr?: boolean) => ({
     width: '100%',
     padding: '9px 12px',
     borderRadius: theme.radii.lg,
-    border: `1px solid ${hasError ? '#EF4444' : theme.colors.neutral[200]}`,
+    border: `1px solid ${hasErr ? '#EF4444' : theme.colors.neutral[200]}`,
     fontSize: theme.typography.fontSizes.sm,
-    color: theme.colors.neutral[800],
-    backgroundColor: theme.colors.neutral[50],
+    backgroundColor: theme.colors.neutral.white,
     outline: 'none',
+    boxSizing: 'border-box' as const,
     fontFamily: theme.typography.fontFamily.sans,
-    boxSizing: 'border-box',
   });
-  const labelStyle: React.CSSProperties = {
-    fontSize: theme.typography.fontSizes.sm,
-    fontWeight: 600,
+
+  const labelStyle = {
+    fontSize: theme.typography.fontSizes.xs,
+    fontWeight: theme.typography.fontWeights.semibold,
     color: theme.colors.neutral[700],
     marginBottom: '4px',
     display: 'block',
   };
-  const errorStyle: React.CSSProperties = {
+
+  const errorStyle = {
     fontSize: '0.7rem',
     color: '#EF4444',
     marginTop: '3px',
+    margin: '3px 0 0',
   };
 
   return (
@@ -158,9 +195,7 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
           width: '90%',
           maxWidth: '560px',
           maxHeight: '90vh',
-          overflow: 'hidden',
-          display: 'flex',
-          flexDirection: 'column',
+          overflowY: 'auto',
           boxShadow: theme.shadows.xl,
           fontFamily: theme.typography.fontFamily.sans,
           direction: 'rtl',
@@ -177,11 +212,11 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
           }}
         >
           <div>
-            <h2 style={{ fontSize: theme.typography.fontSizes.lg, fontWeight: theme.typography.fontWeights.bold, color: '#fff', margin: 0 }}>
+            <h2 style={{ fontSize: theme.typography.fontSizes.base, fontWeight: 700, color: '#fff', margin: 0 }}>
               تعديل بيانات المستخدم: {user.fullName}
             </h2>
-            <p style={{ fontSize: theme.typography.fontSizes.xs, color: '#94A3B8', marginTop: '4px' }}>
-              معرف المستخدم: #{user.userId} • {user.username}
+            <p style={{ fontSize: theme.typography.fontSizes.xs, color: '#94A3B8', marginTop: '2px', margin: '2px 0 0' }}>
+              تعديل الصلاحيات والمدرسة والارتباط الوظيفي
             </p>
           </div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#94A3B8', cursor: 'pointer', padding: '4px' }}>
@@ -189,13 +224,24 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} style={{ padding: '24px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        <form onSubmit={handleSubmit} style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          <div>
+            <label style={labelStyle}>اسم المستخدم (Sign In)</label>
+            <input
+              style={{ ...inputStyle(), backgroundColor: '#F1F5F9', cursor: 'not-allowed' }}
+              value={user.username}
+              disabled
+              dir="ltr"
+            />
+          </div>
+
           <div>
             <label style={labelStyle}>الاسم الكامل *</label>
             <input
               style={inputStyle(!!errors.fullName)}
               value={form.fullName}
               onChange={(e) => handleChange('fullName', e.target.value)}
+              placeholder="الاسم الثلاثي"
             />
             {errors.fullName && <p style={errorStyle}>{errors.fullName}</p>}
           </div>
@@ -212,17 +258,17 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
             {errors.email && <p style={errorStyle}>{errors.email}</p>}
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
             <div>
-              <label style={labelStyle}>نوع المستخدم *</label>
+              <label style={labelStyle}>نوع الحساب (User Type) *</label>
               <select
                 style={inputStyle()}
                 value={form.userType}
                 onChange={(e) => handleChange('userType', e.target.value as UserType)}
               >
-                <option value="school">مستخدم مدرسة</option>
-                <option value="ministry">مشرف وزاري</option>
-                <option value="system">إدارة النظام</option>
+                <option value="school">مستخدم مدرسة (تقييم / إدارة)</option>
+                <option value="ministry">مشرف / مسؤول وزاري</option>
+                <option value="system">مسؤول النظام المركزي</option>
               </select>
             </div>
             <div>
@@ -234,7 +280,7 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
               >
                 {filteredRoles.map((r) => (
                   <option key={r.roleId} value={r.roleId}>
-                    {r.roleName} ({r.roleCode})
+                    {ROLE_ARABIC_NAMES[r.roleName] || r.description || r.roleName}
                   </option>
                 ))}
               </select>
@@ -249,8 +295,8 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
                 value={form.schoolId || ''}
                 onChange={(e) => handleChange('schoolId', e.target.value ? Number(e.target.value) : null)}
               >
-                <option value="">-- اختر المدرسة --</option>
-                {MOCK_SCHOOLS.map((s) => (
+                <option value="">-- اختر المدرسة من قاعدة البيانات --</option>
+                {schools.map((s) => (
                   <option key={s.schoolId} value={s.schoolId}>
                     {s.schoolName} ({s.schoolCode})
                   </option>
@@ -269,9 +315,9 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
                 onChange={(e) => handleChange('directorateId', e.target.value ? Number(e.target.value) : null)}
               >
                 <option value="">-- اختر المديرية --</option>
-                {MOCK_DIRECTORATES.map((d) => (
+                {directorates.map((d) => (
                   <option key={d.directorateId} value={d.directorateId}>
-                    {d.directorateName}
+                    {d.directorateName} ({d.governorate})
                   </option>
                 ))}
               </select>
@@ -286,8 +332,8 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
               value={form.status}
               onChange={(e) => handleChange('status', e.target.value as 'Active' | 'Disabled')}
             >
-              <option value="Active">نشط</option>
-              <option value="Disabled">معلق مؤقتاً</option>
+              <option value="Active">نشط (Active)</option>
+              <option value="Disabled">معلق (Disabled)</option>
             </select>
           </div>
 
@@ -324,7 +370,7 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
                 padding: '9px 24px',
                 borderRadius: theme.radii.lg,
                 border: 'none',
-                background: 'linear-gradient(90deg, #4F46E5, #6366F1)',
+                background: 'linear-gradient(90deg, #2563EB, #3B82F6)',
                 color: '#fff',
                 fontSize: theme.typography.fontSizes.sm,
                 fontWeight: 600,

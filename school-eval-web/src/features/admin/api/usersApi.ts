@@ -139,6 +139,49 @@ export const usersApi = {
   /**
    * Fetch available RBAC roles list
    */
+  /**
+   * Fetch users meta (roles, schools, ministries) from real API
+   */
+  async getUsersMeta(): Promise<ApiResponse<{
+    roles: Role[];
+    schools: Array<{ schoolId: number; schoolName: string; schoolCode: string; educationalDistrict?: string }>;
+    ministries: any[];
+  }>> {
+    try {
+      const res = await get<{
+        roles: any[];
+        schools: any[];
+        ministries: any[];
+      }>('/users/meta');
+
+      if (res && res.data) {
+        return {
+          ...res,
+          data: {
+            roles: (res.data.roles || []).map((r: any) => ({
+              roleId: r.roleId ?? r.role_id,
+              roleName: r.roleName ?? r.role_name,
+              description: r.description ?? '',
+              userType: (r.roleName === 'admin' ? 'system' : r.roleName?.includes('school') ? 'school' : 'ministry') as any,
+              roleCode: r.roleName === 'admin' ? 'SYS' : r.roleName === 'school_evaluator' ? 'S1' : r.roleName === 'school_principal' ? 'S2' : 'B2',
+            })),
+            schools: (res.data.schools || []).map((s: any) => ({
+              schoolId: s.schoolId ?? s.school_id,
+              schoolName: s.schoolName ?? s.school_name,
+              schoolCode: s.schoolCode ?? `SCH-${s.schoolId ?? s.school_id}`,
+              educationalDistrict: s.educationalDistrict ?? s.educational_district ?? '',
+            })),
+            ministries: res.data.ministries || [],
+          },
+        };
+      }
+      return { data: { roles: [], schools: [], ministries: [] }, message: null, errors: null, meta: null };
+    } catch (error) {
+      console.warn('Backend /users/meta failed:', error);
+      return { data: { roles: [], schools: [], ministries: [] }, message: null, errors: null, meta: null };
+    }
+  },
+
   async getRoles(): Promise<ApiResponse<Role[]>> {
     try {
       const res = await get<Role[]>('/roles');
