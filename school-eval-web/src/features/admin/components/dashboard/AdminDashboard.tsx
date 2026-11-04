@@ -1370,7 +1370,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate, addT
                       flexShrink: 0,
                     }}
                   >
-                    {log.actorName.slice(0, 2)}
+                    {log.actorName?.slice(0, 2) ?? 'AD'}
                   </div>
                   <div>
                     <div style={{ fontSize: '0.875rem', fontWeight: 700, color: '#0B0F19' }}>
@@ -1381,7 +1381,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate, addT
                       <span>•</span>
                       <span>IP: {log.ipAddress}</span>
                       <span>•</span>
-                      <span>{formatRelativeArabic(log.timestamp)}</span>
+                      <span>{formatRelativeArabic(log.timestamp || new Date().toISOString())}</span>
                     </div>
                   </div>
                 </div>
@@ -1401,7 +1401,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate, addT
                     }}
                     title={`البصمة التشفيرية الكاملة: ${log.digitalHash}`}
                   >
-                    SHA256: {log.digitalHash.substring(0, 10)}...
+                    SHA256: {(log.digitalHash || '00000000').substring(0, 10)}...
                   </div>
 
                   {/* Severity Badge */}
