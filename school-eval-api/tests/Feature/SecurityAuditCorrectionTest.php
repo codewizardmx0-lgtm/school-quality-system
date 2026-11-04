@@ -29,7 +29,7 @@ use Tests\TestCase;
  * - U-27: معالجة المؤشرات المحذوفة وتغير نصوص المؤشرات في المقارنة التاريخية.
  * - U-40: مسار تغيير كلمة المرور للمستخدم المسجل وإبطال الجلسات الأخرى.
  */
-class SecurityAuditCorrection3Test extends TestCase
+class SecurityAuditCorrectionTest extends TestCase
 {
     use DatabaseTransactions;
 

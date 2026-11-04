@@ -76,7 +76,9 @@ return new class extends Migration
         });
 
         // قيد فحص موثق: يجب تحديد هدف واحد على الأقل للبند (مؤشر أو شاهد)
-        DB::statement('ALTER TABLE completion_request_items ADD CONSTRAINT chk_completion_item_target CHECK (indicator_id IS NOT NULL OR evidence_id IS NOT NULL)');
+        if (DB::getDriverName() !== 'sqlite') {
+            DB::statement('ALTER TABLE completion_request_items ADD CONSTRAINT chk_completion_item_target CHECK (indicator_id IS NOT NULL OR evidence_id IS NOT NULL)');
+        }
     }
 
     /**
@@ -85,7 +87,9 @@ return new class extends Migration
     public function down(): void
     {
         // إسقاط قيد الفحص قبل حذف الجدول
-        DB::statement('ALTER TABLE completion_request_items DROP CHECK chk_completion_item_target');
+        if (DB::getDriverName() !== 'sqlite') {
+            DB::statement('ALTER TABLE completion_request_items DROP CHECK chk_completion_item_target');
+        }
         Schema::dropIfExists('completion_request_items');
         Schema::dropIfExists('completion_requests');
     }
