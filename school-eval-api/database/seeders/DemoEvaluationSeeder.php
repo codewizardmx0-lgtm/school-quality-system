@@ -2,15 +2,16 @@
 
 namespace Database\Seeders;
 
+use App\Models\DocumentVersion;
 use App\Models\Evaluation;
 use App\Models\EvaluationCycle;
 use App\Models\EvaluationResult;
-use App\Models\Evidence;
-use App\Models\EvidenceVersion;
+use App\Models\EvidenceLink;
 use App\Models\ImprovementPlan;
 use App\Models\Indicator;
 use App\Models\IndicatorScoreDescriptor;
 use App\Models\School;
+use App\Models\SchoolDocument;
 use App\Models\User;
 use Illuminate\Database\Seeder;
 
@@ -82,26 +83,45 @@ class DemoEvaluationSeeder extends Seeder
                 ]
             );
 
-            // شاهد إثبات لمدرسة بلقيس
-            $ev = Evidence::updateOrCreate(
+            // مستند وشاهد إثبات لمدرسة بلقيس (المعمارية الجديدة U-24)
+            $doc = SchoolDocument::updateOrCreate(
                 [
-                    'result_id'    => $res->result_id,
-                    'indicator_id' => $ind->indicator_id,
+                    'school_id' => $schoolBelqees->school_id,
+                    'title'     => "ملف شواهد مدرسة بلقيس — {$ind->code}",
                 ],
                 [
-                    'title'         => "ملف شواهد مدرسة بلقيس — {$ind->code}",
-                    'description'   => 'سجلات الحضور وتوثيق خطط التدريس وجداول الفعاليات المدرسية المعتمدة بختم الإدارة.',
-                    'justification' => 'تم استيفاء كافة متطلبات المعيار وفق الدليل الإجرائي الوطني.',
+                    'description'        => 'سجلات الحضور وتوثيق خطط التدريس وجداول الفعاليات المدرسية المعتمدة بختم الإدارة.',
+                    'document_type'      => 'record',
+                    'created_by_user_id' => $evaluatorBelqees->user_id,
                 ]
             );
 
-            EvidenceVersion::updateOrCreate(
+            $docVer = DocumentVersion::updateOrCreate(
                 [
-                    'evidence_id' => $ev->evidence_id,
-                    'version_no'  => 1,
+                    'school_document_id' => $doc->id,
+                    'version_no'         => 1,
                 ],
                 [
-                    'current' => true,
+                    'school_id'   => $schoolBelqees->school_id,
+                    'is_current'  => true,
+                    'file_name'   => "belqees_evidence_{$ind->code}.pdf",
+                    'storage_uri' => "documents/{$schoolBelqees->school_id}/belqees_evidence_{$ind->code}.pdf",
+                    'file_size'   => 1024,
+                    'mime_type'   => 'application/pdf',
+                ]
+            );
+
+            EvidenceLink::updateOrCreate(
+                [
+                    'evaluation_id'       => $evalBelqees->evaluation_id,
+                    'indicator_id'        => $ind->indicator_id,
+                    'document_version_id' => $docVer->id,
+                ],
+                [
+                    'school_id'            => $schoolBelqees->school_id,
+                    'evaluation_result_id' => $res->result_id,
+                    'justification'        => 'تم استيفاء كافة متطلبات المعيار وفق الدليل الإجرائي الوطني.',
+                    'status'               => 'completed',
                 ]
             );
         }
@@ -146,26 +166,45 @@ class DemoEvaluationSeeder extends Seeder
                 ]
             );
 
-            // شاهد إثبات لمدرسة الفاروق
-            $ev = Evidence::updateOrCreate(
+            // مستند وشاهد إثبات لمدرسة الفاروق (المعمارية الجديدة U-24)
+            $docFarouq = SchoolDocument::updateOrCreate(
                 [
-                    'result_id'    => $res->result_id,
-                    'indicator_id' => $ind->indicator_id,
+                    'school_id' => $schoolFarouq->school_id,
+                    'title'     => "وثائق شواهد مدرسة الفاروق — {$ind->code}",
                 ],
                 [
-                    'title'         => "وثائق شواهد مدرسة الفاروق — {$ind->code}",
-                    'description'   => 'محاضر اجتماعات المجالس المدرسية ولجان الجودة بمدرسة الفاروق بتعز.',
-                    'justification' => 'شواهد أولية جاري استكمالها قبل الموعد النهائي.',
+                    'description'        => 'محاضر اجتماعات المجالس المدرسية ولجان الجودة بمدرسة الفاروق بتعز.',
+                    'document_type'      => 'minutes',
+                    'created_by_user_id' => $evaluatorFarouq->user_id,
                 ]
             );
 
-            EvidenceVersion::updateOrCreate(
+            $docVerFarouq = DocumentVersion::updateOrCreate(
                 [
-                    'evidence_id' => $ev->evidence_id,
-                    'version_no'  => 1,
+                    'school_document_id' => $docFarouq->id,
+                    'version_no'         => 1,
                 ],
                 [
-                    'current' => true,
+                    'school_id'   => $schoolFarouq->school_id,
+                    'is_current'  => true,
+                    'file_name'   => "farouq_evidence_{$ind->code}.pdf",
+                    'storage_uri' => "documents/{$schoolFarouq->school_id}/farouq_evidence_{$ind->code}.pdf",
+                    'file_size'   => 1024,
+                    'mime_type'   => 'application/pdf',
+                ]
+            );
+
+            EvidenceLink::updateOrCreate(
+                [
+                    'evaluation_id'       => $evalFarouq->evaluation_id,
+                    'indicator_id'        => $ind->indicator_id,
+                    'document_version_id' => $docVerFarouq->id,
+                ],
+                [
+                    'school_id'            => $schoolFarouq->school_id,
+                    'evaluation_result_id' => $res->result_id,
+                    'justification'        => 'شواهد أولية جاري استكمالها قبل الموعد النهائي.',
+                    'status'               => 'draft',
                 ]
             );
         }

@@ -10,8 +10,14 @@ use App\Models\EvaluationResult;
 use App\Models\Indicator;
 use App\Models\IndicatorScoreDescriptor;
 use App\Models\Note;
+use App\Models\Report;
+use App\Models\EvaluationSubmission;
 use App\Models\StandardVersion;
+use App\Models\User;
+use App\Models\CycleParticipation;
+use App\Models\EvaluationCycle;
 use App\Services\EvaluationLockChecker;
+use App\Services\NotificationService;
 use App\Events\EvaluationSubmitted;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -42,7 +48,7 @@ class EvaluationController extends Controller
             return ApiResponse::forbidden('غير مصرح');
         }
 
-        $query = Evaluation::with(['school', 'cycle', 'creator', 'results.indicator', 'results.scoreDescriptor', 'results.evidences']);
+        $query = Evaluation::with(['school', 'cycle', 'creator', 'results.indicator', 'results.scoreDescriptor', 'results.evidenceLinks']);
 
         // عزل النطاق لمستخدم المدرسة: حصر التقييمات بمدرسته فقط
         if ($user->user_type === 'school') {
@@ -58,6 +64,121 @@ class EvaluationController extends Controller
     }
 
     /**
+     * بدء ملف تقييم ذاتي جديد للمدرسة ضمن دورة تقييمية نشطة (مقيّم المدرسة حصرًا - G-26).
+     *
+     * POST /api/v1/evaluations
+     * الشروط الحتمية:
+     * 1. الدورة نشطة ومفتوحة (Active) وضمن الإطار الزمني المحدد.
+     * 2. الإصدار المعياري المرتبط بالدورة مُقرّ ونشط (Approved/Active).
+     * 3. المدرسة مسجلة رسمياً ومشاركة بالدورة (cycle_participations).
+     * 4. عدم وجود ملف تقييم مسبق لنفس المدرسة في نفس الدورة (unique cycle_id + school_id).
+     * 5. المنشئ مقيّم مدرسة يتبع لنفس المدرسة (user_type = 'school', evaluations.create).
+     */
+    public function store(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        if (!$user) {
+            return ApiResponse::unauthorized();
+        }
+
+        // عزل الأدوار: الأدمن والمشرف والمدير محظورون من بدء التقييم
+        if ($user->hasRole('admin')) {
+            return ApiResponse::forbidden('غير مصرح: مسؤول النظام لا يملك صلاحية إنشاء ملفات التقييم الذاتي (BR-GEN-06).');
+        }
+
+        if ($user->hasRole('ministry_supervisor')) {
+            return ApiResponse::forbidden('غير مصرح: المشرف الوزاري لا ينشئ ملفات التقييم نيابة عن المدارس.');
+        }
+
+        if (!$user->hasPermission('evaluations.create') || $user->user_type !== 'school' || empty($user->school_id)) {
+            return ApiResponse::forbidden('غير مصرح: بدء ملف التقييم الذاتي متاح لمقيّم المدرسة فقط.');
+        }
+
+        $validator = Validator::make($request->all(), [
+            'cycle_id' => ['required', 'integer'],
+        ], [
+            'cycle_id.required' => 'معرّف دورة التقييم مطلوب.',
+            'cycle_id.integer'  => 'معرّف دورة التقييم يجب أن يكون عدداً صحيحاً.',
+        ]);
+
+        if ($validator->fails()) {
+            return ApiResponse::validationError($validator->errors()->toArray());
+        }
+
+        $cycle = EvaluationCycle::with('version')->find($request->cycle_id);
+        if (!$cycle) {
+            return ApiResponse::notFound('دورة التقييم المحددة غير موجودة.');
+        }
+
+        // 1. فحص حالة وفترة الدورة التقييمية
+        if ($cycle->status !== 'Active') {
+            return ApiResponse::validationError([
+                'cycle_id' => ['دورة التقييم المحددة مغلقة ولا تقبل بدء ملفات تقييم جديدة.'],
+            ]);
+        }
+
+        $today = now()->toDateString();
+        $startDate = $cycle->start_date ? $cycle->start_date->toDateString() : null;
+        $endDate = $cycle->end_date ? $cycle->end_date->toDateString() : null;
+
+        if (($startDate && $today < $startDate) || ($endDate && $today > $endDate)) {
+            return ApiResponse::validationError([
+                'cycle_id' => ['فترة الدورة التقييمية المحددة خارج النطاق الزمني المسموح به حالياً.'],
+            ]);
+        }
+
+        // 2. فحص إقرار إصدار المعايير
+        if (!$cycle->version || !$cycle->version->isApproved()) {
+            return ApiResponse::validationError([
+                'version_id' => ['إصدار معايير الاعتماد المدرسي المرتبط بالدورة غير مُقرّ.'],
+            ]);
+        }
+
+        // 3. فحص مشاركة المدرسة في الدورة
+        $isEnrolled = CycleParticipation::where('cycle_id', $cycle->cycle_id)
+            ->where('school_id', $user->school_id)
+            ->exists();
+
+        if (!$isEnrolled) {
+            return ApiResponse::validationError([
+                'school_id' => ['المدرسة غير مسجلة للمشاركة في هذه الدورة التقييمية.'],
+            ]);
+        }
+
+        // 4. فحص التفرد: تقييم واحد فقط للمدرسة في الدورة الواحدة
+        $existing = Evaluation::where('cycle_id', $cycle->cycle_id)
+            ->where('school_id', $user->school_id)
+            ->first();
+
+        if ($existing) {
+            return ApiResponse::validationError([
+                'cycle_id' => ['يوجد ملف تقييم ذاتي مسجل مسبقاً لهذه المدرسة ضمن هذه الدورة.'],
+            ]);
+        }
+
+        // 5. إنشاء ملف التقييم بحالة InProgress
+        $evaluation = DB::transaction(function () use ($cycle, $user) {
+            return Evaluation::create([
+                'cycle_id'           => $cycle->cycle_id,
+                'school_id'          => $user->school_id,
+                'created_by_user_id' => $user->user_id,
+                'status'             => 'InProgress',
+            ]);
+        });
+
+        // 6. إرسال الإشعارات النظامية لمدير المدرسة والمشرفين الوزاريين
+        app(NotificationService::class)->notifyEvaluationInitiated($evaluation, $user);
+
+        $evaluation->load(['school', 'cycle', 'creator']);
+
+        return ApiResponse::success(
+            data: (new EvaluationResource($evaluation))->resolve($request),
+            message: 'تم بدء ملف التقييم الذاتي للمدرسة بنجاح.',
+            status: 201
+        );
+    }
+
+    /**
      * استعراض ملف تقييم محدد مع التحقق الصارم من العزل.
      */
     public function show(Request $request, int $id): JsonResponse
@@ -68,7 +189,7 @@ class EvaluationController extends Controller
             return ApiResponse::forbidden('غير مصرح');
         }
 
-        $evaluation = Evaluation::with(['school', 'cycle', 'creator', 'results.indicator', 'results.scoreDescriptor', 'results.evidences'])
+        $evaluation = Evaluation::with(['school', 'cycle', 'creator', 'results.indicator', 'results.scoreDescriptor', 'results.evidenceLinks'])
             ->find($id);
 
         if (!$evaluation) {
@@ -149,7 +270,7 @@ class EvaluationController extends Controller
         $existingResults = EvaluationResult::where('evaluation_id', $evaluation->evaluation_id)
             ->with([
                 'scoreDescriptor',
-                'evidences',
+                'evidenceLinks',
                 'verificationTools',
                 'notes' => function ($q) {
                     $q->orderBy('note_id', 'desc')->with('author');
@@ -212,7 +333,7 @@ class EvaluationController extends Controller
                                 'scoreDescriptorLabel'   => ($result && $result->completion_status === 'Completed') ? $result->scoreDescriptor?->label : null,
                                 'completionStatus'       => $result?->completion_status,
                                 'textualResult'          => $result?->textual_result,
-                                'evidenceCount'          => $result ? $result->evidences->count() : 0,
+                                'evidenceCount'          => $result ? $result->evidenceLinks->count() : 0,
                                 'notesCount'             => $result ? $result->notes->count() : 0,
                                 'notes'                  => $notes,
                                 'verificationToolIds'    => $result ? $result->verificationTools->pluck('tool_id')->all() : [],
@@ -300,20 +421,12 @@ class EvaluationController extends Controller
             return ApiResponse::notFound('ملف التقييم المطلوب غير موجود.');
         }
 
-        if ($user->cannot('update', $evaluation)) {
-            // التحقق مما إذا كان المنع بسبب قفل التقييم أو إغلاق الدورة
-            $lockCheck = EvaluationLockChecker::canModifyIndicator($evaluation, $indicatorId);
-            if (!$lockCheck['allowed']) {
-                $key = $lockCheck['errorKey'] ?? 'evaluation';
-                return ApiResponse::validationError([
-                    $key => [$lockCheck['message']],
-                ], $lockCheck['message']);
-            }
-
-            return ApiResponse::forbidden('غير مصرح لك بتعديل هذا التقييم.');
+        // فحص الصلاحية الأساسية والعزل المؤسسي (القرار المعماري 9)
+        if ($user->user_type !== 'school' || (int) $user->school_id !== (int) $evaluation->school_id || !$user->hasPermission('evaluations.edit')) {
+            return ApiResponse::forbidden('غير مصرح لك برصد نتائج التقييم.');
         }
 
-        // فحص قفل التعديل الدقيق (BR-SCH-03 / FR-SCH-01)
+        // فحص قفل التعديل الدقيق (BR-SCH-03 / FR-SCH-01 / NeedsCompletion)
         $lockCheck = EvaluationLockChecker::canModifyIndicator($evaluation, $indicatorId);
         if (!$lockCheck['allowed']) {
             $key = $lockCheck['errorKey'] ?? 'evaluation';
@@ -432,6 +545,12 @@ class EvaluationController extends Controller
             }
         }
 
+        // التحقق من وجود نتيجة سابقة لحفظها في سجل التدقيق
+        $existingResult = EvaluationResult::where('evaluation_id', $evaluation->evaluation_id)
+            ->where('indicator_id', $indicatorId)
+            ->first();
+        $oldScore = $existingResult ? (int) $existingResult->score : null;
+
         // تنفيذ الرصد Upsert
         $result = EvaluationResult::updateOrCreate(
             [
@@ -446,6 +565,21 @@ class EvaluationController extends Controller
                 'textual_result'      => $textualResult,
                 'completion_status'   => 'Completed',
             ]
+        );
+
+        // تسجيل عملية رصد النتيجة في سجل التدقيق
+        app(\App\Services\AuditLoggerService::class)->log(
+            action: 'evaluation.scored',
+            targetType: 'EvaluationResult',
+            targetId: $result->result_id,
+            oldValues: $oldScore !== null ? ['score' => $oldScore] : null,
+            newValues: [
+                'score' => $score,
+                'evaluation_id' => $evaluation->evaluation_id,
+                'indicator_id' => $indicatorId,
+            ],
+            userId: $user->user_id,
+            schoolId: $evaluation->school_id
         );
 
         // مزامنة أدوات التحقق المستخدمة فعلياً في النتيجة (FR-SCH-13)
@@ -613,6 +747,18 @@ class EvaluationController extends Controller
             ], 'ملف التقييم مكتمل ومقفل مسبقاً ولا يمكن إعادة تقديمه.');
         }
 
+        if (in_array($evaluation->status, ['Submitted', 'UnderReview'])) {
+            return ApiResponse::validationError([
+                'evaluation' => ['ملف التقييم مسلّم وبانتظار المراجعة الإشرافية ولا يمكن إعادة تقديمه من هذا المسار.'],
+            ], 'ملف التقييم مسلّم وبانتظار المراجعة الإشرافية ولا يمكن إعادة تقديمه من هذا المسار.');
+        }
+
+        if ($evaluation->status === 'NeedsCompletion') {
+            return ApiResponse::validationError([
+                'evaluation' => ['ملف التقييم يتطلب استكمال الملاحظات، ويجب تقديم الاستكمال عبر مسار resubmit المخصص.'],
+            ], 'ملف التقييم يتطلب استكمال الملاحظات، ويجب تقديم الاستكمال عبر مسار resubmit المخصص.');
+        }
+
         if (EvaluationLockChecker::isEvaluationLocked($evaluation)) {
             $lockStatus = EvaluationLockChecker::checkEvaluationGeneralStatus($evaluation);
             $reason = $lockStatus['reason'] ?? 'ملف التقييم مقفل حالياً.';
@@ -680,17 +826,60 @@ class EvaluationController extends Controller
             ], 'لا يمكن تقديم التقييم لعدم استيفاء الحد الأدنى من الشواهد المطلوبة.');
         }
 
-        // 5. التحديث داخل Transaction وإطلاق حدث القفل
-        DB::transaction(function () use ($evaluation, $user) {
+        // 5. التحديث داخل Transaction وإطلاق حدث القفل (الانتقال إلى Submitted وإنشاء التقرير ومحاولة التسليم الأولى)
+        $txResult = DB::transaction(function () use ($evaluation, $user) {
             // حفظ لقطة مجمدة من سياق وإحصاءات المدرسة والمرافق (الشريحة 6)
             $metricsService = app(\App\Services\SchoolMetricsService::class);
             $evaluation->school_context_snapshot = $metricsService->calculateIndicatorsContext($evaluation);
 
-            $evaluation->status = 'Completed';
+            $evaluation->status = 'Submitted';
             $evaluation->updated_at = now();
             $evaluation->save();
 
+            // إنشاء مسودة التقرير إن لم تكن موجودة
+            $report = Report::firstOrCreate(
+                ['evaluation_id' => $evaluation->evaluation_id],
+                [
+                    'status' => 'Draft',
+                    'generated_at' => now(),
+                ]
+            );
+
+            // إنشاء سجل محاولة التسليم الأولى (attempt_no = 1)
+            $submission = EvaluationSubmission::firstOrCreate(
+                [
+                    'report_id' => $report->report_id,
+                    'attempt_no' => 1,
+                ],
+                [
+                    'submitted_by_user_id' => $user->user_id,
+                    'submitted_at' => now(),
+                    'status' => 'Submitted',
+                ]
+            );
+
             event(new EvaluationSubmitted($evaluation, $user));
+            app(NotificationService::class)->notifyEvaluationSubmitted($evaluation, $user);
+
+            // تسجيل عملية تسليم التقييم في سجل التدقيق
+            app(\App\Services\AuditLoggerService::class)->log(
+                action: 'evaluation.submitted',
+                targetType: 'Evaluation',
+                targetId: $evaluation->evaluation_id,
+                oldValues: ['status' => 'InProgress'],
+                newValues: [
+                    'status' => 'Submitted',
+                    'report_id' => $report->report_id,
+                    'attempt_no' => 1,
+                ],
+                userId: $user->user_id,
+                schoolId: $evaluation->school_id
+            );
+
+            return [
+                'report' => $report,
+                'submission' => $submission,
+            ];
         });
 
         return ApiResponse::success(
@@ -698,7 +887,9 @@ class EvaluationController extends Controller
                 'evaluationId' => $evaluation->evaluation_id,
                 'schoolId' => $evaluation->school_id,
                 'status' => $evaluation->status,
-                'completedAt' => $evaluation->updated_at?->toIso8601ZuluString(),
+                'reportId' => $txResult['report']->report_id,
+                'attemptNo' => $txResult['submission']->attempt_no,
+                'submittedAt' => $evaluation->updated_at?->toIso8601ZuluString(),
                 'submittedByUser' => [
                     'userId' => $user->user_id,
                     'name' => $user->full_name,
@@ -706,7 +897,89 @@ class EvaluationController extends Controller
                 ],
                 'isLocked' => true,
             ],
-            message: 'تم إغلاق التقييم الذاتي واعتماده بنجاح وقفل العمليات التعديلية (BR-SCH-03).'
+            message: 'تم تسليم ملف التقييم الذاتي بنجاح والانتقال إلى مرحلة المراجعة الإشرافية (Submitted) وقفل العمليات التعديلية (BR-SCH-03).'
+        );
+    }
+
+    /**
+     * الإغلاق النهائي المباشر لملف التقييم من المشرف الوزاري دون طلب استكمال.
+     *
+     * POST /api/v1/evaluations/{id}/close
+     */
+    public function directClose(Request $request, int $id): JsonResponse
+    {
+        $user = $request->user();
+
+        $evaluation = Evaluation::with(['cycle', 'school'])->find($id);
+        if (!$evaluation) {
+            return ApiResponse::notFound('ملف التقييم المطلوب غير موجود.');
+        }
+
+        // فحص صلاحية المشرف الوزاري
+        if ($user->user_type !== 'ministry' || (!$user->hasRole('ministry_supervisor') && !$user->hasPermission('supervision.review'))) {
+            return ApiResponse::forbidden('غير مصرح لك بإغلاق ملف التقييم. هذه العملية مخصصة للمشرف الوزاري فقط.');
+        }
+
+        if ($evaluation->status === 'Completed') {
+            return ApiResponse::validationError([
+                'evaluation' => ['ملف التقييم مغلق ومكتمل نهائياً مسبقاً.'],
+            ], 'ملف التقييم مغلق ومكتمل نهائياً مسبقاً.');
+        }
+
+        if (!in_array($evaluation->status, ['Submitted', 'UnderReview'])) {
+            return ApiResponse::validationError([
+                'evaluation' => ["لا يمكن إغلاق التقييم إلا إذا كان بحالة مسلّم (Submitted) أو قيد المراجعة (UnderReview). الحالة الحالية: {$evaluation->status}"],
+            ], 'لا يمكن إغلاق ملف التقييم في حالته الحالية.');
+        }
+
+        $oldStatus = $evaluation->status;
+
+        DB::transaction(function () use ($evaluation, $user, $oldStatus) {
+            $evaluation->status = 'Completed';
+            $evaluation->updated_at = now();
+            $evaluation->save();
+
+            // تحديث التقرير إلى Final
+            $report = Report::where('evaluation_id', $evaluation->evaluation_id)->first();
+            if ($report) {
+                $report->status = 'Final';
+                $report->save();
+
+                // تحديث آخر محاولة تسليم إلى Completed
+                EvaluationSubmission::where('report_id', $report->report_id)
+                    ->orderBy('attempt_no', 'desc')
+                    ->limit(1)
+                    ->update([
+                        'status' => 'Completed',
+                    ]);
+            }
+
+            // تسجيل عملية الإغلاق المباشر في سجل التدقيق
+            app(\App\Services\AuditLoggerService::class)->log(
+                action: 'evaluation.direct_closed',
+                targetType: 'Evaluation',
+                targetId: $evaluation->evaluation_id,
+                oldValues: ['status' => $oldStatus],
+                newValues: ['status' => 'Completed'],
+                userId: $user->user_id,
+                schoolId: $evaluation->school_id
+            );
+        });
+
+        return ApiResponse::success(
+            data: [
+                'evaluationId' => $evaluation->evaluation_id,
+                'schoolId' => $evaluation->school_id,
+                'status' => 'Completed',
+                'closedAt' => now()->toIso8601ZuluString(),
+                'closedByUser' => [
+                    'userId' => $user->user_id,
+                    'name' => $user->full_name,
+                    'role' => $user->roles->first()?->role_name,
+                ],
+                'isLocked' => true,
+            ],
+            message: 'تم الإغلاق النهائي لملف التقييم بنجاح واعتماده مكتملاً.'
         );
     }
 
@@ -775,7 +1048,17 @@ class EvaluationController extends Controller
      */
     public function devReset(Request $request, int $id): JsonResponse
     {
+        // 1. قفل المسار خارج البيئة المحلية حصراً (REV-T009 / U-22)
+        if (!app()->environment('local')) {
+            return ApiResponse::forbidden('مسار إعادة الضبط التجريبي متاح فقط في البيئة المحلية (local environment).');
+        }
+
         $user = $request->user();
+
+        // 2. التحقق الصارم من التفويض والعزل المؤسسي (منع الأدمن والمشرفين ومستخدمي المدارس الأخرى من التدخل التشغيلي BR-GEN-06)
+        if (!$user || $user->user_type !== 'school' || !$user->hasPermission('evaluations.edit')) {
+            return ApiResponse::forbidden('غير مصرح لك بإفراغ هذا التقييم؛ الإجراء محصور بمقيّم المدرسة المصرح له.');
+        }
 
         $evaluation = Evaluation::find($id);
         if (!$evaluation) {
@@ -783,7 +1066,7 @@ class EvaluationController extends Controller
         }
 
         // عزل المدارس (القرار المعماري 9)
-        if ($user->user_type === 'school' && (int) $user->school_id !== (int) $evaluation->school_id) {
+        if ((int) $user->school_id !== (int) $evaluation->school_id) {
             return ApiResponse::notFound('ملف التقييم غير موجود.');
         }
 
@@ -805,19 +1088,9 @@ class EvaluationController extends Controller
                     \App\Models\ImprovementArea::whereIn('area_id', $areaIds)->delete();
                 }
 
-                foreach ($results as $result) {
-                    $evidences = \App\Models\Evidence::where('result_id', $result->result_id)->get();
-                    foreach ($evidences as $evidence) {
-                        $versions = \App\Models\EvidenceVersion::where('evidence_id', $evidence->evidence_id)->get();
-                        foreach ($versions as $version) {
-                            \App\Models\Attachment::where('target_type', 'evidence_version')
-                                ->where('target_id', $version->evidence_version_id)
-                                ->delete();
-                            $version->delete();
-                        }
-                        $evidence->delete();
-                    }
+                \App\Models\EvidenceLink::where('evaluation_id', $evaluation->evaluation_id)->delete();
 
+                foreach ($results as $result) {
                     DB::table('evaluation_result_verification_methods')->where('evaluation_result_id', $result->result_id)->delete();
                     \App\Models\Note::where('result_id', $result->result_id)->delete();
                     $result->delete();
@@ -829,5 +1102,165 @@ class EvaluationController extends Controller
             data: null,
             message: 'تم إفراغ التقييم التجريبي بنجاح.'
         );
+    }
+
+    /**
+     * تصدير بطاقة تقويم المدرسة الرسمية بصيغة PDF (الشريحة 9).
+     *
+     * GET /api/v1/evaluations/{id}/export-pdf
+     */
+    public function exportPdf(Request $request, int $id)
+    {
+        $user = $request->user();
+        $evaluation = Evaluation::with(['school', 'cycle'])->find($id);
+
+        if (!$evaluation) {
+            return ApiResponse::notFound('ملف التقييم المطلوب غير موجود.');
+        }
+
+        $authError = $this->authorizeReportOrExportAccess($user, $evaluation);
+        if ($authError) {
+            return $authError;
+        }
+
+        $reportService = app(\App\Services\EvaluationReportService::class);
+        $pdfContent = $reportService->generateEvaluationCardPdf($evaluation, $user);
+
+        $filename = "evaluation_card_{$evaluation->evaluation_id}.pdf";
+
+        return response($pdfContent, 200, [
+            'Content-Type'        => 'application/pdf',
+            'Content-Disposition' => "attachment; filename=\"{$filename}\"",
+        ]);
+    }
+
+    /**
+     * تصدير نتائج التقييم وسجل الشواهد والخطط بصيغة Excel (الشريحة 9).
+     *
+     * GET /api/v1/evaluations/{id}/export-excel
+     */
+    public function exportExcel(Request $request, int $id)
+    {
+        $user = $request->user();
+        $evaluation = Evaluation::with(['school', 'cycle'])->find($id);
+
+        if (!$evaluation) {
+            return ApiResponse::notFound('ملف التقييم المطلوب غير موجود.');
+        }
+
+        $authError = $this->authorizeReportOrExportAccess($user, $evaluation);
+        if ($authError) {
+            return $authError;
+        }
+
+        $filename = "school_evaluation_{$evaluation->evaluation_id}.xlsx";
+
+        return \Maatwebsite\Excel\Facades\Excel::download(
+            new \App\Exports\EvaluationWorkbookExport($evaluation, $user),
+            $filename
+        );
+    }
+
+    /**
+     * استعراض بطاقة مقارنة الأداء وتتبع مسار التطور مع الدورة السابقة (Trend) - الشريحة 9.
+     *
+     * GET /api/v1/evaluations/{id}/trend
+     */
+    public function trend(Request $request, int $id): JsonResponse
+    {
+        $user = $request->user();
+        $evaluation = Evaluation::with(['school', 'cycle'])->find($id);
+
+        if (!$evaluation) {
+            return ApiResponse::notFound('ملف التقييم المطلوب غير موجود.');
+        }
+
+        $authError = $this->authorizeReportOrExportAccess($user, $evaluation);
+        if ($authError) {
+            return $authError;
+        }
+
+        $trendService = app(\App\Services\EvaluationTrendService::class);
+        $trendData = $trendService->calculateTrend($evaluation);
+
+        return ApiResponse::success(
+            data: $trendData,
+            message: 'تم استخراج بيانات مسار التطور مقارنة بالدورة السابقة بنجاح.'
+        );
+    }
+
+    /**
+     * اقتراح إجراءات نموذجية من بنك الإجراءات للمؤشرات الضعيفة (0 أو 1) - الشريحة 9.
+     *
+     * GET /api/v1/evaluations/{id}/action-recommendations?indicator_code={code}
+     */
+    public function actionRecommendations(Request $request, int $id): JsonResponse
+    {
+        $user = $request->user();
+        $evaluation = Evaluation::with(['school'])->find($id);
+
+        if (!$evaluation) {
+            return ApiResponse::notFound('ملف التقييم المطلوب غير موجود.');
+        }
+
+        $authError = $this->authorizeReportOrExportAccess($user, $evaluation);
+        if ($authError) {
+            return $authError;
+        }
+
+        $indicatorCode = $request->query('indicator_code');
+        if (!$indicatorCode || !is_string($indicatorCode)) {
+            return ApiResponse::validationError([
+                'indicator_code' => ['رمز المؤشر مطلوب لاستخراج توصيات بنك الإجراءات.'],
+            ]);
+        }
+
+        // جلب درجة المؤشر في هذا التقييم إن وجدت
+        $result = EvaluationResult::where('evaluation_id', $evaluation->evaluation_id)
+            ->whereHas('indicator', fn($q) => $q->where('code', $indicatorCode))
+            ->first();
+
+        $score = $result ? $result->score : null;
+
+        $catalogService = app(\App\Services\ActionCatalogService::class);
+        $recommendations = $catalogService->getRecommendationsForIndicator($indicatorCode, $score);
+
+        return ApiResponse::success(
+            data: $recommendations,
+            message: 'تم استخراج التوصيات المقترحة من بنك الإجراءات بنجاح.'
+        );
+    }
+
+    /**
+     * التحقق من أمن وصلاحيات الوصول للتقارير والتصدير (الشريحة 9).
+     */
+    protected function authorizeReportOrExportAccess(?User $user, Evaluation $evaluation): ?JsonResponse
+    {
+        if (!$user) {
+            return ApiResponse::unauthorized('يجب تسجيل الدخول للمتابعة.');
+        }
+
+        // 1. مسؤول المعايير ممنوع من شاشات المدارس وتقاريرها (BR-MIN-01)
+        if ($user->hasRole('ministry_standards_manager')) {
+            return ApiResponse::forbidden('غير مصرح لك بالاطلاع على تقارير المدارس أو تصديرها (BR-MIN-01).');
+        }
+
+        // 2. عزل المدارس الصارم (القرار المعماري 9)
+        if ($user->user_type === 'school' && (int) $user->school_id !== (int) $evaluation->school_id) {
+            return ApiResponse::notFound('ملف التقييم المطلوب غير موجود.');
+        }
+
+        // 3. فحص الصلاحيات العامة
+        $hasAccess = $user->hasRole('admin')
+            || $user->user_type === 'admin'
+            || $user->user_type === 'system'
+            || $user->hasPermission('reports.view')
+            || $user->hasPermission('evaluations.view');
+
+        if (!$hasAccess) {
+            return ApiResponse::forbidden('غير مصرح لك بتصدير أو استعراض هذا التقرير.');
+        }
+
+        return null;
     }
 }

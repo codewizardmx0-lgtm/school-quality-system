@@ -18,6 +18,11 @@ class ImprovementPlan extends Model
 {
     use HasFactory;
 
+    // ثوابت أنواع الخطط المدرسية (الشريحة 8)
+    public const TYPE_QUALITY_IMPROVEMENT = 'QualityImprovement';
+    public const TYPE_STAFF_DEVELOPMENT   = 'StaffProfessionalDevelopment';
+    public const TYPE_ANNUAL_OPERATIONAL  = 'AnnualOperational';
+
     /**
      * اسم الجدول المرتبط بالنموذج في قاعدة البيانات.
      *
@@ -40,6 +45,7 @@ class ImprovementPlan extends Model
     protected $fillable = [
         'cycle_id',
         'school_id',
+        'plan_type',
         'created_by_user_id',
         'title',
         'start_date',
@@ -131,12 +137,48 @@ class ImprovementPlan extends Model
     }
 
     /**
-     * ملاحظات المراجعة الداخلية على خطة التحسين من قِبل الإدارة المدرسية.
+     * ملاحظات المراجعة على خطة التحسين (الداخلية من المدير والخارجية من المشرف).
      *
      * @return HasMany
      */
     public function reviewNotes(): HasMany
     {
         return $this->hasMany(PlanReviewNote::class, 'plan_id', 'plan_id');
+    }
+
+    /**
+     * حساب متوسط نسبة الإنجاز الإجمالية لإجراءات الخطة ديناميكياً (0 - 100%).
+     *
+     * @return float
+     */
+    public function getOverallProgressPercentageAttribute(): float
+    {
+        $actions = $this->actions;
+        if ($actions->isEmpty()) {
+            return 0.0;
+        }
+
+        // استبعاد الإجراءات الملغاة Cancelled من الحساب إن وُجدت
+        $activeActions = $actions->where('status', '!=', 'Cancelled');
+        if ($activeActions->isEmpty()) {
+            return 100.0;
+        }
+
+        $avg = $activeActions->avg('completion_percentage');
+        return round((float) $avg, 2);
+    }
+
+    /**
+     * المسمى العربي لنوع الخطة.
+     *
+     * @return string
+     */
+    public function getPlanTypeLabelAttribute(): string
+    {
+        return match ($this->plan_type) {
+            self::TYPE_STAFF_DEVELOPMENT  => 'خطة التطوير المهني والتربوي',
+            self::TYPE_ANNUAL_OPERATIONAL => 'الخطة التشغيلية السنوية',
+            default                       => 'خطة تحسين الجودة المدرسية',
+        };
     }
 }

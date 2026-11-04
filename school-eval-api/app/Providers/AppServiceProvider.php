@@ -2,9 +2,7 @@
 
 namespace App\Providers;
 
-use App\Models\Evidence;
 use App\Models\ImprovementPlan;
-use App\Policies\EvidencePolicy;
 use App\Policies\ImprovementPlanPolicy;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
@@ -24,7 +22,6 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        Gate::policy(Evidence::class, EvidencePolicy::class);
         Gate::policy(ImprovementPlan::class, ImprovementPlanPolicy::class);
     }
 }

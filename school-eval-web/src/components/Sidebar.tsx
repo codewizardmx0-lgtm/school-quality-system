@@ -46,6 +46,9 @@ export const Sidebar: React.FC<{ activeTab: string; onSelectTab: (tab: string) =
     if (perms.includes('users.manage')) {
       items.push({ id: 'users', label: 'إدارة المستخدمين', icon: <Users size={18} /> });
     }
+    if (primaryRole === 'admin' || perms.includes('users.manage')) {
+      items.push({ id: 'admin-suite', label: 'بوابة مسؤول النظام المركزية', icon: <ShieldCheck size={18} /> });
+    }
     if (perms.includes('standards.manage')) {
       items.push(
         { id: 'standards-versions', label: 'إصدارات المعايير', icon: <BookOpen size={18} /> },
