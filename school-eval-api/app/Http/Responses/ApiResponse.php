@@ -116,6 +116,29 @@ class ApiResponse
     }
 
     /**
+     * استجابة تجاوز معدل الطلبات المسموح به 429 Too Many Requests (الشريحة 11).
+     *
+     * @param string $message
+     * @param int $retryAfter
+     * @return JsonResponse
+     */
+    public static function tooManyRequests(string $message = 'تم تجاوز الحد المسموح به من المحاولات. يرجى الانتظار والمحاولة لاحقًا.', int $retryAfter = 60): JsonResponse
+    {
+        return response()->json([
+            'success'     => false,
+            'data'        => null,
+            'message'     => $message,
+            'retry_after' => $retryAfter,
+            'errors'      => [
+                'throttle' => [$message],
+            ],
+            'meta'        => null,
+        ], 429, [
+            'Retry-After' => (string) $retryAfter,
+        ], JSON_UNESCAPED_UNICODE);
+    }
+
+    /**
      * استجابة تعارض قيود تكاملية 409 Conflict.
      *
      * @param string $message

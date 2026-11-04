@@ -47,6 +47,22 @@ class StandardVersion extends Model
     }
 
     /**
+     * ضابط سلامة الحالات وتفرد الإصدار النشط (ضابط G-23).
+     * يضمن على مستوى النموذج عدم وجود أكثر من إصدار معياري واحد بحالة Active في نفس الوقت.
+     * لا يؤثر إطلاقاً على حالات Approved أو Draft أو التعديلات العادية.
+     */
+    protected static function booted(): void
+    {
+        static::saving(function (StandardVersion $version) {
+            if ($version->status === self::STATUS_ACTIVE) {
+                static::where('status', self::STATUS_ACTIVE)
+                    ->when($version->exists, fn ($q) => $q->where('version_id', '!=', $version->version_id))
+                    ->update(['status' => self::STATUS_ARCHIVED]);
+            }
+        });
+    }
+
+    /**
      * اسم الجدول المرتبط بالنموذج في قاعدة البيانات.
      *
      * @var string

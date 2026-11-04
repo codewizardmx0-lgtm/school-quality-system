@@ -13,16 +13,32 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        $middleware->append([
+            \App\Http\Middleware\SecurityHeadersMiddleware::class,
+        ]);
+
         $middleware->alias([
-            'permission'      => \App\Http\Middleware\CheckPermission::class,
-            'role'            => \App\Http\Middleware\CheckRole::class,
-            'session.timeout' => \App\Http\Middleware\EnforceSessionTimeout::class,
+            'permission'       => \App\Http\Middleware\CheckPermission::class,
+            'role'             => \App\Http\Middleware\CheckRole::class,
+            'session.timeout'  => \App\Http\Middleware\EnforceSessionTimeout::class,
+            'security.headers' => \App\Http\Middleware\SecurityHeadersMiddleware::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(
             fn (Request $request) => $request->is('api/*') || $request->expectsJson(),
         );
+
+        // تخصيص استجابة 429 عند تجاوز معدل الطلبات المسموح به (Rate Limiting)
+        $exceptions->render(function (\Illuminate\Http\Exceptions\ThrottleRequestsException $e, Request $request) {
+            if ($request->is('api/*') || $request->expectsJson()) {
+                $retryAfter = (int) ($e->getHeaders()['Retry-After'] ?? 60);
+                return \App\Http\Responses\ApiResponse::tooManyRequests(
+                    message: 'تم تجاوز الحد المسموح به من المحاولات. يرجى الانتظار والمحاولة لاحقًا.',
+                    retryAfter: $retryAfter
+                );
+            }
+        });
 
         // تخصيص استجابة 401 عند فشل مصادقة Sanctum أو الرمز المفقود
         $exceptions->render(function (\Illuminate\Auth\AuthenticationException $e, Request $request) {

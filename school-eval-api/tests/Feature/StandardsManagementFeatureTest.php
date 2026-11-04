@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\AuditLog;
 use App\Models\Evaluation;
 use App\Models\EvaluationCycle;
 use App\Models\EvaluationResult;
@@ -15,6 +16,7 @@ use App\Models\Standard;
 use App\Models\StandardVersion;
 use App\Models\SubStandard;
 use App\Models\User;
+use App\Services\AuditLoggerService;
 use App\Services\ReportsAnalyticsService;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Tests\TestCase;
@@ -319,9 +321,9 @@ class StandardsManagementFeatureTest extends TestCase
     }
 
     /**
-     * اختبار إقرار المسودة والأرشفة التلقائية للإصدار المُقرّ السابق.
+     * اختبار إقرار المسودة دون التأثير على الإصدار النشط الحالي.
      */
-    public function test_can_approve_draft_and_auto_archive_previous_version(): void
+    public function test_can_approve_draft_without_affecting_current_active_version(): void
     {
         $clonedResponse = $this->actingAs($this->standardsManager, 'sanctum')
             ->postJson("/api/v1/standard-versions/{$this->seededVersion->version_id}/clone", [
@@ -336,13 +338,13 @@ class StandardsManagementFeatureTest extends TestCase
         $approveResponse->assertOk()
             ->assertJsonPath('data.status', 'Approved');
 
-        // التحقق من أرشفة الإصدار السابق تلقائيًا
+        // التحقق من أن الإصدار النشط الحالي لم يتأثر وظل نشطاً دون أرشفة
         $this->seededVersion->refresh();
-        $this->assertEquals('Archived', $this->seededVersion->status);
+        $this->assertEquals(StandardVersion::STATUS_ACTIVE, $this->seededVersion->status);
 
         // التحقق من أن الإصدار الجديد أصبح Approved
         $newOfficial = StandardVersion::find($clonedId);
-        $this->assertEquals('Approved', $newOfficial->status);
+        $this->assertEquals(StandardVersion::STATUS_APPROVED, $newOfficial->status);
     }
 
     /**
@@ -642,5 +644,135 @@ class StandardsManagementFeatureTest extends TestCase
 
         // التأكد من حذفه من قاعدة البيانات
         $this->assertDatabaseMissing('standards', ['standard_id' => $stdId]);
+    }
+
+    // =========================================================================
+    // اختبارات ضابط اتساق الإصدارات المعيارية والأرشفة الذرية (G-23 - الشريحة 11)
+    // =========================================================================
+
+    /**
+     * اختبار إقرار مسودة جديدة لا يؤثر على الإصدار النشط الحالي (G-23).
+     * الإقرار (Approve) يعتمد المسودة ويجمدها فقط، دون أن يؤرشف الإصدار الساري.
+     */
+    public function test_approving_new_version_does_not_affect_existing_active_version_g23(): void
+    {
+        $clonedResponse = $this->actingAs($this->standardsManager, 'sanctum')
+            ->postJson("/api/v1/standard-versions/{$this->seededVersion->version_id}/clone", [
+                'version_no' => '2027.APPROVE-OK',
+            ]);
+        $clonedResponse->assertCreated();
+        $newVersionId = $clonedResponse->json('data.version_id');
+
+        // إقرار المسودة
+        $approveResponse = $this->actingAs($this->standardsManager, 'sanctum')
+            ->postJson("/api/v1/standard-versions/{$newVersionId}/approve");
+        $approveResponse->assertOk()
+            ->assertJsonPath('data.status', 'Approved');
+
+        // التحقق من أن الإصدار النشط الحالي لم يتأثر وظل نشطاً دون أي أرشفة
+        $this->seededVersion->refresh();
+        $this->assertEquals(StandardVersion::STATUS_ACTIVE, $this->seededVersion->status, 'الإصدار النشط الحالي يجب ألا يؤرشف عند الإقرار.');
+
+        // التحقق من أن الإصدار الجديد أصبح Approved
+        $newVersion = StandardVersion::find($newVersionId);
+        $this->assertEquals(StandardVersion::STATUS_APPROVED, $newVersion->status);
+    }
+
+    /**
+     * اختبار مسار التنشيط الصريح /activate عبر API:
+     * ينشط الإصدار المطلوب إلى Active ويؤرشف الإصدار النشط السابق تلقائيًا داخل DB::transaction مع تسجيل التدقيق (G-23).
+     */
+    public function test_explicit_activate_endpoint_works_and_archives_previous_active_g23(): void
+    {
+        // إنشاء إصدار جديد
+        $draft = StandardVersion::create([
+            'version_no'          => '2028.ACTIVATE-API',
+            'issue_date'          => now()->toDateString(),
+            'source_organization' => 'وزارة التربية والتعليم والبحث العلمي',
+            'status'              => StandardVersion::STATUS_DRAFT,
+        ]);
+
+        $response = $this->actingAs($this->standardsManager, 'sanctum')
+            ->postJson("/api/v1/standard-versions/{$draft->version_id}/activate");
+        $response->assertOk();
+
+        // الإصدار النشط السابق تم أرشفته
+        $this->seededVersion->refresh();
+        $this->assertEquals(StandardVersion::STATUS_ARCHIVED, $this->seededVersion->status, 'يجب أرشفة الإصدار النشط السابق تلقائياً عند التنشيط.');
+
+        // الإصدار الجديد أصبح Active
+        $draft->refresh();
+        $this->assertEquals(StandardVersion::STATUS_ACTIVE, $draft->status);
+
+        // التحقق من وجود إصدار واحد فقط بحالة Active في النظام
+        $activeCount = StandardVersion::where('status', StandardVersion::STATUS_ACTIVE)->count();
+        $this->assertEquals(1, $activeCount, 'يجب أن يكون هناك إصدار نشط واحد فقط.');
+
+        // التحقق من تسجيل عمليتي التدقيق
+        $autoArchivedLog = AuditLog::where('action', AuditLoggerService::ACTION_STANDARD_VERSION_AUTO_ARCHIVED)
+            ->where('target_id', $this->seededVersion->version_id)
+            ->latest('log_id')
+            ->first();
+
+        $this->assertNotNull($autoArchivedLog, 'يجب تسجيل تدقيق للأرشفة التلقائية.');
+        $this->assertEquals($this->standardsManager->user_id, $autoArchivedLog->user_id);
+        $this->assertEquals(StandardVersion::STATUS_ARCHIVED, $autoArchivedLog->new_values['status']);
+
+        $activatedLog = AuditLog::where('action', AuditLoggerService::ACTION_STANDARD_VERSION_ACTIVATED)
+            ->where('target_id', $draft->version_id)
+            ->latest('log_id')
+            ->first();
+
+        $this->assertNotNull($activatedLog, 'يجب تسجيل تدقيق لتنشيط الإصدار الجديد.');
+        $this->assertEquals($this->standardsManager->user_id, $activatedLog->user_id);
+    }
+
+    /**
+     * اختبار الضمانة على مستوى النموذج (Model Level Safeguard):
+     * تحديث مباشر لنموذج ليصبح Active يؤرشف أي إصدار نشط آخر تلقائياً دون التأثير على Approved أو Draft (G-23).
+     */
+    public function test_model_safeguard_prevents_multiple_active_versions_simultaneously_g23(): void
+    {
+        $v1 = StandardVersion::create([
+            'version_no'          => '2099.V1',
+            'issue_date'          => now()->toDateString(),
+            'source_organization' => 'وزارة التربية والتعليم والبحث العلمي',
+            'status'              => StandardVersion::STATUS_DRAFT,
+        ]);
+
+        $v2 = StandardVersion::create([
+            'version_no'          => '2099.V2',
+            'issue_date'          => now()->toDateString(),
+            'source_organization' => 'وزارة التربية والتعليم والبحث العلمي',
+            'status'              => StandardVersion::STATUS_DRAFT,
+        ]);
+
+        $vApproved = StandardVersion::create([
+            'version_no'          => '2099.V-APPROVED',
+            'issue_date'          => now()->toDateString(),
+            'source_organization' => 'وزارة التربية والتعليم والبحث العلمي',
+            'status'              => StandardVersion::STATUS_APPROVED,
+        ]);
+
+        // تنشيط الأول
+        $v1->update(['status' => StandardVersion::STATUS_ACTIVE]);
+        $this->assertEquals(StandardVersion::STATUS_ACTIVE, $v1->fresh()->status);
+
+        // التأكد من أن الإصدار المُقر (Approved) لم يتأثر
+        $this->assertEquals(StandardVersion::STATUS_APPROVED, $vApproved->fresh()->status);
+
+        // تنشيط الثاني مباشرة عبر النموذج
+        $v2->update(['status' => StandardVersion::STATUS_ACTIVE]);
+        $this->assertEquals(StandardVersion::STATUS_ACTIVE, $v2->fresh()->status);
+
+        // يجب أن يكون الأول (Active) قد أُرشِف تلقائياً بواسطة Booted Model Safeguard
+        $this->assertEquals(StandardVersion::STATUS_ARCHIVED, $v1->fresh()->status);
+
+        // والإصدار Approved لا يزال Approved دون أي تغيير
+        $this->assertEquals(StandardVersion::STATUS_APPROVED, $vApproved->fresh()->status);
+
+        // عدد الإصدارات بحالة Active الآن في النظام هو 1 فقط
+        $activeCount = StandardVersion::where('status', StandardVersion::STATUS_ACTIVE)->count();
+        $this->assertEquals(1, $activeCount);
     }
 }

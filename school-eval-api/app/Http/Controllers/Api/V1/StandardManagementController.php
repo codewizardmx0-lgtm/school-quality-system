@@ -141,7 +141,31 @@ class StandardManagementController extends Controller
 
         try {
             $approved = $this->service->approveVersion($version);
-            return ApiResponse::success(data: $approved, message: 'تم إقرار الإصدار المعياري بنجاح وأرشفة الإصدار السابق تلقائيًا.');
+            return ApiResponse::success(data: $approved, message: 'تم إقرار الإصدار المعياري بنجاح.');
+        } catch (ValidationException $e) {
+            return ApiResponse::validationError($e->errors(), $e->getMessage());
+        }
+    }
+
+    /**
+     * تنشيط إصدار معياري مع أرشفة الإصدار النشط القديم تلقائيًا داخل معاملة ذرية (ضابط G-23).
+     * الصلاحية المطلوبة: standards.manage
+     */
+    public function activate(Request $request, int $id): JsonResponse
+    {
+        $user = $request->user();
+        if (!$user || !$user->hasPermission('standards.manage')) {
+            return ApiResponse::forbidden('غير مصرح لك بتنشيط الإصدار المعياري.');
+        }
+
+        $version = StandardVersion::find($id);
+        if (!$version) {
+            return ApiResponse::notFound('الإصدار المعياري غير موجود.');
+        }
+
+        try {
+            $activated = $this->service->activateVersion($version);
+            return ApiResponse::success(data: $activated, message: 'تم تنشيط الإصدار المعياري بنجاح وأرشفة الإصدار النشط السابق تلقائيًا.');
         } catch (ValidationException $e) {
             return ApiResponse::validationError($e->errors(), $e->getMessage());
         }

@@ -302,6 +302,14 @@ class StandardManagementService
      * @return StandardVersion
      * @throws ValidationException
      */
+    /**
+     * إقرار مسودة الإصدار وتجميدها مع التحقق من مجموع الأوزان = 100%.
+     * يحول المسودة إلى Approved فقط دون المساس بالإصدار النشط الحالي.
+     *
+     * @param StandardVersion $version
+     * @return StandardVersion
+     * @throws ValidationException
+     */
     public function approveVersion(StandardVersion $version): StandardVersion
     {
         $this->ensureIsDraft($version);
@@ -314,15 +322,55 @@ class StandardManagementService
             ]);
         }
 
-        return DB::transaction(function () use ($version) {
-            // أرشفة أي إصدار مُقرّ أو نشط سابق تلقائيًا لضمان وجود إصدار مُقرّ نشط واحد فقط
-            StandardVersion::whereIn('status', [StandardVersion::STATUS_APPROVED, StandardVersion::STATUS_ACTIVE])
-                ->where('version_id', '!=', $version->version_id)
-                ->update(['status' => StandardVersion::STATUS_ARCHIVED]);
+        // إقرار الإصدار فقط دون التأثير على الإصدار النشط الحالي
+        $version->status = StandardVersion::STATUS_APPROVED;
+        $version->save();
 
-            // إقرار الإصدار
-            $version->status = StandardVersion::STATUS_APPROVED;
-            $version->save();
+        return $version;
+    }
+
+    /**
+     * تنشيط إصدار معياري وأرشفة الإصدار النشط القديم تلقائيًا داخل معاملة ذرية (ضابط G-23).
+     *
+     * @param StandardVersion $version
+     * @return StandardVersion
+     */
+    public function activateVersion(StandardVersion $version): StandardVersion
+    {
+        return DB::transaction(function () use ($version) {
+            $auditLogger = app(AuditLoggerService::class);
+
+            // أرشفة أي إصدار نشط (Active) سابق تلقائيًا داخل المعاملة
+            $activeVersions = StandardVersion::where('status', StandardVersion::STATUS_ACTIVE)
+                ->where('version_id', '!=', $version->version_id)
+                ->get();
+
+            foreach ($activeVersions as $prev) {
+                $oldStatus = $prev->status;
+                $prev->status = StandardVersion::STATUS_ARCHIVED;
+                $prev->saveQuietly();
+
+                $auditLogger->log(
+                    action: AuditLoggerService::ACTION_STANDARD_VERSION_AUTO_ARCHIVED,
+                    targetType: 'StandardVersion',
+                    targetId: $prev->version_id,
+                    oldValues: ['status' => $oldStatus, 'version_no' => $prev->version_no],
+                    newValues: ['status' => StandardVersion::STATUS_ARCHIVED, 'version_no' => $prev->version_no],
+                );
+            }
+
+            // تنشيط الإصدار المطلوب
+            $oldVersionStatus = $version->status;
+            $version->status = StandardVersion::STATUS_ACTIVE;
+            $version->saveQuietly();
+
+            $auditLogger->log(
+                action: AuditLoggerService::ACTION_STANDARD_VERSION_ACTIVATED,
+                targetType: 'StandardVersion',
+                targetId: $version->version_id,
+                oldValues: ['status' => $oldVersionStatus, 'version_no' => $version->version_no],
+                newValues: ['status' => StandardVersion::STATUS_ACTIVE, 'version_no' => $version->version_no],
+            );
 
             return $version;
         });

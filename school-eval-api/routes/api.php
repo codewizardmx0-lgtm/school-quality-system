@@ -22,9 +22,14 @@ Route::prefix('v1')->group(function () {
     // مسارات المصادقة العامة (Public Auth Routes)
     // --------------------------------------------------------------------------
     Route::prefix('auth')->group(function () {
-        Route::post('/login', [AuthController::class, 'login'])->name('api.v1.auth.login');
-        Route::post('/password/forgot', [\App\Http\Controllers\Api\V1\PasswordResetController::class, 'forgotPassword'])->name('api.v1.auth.password.forgot');
-        Route::post('/password/reset', [\App\Http\Controllers\Api\V1\PasswordResetController::class, 'resetPassword'])->name('api.v1.auth.password.reset');
+        Route::post('/login', [AuthController::class, 'login'])
+            ->middleware('throttle:auth.login')
+            ->name('api.v1.auth.login');
+        Route::post('/password/forgot', [\App\Http\Controllers\Api\V1\PasswordResetController::class, 'forgotPassword'])
+            ->middleware('throttle:auth.password.forgot')
+            ->name('api.v1.auth.password.forgot');
+        Route::post('/password/reset', [\App\Http\Controllers\Api\V1\PasswordResetController::class, 'resetPassword'])
+            ->name('api.v1.auth.password.reset');
     });
 
     // --------------------------------------------------------------------------
@@ -36,7 +41,9 @@ Route::prefix('v1')->group(function () {
         Route::prefix('auth')->group(function () {
             Route::post('/logout', [AuthController::class, 'logout'])->name('api.v1.auth.logout');
             Route::get('/me', [AuthController::class, 'me'])->name('api.v1.auth.me');
-            Route::post('/password/change', [AuthController::class, 'changePassword'])->name('api.v1.auth.password.change');
+            Route::post('/password/change', [AuthController::class, 'changePassword'])
+                ->middleware('throttle:auth.password.change')
+                ->name('api.v1.auth.password.change');
         });
 
         // سجل التدقيق للعمليات الحساسة (Audit Logs)
@@ -82,6 +89,7 @@ Route::prefix('v1')->group(function () {
             Route::post('/{id}/clone', [\App\Http\Controllers\Api\V1\StandardManagementController::class, 'clone'])->name('api.v1.standard-versions.clone');
             Route::put('/{id}/weights', [\App\Http\Controllers\Api\V1\StandardManagementController::class, 'updateWeights'])->name('api.v1.standard-versions.weights.update');
             Route::post('/{id}/approve', [\App\Http\Controllers\Api\V1\StandardManagementController::class, 'approve'])->name('api.v1.standard-versions.approve');
+            Route::post('/{id}/activate', [\App\Http\Controllers\Api\V1\StandardManagementController::class, 'activate'])->name('api.v1.standard-versions.activate');
             Route::post('/{id}/archive', [\App\Http\Controllers\Api\V1\StandardManagementController::class, 'archive'])->name('api.v1.standard-versions.archive');
             Route::post('/{id}/standards', [\App\Http\Controllers\Api\V1\StandardManagementController::class, 'storeStandard'])->name('api.v1.standard-versions.standards.store');
         });
