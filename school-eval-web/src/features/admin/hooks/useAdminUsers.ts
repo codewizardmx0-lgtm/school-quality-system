@@ -103,6 +103,7 @@ export function useAdminUsers() {
         roleFilter === 'الكل' ||
         roleFilter === 'all' ||
         u.roleName === roleFilter ||
+        u.roleNameAr === roleFilter ||
         String(u.roleId) === roleFilter ||
         u.roleCode === roleFilter ||
         formatRoleNameAr(u.roleName) === roleFilter;

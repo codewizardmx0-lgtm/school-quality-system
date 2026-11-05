@@ -107,7 +107,7 @@ export const UsersManagement: React.FC<UsersManagementProps> = ({ onNavigate, ad
       u.username,
       u.email,
       u.userType === 'school' ? 'مدرسة' : u.userType === 'ministry' ? 'مشرف وزاري' : 'إدارة النظام',
-      formatRoleNameAr(u.roleName),
+      u.roleNameAr || formatRoleNameAr(u.roleName),
       u.schoolName ? `${u.schoolName} (${u.schoolCode})` : u.directorate || 'المركز الرئيسي',
       u.status === 'Active' ? 'نشط' : 'معطل',
       formatRelativeArabic(u.lastActivity),
@@ -379,7 +379,7 @@ export const UsersManagement: React.FC<UsersManagementProps> = ({ onNavigate, ad
             {roles && roles.length > 0
               ? roles.map((r) => (
                   <option key={r.roleId || r.roleName} value={r.roleName}>
-                    {formatRoleNameAr(r.roleName)} ({r.roleCode || r.roleName})
+                    {r.roleNameAr || formatRoleNameAr(r.roleName)} ({r.roleCode || r.roleName})
                   </option>
                 ))
               : Array.from(new Set(users.map((u) => u.roleName).filter(Boolean))).map((rName) => (
@@ -572,7 +572,7 @@ export const UsersManagement: React.FC<UsersManagementProps> = ({ onNavigate, ad
 
                     {/* Role */}
                     <td style={{ padding: '14px 16px' }}>
-                      <StatusBadge variant={roleBadgeVariant} label={formatRoleNameAr(user.roleName)} size="md" />
+                      <StatusBadge variant={roleBadgeVariant} label={user.roleNameAr || formatRoleNameAr(user.roleName)} size="md" />
                     </td>
 
                     {/* Affiliation */}

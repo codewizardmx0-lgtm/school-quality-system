@@ -88,7 +88,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate, addT
 
 2. سلامة الحسابات ومستخدمي الميدان:
    - إجمالي المستخدمين المسجلين: ${stats?.totalUsers ?? '---'} حساباً
-   - المستخدمين المتصلين / النشطين: ${stats?.activeUsers ?? '---'} مستخدماً
+   - الحسابات المفعلة والنشطة: ${stats?.activeUsers ?? '---'} حساباً مفعلاً
    - مؤشر استقرار الحسابات: ${stats?.securityIndex ?? 100}%
 
 3. مؤشر النزاهة والأمان الرقمي:

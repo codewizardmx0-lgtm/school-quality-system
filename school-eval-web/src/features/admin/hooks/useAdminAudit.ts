@@ -8,7 +8,7 @@ import { auditApi } from '../api/auditApi';
 import { usersApi } from '../api/usersApi';
 import { downloadEncryptedLog } from '../utils/exportUtils';
 import { formatArabicDateTime } from '../utils/dateUtils';
-import type { AuditLogEntry, BlockedIp } from '../types/admin.types';
+import type { AuditLogEntry, BlockedIp, User } from '../types/admin.types';
 
 export const AUDIT_EVENT_LABELS: Record<string, string> = {
   'auth.login_success': 'تسجيل دخول ناجح',
@@ -25,11 +25,18 @@ export const AUDIT_EVENT_LABELS: Record<string, string> = {
   'evidence.unlinked': 'فك ارتباط شواهد',
   'standard_version.activated': 'تفعيل وثيقة معايير',
   'standard_version.auto_archived': 'أرشفة وثيقة معايير تلقائيًا',
+  'school.created': 'تسجيل مدرسة جديدة',
+  'school.updated': 'تعديل بيانات مدرسة',
+  'school.assigned_principal': 'إسناد مدير لمدرسة',
+  'school.unassigned_principal': 'فك ارتباط مدير عن مدرسة',
+  'school.assigned_evaluator': 'إسناد مقيم جودة للمدرسة',
+  'school.unassigned_evaluator': 'فك ارتباط مقيم عن مدرسة',
 };
 
 export function useAdminAudit() {
   const [logs, setLogs] = useState<AuditLogEntry[]>([]);
   const [blockedIps, setBlockedIps] = useState<BlockedIp[]>([]);
+  const [rawUsers, setRawUsers] = useState<User[]>([]);
   const [usersList, setUsersList] = useState<string[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -49,21 +56,34 @@ export function useAdminAudit() {
     let ignore = false;
     usersApi.getUsers().then((res) => {
       if (!ignore && res.data) {
+        setRawUsers(res.data);
         setUsersList(res.data.map((u) => u.fullName).filter(Boolean));
       }
     }).catch(() => {});
     return () => { ignore = true; };
   }, []);
 
+  const handleActionTypeChange = useCallback((newType: string) => {
+    setActionType(newType);
+    setCurrentPage(1);
+  }, []);
+
+  const handleActorChange = useCallback((newActor: string) => {
+    setActor(newActor);
+    setCurrentPage(1);
+  }, []);
+
   const fetchData = useCallback(async (page: number = currentPage) => {
     setLoading(true);
     setError(null);
     try {
+      const selectedUser = actor !== 'الكل' ? rawUsers.find((u) => u.fullName === actor) : null;
       const [logsRes, ipsRes] = await Promise.all([
         auditApi.getAuditLogs({
           actionType: actionType !== 'الكل' ? actionType : undefined,
+          userId: selectedUser ? selectedUser.userId : undefined,
           page,
-          perPage: 25,
+          perPage: 15,
         }),
         auditApi.getBlockedIps(),
       ]);
@@ -71,7 +91,7 @@ export function useAdminAudit() {
         setLogs(logsRes.data);
         if (logsRes.meta) {
           const m = logsRes.meta as any;
-          setCurrentPage(m.currentPage ?? m.current_page ?? page);
+          setCurrentPage(m.currentPage ?? m.current_page ?? m.page ?? page);
           setTotalPages(m.lastPage ?? m.last_page ?? 1);
           setTotalCount(m.total ?? logsRes.data.length);
         } else {
@@ -84,7 +104,7 @@ export function useAdminAudit() {
     } finally {
       setLoading(false);
     }
-  }, [actionType, currentPage]);
+  }, [actionType, actor, currentPage, rawUsers]);
 
   useEffect(() => {
     void fetchData();
@@ -186,9 +206,9 @@ export function useAdminAudit() {
     loading,
     error,
     actionType,
-    setActionType,
+    setActionType: handleActionTypeChange,
     actor,
-    setActor,
+    setActor: handleActorChange,
     timeScope,
     setTimeScope,
     currentPage,

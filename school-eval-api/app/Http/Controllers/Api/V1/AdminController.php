@@ -6,6 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Http\Resources\SchoolResource;
 use App\Http\Resources\UserResource;
 use App\Http\Responses\ApiResponse;
+use App\Models\AuditLog;
+use App\Services\AuditLoggerService;
 use App\Models\Role;
 use App\Models\School;
 use App\Models\User;
@@ -405,132 +407,111 @@ class AdminController extends Controller
      */
     public function auditLogs(Request $request): JsonResponse
     {
-        $defaultLogs = [
-            [
-                'logId'          => 1,
-                'timestamp'      => '2026-11-02T08:42:00Z',
-                'actorUserId'    => 2,
-                'actorName'      => 'د. خالد الرازحي',
-                'actorRole'      => 'مسؤول إدارة المرجعية',
-                'actorRoleCode'  => 'A3',
-                'eventType'      => 'قفل وثيقة معايير',
-                'eventCategory'  => 'sensitive',
-                'description'    => 'قفل وثيقة المعايير الوطنية للمرحلة الثانوية - الإصدار 3.2 • توليد البصمة الرقمية: SHA-8f9c2e1b',
-                'digitalHash'    => 'SHA-8f9c2e1b',
-                'ipAddress'      => '192.168.10.45',
-                'location'       => 'صنعاء، اليمن',
-                'deviceInfo'     => 'Chrome OS • متصفح Chrome 118',
-                'securityStatus' => 'verified',
-            ],
-            [
-                'logId'          => 2,
-                'timestamp'      => '2026-11-02T08:15:00Z',
-                'actorUserId'    => 3,
-                'actorName'      => 'أ. عبدالرحمن الشامي',
-                'actorRole'      => 'مسؤول إدارة المرجعية',
-                'actorRoleCode'  => 'A3',
-                'eventType'      => 'إصدار طلب استكمال',
-                'eventCategory'  => 'normal',
-                'description'    => 'إرسال طلب استكمال بيانات التقييم الذاتي لمدرسة الأمل الثانوية (SCH-101)',
-                'digitalHash'    => 'SHA-3a2b1c9d',
-                'ipAddress'      => '192.168.10.31',
-                'location'       => 'صنعاء، اليمن',
-                'deviceInfo'     => 'Windows 11 • متصفح Edge 118',
-                'securityStatus' => 'verified',
-            ],
-            [
-                'logId'          => 3,
-                'timestamp'      => '2026-11-02T07:58:00Z',
-                'actorUserId'    => 5,
-                'actorName'      => 'أحمد محمد الحربي',
-                'actorRole'      => 'مستخدم التقييم بالمدرسة',
-                'actorRoleCode'  => 'S1',
-                'eventType'      => 'رفع مخرج نهائي',
-                'eventCategory'  => 'normal',
-                'description'    => 'رفع مخرج التقييم النهائي لمدرسة الأمل الثانوية - الدورة الثالثة 2026 • حجم الملف: 4.2 MB',
-                'digitalHash'    => 'SHA-f1e2d3c4',
-                'ipAddress'      => '197.32.45.12',
-                'location'       => 'صنعاء، اليمن',
-                'deviceInfo'     => 'macOS 14 • Safari 17',
-                'securityStatus' => 'verified',
-            ],
-            [
-                'logId'          => 4,
-                'timestamp'      => '2026-11-02T06:33:00Z',
-                'actorUserId'    => 0,
-                'actorName'      => 'حساب مجهول',
-                'actorRole'      => 'غير معروف',
-                'actorRoleCode'  => '---',
-                'eventType'      => 'فشل تسجيل دخول',
-                'eventCategory'  => 'breach',
-                'description'    => 'محاولة دخول غير مصرح بها (3 محاولات متكررة) • تم حظر عنوان IP تلقائياً بواسطة منظومة الحماية',
-                'digitalHash'    => 'SHA-0a0b0c0d',
-                'ipAddress'      => '45.139.210.88',
-                'location'       => 'موسكو، روسيا',
-                'deviceInfo'     => 'Linux • Python Requests 2.31',
-                'securityStatus' => 'blocked',
-            ],
-            [
-                'logId'          => 5,
-                'timestamp'      => '2026-11-02T05:10:00Z',
-                'actorUserId'    => 1,
-                'actorName'      => 'المهندس عادل ناصر',
-                'actorRole'      => 'مدير النظام المركزي',
-                'actorRoleCode'  => 'SYS',
-                'eventType'      => 'تعديل صلاحية حساب',
-                'eventCategory'  => 'sensitive',
-                'description'    => 'تعديل صلاحيات حساب المستخدم (ID:26) - تعليق مؤقت للحساب • السبب: انتهاء صلاحية التفويض الوزاري',
-                'digitalHash'    => 'SHA-9e8d7c6b',
-                'ipAddress'      => '192.168.1.1',
-                'location'       => 'صنعاء، اليمن',
-                'deviceInfo'     => 'Windows Server 2022 • Chrome 118',
-                'securityStatus' => 'verified',
-            ],
-            [
-                'logId'          => 6,
-                'timestamp'      => '2026-11-02T04:55:00Z',
-                'actorUserId'    => 4,
-                'actorName'      => 'عمار عمر عبدالله',
-                'actorRole'      => 'مدير النظام المركزي',
-                'actorRoleCode'  => 'SYS',
-                'eventType'      => 'إنشاء نسخة احتياطية',
-                'eventCategory'  => 'normal',
-                'description'    => 'تنفيذ النسخة الاحتياطية الليلية التلقائية الكاملة • الحجم: 3.85 GB • الحالة: مكتملة بنجاح',
-                'digitalHash'    => 'SHA-a1b2c3d4',
-                'ipAddress'      => '127.0.0.1',
-                'location'       => 'صنعاء، اليمن',
-                'deviceInfo'     => 'مهمة مجدولة (Cron Job)',
-                'securityStatus' => 'verified',
-            ],
+        $actionDescriptions = [
+            AuditLoggerService::ACTION_LOGIN_SUCCESS                 => 'تسجيل دخول ناجح إلى المنصة',
+            AuditLoggerService::ACTION_LOGIN_FAILED                  => 'محاولة دخول غير مصرح بها أو كلمة مرور خاطئة',
+            AuditLoggerService::ACTION_LOGOUT                        => 'تسجيل خروج نظامي من الحساب',
+            AuditLoggerService::ACTION_PASSWORD_CHANGED              => 'تغيير كلمة المرور الخاصة بالمستخدم',
+            AuditLoggerService::ACTION_EVALUATION_SCORED             => 'رصد درجة تقييم لمؤشر معايير الجودة',
+            AuditLoggerService::ACTION_EVALUATION_SUBMITTED          => 'رفع ملف التقييم الذاتي للاعتماد الوزاري',
+            AuditLoggerService::ACTION_EVALUATION_DIRECT_CLOSED      => 'إغلاق واعتماد التقييم مباشرة من المشرف الوزاري',
+            AuditLoggerService::ACTION_COMPLETION_CREATED            => 'إصدار طلب استكمال نواقص وشواهد المدرسة',
+            AuditLoggerService::ACTION_COMPLETION_DEADLINE_EXTENDED  => 'تمديد المهلة الزمنية لطلب الاستكمال',
+            AuditLoggerService::ACTION_COMPLETION_RESUBMITTED        => 'إعادة تسليم متطلبات الاستكمال من مسؤول الجودة',
+            AuditLoggerService::ACTION_COMPLETION_CLOSED             => 'إغلاق واعتماد ملف الاستكمال بعد التدقيق',
+            AuditLoggerService::ACTION_EVIDENCE_UNLINKED             => 'فك ارتباط وثيقة شاهد عن مؤشر المعايير',
+            AuditLoggerService::ACTION_STANDARD_VERSION_ACTIVATED    => 'تفعيل وسريان وثيقة المعايير الوطنية رسمياً',
+            AuditLoggerService::ACTION_STANDARD_VERSION_AUTO_ARCHIVED=> 'أرشفة تلقائية لإصدار معايير سابق',
+            'school.created'                                         => 'تسجيل مدرسة جديدة وتحديد نطاقها التعليمي',
+            'school.updated'                                         => 'تحديث البيانات الأساسية للمدرسة',
+            'school.assigned_principal'                              => 'إسناد مدير معتمد للمدرسة',
+            'school.unassigned_principal'                            => 'فك ارتباط مدير المدرسة',
+            'school.assigned_evaluator'                              => 'إسناد مقيم جودة للمدرسة',
+            'school.unassigned_evaluator'                            => 'فك ارتباط مقيم الجودة عن المدرسة',
         ];
 
-        $logs = Cache::get('admin_audit_logs', $defaultLogs);
+        $arabicRoles = [
+            'admin'                      => 'مدير النظام المركزي',
+            'school_evaluator'           => 'مقيم المدرسة',
+            'school_principal'           => 'مدير المدرسة',
+            'ministry_standards_manager' => 'مسؤول إدارة المعايير',
+            'ministry_supervisor'        => 'مشرف وزاري معتمد',
+        ];
 
-        // فلترة بالنوع
+        $roleCodes = [
+            'admin'                      => 'SYS',
+            'school_evaluator'           => 'S1',
+            'school_principal'           => 'P1',
+            'ministry_standards_manager' => 'M2',
+            'ministry_supervisor'        => 'A3',
+        ];
+
+        $query = AuditLog::with(['user.roles', 'school'])->orderBy('log_id', 'desc');
+
         if ($request->has('actionType') && $request->query('actionType') !== 'الكل') {
             $type = $request->query('actionType');
-            $logs = array_values(array_filter($logs, fn($l) => $l['eventType'] === $type || $l['eventCategory'] === $type));
+            $query->where('action', $type);
         }
 
-        // فلترة بالمستخدم
-        if ($request->has('userId')) {
-            $uId = (int) $request->query('userId');
-            $logs = array_values(array_filter($logs, fn($l) => $l['actorUserId'] === $uId));
+        if ($request->has('userId') && $request->query('userId') !== 'الكل' && !empty($request->query('userId'))) {
+            $query->where('user_id', (int) $request->query('userId'));
         }
 
-        $page = (int) $request->query('page', 1);
-        $perPage = (int) $request->query('perPage', 20);
-        $total = count($logs);
-        $sliced = array_slice($logs, ($page - 1) * $perPage, $perPage);
+        $total = $query->count();
+        $page = max(1, (int) $request->query('page', 1));
+        $perPage = max(1, (int) $request->query('perPage', 20));
+
+        if ($total > 0) {
+            $dbLogs = $query->skip(($page - 1) * $perPage)->take($perPage)->get();
+            $logs = $dbLogs->map(function ($log) use ($actionDescriptions, $arabicRoles, $roleCodes) {
+                $role = $log->user?->roles?->first();
+                $rName = $role?->role_name ?? '';
+                $isBreach = str_contains($log->action, 'failed') || str_contains($log->action, 'breach');
+                $isSensitive = str_contains($log->action, 'password') || str_contains($log->action, 'activated') || str_contains($log->action, 'closed') || str_contains($log->action, 'assigned');
+
+                $desc = $actionDescriptions[$log->action] ?? ("عملية {$log->action} على النظام");
+                if ($log->school) {
+                    $desc .= " • مدرسة {$log->school->school_name}";
+                }
+
+                return [
+                    'logId'          => $log->log_id,
+                    'timestamp'      => $log->created_at?->toIso8601ZuluString() ?? now()->toIso8601ZuluString(),
+                    'actorUserId'    => $log->user_id ?? 0,
+                    'actorName'      => $log->user?->full_name ?? ($log->user?->username ?? 'حساب غير معروف'),
+                    'actorRole'      => $arabicRoles[$rName] ?? ($rName ?: 'غير محدد'),
+                    'actorRoleCode'  => $roleCodes[$rName] ?? ($log->user?->user_type === 'system' ? 'SYS' : 'USR'),
+                    'eventType'      => $log->action,
+                    'eventCategory'  => $isBreach ? 'breach' : ($isSensitive ? 'sensitive' : 'normal'),
+                    'description'    => $desc,
+                    'digitalHash'    => 'SHA-' . substr(hash('sha256', "{$log->log_id}-{$log->action}-{$log->created_at}"), 0, 8),
+                    'ipAddress'      => $log->ip_address ?: '127.0.0.1',
+                    'location'       => 'صنعاء، اليمن',
+                    'deviceInfo'     => $log->user_agent ?: 'Chrome • Windows',
+                    'securityStatus' => $isBreach ? 'blocked' : 'verified',
+                ];
+            })->toArray();
+
+            return ApiResponse::success(
+                data: $logs,
+                message: null,
+                meta: [
+                    'page'     => $page,
+                    'perPage'  => $perPage,
+                    'total'    => $total,
+                    'lastPage' => (int) ceil($total / $perPage),
+                ]
+            );
+        }
 
         return ApiResponse::success(
-            data: $sliced,
+            data: [],
             message: null,
             meta: [
-                'page'     => $page,
+                'page'     => 1,
                 'perPage'  => $perPage,
-                'total'    => $total,
-                'lastPage' => (int) ceil($total / max(1, $perPage)),
+                'total'    => 0,
+                'lastPage' => 1,
             ]
         );
     }

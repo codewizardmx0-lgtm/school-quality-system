@@ -282,7 +282,7 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
               >
                 {filteredRoles.map((r) => (
                   <option key={r.roleId} value={r.roleId}>
-                    {formatRoleNameAr(r.roleName, r.description)}
+                    {r.roleNameAr || formatRoleNameAr(r.roleName, r.description)}
                   </option>
                 ))}
               </select>

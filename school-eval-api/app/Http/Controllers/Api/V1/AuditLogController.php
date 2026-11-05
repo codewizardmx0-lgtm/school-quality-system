@@ -48,13 +48,15 @@ class AuditLogController extends Controller
         }
 
         // فلترة بنوع العملية
-        if ($request->filled('action')) {
-            $query->where('action', (string) $request->input('action'));
+        $action = $request->input('action') ?? $request->input('actionType');
+        if ($action && $action !== 'الكل') {
+            $query->where('action', (string) $action);
         }
 
         // فلترة بالمستخدم المنفذ
-        if ($request->filled('user_id')) {
-            $query->where('user_id', (int) $request->input('user_id'));
+        $userId = $request->input('user_id') ?? $request->input('userId');
+        if ($userId && $userId !== 'الكل') {
+            $query->where('user_id', (int) $userId);
         }
 
         // فلترة بنوع الكيان المستهدف

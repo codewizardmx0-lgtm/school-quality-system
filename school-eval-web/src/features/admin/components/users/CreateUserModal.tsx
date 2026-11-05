@@ -243,7 +243,7 @@ export const CreateUserModal: React.FC<CreateUserModalProps> = ({ isOpen, onClos
               <select style={inputStyle()} value={form.roleId} onChange={(e) => handleChange('roleId', Number(e.target.value))}>
                 {filteredRoles.map((r) => (
                   <option key={r.roleId} value={r.roleId}>
-                    {formatRoleNameAr(r.roleName, r.description)}
+                    {r.roleNameAr || formatRoleNameAr(r.roleName, r.description)}
                   </option>
                 ))}
               </select>

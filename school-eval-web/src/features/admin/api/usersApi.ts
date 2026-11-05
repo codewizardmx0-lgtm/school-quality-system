@@ -38,6 +38,7 @@ export const usersApi = {
             status: u.status ?? 'Active',
             roleId: u.roleId ?? firstRole?.roleId ?? 1,
             roleName: u.roleName ?? firstRole?.roleName ?? '',
+            roleNameAr: u.roleNameAr ?? firstRole?.roleNameAr ?? '',
             roleCode: u.roleCode ?? (u.userType === 'system' ? 'SYS' : u.userType === 'ministry' ? 'B2' : 'S1'),
             schoolId: u.schoolId ?? u.school?.schoolId ?? null,
             schoolName: u.schoolName ?? u.school?.schoolName ?? null,

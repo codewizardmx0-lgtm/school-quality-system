@@ -88,6 +88,7 @@ export interface User {
   status: AccountStatus;
   roleId: number;
   roleName: string;
+  roleNameAr?: string;
   roleCode: string;
   schoolId: number | null;
   schoolName: string | null;
