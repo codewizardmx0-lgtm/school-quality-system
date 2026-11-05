@@ -152,6 +152,9 @@ class UserController extends Controller
         DB::transaction(function () use ($targetUser, $data) {
             $fields = [];
 
+            if (isset($data['username'])) {
+                $fields['username'] = $data['username'];
+            }
             if (isset($data['fullName'])) {
                 $fields['full_name'] = $data['fullName'];
             }

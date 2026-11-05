@@ -1,5 +1,5 @@
-﻿import React from 'react';
-import { MapPin, Plus, Check } from 'lucide-react';
+import React from 'react';
+import { MapPin, Plus, Check, Edit2, Trash2 } from 'lucide-react';
 import { theme } from '../../theme';
 import type { Directorate } from '../../types/admin.types';
 
@@ -8,6 +8,8 @@ interface DirectorateSidebarProps {
   selectedDirectorateId: number | null;
   onSelect: (id: number | null) => void;
   onAddDirectorate: () => void;
+  onEditDirectorate?: (directorate: Directorate) => void;
+  onDeleteDirectorate?: (directorate: Directorate) => void;
   isMobile?: boolean;
 }
 
@@ -16,6 +18,8 @@ export const DirectorateSidebar: React.FC<DirectorateSidebarProps> = ({
   selectedDirectorateId,
   onSelect,
   onAddDirectorate,
+  onEditDirectorate,
+  onDeleteDirectorate,
   isMobile = false,
 }) => {
   const totalSchools = directorates.reduce((acc, d) => acc + d.schoolCount, 0);
@@ -23,8 +27,8 @@ export const DirectorateSidebar: React.FC<DirectorateSidebarProps> = ({
   return (
     <div
       style={{
-        width: isMobile ? '100%' : '280px',
-        maxWidth: isMobile ? '100%' : '280px',
+        width: isMobile ? '100%' : '300px',
+        maxWidth: isMobile ? '100%' : '300px',
         flexShrink: 0,
         backgroundColor: theme.colors.neutral.white,
         borderRadius: theme.radii.xl,
@@ -45,15 +49,15 @@ export const DirectorateSidebar: React.FC<DirectorateSidebarProps> = ({
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: theme.colors.neutral[800], fontWeight: 700, fontSize: theme.typography.fontSizes.sm }}>
           <MapPin size={16} color="#4F46E5" />
-          <span>التوزيع الجغرافي (أمانة العاصمة)</span>
+          <span>التوزيع الجغرافي والمديريات</span>
         </div>
         <p style={{ fontSize: '0.75rem', color: theme.colors.neutral[500], marginTop: '4px' }}>
-          اختر المديرية لتصفية المدارس التابعة:
+          إدارة وتصفية المدارس بحسب المديرية:
         </p>
       </div>
 
       {/* Directorate List */}
-      <div style={{ flex: 1, maxHeight: isMobile ? '180px' : '480px', overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '8px' }}>
+      <div style={{ flex: 1, maxHeight: isMobile ? '220px' : '520px', overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '8px' }}>
         {/* All Directorates item */}
         <button
           onClick={() => onSelect(null)}
@@ -94,12 +98,12 @@ export const DirectorateSidebar: React.FC<DirectorateSidebarProps> = ({
         {directorates.map((d) => {
           const isSelected = selectedDirectorateId === d.directorateId;
           return (
-            <button
+            <div
               key={d.directorateId}
               onClick={() => onSelect(d.directorateId)}
               style={{
                 width: '100%',
-                padding: '10px 14px',
+                padding: '8px 12px',
                 borderRadius: theme.radii.lg,
                 border: 'none',
                 backgroundColor: isSelected ? '#EEF2FF' : 'transparent',
@@ -114,41 +118,80 @@ export const DirectorateSidebar: React.FC<DirectorateSidebarProps> = ({
                 fontWeight: isSelected ? 700 : 500,
                 transition: 'background-color 0.15s ease',
                 textAlign: 'right',
+                boxSizing: 'border-box',
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                {isSelected && <Check size={14} color="#4F46E5" />}
-                <span>{d.directorateName}</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', overflow: 'hidden' }}>
+                {isSelected && <Check size={14} color="#4F46E5" style={{ flexShrink: 0 }} />}
+                <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{d.directorateName}</span>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
                 <span
                   style={{
-                    padding: '2px 8px',
+                    padding: '2px 6px',
                     borderRadius: '9999px',
                     backgroundColor: isSelected ? '#C7D2FE' : theme.colors.neutral[100],
                     color: isSelected ? '#3730A3' : theme.colors.neutral[600],
-                    fontSize: '0.7rem',
+                    fontSize: '0.65rem',
                     fontWeight: 600,
                   }}
                 >
-                  {d.schoolCount} مدارس
+                  {d.schoolCount}
                 </span>
-                {isSelected && (
-                  <span
-                    style={{
-                      padding: '2px 6px',
-                      borderRadius: '4px',
-                      backgroundColor: '#4F46E5',
-                      color: '#fff',
-                      fontSize: '0.65rem',
-                      fontWeight: 700,
+
+                {onEditDirectorate && (
+                  <button
+                    type="button"
+                    title="تعديل المديرية"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onEditDirectorate(d);
                     }}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: '#64748B',
+                      cursor: 'pointer',
+                      padding: '3px',
+                      borderRadius: '4px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.color = '#4F46E5')}
+                    onMouseLeave={(e) => (e.currentTarget.style.color = '#64748B')}
                   >
-                    عرض
-                  </span>
+                    <Edit2 size={13} />
+                  </button>
+                )}
+
+                {onDeleteDirectorate && (
+                  <button
+                    type="button"
+                    title="حذف المديرية"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDeleteDirectorate(d);
+                    }}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: '#64748B',
+                      cursor: 'pointer',
+                      padding: '3px',
+                      borderRadius: '4px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.color = '#EF4444')}
+                    onMouseLeave={(e) => (e.currentTarget.style.color = '#64748B')}
+                  >
+                    <Trash2 size={13} />
+                  </button>
                 )}
               </div>
-            </button>
+            </div>
           );
         })}
       </div>

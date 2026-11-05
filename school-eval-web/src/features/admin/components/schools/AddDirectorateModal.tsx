@@ -1,14 +1,15 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, MapPin } from 'lucide-react';
 import { theme } from '../../theme';
 import { schoolsApi } from '../../api/schoolsApi';
-import type { AddDirectorateDto } from '../../types/admin.types';
+import type { AddDirectorateDto, Directorate } from '../../types/admin.types';
 
 interface AddDirectorateModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: () => void;
   addToast: (type: 'success' | 'error', msg: string) => void;
+  directorateToEdit?: Directorate | null;
 }
 
 export const AddDirectorateModal: React.FC<AddDirectorateModalProps> = ({
@@ -16,13 +17,31 @@ export const AddDirectorateModal: React.FC<AddDirectorateModalProps> = ({
   onClose,
   onSuccess,
   addToast,
+  directorateToEdit = null,
 }) => {
+  const isEditing = Boolean(directorateToEdit);
+
   const [form, setForm] = useState<AddDirectorateDto>({
     directorateName: '',
     governorate: 'أمانة العاصمة',
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (directorateToEdit) {
+      setForm({
+        directorateName: directorateToEdit.directorateName,
+        governorate: directorateToEdit.governorate || 'أمانة العاصمة',
+      });
+    } else {
+      setForm({
+        directorateName: '',
+        governorate: 'أمانة العاصمة',
+      });
+    }
+    setError('');
+  }, [directorateToEdit, isOpen]);
 
   if (!isOpen) return null;
 
@@ -34,8 +53,13 @@ export const AddDirectorateModal: React.FC<AddDirectorateModalProps> = ({
     }
     setLoading(true);
     try {
-      await schoolsApi.addDirectorate(form);
-      addToast('success', `تمت تهيئة "${form.directorateName}" بنجاح في النظام`);
+      if (isEditing && directorateToEdit) {
+        await schoolsApi.updateDirectorate(directorateToEdit.directorateId, form);
+        addToast('success', `تم تعديل بيانات "${form.directorateName}" بنجاح`);
+      } else {
+        await schoolsApi.addDirectorate(form);
+        addToast('success', `تمت تهيئة "${form.directorateName}" بنجاح في النظام`);
+      }
       onSuccess();
       onClose();
     } catch (err: any) {
@@ -43,7 +67,8 @@ export const AddDirectorateModal: React.FC<AddDirectorateModalProps> = ({
         const firstError = Object.values(err.errors)[0];
         setError(Array.isArray(firstError) ? firstError[0] : String(firstError));
       } else {
-        addToast('error', err?.message || 'فشل في إضافة المديرية، يرجى المحاولة لاحقاً');
+        setError(err?.message || (isEditing ? 'فشل تعديل المديرية' : 'فشل إضافة المديرية'));
+        addToast('error', err?.message || (isEditing ? 'فشل تعديل المديرية' : 'فشل في إضافة المديرية، يرجى المحاولة لاحقاً'));
       }
     } finally {
       setLoading(false);
@@ -107,10 +132,10 @@ export const AddDirectorateModal: React.FC<AddDirectorateModalProps> = ({
             </div>
             <div>
               <h2 style={{ fontSize: theme.typography.fontSizes.base, fontWeight: theme.typography.fontWeights.bold, color: '#fff', margin: 0 }}>
-                تهيئة نطاق جغرافي / مديرية جديدة
+                {isEditing ? 'تعديل بيانات المديرية التعليمية' : 'تهيئة نطاق جغرافي / مديرية جديدة'}
               </h2>
               <p style={{ fontSize: theme.typography.fontSizes.xs, color: '#94A3B8', marginTop: '2px' }}>
-                إضافة نطاق جغرافي لتسكين المدارس المستقبلية
+                {isEditing ? 'تحديث مسمى ونطاق المديرية في النظام' : 'إضافة نطاق جغرافي لتسكين المدارس المستقبلية'}
               </p>
             </div>
           </div>
@@ -143,25 +168,25 @@ export const AddDirectorateModal: React.FC<AddDirectorateModalProps> = ({
                 boxSizing: 'border-box',
               }}
             />
-            {error && <p style={{ fontSize: '0.7rem', color: '#EF4444', marginTop: '3px' }}>{error}</p>}
+            {error && <p style={{ fontSize: '0.75rem', color: '#EF4444', marginTop: '4px', fontWeight: 600 }}>{error}</p>}
           </div>
 
           <div>
             <label style={{ fontSize: theme.typography.fontSizes.sm, fontWeight: 600, color: theme.colors.neutral[700], marginBottom: '4px', display: 'block' }}>
-              المحافظة
+              المحافظة *
             </label>
             <input
               value={form.governorate}
-              readOnly
+              onChange={(e) => setForm((prev) => ({ ...prev, governorate: e.target.value }))}
+              placeholder="مثال: أمانة العاصمة أو محافظة تعز..."
               style={{
                 width: '100%',
                 padding: '9px 12px',
                 borderRadius: theme.radii.lg,
                 border: `1px solid ${theme.colors.neutral[200]}`,
                 fontSize: theme.typography.fontSizes.sm,
-                backgroundColor: '#F1F5F9',
-                color: theme.colors.neutral[600],
-                cursor: 'not-allowed',
+                backgroundColor: theme.colors.neutral[50],
+                color: theme.colors.neutral[800],
                 fontFamily: theme.typography.fontFamily.sans,
                 boxSizing: 'border-box',
               }}
@@ -210,7 +235,7 @@ export const AddDirectorateModal: React.FC<AddDirectorateModalProps> = ({
                 fontFamily: theme.typography.fontFamily.sans,
               }}
             >
-              {loading ? 'جاري التهيئة...' : 'تهيئة المديرية ✓'}
+              {loading ? (isEditing ? 'جاري الحفظ...' : 'جاري التهيئة...') : (isEditing ? 'حفظ التعديلات ✓' : 'تهيئة المديرية ✓')}
             </button>
           </div>
         </form>

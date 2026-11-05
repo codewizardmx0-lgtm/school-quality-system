@@ -22,6 +22,7 @@ import {
 import { theme } from '../../theme';
 import { useAdminDashboard } from '../../hooks/useAdminDashboard';
 import { formatRelativeArabic } from '../../utils/dateUtils';
+import { schoolsApi } from '../../api/schoolsApi';
 import type { AdminScreen, School, BackupRecord } from '../../types/admin.types';
 
 // Modals for Zero Dead Buttons
@@ -65,60 +66,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate, addT
     (s) => !s.evaluatorName || s.evaluatorName.trim() === ''
   ).slice(0, 4);
 
-  // Handle Export PDF Report
-  const handleExportReport = () => {
-    const totalSchoolsCount = stats?.totalSchools ?? schools.length;
-    const readySchoolsCount = stats?.activeSchools ?? schools.filter((s) => s.isLinked).length;
-    const pendingSchoolsCount = schools.filter((s) => !s.evaluatorName || s.evaluatorName.trim() === '').length;
-    const completionRate = totalSchoolsCount > 0 ? Math.round((readySchoolsCount / totalSchoolsCount) * 100) : 100;
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
 
-    const reportContent = `
-================================================================================
-              منصة ارتقاء للتقييم الذاتي والتحسين المدرسي
-           التقرير التشغيلي التنفيذي الشامل - بوابة مسؤول النظام
-================================================================================
-تاريخ الإصدار: ${new Date().toLocaleDateString('ar-YE', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-حالة المنظومة: مستقرة وجاهزة بنسبة 100%
-
-1. مؤشرات الجاهزية والمدارس:
-   - إجمالي المدارس المسجلة: ${totalSchoolsCount} مدرسة
-   - المدارس الجاهزة والمكتملة: ${readySchoolsCount} مدرسة (${completionRate}%)
-   - المدارس بانتظار ربط منسق جودة: ${pendingSchoolsCount} مدارس
-   - المديريات التعليمية المغطاة: ${stats?.activeDirectoratesCount ?? '---'} مديريات
-
-2. سلامة الحسابات ومستخدمي الميدان:
-   - إجمالي المستخدمين المسجلين: ${stats?.totalUsers ?? '---'} حساباً
-   - الحسابات المفعلة والنشطة: ${stats?.activeUsers ?? '---'} حساباً مفعلاً
-   - مؤشر استقرار الحسابات: ${stats?.securityIndex ?? 100}%
-
-3. مؤشر النزاهة والأمان الرقمي:
-   - نسبة النزاهة المؤكدة: ${stats?.securityIndex ?? 100}%
-   - محاولات الوصول غير المصرح بها: 0 خروقات
-   - العناوين المحظورة وقائياً (IPs): ${stats?.blockedIpsCount ?? 3} عناوين
-   - تشفير قنوات الاتصال: TLS 1.3 نشط
-
-4. البنية التحتية والذكاء الاصطناعي:
-   - حالة البنية التحتية: ${stats?.infrastructureStatus ?? 'تشغيلية مستقرة'}
-   - خادم البريد والإشعارات: يعمل بكفاءة 100%
-   - النسخ الاحتياطي: ${stats?.lastBackupTime ? new Date(stats.lastBackupTime).toLocaleDateString('ar-YE') : 'منتظم ومفعل'}
-
-================================================================================
-تم إصدار هذا التقرير آلياً من بوابة الإدارة المركزية - منصة ارتقاء
-التوقيع الرقمي: SHA256:${Math.random().toString(36).substring(2, 15)}...
-================================================================================
-    `.trim();
-
-    const blob = new Blob([reportContent], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `Erteqa_Executive_Operations_Report_${new Date().toISOString().slice(0, 10)}.txt`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-
-    addToast('success', 'تم تصدير التقرير التنفيذي العام لعمليات المنظومة بنجاح');
+  // Handle Export Official PDF Report
+  const handleExportReport = async () => {
+    if (isExportingPdf) return;
+    setIsExportingPdf(true);
+    addToast('info', 'جاري إنشاء وتصدير التقرير التنفيذي الرسمي بتنسيق PDF...');
+    try {
+      await schoolsApi.downloadExecutivePdf();
+      addToast('success', 'تم استخراج وتنزيل التقرير التنفيذي الشامل (PDF) بنجاح');
+    } catch (err: any) {
+      console.error('Failed to export executive PDF report:', err);
+      addToast('error', err?.message || 'فشل في استخراج التقرير التنفيذي، يرجى المحاولة لاحقاً.');
+    } finally {
+      setIsExportingPdf(false);
+    }
   };
 
   const handleOpenLinkModal = (school: School) => {

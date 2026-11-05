@@ -92,6 +92,8 @@ Route::prefix('v1')->group(function () {
         Route::prefix('directorates')->group(function () {
             Route::get('/', [\App\Http\Controllers\Api\V1\AdminController::class, 'directorates'])->name('api.v1.directorates.index');
             Route::post('/', [\App\Http\Controllers\Api\V1\AdminController::class, 'storeDirectorate'])->name('api.v1.directorates.store');
+            Route::put('/{id}', [\App\Http\Controllers\Api\V1\AdminController::class, 'updateDirectorate'])->name('api.v1.directorates.update');
+            Route::delete('/{id}', [\App\Http\Controllers\Api\V1\AdminController::class, 'destroyDirectorate'])->name('api.v1.directorates.destroy');
         });
 
         Route::get('/admin/audit-logs', [\App\Http\Controllers\Api\V1\AdminController::class, 'auditLogs'])->name('api.v1.admin.audit-logs.index');
@@ -115,6 +117,7 @@ Route::prefix('v1')->group(function () {
 
         Route::prefix('admin')->group(function () {
             Route::get('/dashboard-stats', [\App\Http\Controllers\Api\V1\AdminController::class, 'dashboardStats'])->name('api.v1.admin.dashboard-stats');
+            Route::get('/export-report-pdf', [\App\Http\Controllers\Api\V1\AdminController::class, 'exportReportPdf'])->name('api.v1.admin.export-report-pdf');
         });
         // الإصدارات المعيارية وإدارة معايير الاعتماد المدرسي (Standard Versions Management - الشريحة 7)
         Route::prefix('standard-versions')->group(function () {

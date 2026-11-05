@@ -4,7 +4,7 @@
  * Conforms to conventions.md (§2, §3, §7, §8)
  */
 
-import { get, post, put } from '../../../api/apiClient';
+import { get, post, put, del } from '../../../api/apiClient';
 import type { ApiResponse } from '../../../api/apiTypes';
 import type {
   School,
@@ -167,5 +167,52 @@ export const schoolsApi = {
       console.warn('Backend add directorate failed, applying mock fallback:', error);
       return mockAdminService.createDirectorate(dto);
     }
+  },
+  /**
+   * Update an existing educational directorate
+   */
+  async updateDirectorate(id: number, dto: AddDirectorateDto): Promise<ApiResponse<Directorate>> {
+    return await put<Directorate>(`/directorates/${id}`, dto);
+  },
+
+  /**
+   * Delete an educational directorate (prevented if linked to schools)
+   */
+  async deleteDirectorate(id: number): Promise<ApiResponse<null>> {
+    return await del<null>(`/directorates/${id}`);
+  },
+
+  /**
+   * Download the official Executive Operations PDF report directly from backend mPDF engine
+   */
+  async downloadExecutivePdf(): Promise<void> {
+    const token =
+      localStorage.getItem('auth_token') ||
+      sessionStorage.getItem('school_eval_auth_token') ||
+      localStorage.getItem('school_eval_auth_token');
+
+    const baseURL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
+    const response = await fetch(`${baseURL}/admin/export-report-pdf`, {
+      method: 'GET',
+      headers: {
+        Authorization: token ? `Bearer ${token}` : '',
+        Accept: 'application/pdf',
+      },
+    });
+
+    if (!response.ok) {
+      const errorJson = await response.json().catch(() => null);
+      throw new Error(errorJson?.message || 'فشل تحميل تقرير PDF التنفيذي من الخادم.');
+    }
+
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `erteqa_executive_report_${new Date().toISOString().slice(0, 10)}.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
   },
 };

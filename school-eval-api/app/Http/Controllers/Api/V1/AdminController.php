@@ -315,14 +315,11 @@ class AdminController extends Controller
     }
 
     /**
-     * قائمة المديريات التعليمية وإحصاءات المدارس التابعة لها فعلياً من قاعدة البيانات.
+     * قائمة المديريات الافتراضية الثابتة للنظام.
      */
-    public function directorates(Request $request): JsonResponse
+    private function getBaseDirectorates(): array
     {
-        // مسح أي كاش قديم لتفادي التكرار
-        Cache::forget('admin_directorates');
-
-        $baseDirectorates = [
+        return [
             ['directorateId' => 1, 'directorateName' => 'مديرية التحرير', 'governorate' => 'أمانة العاصمة', 'isActive' => true, 'createdAt' => '2024-01-15T08:00:00Z'],
             ['directorateId' => 2, 'directorateName' => 'مديرية الصافية', 'governorate' => 'أمانة العاصمة', 'isActive' => true, 'createdAt' => '2024-01-15T08:00:00Z'],
             ['directorateId' => 3, 'directorateName' => 'مديرية الوحدة', 'governorate' => 'أمانة العاصمة', 'isActive' => true, 'createdAt' => '2024-01-15T08:00:00Z'],
@@ -333,6 +330,14 @@ class AdminController extends Controller
             ['directorateId' => 8, 'directorateName' => 'مديرية آزال', 'governorate' => 'أمانة العاصمة', 'isActive' => true, 'createdAt' => '2024-01-15T08:00:00Z'],
             ['directorateId' => 9, 'directorateName' => 'مديرية المظفر', 'governorate' => 'محافظة تعز', 'isActive' => true, 'createdAt' => '2024-01-15T08:00:00Z'],
         ];
+    }
+
+    /**
+     * قائمة المديريات التعليمية وإحصاءات المدارس التابعة لها فعلياً من قاعدة البيانات.
+     */
+    public function directorates(Request $request): JsonResponse
+    {
+        $storedDirectorates = Cache::get('admin_directorates', $this->getBaseDirectorates());
 
         // حساب عدد المدارس الفعلي لكل مديرية من قاعدة البيانات
         $directorates = array_map(function ($dir) {
@@ -347,7 +352,7 @@ class AdminController extends Controller
 
             $dir['schoolCount'] = $count;
             return $dir;
-        }, $baseDirectorates);
+        }, $storedDirectorates);
 
         return ApiResponse::success(
             data: $directorates,
@@ -356,7 +361,7 @@ class AdminController extends Controller
     }
 
     /**
-     * إضافة مديرية تعليمية جديدة.
+     * إضافة مديرية تعليمية جديدة مع منع تكرار الاسم وتحديث الكاش.
      */
     public function storeDirectorate(Request $request): JsonResponse
     {
@@ -370,24 +375,34 @@ class AdminController extends Controller
             'governorate'     => 'required|string|max:100',
         ]);
 
-        $defaultDirectorates = [
-            ['directorateId' => 1, 'directorateName' => 'مديرية التحرير', 'governorate' => 'أمانة العاصمة', 'schoolCount' => 8, 'isActive' => true, 'createdAt' => '2024-01-15T08:00:00Z'],
-            ['directorateId' => 2, 'directorateName' => 'مديرية الصافية', 'governorate' => 'أمانة العاصمة', 'schoolCount' => 7, 'isActive' => true, 'createdAt' => '2024-01-15T08:00:00Z'],
-            ['directorateId' => 3, 'directorateName' => 'مديرية الوحدة', 'governorate' => 'أمانة العاصمة', 'schoolCount' => 6, 'isActive' => true, 'createdAt' => '2024-01-15T08:00:00Z'],
-            ['directorateId' => 4, 'directorateName' => 'مديرية معين', 'governorate' => 'أمانة العاصمة', 'schoolCount' => 9, 'isActive' => true, 'createdAt' => '2024-01-15T08:00:00Z'],
-            ['directorateId' => 5, 'directorateName' => 'مديرية السبعين', 'governorate' => 'أمانة العاصمة', 'schoolCount' => 10, 'isActive' => true, 'createdAt' => '2024-01-15T08:00:00Z'],
-            ['directorateId' => 6, 'directorateName' => 'مديرية الثورة', 'governorate' => 'أمانة العاصمة', 'schoolCount' => 4, 'isActive' => true, 'createdAt' => '2024-01-15T08:00:00Z'],
-            ['directorateId' => 7, 'directorateName' => 'مديرية شعوب', 'governorate' => 'أمانة العاصمة', 'schoolCount' => 2, 'isActive' => true, 'createdAt' => '2024-01-15T08:00:00Z'],
-            ['directorateId' => 8, 'directorateName' => 'مديرية آزال', 'governorate' => 'أمانة العاصمة', 'schoolCount' => 2, 'isActive' => true, 'createdAt' => '2024-01-15T08:00:00Z'],
-        ];
+        $directorates = Cache::get('admin_directorates', $this->getBaseDirectorates());
 
-        $directorates = Cache::get('admin_directorates', $defaultDirectorates);
+        $name = trim($validated['directorateName']);
+        $shortName = str_replace('مديرية ', '', $name);
 
-        $newId = count($directorates) + 1;
+        // التحقق من عدم تكرار الاسم
+        foreach ($directorates as $dir) {
+            $existingName = trim($dir['directorateName']);
+            $existingShort = str_replace('مديرية ', '', $existingName);
+
+            if ($existingName === $name || $existingShort === $shortName) {
+                return ApiResponse::validationError([
+                    'directorateName' => ['اسم المديرية مسجل مسبقاً.'],
+                ], 'اسم المديرية مسجل مسبقاً.');
+            }
+        }
+
+        $maxId = 0;
+        foreach ($directorates as $dir) {
+            if ($dir['directorateId'] > $maxId) {
+                $maxId = $dir['directorateId'];
+            }
+        }
+
         $newDir = [
-            'directorateId'   => $newId,
-            'directorateName' => $validated['directorateName'],
-            'governorate'     => $validated['governorate'],
+            'directorateId'   => $maxId + 1,
+            'directorateName' => $name,
+            'governorate'     => trim($validated['governorate']),
             'schoolCount'     => 0,
             'isActive'        => true,
             'createdAt'       => now()->toIso8601ZuluString(),
@@ -400,6 +415,159 @@ class AdminController extends Controller
             data: $newDir,
             message: 'تمت إضافة المديرية بنجاح.'
         );
+    }
+
+    /**
+     * تعديل بيانات مديرية تعليمية قائمة وتحديث المدارس المرتبطة والكاش.
+     */
+    public function updateDirectorate(Request $request, int|string $id): JsonResponse
+    {
+        $user = $request->user();
+        if (!$user->hasPermission('users.manage')) {
+            return ApiResponse::forbidden('غير مصرح');
+        }
+
+        $validated = $request->validate([
+            'directorateName' => 'required|string|max:150',
+            'governorate'     => 'required|string|max:100',
+        ]);
+
+        $directorates = Cache::get('admin_directorates', $this->getBaseDirectorates());
+
+        $foundIndex = null;
+        foreach ($directorates as $idx => $dir) {
+            if ((int)$dir['directorateId'] === (int)$id) {
+                $foundIndex = $idx;
+                break;
+            }
+        }
+
+        if ($foundIndex === null) {
+            return ApiResponse::notFound('المديرية المطلوبة غير موجودة.');
+        }
+
+        $name = trim($validated['directorateName']);
+        $shortName = str_replace('مديرية ', '', $name);
+
+        // التحقق من عدم تكرار الاسم مع مديريات أخرى
+        foreach ($directorates as $idx => $dir) {
+            if ($idx === $foundIndex) {
+                continue;
+            }
+            $existingName = trim($dir['directorateName']);
+            $existingShort = str_replace('مديرية ', '', $existingName);
+
+            if ($existingName === $name || $existingShort === $shortName) {
+                return ApiResponse::validationError([
+                    'directorateName' => ['اسم المديرية مسجل مسبقاً.'],
+                ], 'اسم المديرية مسجل مسبقاً.');
+            }
+        }
+
+        // تحديث المدارس المرتبطة بالمديرية لتعكس الاسم الجديد
+        $oldName = $directorates[$foundIndex]['directorateName'];
+        $oldShort = str_replace('مديرية ', '', $oldName);
+        School::where(function ($q) use ($oldName, $oldShort) {
+            $q->where('educational_district', $oldName)
+              ->orWhere('educational_district', $oldShort)
+              ->orWhere('educational_district', 'LIKE', "%{$oldShort}%");
+        })->update(['educational_district' => $name]);
+
+        // تحديث المديرية في الكاش
+        $directorates[$foundIndex]['directorateName'] = $name;
+        $directorates[$foundIndex]['governorate'] = trim($validated['governorate']);
+        $directorates[$foundIndex]['updatedAt'] = now()->toIso8601ZuluString();
+
+        Cache::put('admin_directorates', $directorates, now()->addDays(30));
+
+        // حساب عدد المدارس الفعلي
+        $count = School::where(function ($q) use ($name, $shortName) {
+            $q->where('educational_district', $name)
+              ->orWhere('educational_district', $shortName)
+              ->orWhere('educational_district', 'LIKE', "%{$shortName}%");
+        })->count();
+        $directorates[$foundIndex]['schoolCount'] = $count;
+
+        return ApiResponse::success(
+            data: $directorates[$foundIndex],
+            message: 'تم تحديث بيانات المديرية بنجاح.'
+        );
+    }
+
+    /**
+     * حذف مديرية تعليمية (مع منع الحذف إن كانت مرتبطة بمدارس وتحديث الكاش).
+     */
+    public function destroyDirectorate(Request $request, int|string $id): JsonResponse
+    {
+        $user = $request->user();
+        if (!$user->hasPermission('users.manage')) {
+            return ApiResponse::forbidden('غير مصرح');
+        }
+
+        $directorates = Cache::get('admin_directorates', $this->getBaseDirectorates());
+
+        $targetDirectorate = null;
+        $targetIndex = null;
+        foreach ($directorates as $idx => $dir) {
+            if ((int)$dir['directorateId'] === (int)$id) {
+                $targetDirectorate = $dir;
+                $targetIndex = $idx;
+                break;
+            }
+        }
+
+        if (!$targetDirectorate) {
+            return ApiResponse::notFound('المديرية المطلوبة غير موجودة.');
+        }
+
+        // التحقق من ارتباط أي مدارس بهذه المديرية
+        $name = $targetDirectorate['directorateName'];
+        $shortName = str_replace('مديرية ', '', $name);
+
+        $linkedSchoolsCount = School::where(function ($q) use ($name, $shortName) {
+            $q->where('educational_district', $name)
+              ->orWhere('educational_district', $shortName)
+              ->orWhere('educational_district', 'LIKE', "%{$shortName}%");
+        })->count();
+
+        if ($linkedSchoolsCount > 0) {
+            return ApiResponse::validationError([
+                'directorate' => ['لا يمكن حذف المديرية لأنها مرتبطة بمدارس.'],
+            ], 'لا يمكن حذف المديرية لأنها مرتبطة بمدارس');
+        }
+
+        // الحذف من الكاش
+        unset($directorates[$targetIndex]);
+        $directorates = array_values($directorates);
+        Cache::put('admin_directorates', $directorates, now()->addDays(30));
+
+        return ApiResponse::success(
+            data: null,
+            message: 'تم حذف المديرية بنجاح.'
+        );
+    }
+
+    /**
+     * تصدير التقرير التنفيذي الشامل للوحة تحكم المسؤول بتنسيق PDF رسمي.
+     */
+    public function exportReportPdf(Request $request)
+    {
+        $user = $request->user();
+        if (!$user->hasPermission('users.manage') && !$user->hasRole('admin') && !$user->hasPermission('schools.view')) {
+            return ApiResponse::forbidden('غير مصرح لك بتصدير التقارير التنفيذية.');
+        }
+
+        $reportService = new \App\Services\AdminExecutiveReportService();
+        $pdfContent = $reportService->generateExecutivePdf();
+
+        $fileName = 'erteqa_executive_report_' . date('Y-m-d') . '.pdf';
+
+        return response($pdfContent, 200, [
+            'Content-Type'        => 'application/pdf',
+            'Content-Disposition' => 'attachment; filename="' . $fileName . '"',
+            'Cache-Control'       => 'private, max-age=0, must-revalidate',
+            'Pragma'              => 'public',
+        ]);
     }
 
     /**

@@ -24,10 +24,11 @@ import { AssignPrincipalModal } from './AssignPrincipalModal';
 import { EditSchoolModal } from './EditSchoolModal';
 import { exportToExcel } from '../../utils/exportUtils';
 import { UserCheck, FileSpreadsheet } from 'lucide-react';
+import { schoolsApi } from '../../api/schoolsApi';
 import { AddDirectorateModal } from './AddDirectorateModal';
 import { useAdminSchools } from '../../hooks/useAdminSchools';
 import { downloadCsv } from '../../utils/exportUtils';
-import type { School, AdminScreen } from '../../types/admin.types';
+import type { School, AdminScreen, Directorate } from '../../types/admin.types';
 
 interface SchoolsDirectoryProps {
   onNavigate: (screen: AdminScreen) => void;
@@ -70,9 +71,37 @@ export const SchoolsDirectory: React.FC<SchoolsDirectoryProps> = ({ onNavigate, 
   // Modals
   const [isRegisterOpen, setIsRegisterOpen] = useState(false);
   const [isAddDirOpen, setIsAddDirOpen] = useState(false);
+  const [editingDirectorate, setEditingDirectorate] = useState<Directorate | null>(null);
+  const [deletingDirectorate, setDeletingDirectorate] = useState<Directorate | null>(null);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [isDeletingDir, setIsDeletingDir] = useState(false);
   const [linkingSchool, setLinkingSchool] = useState<School | null>(null);
   const [editingSchool, setEditingSchool] = useState<School | null>(null);
   const [assigningPrincipalSchool, setAssigningPrincipalSchool] = useState<School | null>(null);
+
+  const handleDeleteDirectorate = async () => {
+    if (!deletingDirectorate) return;
+    setIsDeletingDir(true);
+    try {
+      await schoolsApi.deleteDirectorate(deletingDirectorate.directorateId);
+      addToast('success', 'تم حذف المديرية بنجاح.');
+      setIsDeleteModalOpen(false);
+      setDeletingDirectorate(null);
+      if (selectedDirectorateId === deletingDirectorate.directorateId) {
+        setSelectedDirectorateId(null);
+      }
+      await fetchData();
+    } catch (err: any) {
+      const errorMsg =
+        err?.response?.data?.message ||
+        err?.errors?.directorate?.[0] ||
+        err?.message ||
+        'لا يمكن حذف المديرية لأنها مرتبطة بمدارس';
+      addToast('error', errorMsg);
+    } finally {
+      setIsDeletingDir(false);
+    }
+  };
 
   const handleRefresh = async () => {
     await fetchData();
@@ -309,7 +338,18 @@ export const SchoolsDirectory: React.FC<SchoolsDirectoryProps> = ({ onNavigate, 
           directorates={directorates}
           selectedDirectorateId={selectedDirectorateId}
           onSelect={setSelectedDirectorateId}
-          onAddDirectorate={() => setIsAddDirOpen(true)}
+          onAddDirectorate={() => {
+            setEditingDirectorate(null);
+            setIsAddDirOpen(true);
+          }}
+          onEditDirectorate={(d) => {
+            setEditingDirectorate(d);
+            setIsAddDirOpen(true);
+          }}
+          onDeleteDirectorate={(d) => {
+            setDeletingDirectorate(d);
+            setIsDeleteModalOpen(true);
+          }}
           isMobile={activeIsMobile}
         />
 
@@ -884,10 +924,134 @@ export const SchoolsDirectory: React.FC<SchoolsDirectoryProps> = ({ onNavigate, 
 
       <AddDirectorateModal
         isOpen={isAddDirOpen}
-        onClose={() => setIsAddDirOpen(false)}
+        directorateToEdit={editingDirectorate}
+        onClose={() => {
+          setIsAddDirOpen(false);
+          setEditingDirectorate(null);
+        }}
         onSuccess={fetchData}
         addToast={addToast}
       />
+
+      {/* Delete Directorate Confirmation Modal */}
+      {isDeleteModalOpen && deletingDirectorate && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 8500,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: 'rgba(15,23,42,0.65)',
+            backdropFilter: 'blur(4px)',
+          }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !isDeletingDir) {
+              setIsDeleteModalOpen(false);
+              setDeletingDirectorate(null);
+            }
+          }}
+        >
+          <div
+            style={{
+              backgroundColor: '#fff',
+              borderRadius: theme.radii.xl,
+              width: '90%',
+              maxWidth: '440px',
+              padding: '24px',
+              boxShadow: theme.shadows.xl,
+              fontFamily: theme.typography.fontFamily.sans,
+              direction: 'rtl',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+              <div
+                style={{
+                  width: '40px',
+                  height: '40px',
+                  borderRadius: '10px',
+                  backgroundColor: '#FEE2E2',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#EF4444',
+                }}
+              >
+                <ShieldAlert size={22} />
+              </div>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: '#1E293B' }}>
+                  تأكيد حذف المديرية
+                </h3>
+                <p style={{ margin: '3px 0 0', fontSize: '0.8rem', color: '#64748B' }}>
+                  إجراء حساس يستلزم التحقق من ارتباطات المدارس
+                </p>
+              </div>
+            </div>
+
+            <p style={{ fontSize: '0.875rem', color: '#334155', lineHeight: 1.6, marginBottom: '16px' }}>
+              هل أنت متأكد من رغبتك في حذف <strong>"{deletingDirectorate.directorateName}"</strong> نهائياً من النظام؟
+            </p>
+
+            <div
+              style={{
+                backgroundColor: '#FFFBEB',
+                border: '1px solid #FDE68A',
+                borderRadius: '8px',
+                padding: '10px 14px',
+                fontSize: '0.78rem',
+                color: '#92400E',
+                marginBottom: '20px',
+                lineHeight: 1.5,
+              }}
+            >
+              ⚠️ <strong>قاعدة أمان صارمة:</strong> تمنع المنظومة حذف أي مديرية تعليمية طالما أنها مرتبطة بمدارس مسجلة في قاعدة البيانات.
+            </div>
+
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+              <button
+                type="button"
+                disabled={isDeletingDir}
+                onClick={() => {
+                  setIsDeleteModalOpen(false);
+                  setDeletingDirectorate(null);
+                }}
+                style={{
+                  padding: '9px 18px',
+                  borderRadius: theme.radii.lg,
+                  border: '1px solid #CBD5E1',
+                  backgroundColor: '#fff',
+                  color: '#475569',
+                  fontSize: '0.85rem',
+                  fontWeight: 600,
+                  cursor: isDeletingDir ? 'not-allowed' : 'pointer',
+                }}
+              >
+                إلغاء
+              </button>
+              <button
+                type="button"
+                disabled={isDeletingDir}
+                onClick={handleDeleteDirectorate}
+                style={{
+                  padding: '9px 20px',
+                  borderRadius: theme.radii.lg,
+                  border: 'none',
+                  backgroundColor: '#DC2626',
+                  color: '#fff',
+                  fontSize: '0.85rem',
+                  fontWeight: 600,
+                  cursor: isDeletingDir ? 'not-allowed' : 'pointer',
+                  opacity: isDeletingDir ? 0.7 : 1,
+                }}
+              >
+                {isDeletingDir ? 'جاري الحذف...' : 'حذف المديرية'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
