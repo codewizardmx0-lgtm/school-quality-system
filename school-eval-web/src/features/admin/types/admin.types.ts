@@ -30,6 +30,7 @@ export type AdminScreen = 'dashboard' | 'users' | 'schools' | 'audit' | 'backup'
 export interface Role {
   roleId: number;
   roleName: string;
+  roleNameAr?: string;
   roleCode: string;
   description: string;
   userType: UserType;
@@ -54,12 +55,25 @@ export interface School {
   educationalStage: string;
   directorateId: number;
   directorate: string;
+  educationalDistrict?: string;
   governorate: string;
   status: SchoolStatus;
   evaluatorUserId: number | null;
   evaluatorName: string | null;
   evaluatorEmail: string | null;
   isLinked: boolean;
+  principal?: {
+    userId: number;
+    fullName: string;
+    email: string;
+    phone?: string | null;
+  } | null;
+  evaluators?: {
+    userId: number;
+    fullName: string;
+    email: string;
+    phone?: string | null;
+  }[];
   createdAt: string;
   updatedAt: string;
 }
@@ -191,6 +205,8 @@ export interface RegisterSchoolDto {
   schoolType: SchoolType;
   educationalStage: string;
   directorateId: number;
+  directorateName?: string;
+  educationalDistrict?: string;
   governorate: string;
 }
 

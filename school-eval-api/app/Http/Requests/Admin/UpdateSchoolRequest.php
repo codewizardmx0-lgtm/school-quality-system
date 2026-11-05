@@ -18,6 +18,7 @@ class UpdateSchoolRequest extends FormRequest
     {
         return [
             'schoolName'          => ['sometimes', 'required', 'string', 'max:150'],
+            'schoolType'          => ['nullable', 'string', 'in:government,private'],
             'educationalStage'    => ['sometimes', 'required', 'string', 'max:50'],
             'identificationData'  => ['nullable', 'string', 'max:100'],
             'educationalDistrict' => ['sometimes', 'required', 'string', 'max:100'],

@@ -1,6 +1,7 @@
 ﻿import React from 'react';
 import { Filter, User, Clock, RefreshCw } from 'lucide-react';
 import { theme } from '../../theme';
+import { AUDIT_EVENT_LABELS } from '../../hooks/useAdminAudit';
 
 interface AuditFilterBarProps {
   actionType: string;
@@ -13,31 +14,9 @@ interface AuditFilterBarProps {
   isLoading: boolean;
   totalFiltered: number;
   totalLogs: number;
+  availableEventTypes?: string[];
+  availableActors?: string[];
 }
-
-const ACTION_OPTIONS = [
-  'الكل',
-  'قفل وثيقة معايير',
-  'إصدار طلب استكمال',
-  'رفع مخرج نهائي',
-  'فشل تسجيل دخول',
-  'تعديل صلاحية حساب',
-  'إنشاء نسخة احتياطية',
-  'تسجيل مدرسة جديدة',
-  'إنشاء مستخدم جديد',
-  'مراجعة تقرير مدرسة',
-];
-
-const ACTOR_OPTIONS = [
-  'الكل',
-  'د. خالد الرازحي',
-  'أ. عبدالرحمن الشامي',
-  'عمار عمر عبدالله',
-  'حساب مجهول',
-  'المهندس عادل ناصر',
-  'أحمد محمد الحربي',
-  'أ. وليد الحسني',
-];
 
 const TIME_OPTIONS = [
   { label: 'آخر 24 ساعة', value: '24h' },
@@ -56,6 +35,8 @@ export const AuditFilterBar: React.FC<AuditFilterBarProps> = ({
   isLoading,
   totalFiltered,
   totalLogs,
+  availableEventTypes = [],
+  availableActors = [],
 }) => {
   const selectStyle: React.CSSProperties = {
     padding: '8px 12px',
@@ -90,9 +71,10 @@ export const AuditFilterBar: React.FC<AuditFilterBarProps> = ({
           نوع الحدث:
         </span>
         <select value={actionType} onChange={(e) => onActionTypeChange(e.target.value)} style={selectStyle}>
-          {ACTION_OPTIONS.map((opt) => (
-            <option key={opt} value={opt}>
-              {opt}
+          <option value="الكل">الكل (جميع العمليات)</option>
+          {availableEventTypes.map((evt) => (
+            <option key={evt} value={evt}>
+              {AUDIT_EVENT_LABELS[evt] ? `${AUDIT_EVENT_LABELS[evt]} (${evt})` : evt}
             </option>
           ))}
         </select>
@@ -105,7 +87,8 @@ export const AuditFilterBar: React.FC<AuditFilterBarProps> = ({
           الفاعل / الحساب:
         </span>
         <select value={actor} onChange={(e) => onActorChange(e.target.value)} style={selectStyle}>
-          {ACTOR_OPTIONS.map((act) => (
+          <option value="الكل">الكل (جميع الحسابات)</option>
+          {availableActors.map((act) => (
             <option key={act} value={act}>
               {act}
             </option>

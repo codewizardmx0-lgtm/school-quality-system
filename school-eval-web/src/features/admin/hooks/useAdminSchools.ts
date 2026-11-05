@@ -91,9 +91,19 @@ export function useAdminSchools() {
 
   const filteredSchools = useMemo(() => {
     return schools.filter((s) => {
+      const selectedDir = selectedDirectorateId !== null
+        ? directorates.find((d) => d.directorateId === selectedDirectorateId)
+        : null;
+
       const matchDir =
         selectedDirectorateId === null ||
-        s.directorateId === selectedDirectorateId;
+        (selectedDir && (
+          s.directorate === selectedDir.directorateName ||
+          s.educationalDistrict === selectedDir.directorateName ||
+          (s.directorate && s.directorate.includes(selectedDir.directorateName)) ||
+          (selectedDir.directorateName && selectedDir.directorateName.includes(s.directorate))
+        )) ||
+        (s.directorateId !== null && s.directorateId !== undefined && s.directorateId === selectedDirectorateId);
 
       const matchType =
         typeFilter === 'all' ||

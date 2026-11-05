@@ -26,7 +26,8 @@ import { CreateUserModal } from './CreateUserModal';
 import { EditUserModal } from './EditUserModal';
 import { ResetPasswordModal } from './ResetPasswordModal';
 import { useAdminUsers } from '../../hooks/useAdminUsers';
-import { downloadCsv } from '../../utils/exportUtils';
+import { downloadCsv, exportToExcel } from '../../utils/exportUtils';
+import { FileSpreadsheet } from 'lucide-react';
 import { formatRelativeArabic } from '../../utils/dateUtils';
 import type { User, AdminScreen } from '../../types/admin.types';
 
@@ -39,6 +40,7 @@ export const UsersManagement: React.FC<UsersManagementProps> = ({ onNavigate, ad
   const {
     users,
     filteredUsers,
+    roles,
     loading,
     error,
     searchQuery,
@@ -87,7 +89,7 @@ export const UsersManagement: React.FC<UsersManagementProps> = ({ onNavigate, ad
   };
 
   // Export to XLSX / CSV
-  const handleExport = () => {
+  const getUserExportData = () => {
     const headers = [
       'معرف المستخدم',
       'الاسم الكامل',
@@ -110,8 +112,19 @@ export const UsersManagement: React.FC<UsersManagementProps> = ({ onNavigate, ad
       u.status === 'Active' ? 'نشط' : 'معطل',
       formatRelativeArabic(u.lastActivity),
     ]);
-    downloadCsv('erteqa_users_directory.csv', headers, rows);
-    addToast('success', 'تم تصدير دليل المستخدمين بنجاح بصيغة CSV المتوافقة مع Excel');
+    return { headers, rows };
+  };
+
+  const handleExportExcel = () => {
+    const { headers, rows } = getUserExportData();
+    exportToExcel('دليل_المستخدمين.xlsx', 'المستخدمين', headers, rows);
+    addToast('success', 'تم تصدير دليل المستخدمين بصيغة Excel بنجاح');
+  };
+
+  const handleExportCsv = () => {
+    const { headers, rows } = getUserExportData();
+    downloadCsv('دليل_المستخدمين.csv', headers, rows);
+    addToast('success', 'تم تصدير دليل المستخدمين بصيغة CSV بنجاح');
   };
 
   // Get user initials for avatar
@@ -159,25 +172,45 @@ export const UsersManagement: React.FC<UsersManagementProps> = ({ onNavigate, ad
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
           <RefreshButton onRefresh={handleRefresh} loading={loading} lastUpdated={lastUpdated} />
           <button
-            onClick={handleExport}
+            onClick={handleExportExcel}
             style={{
               display: 'flex',
               alignItems: 'center',
               gap: '6px',
               padding: '9px 16px',
               borderRadius: theme.radii.lg,
-              border: `1px solid ${theme.colors.neutral[200]}`,
-              backgroundColor: theme.colors.neutral.white,
-              color: theme.colors.neutral[700],
+              border: '1px solid #10B981',
+              backgroundColor: '#ECFDF5',
+              color: '#065F46',
               fontSize: theme.typography.fontSizes.sm,
-              fontWeight: 600,
+              fontWeight: 700,
               cursor: 'pointer',
               fontFamily: theme.typography.fontFamily.sans,
               boxShadow: theme.shadows.sm,
             }}
           >
-            <Download size={16} />
-            تصدير CSV
+            <FileSpreadsheet size={16} color="#059669" />
+            تصدير Excel (.xlsx)
+          </button>
+          <button
+            onClick={handleExportCsv}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '9px 12px',
+              borderRadius: theme.radii.lg,
+              border: `1px solid ${theme.colors.neutral[200]}`,
+              backgroundColor: theme.colors.neutral.white,
+              color: theme.colors.neutral[600],
+              fontSize: theme.typography.fontSizes.xs,
+              fontWeight: 600,
+              cursor: 'pointer',
+              fontFamily: theme.typography.fontFamily.sans,
+            }}
+          >
+            <Download size={14} />
+            CSV
           </button>
           <button
             onClick={() => setIsCreateOpen(true)}
@@ -342,11 +375,18 @@ export const UsersManagement: React.FC<UsersManagementProps> = ({ onNavigate, ad
               fontFamily: theme.typography.fontFamily.sans,
             }}
           >
-            <option value="الكل">الكل</option>
-            <option value="مستخدم التقييم بالمدرسة">مستخدم التقييم بالمدرسة</option>
-            <option value="مشرف وزاري معتمد">مشرف وزاري معتمد</option>
-            <option value="مسؤول إدارة المرجعية">مسؤول إدارة المرجعية</option>
-            <option value="مدير النظام المركزي">مدير النظام المركزي</option>
+            <option value="الكل">الكل (جميع الأدوار)</option>
+            {roles && roles.length > 0
+              ? roles.map((r) => (
+                  <option key={r.roleId || r.roleName} value={r.roleName}>
+                    {formatRoleNameAr(r.roleName)} ({r.roleCode || r.roleName})
+                  </option>
+                ))
+              : Array.from(new Set(users.map((u) => u.roleName).filter(Boolean))).map((rName) => (
+                  <option key={rName} value={rName}>
+                    {formatRoleNameAr(rName)} ({rName})
+                  </option>
+                ))}
           </select>
         </div>
 
@@ -697,7 +737,7 @@ export const UsersManagement: React.FC<UsersManagementProps> = ({ onNavigate, ad
         }}
       >
         <button
-          onClick={handleExport}
+          onClick={handleExportExcel}
           style={{
             display: 'flex',
             alignItems: 'center',
@@ -714,7 +754,7 @@ export const UsersManagement: React.FC<UsersManagementProps> = ({ onNavigate, ad
           }}
         >
           <Download size={16} />
-          تصدير دليل المستخدمين (XLSX) ↓
+          تصدير دليل المستخدمين Excel (.xlsx) ↓
         </button>
 
         <div style={{ display: 'flex', gap: '10px' }}>

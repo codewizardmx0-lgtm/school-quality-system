@@ -247,9 +247,26 @@ class UserController extends Controller
         }
 
         $roles = Role::orderBy('role_id')->get()->map(function ($r) {
+            $arabicNameMap = [
+                'admin'                       => 'مدير النظام المركزي',
+                'school_evaluator'            => 'مقيم المدرسة',
+                'school_principal'            => 'مدير المدرسة',
+                'ministry_standards_manager'  => 'مسؤول إدارة المعايير',
+                'ministry_supervisor'         => 'مشرف وزاري معتمد',
+            ];
+            $codeMap = [
+                'admin'                       => 'SYS',
+                'school_evaluator'            => 'S1',
+                'school_principal'            => 'P1',
+                'ministry_standards_manager'  => 'M2',
+                'ministry_supervisor'         => 'A3',
+            ];
+
             return [
                 'roleId'      => $r->role_id,
                 'roleName'    => $r->role_name,
+                'roleNameAr'  => $arabicNameMap[$r->role_name] ?? $r->role_name,
+                'roleCode'    => $codeMap[$r->role_name] ?? ('R-' . $r->role_id),
                 'description' => $r->description,
             ];
         });

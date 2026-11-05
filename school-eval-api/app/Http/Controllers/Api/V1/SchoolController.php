@@ -97,6 +97,7 @@ class SchoolController extends Controller
 
         $school = School::create([
             'school_name'          => $data['schoolName'],
+            'school_type'          => $data['schoolType'] ?? 'government',
             'educational_stage'    => $data['educationalStage'],
             'identification_data'  => $data['identificationData'] ?? null,
             'educational_district' => $data['educationalDistrict'],
@@ -126,6 +127,9 @@ class SchoolController extends Controller
 
         if (isset($data['schoolName'])) {
             $fields['school_name'] = $data['schoolName'];
+        }
+        if (isset($data['schoolType'])) {
+            $fields['school_type'] = $data['schoolType'];
         }
         if (isset($data['educationalStage'])) {
             $fields['educational_stage'] = $data['educationalStage'];

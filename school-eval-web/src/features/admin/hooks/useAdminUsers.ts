@@ -101,7 +101,10 @@ export function useAdminUsers() {
 
       const matchRole =
         roleFilter === 'الكل' ||
+        roleFilter === 'all' ||
         u.roleName === roleFilter ||
+        String(u.roleId) === roleFilter ||
+        u.roleCode === roleFilter ||
         formatRoleNameAr(u.roleName) === roleFilter;
 
       const matchStatus =

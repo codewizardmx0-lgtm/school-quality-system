@@ -72,7 +72,11 @@ export const RegisterSchoolModal: React.FC<RegisterSchoolModalProps> = ({
     }
     setLoading(true);
     try {
-      await schoolsApi.registerSchool(form);
+      const selectedDir = directorates.find((d) => d.directorateId === form.directorateId);
+      await schoolsApi.registerSchool({
+        ...form,
+        directorateName: selectedDir ? selectedDir.directorateName : undefined,
+      });
       addToast('success', `تم تسجيل مدرسة "${form.schoolName}" بنجاح في النظام`);
       onSuccess();
       onClose();

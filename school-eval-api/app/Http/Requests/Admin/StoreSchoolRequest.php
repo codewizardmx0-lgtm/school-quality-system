@@ -18,6 +18,7 @@ class StoreSchoolRequest extends FormRequest
     {
         return [
             'schoolName'          => ['required', 'string', 'max:150'],
+            'schoolType'          => ['nullable', 'string', 'in:government,private'],
             'educationalStage'    => ['required', 'string', 'max:50'],
             'identificationData'  => ['nullable', 'string', 'max:100'],
             'educationalDistrict' => ['required', 'string', 'max:100'],

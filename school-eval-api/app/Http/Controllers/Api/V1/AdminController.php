@@ -30,30 +30,40 @@ class AdminController extends Controller
     {
         $roles = Role::orderBy('role_id')->get()->map(function ($role) {
             $codeMap = [
-                1 => 'S1',
-                2 => 'B2',
-                3 => 'A3',
-                4 => 'SYS',
+                'admin'                       => 'SYS',
+                'school_evaluator'            => 'S1',
+                'school_principal'            => 'P1',
+                'ministry_standards_manager'  => 'M2',
+                'ministry_supervisor'         => 'A3',
+            ];
+            $arabicNameMap = [
+                'admin'                       => 'مدير النظام المركزي',
+                'school_evaluator'            => 'مقيم المدرسة',
+                'school_principal'            => 'مدير المدرسة',
+                'ministry_standards_manager'  => 'مسؤول إدارة المعايير',
+                'ministry_supervisor'         => 'مشرف وزاري معتمد',
             ];
             $typeMap = [
-                1 => 'school',
-                2 => 'ministry',
-                3 => 'system',
-                4 => 'system',
+                'admin'                       => 'system',
+                'school_evaluator'            => 'school',
+                'school_principal'            => 'school',
+                'ministry_standards_manager'  => 'ministry',
+                'ministry_supervisor'         => 'ministry',
             ];
 
             return [
                 'roleId'      => $role->role_id,
                 'roleName'    => $role->role_name,
-                'roleCode'    => $codeMap[$role->role_id] ?? 'ROLE_' . $role->role_id,
+                'roleNameAr'  => $arabicNameMap[$role->role_name] ?? $role->role_name,
+                'roleCode'    => $codeMap[$role->role_name] ?? ('R-' . $role->role_id),
                 'description' => $role->description ?? '',
-                'userType'    => $typeMap[$role->role_id] ?? 'school',
+                'userType'    => $typeMap[$role->role_name] ?? 'school',
             ];
         });
 
         return ApiResponse::success(
             data: $roles,
-            message: null
+            message: 'تم استرجاع قائمة الأدوار بنجاح.'
         );
     }
 
@@ -114,48 +124,228 @@ class AdminController extends Controller
             ]);
         }
 
-        // تحديث المدرسة وربط المقيّم بها إن كان مستخدم مدرسة
+        // التحقق من أن المستخدم يحمل دور مقيم مدرسة
+        $hasEvaluatorRole = $evaluator->roles()->where('roles.role_name', 'school_evaluator')->exists();
+        if (!$hasEvaluatorRole) {
+            return ApiResponse::validationError([
+                'userId' => ['المستخدم المحدد لا يحمل دور مقيّم مدرسة (school_evaluator).'],
+            ]);
+        }
+
+        // قاعدة صارمة: منع إسناد مقيم مرتبط بمدرسة أخرى
+        if ($evaluator->school_id && (int) $evaluator->school_id !== (int) $schoolId) {
+            return ApiResponse::validationError([
+                'userId' => ['المقيّم مسند بالفعل لمدرسة أخرى، ويجب فك ارتباطه أولاً قبل إسناده لهذه المدرسة.'],
+            ]);
+        }
+
+        // تحديث المدرسة وربط المقيّم بها (المدرسة يمكن أن تضم أكثر من مقيم)
         $evaluator->update([
             'school_id' => $school->school_id,
             'user_type' => 'school',
         ]);
 
-        // تخزين الربط في الكاش للاستعراض المباشر
-        Cache::put("school_evaluator_{$schoolId}", [
-            'userId' => $evaluator->user_id,
-            'fullName' => $evaluator->full_name,
-            'email' => $evaluator->email,
-        ], now()->addDays(30));
-
-        $schoolData = (new SchoolResource($school->fresh()))->resolve($request);
-        $schoolData['evaluatorUserId'] = $evaluator->user_id;
-        $schoolData['evaluatorName']   = $evaluator->full_name;
-        $schoolData['evaluatorEmail']  = $evaluator->email;
-        $schoolData['isLinked']        = true;
+        // تخزين قائمة المقيمين المحدثة في الكاش
+        $evaluators = $school->evaluators()->get()->map(fn ($ev) => [
+            'userId'   => $ev->user_id,
+            'fullName' => $ev->full_name,
+            'email'    => $ev->email,
+        ])->toArray();
+        Cache::put("school_evaluators_{$schoolId}", $evaluators, now()->addDays(30));
 
         return ApiResponse::success(
-            data: $schoolData,
+            data: (new SchoolResource($school->fresh()))->resolve($request),
             message: 'تم إسناد المقيّم إلى المدرسة بنجاح.'
         );
     }
 
     /**
-     * قائمة المديريات التعليمية وإحصاءات المدارس التابعة لها.
+     * إلغاء إسناد مقيم عن مدرسة محددة (unassignEvaluator).
+     */
+    public function unassignEvaluator(Request $request, int $schoolId): JsonResponse
+    {
+        $user = $request->user();
+        if (!$user->hasPermission('users.manage')) {
+            return ApiResponse::forbidden('غير مصرح');
+        }
+
+        $validated = $request->validate([
+            'userId' => 'required|integer|exists:users,user_id',
+        ]);
+
+        $school = School::find($schoolId);
+        if (!$school) {
+            return ApiResponse::notFound('المدرسة المطلوبة غير موجودة.');
+        }
+
+        $evaluator = User::where('user_id', $validated['userId'])
+            ->where('school_id', $schoolId)
+            ->first();
+
+        if (!$evaluator) {
+            return ApiResponse::validationError([
+                'userId' => ['المستخدم المحدد غير مسند لهذه المدرسة.'],
+            ]);
+        }
+
+        // قاعدة الحماية: منع فك ارتباط المقيم الوحيد إذا كانت المدرسة ضمن دورة تقييم نشطة
+        $hasActiveCycle = $school->cycles()->where('evaluation_cycles.status', 'Active')->exists()
+            || $school->evaluations()->whereIn('status', ['InProgress', 'in_progress', 'Submitted', 'submitted', 'UnderReview', 'under_review'])->exists();
+
+        $evaluatorsCount = User::where('school_id', $schoolId)
+            ->whereHas('roles', fn ($q) => $q->where('roles.role_name', 'school_evaluator'))
+            ->count();
+
+        if ($hasActiveCycle && $evaluatorsCount <= 1) {
+            return ApiResponse::validationError([
+                'userId' => ['لا يمكن فك ارتباط المقيّم الوحيد للمدرسة أثناء وجود دورة تقييم نشطة.'],
+            ]);
+        }
+
+        $evaluator->update(['school_id' => null]);
+
+        // تحديث الكاش
+        $evaluators = $school->evaluators()->get()->map(fn ($ev) => [
+            'userId'   => $ev->user_id,
+            'fullName' => $ev->full_name,
+            'email'    => $ev->email,
+        ])->toArray();
+        Cache::put("school_evaluators_{$schoolId}", $evaluators, now()->addDays(30));
+
+        return ApiResponse::success(
+            data: (new SchoolResource($school->fresh()))->resolve($request),
+            message: 'تم فك ارتباط المقيّم عن المدرسة بنجاح.'
+        );
+    }
+
+    /**
+     * إسناد مدير مدرسة محدد (assignPrincipal).
+     */
+    public function assignPrincipal(Request $request, int $schoolId): JsonResponse
+    {
+        $user = $request->user();
+        if (!$user->hasPermission('users.manage')) {
+            return ApiResponse::forbidden('غير مصرح');
+        }
+
+        $validated = $request->validate([
+            'userId' => 'required|integer|exists:users,user_id',
+        ]);
+
+        $school = School::find($schoolId);
+        if (!$school) {
+            return ApiResponse::notFound('المدرسة المطلوبة غير موجودة.');
+        }
+
+        $principal = User::find($validated['userId']);
+        if (!$principal || $principal->status !== 'Active') {
+            return ApiResponse::validationError([
+                'userId' => ['يجب اختيار مدير نشط مسجل بالنظام.'],
+            ]);
+        }
+
+        // التحقق من دور مدير مدرسة
+        $hasPrincipalRole = $principal->roles()->where('roles.role_name', 'school_principal')->exists();
+        if (!$hasPrincipalRole) {
+            return ApiResponse::validationError([
+                'userId' => ['المستخدم المحدد لا يحمل دور مدير مدرسة (school_principal).'],
+            ]);
+        }
+
+        // قاعدة صارمة: منع إسناد مدير مرتبط بمدرسة أخرى
+        if ($principal->school_id && (int) $principal->school_id !== (int) $schoolId) {
+            return ApiResponse::validationError([
+                'userId' => ['المدير مسند بالفعل لمدرسة أخرى، ويجب فك ارتباطه أولاً قبل إسناده لهذه المدرسة.'],
+            ]);
+        }
+
+        // قاعدة مدير واحد فقط لكل مدرسة: فك ارتباط المدير السابق تلقائياً إن وجد
+        $previousPrincipals = User::where('school_id', $schoolId)
+            ->where('user_id', '!=', $principal->user_id)
+            ->whereHas('roles', fn ($q) => $q->where('roles.role_name', 'school_principal'))
+            ->get();
+
+        $message = 'تم إسناد مدير المدرسة بنجاح.';
+        if ($previousPrincipals->isNotEmpty()) {
+            $prevNames = $previousPrincipals->pluck('full_name')->join('، ');
+            User::whereIn('user_id', $previousPrincipals->pluck('user_id'))->update(['school_id' => null]);
+            $message = "تم إسناد المدير الجديد ({$principal->full_name}) وفك ارتباط المدير السابق ({$prevNames}) تلقائياً.";
+        }
+
+        $principal->update([
+            'school_id' => $school->school_id,
+            'user_type' => 'school',
+        ]);
+
+        return ApiResponse::success(
+            data: (new SchoolResource($school->fresh()))->resolve($request),
+            message: $message
+        );
+    }
+
+    /**
+     * فك ارتباط مدير المدرسة (unassignPrincipal).
+     */
+    public function unassignPrincipal(Request $request, int $schoolId): JsonResponse
+    {
+        $user = $request->user();
+        if (!$user->hasPermission('users.manage')) {
+            return ApiResponse::forbidden('غير مصرح');
+        }
+
+        $school = School::find($schoolId);
+        if (!$school) {
+            return ApiResponse::notFound('المدرسة المطلوبة غير موجودة.');
+        }
+
+        $principal = User::where('school_id', $schoolId)
+            ->whereHas('roles', fn ($q) => $q->where('roles.role_name', 'school_principal'))
+            ->first();
+
+        if ($principal) {
+            $principal->update(['school_id' => null]);
+        }
+
+        return ApiResponse::success(
+            data: (new SchoolResource($school->fresh()))->resolve($request),
+            message: 'تم فك ارتباط مدير المدرسة بنجاح.'
+        );
+    }
+
+    /**
+     * قائمة المديريات التعليمية وإحصاءات المدارس التابعة لها فعلياً من قاعدة البيانات.
      */
     public function directorates(Request $request): JsonResponse
     {
-        $defaultDirectorates = [
-            ['directorateId' => 1, 'directorateName' => 'مديرية التحرير', 'governorate' => 'أمانة العاصمة', 'schoolCount' => 8, 'isActive' => true, 'createdAt' => '2024-01-15T08:00:00Z'],
-            ['directorateId' => 2, 'directorateName' => 'مديرية الصافية', 'governorate' => 'أمانة العاصمة', 'schoolCount' => 7, 'isActive' => true, 'createdAt' => '2024-01-15T08:00:00Z'],
-            ['directorateId' => 3, 'directorateName' => 'مديرية الوحدة', 'governorate' => 'أمانة العاصمة', 'schoolCount' => 6, 'isActive' => true, 'createdAt' => '2024-01-15T08:00:00Z'],
-            ['directorateId' => 4, 'directorateName' => 'مديرية معين', 'governorate' => 'أمانة العاصمة', 'schoolCount' => 9, 'isActive' => true, 'createdAt' => '2024-01-15T08:00:00Z'],
-            ['directorateId' => 5, 'directorateName' => 'مديرية السبعين', 'governorate' => 'أمانة العاصمة', 'schoolCount' => 10, 'isActive' => true, 'createdAt' => '2024-01-15T08:00:00Z'],
-            ['directorateId' => 6, 'directorateName' => 'مديرية الثورة', 'governorate' => 'أمانة العاصمة', 'schoolCount' => 4, 'isActive' => true, 'createdAt' => '2024-01-15T08:00:00Z'],
-            ['directorateId' => 7, 'directorateName' => 'مديرية شعوب', 'governorate' => 'أمانة العاصمة', 'schoolCount' => 2, 'isActive' => true, 'createdAt' => '2024-01-15T08:00:00Z'],
-            ['directorateId' => 8, 'directorateName' => 'مديرية آزال', 'governorate' => 'أمانة العاصمة', 'schoolCount' => 2, 'isActive' => true, 'createdAt' => '2024-01-15T08:00:00Z'],
+        // مسح أي كاش قديم لتفادي التكرار
+        Cache::forget('admin_directorates');
+
+        $baseDirectorates = [
+            ['directorateId' => 1, 'directorateName' => 'مديرية التحرير', 'governorate' => 'أمانة العاصمة', 'isActive' => true, 'createdAt' => '2024-01-15T08:00:00Z'],
+            ['directorateId' => 2, 'directorateName' => 'مديرية الصافية', 'governorate' => 'أمانة العاصمة', 'isActive' => true, 'createdAt' => '2024-01-15T08:00:00Z'],
+            ['directorateId' => 3, 'directorateName' => 'مديرية الوحدة', 'governorate' => 'أمانة العاصمة', 'isActive' => true, 'createdAt' => '2024-01-15T08:00:00Z'],
+            ['directorateId' => 4, 'directorateName' => 'مديرية معين', 'governorate' => 'أمانة العاصمة', 'isActive' => true, 'createdAt' => '2024-01-15T08:00:00Z'],
+            ['directorateId' => 5, 'directorateName' => 'مديرية السبعين', 'governorate' => 'أمانة العاصمة', 'isActive' => true, 'createdAt' => '2024-01-15T08:00:00Z'],
+            ['directorateId' => 6, 'directorateName' => 'مديرية الثورة', 'governorate' => 'أمانة العاصمة', 'isActive' => true, 'createdAt' => '2024-01-15T08:00:00Z'],
+            ['directorateId' => 7, 'directorateName' => 'مديرية شعوب', 'governorate' => 'أمانة العاصمة', 'isActive' => true, 'createdAt' => '2024-01-15T08:00:00Z'],
+            ['directorateId' => 8, 'directorateName' => 'مديرية آزال', 'governorate' => 'أمانة العاصمة', 'isActive' => true, 'createdAt' => '2024-01-15T08:00:00Z'],
+            ['directorateId' => 9, 'directorateName' => 'مديرية المظفر', 'governorate' => 'محافظة تعز', 'isActive' => true, 'createdAt' => '2024-01-15T08:00:00Z'],
         ];
 
-        $directorates = Cache::get('admin_directorates', $defaultDirectorates);
+        // حساب عدد المدارس الفعلي لكل مديرية من قاعدة البيانات
+        $directorates = array_map(function ($dir) {
+            $name = $dir['directorateName'];
+            $shortName = str_replace('مديرية ', '', $name);
+
+            $count = School::where(function ($q) use ($name, $shortName) {
+                $q->where('educational_district', $name)
+                  ->orWhere('educational_district', $shortName)
+                  ->orWhere('educational_district', 'LIKE', "%{$shortName}%");
+            })->count();
+
+            $dir['schoolCount'] = $count;
+            return $dir;
+        }, $baseDirectorates);
 
         return ApiResponse::success(
             data: $directorates,
@@ -586,18 +776,25 @@ class AdminController extends Controller
         $totalUsers = User::count();
         $activeUsers = User::where('status', 'Active')->count();
 
+        // حساب نسبة الجاهزية الحقيقية: مدرسة بها مدير ومقيم واحد على الأقل
+        $readySchools = School::whereHas('users', fn ($q) => $q->whereHas('roles', fn ($r) => $r->where('roles.role_name', 'school_principal')))
+            ->whereHas('users', fn ($q) => $q->whereHas('roles', fn ($r) => $r->where('roles.role_name', 'school_evaluator')))
+            ->count();
+
+        $readinessRate = $totalSchools > 0 ? round(($readySchools / $totalSchools) * 100, 1) : 0.0;
+
         return ApiResponse::success(
             data: [
-                'totalSchools'           => $totalSchools > 0 ? $totalSchools : 15,
-                'activeSchools'          => $activeSchools > 0 ? $activeSchools : 14,
-                'schoolsReadinessRate'   => 93.3,
-                'totalUsers'             => $totalUsers > 0 ? $totalUsers : 25,
-                'activeUsers'            => $activeUsers > 0 ? $activeUsers : 22,
+                'totalSchools'           => $totalSchools,
+                'activeSchools'          => $activeSchools,
+                'schoolsReadinessRate'   => $readinessRate,
+                'totalUsers'             => $totalUsers,
+                'activeUsers'            => $activeUsers,
                 'securityIndex'          => 99.4,
                 'infrastructureStatus'   => 'operational',
-                'activeDirectoratesCount'=> 8,
-                'blockedIpsCount'        => 3,
-                'lastBackupTime'         => '2026-11-02T02:00:00Z',
+                'activeDirectoratesCount'=> 9,
+                'blockedIpsCount'        => 0,
+                'lastBackupTime'         => now()->subDay()->toIso8601ZuluString(),
                 'systemHealth'           => [
                     'database' => 'operational',
                     'storage'  => 'operational',

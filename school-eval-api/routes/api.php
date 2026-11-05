@@ -57,6 +57,9 @@ Route::prefix('v1')->group(function () {
             Route::put('/{id}', [SchoolController::class, 'update'])->name('api.v1.schools.update');
             Route::patch('/{id}/toggle-status', [SchoolController::class, 'toggleStatus'])->name('api.v1.schools.toggle-status');
             Route::post('/{id}/assign-evaluator', [\App\Http\Controllers\Api\V1\AdminController::class, 'assignEvaluator'])->name('api.v1.schools.assign-evaluator');
+            Route::post('/{id}/unassign-evaluator', [\App\Http\Controllers\Api\V1\AdminController::class, 'unassignEvaluator'])->name('api.v1.schools.unassign-evaluator');
+            Route::post('/{id}/assign-principal', [\App\Http\Controllers\Api\V1\AdminController::class, 'assignPrincipal'])->name('api.v1.schools.assign-principal');
+            Route::post('/{id}/unassign-principal', [\App\Http\Controllers\Api\V1\AdminController::class, 'unassignPrincipal'])->name('api.v1.schools.unassign-principal');
 
             // الملف التعريفي وإحصاءات ومرافق المدرسة (الشريحة 6)
             Route::get('/{id}/profile', [\App\Http\Controllers\Api\V1\SchoolManagementController::class, 'getProfile'])->name('api.v1.schools.profile.get');

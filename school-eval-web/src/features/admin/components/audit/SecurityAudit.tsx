@@ -16,7 +16,8 @@ import { StatusBadge } from '../common/StatusBadge';
 import { AuditFilterBar } from './AuditFilterBar';
 import { BlockedIpsModal } from './BlockedIpsModal';
 import { useAdminAudit } from '../../hooks/useAdminAudit';
-import { downloadEncryptedLog } from '../../utils/exportUtils';
+import { exportToExcel, downloadCsv } from '../../utils/exportUtils';
+import { FileSpreadsheet, ChevronRight, ChevronLeft } from 'lucide-react';
 import { formatRelativeArabic, formatArabicDateTime } from '../../utils/dateUtils';
 import type { AdminScreen } from '../../types/admin.types';
 
@@ -32,6 +33,8 @@ export const SecurityAudit: React.FC<SecurityAuditProps> = ({ onNavigate, addToa
   const {
     logs,
     filteredLogs,
+    availableEventTypes,
+    availableActors,
     blockedIps,
     loading,
     error,
@@ -41,6 +44,10 @@ export const SecurityAudit: React.FC<SecurityAuditProps> = ({ onNavigate, addToa
     setActor,
     timeScope,
     setTimeScope,
+    currentPage,
+    setCurrentPage,
+    totalPages,
+    totalCount,
     fetchData,
   } = useAdminAudit();
 
@@ -49,11 +56,11 @@ export const SecurityAudit: React.FC<SecurityAuditProps> = ({ onNavigate, addToa
 
   const handleRefresh = async () => { await fetchData(); setLastUpdated(new Date().toLocaleTimeString('ar-YE', { hour: '2-digit', minute: '2-digit' })); };
 
-  // Export encrypted CSV
-  const handleExport = () => {
+  // Export audit data
+  const getAuditData = () => {
     const headers = [
       'معرف السجل',
-      'الوقت والتاريخ (UTC)',
+      'الوقت والتاريخ',
       'الفاعل',
       'الدور',
       'كود الدور',
@@ -68,7 +75,7 @@ export const SecurityAudit: React.FC<SecurityAuditProps> = ({ onNavigate, addToa
     ];
     const rows = filteredLogs.map((l) => [
       l.logId,
-      l.timestamp,
+      formatArabicDateTime(l.timestamp),
       l.actorName,
       l.actorRole,
       l.actorRoleCode,
@@ -81,8 +88,19 @@ export const SecurityAudit: React.FC<SecurityAuditProps> = ({ onNavigate, addToa
       l.deviceInfo,
       l.securityStatus === 'verified' ? 'موثق' : 'محظور',
     ]);
-    downloadEncryptedLog('erteqa_security_audit_log.csv', headers, rows);
-    addToast('success', 'تم تصدير سجل التدقيق الأمني المشفّر بنجاح');
+    return { headers, rows };
+  };
+
+  const handleExportExcel = () => {
+    const { headers, rows } = getAuditData();
+    exportToExcel('سجل_التدقيق_الامني.xlsx', 'سجل التدقيق', headers, rows);
+    addToast('success', 'تم تصدير سجل التدقيق الأمني بصيغة Excel بنجاح');
+  };
+
+  const handleExportCsv = () => {
+    const { headers, rows } = getAuditData();
+    downloadCsv('سجل_التدقيق_الامني.csv', headers, rows);
+    addToast('success', 'تم تصدير سجل التدقيق الأمني بصيغة CSV بنجاح');
   };
 
   return (
@@ -127,65 +145,45 @@ export const SecurityAudit: React.FC<SecurityAuditProps> = ({ onNavigate, addToa
 
 
           <button
-
-
-            onClick={handleExport}
-
-
+            onClick={handleExportExcel}
             style={{
-
-
               display: 'flex',
-
-
               alignItems: 'center',
-
-
-              gap: '8px',
-
-
-              padding: '10px 20px',
-
-
+              gap: '6px',
+              padding: '9px 16px',
               borderRadius: theme.radii.lg,
-
-
-              border: 'none',
-
-
-              background: 'linear-gradient(90deg, #059669, #10B981)',
-
-
-              color: '#fff',
-
-
+              border: '1px solid #10B981',
+              backgroundColor: '#ECFDF5',
+              color: '#065F46',
               fontSize: theme.typography.fontSizes.sm,
-
-
-              fontWeight: 600,
-
-
+              fontWeight: 700,
               cursor: 'pointer',
-
-
-              boxShadow: '0 4px 12px rgba(16, 185, 129, 0.3)',
-
-
               fontFamily: theme.typography.fontFamily.sans,
-
-
+              boxShadow: theme.shadows.sm,
             }}
-
-
           >
-
-
-            <Download size={18} />
-
-
-            تصدير السجل المشفّر (CSV) ↓
-
-
+            <FileSpreadsheet size={16} color="#059669" />
+            تصدير Excel (.xlsx)
+          </button>
+          <button
+            onClick={handleExportCsv}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '9px 12px',
+              borderRadius: theme.radii.lg,
+              border: `1px solid ${theme.colors.neutral[300]}`,
+              backgroundColor: theme.colors.neutral.white,
+              color: theme.colors.neutral[700],
+              fontSize: theme.typography.fontSizes.sm,
+              fontWeight: 600,
+              cursor: 'pointer',
+              fontFamily: theme.typography.fontFamily.sans,
+            }}
+          >
+            <Download size={16} />
+            تصدير CSV
           </button>
 
 
@@ -268,6 +266,8 @@ export const SecurityAudit: React.FC<SecurityAuditProps> = ({ onNavigate, addToa
         isLoading={loading}
         totalFiltered={filteredLogs.length}
         totalLogs={logs.length}
+        availableEventTypes={availableEventTypes}
+        availableActors={availableActors}
       />
 
       {/* Error Fallback Prompt */}
@@ -479,6 +479,62 @@ export const SecurityAudit: React.FC<SecurityAuditProps> = ({ onNavigate, addToa
             )}
           </tbody>
         </table>
+
+        {/* Pagination controls */}
+        {totalPages > 1 && (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '12px 16px',
+              backgroundColor: '#FAFAFA',
+              borderTop: `1px solid ${theme.colors.neutral[200]}`,
+            }}
+          >
+            <span style={{ fontSize: theme.typography.fontSizes.xs, color: theme.colors.neutral[600] }}>
+              عرض الصفحة {currentPage} من {totalPages} (إجمالي {totalCount} سجل)
+            </span>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                disabled={currentPage <= 1}
+                onClick={() => setCurrentPage(currentPage - 1)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  padding: '6px 12px',
+                  borderRadius: theme.radii.md,
+                  border: `1px solid ${theme.colors.neutral[300]}`,
+                  backgroundColor: currentPage <= 1 ? '#F3F4F6' : '#fff',
+                  cursor: currentPage <= 1 ? 'not-allowed' : 'pointer',
+                  fontSize: theme.typography.fontSizes.xs,
+                }}
+              >
+                <ChevronRight size={14} />
+                السابق
+              </button>
+              <button
+                disabled={currentPage >= totalPages}
+                onClick={() => setCurrentPage(currentPage + 1)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  padding: '6px 12px',
+                  borderRadius: theme.radii.md,
+                  border: `1px solid ${theme.colors.neutral[300]}`,
+                  backgroundColor: currentPage >= totalPages ? '#F3F4F6' : '#fff',
+                  cursor: currentPage >= totalPages ? 'not-allowed' : 'pointer',
+                  fontSize: theme.typography.fontSizes.xs,
+                }}
+              >
+                التالي
+                <ChevronLeft size={14} />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Legal Non-Repudiation Callout Box */}

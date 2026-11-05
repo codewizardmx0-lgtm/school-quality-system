@@ -38,8 +38,9 @@ export const schoolsApi = {
           schoolName: s.schoolName ?? s.school_name ?? '',
           schoolType: s.schoolType ?? (s.school_type === 'private' ? 'private' : 'government'),
           educationalStage: s.educationalStage ?? s.educational_stage ?? '',
-          directorateId: s.directorateId ?? (s.educationalDistrict ? 1 : 1),
-          directorate: s.directorate ?? s.educationalDistrict ?? 'مديرية التحرير',
+          directorateId: s.directorateId ?? null,
+          directorate: s.directorate ?? s.educationalDistrict ?? s.educational_district ?? '',
+          educationalDistrict: s.educationalDistrict ?? s.educational_district ?? s.directorate ?? '',
           governorate: s.governorate ?? 'أمانة العاصمة',
           status: s.status ?? 'Active',
           evaluatorUserId: s.evaluatorUserId ?? null,
@@ -70,7 +71,7 @@ export const schoolsApi = {
         schoolName: dto.schoolName,
         educationalStage: dto.educationalStage,
         identificationData: dto.schoolCode,
-        educationalDistrict: dto.governorate,
+        educationalDistrict: dto.directorateName || dto.educationalDistrict || 'مديرية التحرير',
         governorate: dto.governorate,
         schoolType: dto.schoolType,
         directorateId: dto.directorateId,
@@ -94,36 +95,47 @@ export const schoolsApi = {
   },
 
   /**
-   * Update school information
+   * Update school information (strictly connected to PUT /api/v1/schools/{id} with zero mock fallback)
    */
-  async updateSchool(schoolId: number, dto: Partial<School>): Promise<ApiResponse<School>> {
-    try {
-      return await put<School>(`/schools/${schoolId}`, dto);
-    } catch (error) {
-      if ((error as any)?.status === 422 || (error as any)?.status === 403) {
-        throw error;
-      }
-      console.warn('Backend update school failed, applying mock fallback:', error);
-      const all = await mockAdminService.getSchools();
-      const school = all.data?.find((s) => s.schoolId === schoolId);
-      if (school) {
-        Object.assign(school, dto);
-        return { data: school, message: 'تم تحديث بيانات المدرسة بنجاح.', errors: null, meta: null };
-      }
-      throw error;
-    }
+  async updateSchool(schoolId: number, dto: Partial<School> & { schoolCode?: string }): Promise<ApiResponse<School>> {
+    const payload = {
+      schoolName: dto.schoolName,
+      schoolType: dto.schoolType,
+      educationalStage: dto.educationalStage,
+      identificationData: dto.schoolCode ?? (dto as any).identificationData,
+      educationalDistrict: dto.educationalDistrict ?? dto.directorate,
+      governorate: dto.governorate,
+      status: dto.status ?? 'Active',
+    };
+    return await put<School>(`/schools/${schoolId}`, payload);
   },
 
   /**
    * Assign active evaluator (userId) to the school
    */
   async assignEvaluator(schoolId: number, userId: number): Promise<ApiResponse<School>> {
-    try {
-      return await post<School>(`/schools/${schoolId}/assign-evaluator`, { userId });
-    } catch (error) {
-      console.warn('Backend assign evaluator failed, applying mock fallback:', error);
-      return mockAdminService.linkEvaluator(schoolId, userId);
-    }
+    return await post<School>(`/schools/${schoolId}/assign-evaluator`, { userId });
+  },
+
+  /**
+   * Unassign an evaluator from a school
+   */
+  async unassignEvaluator(schoolId: number, userId: number): Promise<ApiResponse<School>> {
+    return await post<School>(`/schools/${schoolId}/unassign-evaluator`, { userId });
+  },
+
+  /**
+   * Assign school principal (exactly one principal per school)
+   */
+  async assignPrincipal(schoolId: number, userId: number): Promise<ApiResponse<School>> {
+    return await post<School>(`/schools/${schoolId}/assign-principal`, { userId });
+  },
+
+  /**
+   * Unassign school principal
+   */
+  async unassignPrincipal(schoolId: number): Promise<ApiResponse<School>> {
+    return await post<School>(`/schools/${schoolId}/unassign-principal`, {});
   },
 
   /**

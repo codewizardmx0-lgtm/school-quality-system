@@ -50,6 +50,7 @@ class School extends Model
      */
     protected $fillable = [
         'school_name',
+        'school_type',
         'educational_stage',
         'identification_data',
         'educational_district',
@@ -87,6 +88,24 @@ class School extends Model
     public function users(): HasMany
     {
         return $this->hasMany(User::class, 'school_id', 'school_id');
+    }
+
+    /**
+     * مدير المدرسة (علاقة واحد لواحد).
+     */
+    public function principal()
+    {
+        return $this->hasOne(User::class, 'school_id', 'school_id')
+            ->whereHas('roles', fn ($q) => $q->where('role_name', 'school_principal'));
+    }
+
+    /**
+     * مقيمو المدرسة (علاقة واحد لمتعدد).
+     */
+    public function evaluators()
+    {
+        return $this->hasMany(User::class, 'school_id', 'school_id')
+            ->whereHas('roles', fn ($q) => $q->where('role_name', 'school_evaluator'));
     }
 
     /**

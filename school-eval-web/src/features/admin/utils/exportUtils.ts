@@ -1,7 +1,38 @@
+import * as XLSX from 'xlsx';
+
 /**
  * exportUtils.ts
- * Client-side CSV export utilities with UTF-8 BOM and sep=, directive for Excel
+ * Real Excel (.xlsx) and CSV export utilities with native Arabic & RTL support
  */
+
+/**
+ * Export data to a real Microsoft Excel (.xlsx) workbook with native RTL Arabic sheet direction.
+ */
+export function exportToExcel(
+  filename: string,
+  sheetName: string,
+  headers: string[],
+  rows: (string | number | null | undefined)[][]
+): void {
+  const wsData = [
+    headers,
+    ...rows.map((row) => row.map((cell) => cell ?? '')),
+  ];
+
+  const ws = XLSX.utils.aoa_to_sheet(wsData);
+
+  // Set Right-to-Left (RTL) worksheet layout for flawless Arabic experience
+  ws['!dir'] = 'rtl';
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, sheetName || 'البيانات');
+
+  const safeFilename = filename.endsWith('.xlsx')
+    ? filename
+    : filename.replace(/\.[^/.]+$/, '') + '.xlsx';
+
+  XLSX.writeFile(wb, safeFilename);
+}
 
 /**
  * Download CSV with UTF-8 BOM and explicit sep=, directive for automatic
@@ -12,8 +43,10 @@ export function downloadCsv(
   headers: string[],
   rows: (string | number | null | undefined)[][]
 ): void {
-  const BOM = '\uFEFF';
-  const SEP_DIRECTIVE = 'sep=,\r\n';
+  // Explicit UTF-8 Byte Order Mark (BOM: EF BB BF) as binary Uint8Array
+  // Guarantees Excel recognizes Arabic encoding regardless of OS locale.
+  const bomBytes = new Uint8Array([0xEF, 0xBB, 0xBF]);
+  const sepDirective = 'sep=,\r\n';
 
   const csvRows = [
     headers.map((h) => `"${String(h ?? '').replace(/"/g, '""')}"`).join(','),
@@ -22,10 +55,9 @@ export function downloadCsv(
     ),
   ];
 
-  const csvContent = csvRows.join('\r\n');
-  const fullContent = BOM + SEP_DIRECTIVE + csvContent;
+  const csvContent = sepDirective + csvRows.join('\r\n');
 
-  const blob = new Blob([fullContent], { type: 'text/csv;charset=utf-8;' });
+  const blob = new Blob([bomBytes, csvContent], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   
@@ -43,25 +75,26 @@ export function downloadCsv(
 }
 
 /**
- * Legacy alias for downloadCsv (ensures compatibility with existing calls)
+ * Standard alias for real .xlsx export
  */
 export function downloadXlsx(
   filename: string,
   headers: string[],
-  rows: (string | number | null | undefined)[][]
+  rows: (string | number | null | undefined)[][],
+  sheetName: string = 'البيانات'
 ): void {
-  downloadCsv(filename, headers, rows);
+  exportToExcel(filename, sheetName, headers, rows);
 }
 
 /**
- * Download encrypted audit log CSV
+ * Download encrypted audit log (defaults to real Excel .xlsx)
  */
 export function downloadEncryptedLog(
   filename: string,
   headers: string[],
   rows: (string | number | null | undefined)[][]
 ): void {
-  downloadCsv(filename, headers, rows);
+  exportToExcel(filename, 'سجل التدقيق الأمني', headers, rows);
 }
 
 /**

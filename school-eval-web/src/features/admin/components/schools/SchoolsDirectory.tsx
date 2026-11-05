@@ -7,11 +7,10 @@ import {
   Plus,
   Download,
   Search,
-  Link as LinkIcon,
+
   Edit,
   ArrowRight,
   ShieldAlert,
-  AlertTriangle,
   RefreshCw,
 } from 'lucide-react';
 import { theme } from '../../theme';
@@ -21,6 +20,10 @@ import { DirectorateSidebar } from './DirectorateSidebar';
 import { RefreshButton } from '../common/RefreshButton';
 import { RegisterSchoolModal } from './RegisterSchoolModal';
 import { LinkEvaluatorModal } from './LinkEvaluatorModal';
+import { AssignPrincipalModal } from './AssignPrincipalModal';
+import { EditSchoolModal } from './EditSchoolModal';
+import { exportToExcel } from '../../utils/exportUtils';
+import { UserCheck, FileSpreadsheet } from 'lucide-react';
 import { AddDirectorateModal } from './AddDirectorateModal';
 import { useAdminSchools } from '../../hooks/useAdminSchools';
 import { downloadCsv } from '../../utils/exportUtils';
@@ -68,6 +71,8 @@ export const SchoolsDirectory: React.FC<SchoolsDirectoryProps> = ({ onNavigate, 
   const [isRegisterOpen, setIsRegisterOpen] = useState(false);
   const [isAddDirOpen, setIsAddDirOpen] = useState(false);
   const [linkingSchool, setLinkingSchool] = useState<School | null>(null);
+  const [editingSchool, setEditingSchool] = useState<School | null>(null);
+  const [assigningPrincipalSchool, setAssigningPrincipalSchool] = useState<School | null>(null);
 
   const handleRefresh = async () => {
     await fetchData();
@@ -84,45 +89,63 @@ export const SchoolsDirectory: React.FC<SchoolsDirectoryProps> = ({ onNavigate, 
   const govPercentage = schools.length > 0 ? Math.round((totalGov / schools.length) * 100) : 0;
   const privatePercentage = schools.length > 0 ? Math.round((totalPrivate / schools.length) * 100) : 0;
 
-  // Export to CSV with real users and roles
-  const handleExport = () => {
+  // Build rows for export
+  const buildExportRows = () => {
     const headers = [
       'كود المدرسة',
       'اسم المدرسة',
-      'النوع',
-      'المرحلة',
-      'المديرية',
       'المحافظة',
+      'المديرية',
+      'نوع المدرسة',
+      'المرحلة التعليمية',
+      'حالة المدرسة',
+      'مدير المدرسة المرتبط',
+      'المقيمون المرتبطون',
       'حالة الجاهزية',
-      'مدير المدرسة',
-      'مسؤولو التقييم',
     ];
     const rows = filteredSchools.map((s) => {
       const schoolEvaluators = (users || []).filter(
         (u) => u.schoolId === s.schoolId && (u.roleName === 'school_evaluator' || u.roleCode === 'S1' || u.roleId === 2)
       );
-      const schoolPrincipal = (users || []).find(
-        (u) => u.schoolId === s.schoolId && (u.roleName === 'school_principal' || u.roleCode === 'S2' || u.roleId === 3)
+      const schoolPrincipal = s.principal || (users || []).find(
+        (u) => u.schoolId === s.schoolId && (u.roleName === 'school_principal' || u.roleCode === 'P1' || u.roleId === 3)
       );
       const evalNames =
-        schoolEvaluators.map((e) => e.fullName || e.username).join(' - ') || s.evaluatorName || 'لم يُعين';
-      const princName = schoolPrincipal?.fullName || schoolPrincipal?.username || 'لم يُعين';
-      const isReady = schoolEvaluators.length > 0 || !!s.evaluatorName;
+        (s.evaluators && s.evaluators.length > 0 ? s.evaluators.map(e => e.fullName).join('، ') : null) ||
+        schoolEvaluators.map((e) => e.fullName || e.username).join('، ') ||
+        s.evaluatorName ||
+        'غير مسند';
+      const princName = schoolPrincipal?.fullName || (schoolPrincipal as any)?.username || 'غير مسند';
+      const isReady = (schoolEvaluators.length > 0 || (s.evaluators && s.evaluators.length > 0) || !!s.evaluatorName) && !!schoolPrincipal;
 
       return [
         s.schoolCode,
         s.schoolName,
-        s.schoolType === 'government' ? 'حكومية' : 'أهلية / خاصة',
-        s.educationalStage,
-        s.directorate,
         s.governorate,
-        isReady ? 'جاهزة ومرتبطة' : 'غير مهيأة',
+        s.directorate || s.educationalDistrict || '---',
+        s.schoolType === 'private' ? 'أهلية / خاصة' : 'حكومية (رسمية)',
+        s.educationalStage,
+        s.status === 'Active' ? 'نشطة' : 'معطلة',
         princName,
         evalNames,
+        isReady ? 'مكتملة الجاهزية' : 'غير مكتملة الجاهزية',
       ];
     });
+    return { headers, rows };
+  };
+
+  // Export to Excel (.xlsx) with RTL layout
+  const handleExportExcel = () => {
+    const { headers, rows } = buildExportRows();
+    exportToExcel('erteqa_schools_directory.xlsx', 'دليل المدارس', headers, rows);
+    addToast('success', 'تم تصدير دليل المدارس بنجاح إلى ملف Excel (.xlsx) حقيقي.');
+  };
+
+  // Export to CSV with UTF-8 BOM
+  const handleExportCsv = () => {
+    const { headers, rows } = buildExportRows();
     downloadCsv('erteqa_schools_directory.csv', headers, rows);
-    addToast('success', 'تم تصدير دليل المدارس بنجاح بصيغة CSV');
+    addToast('success', 'تم تصدير دليل المدارس بصيغة CSV');
   };
 
   return (
@@ -163,25 +186,45 @@ export const SchoolsDirectory: React.FC<SchoolsDirectoryProps> = ({ onNavigate, 
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
           <RefreshButton onRefresh={handleRefresh} loading={loading} lastUpdated={lastUpdated} />
           <button
-            onClick={handleExport}
+            onClick={handleExportExcel}
             style={{
               display: 'flex',
               alignItems: 'center',
               gap: '6px',
               padding: '9px 16px',
               borderRadius: theme.radii.lg,
-              border: `1px solid ${theme.colors.neutral[200]}`,
-              backgroundColor: theme.colors.neutral.white,
-              color: theme.colors.neutral[700],
+              border: '1px solid #10B981',
+              backgroundColor: '#ECFDF5',
+              color: '#065F46',
               fontSize: theme.typography.fontSizes.sm,
-              fontWeight: 600,
+              fontWeight: 700,
               cursor: 'pointer',
               fontFamily: theme.typography.fontFamily.sans,
               boxShadow: theme.shadows.sm,
             }}
           >
-            <Download size={16} />
-            تصدير CSV
+            <FileSpreadsheet size={16} color="#059669" />
+            تصدير Excel (.xlsx)
+          </button>
+          <button
+            onClick={handleExportCsv}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '9px 14px',
+              borderRadius: theme.radii.lg,
+              border: `1px solid ${theme.colors.neutral[200]}`,
+              backgroundColor: theme.colors.neutral.white,
+              color: theme.colors.neutral[600],
+              fontSize: theme.typography.fontSizes.xs,
+              fontWeight: 600,
+              cursor: 'pointer',
+              fontFamily: theme.typography.fontFamily.sans,
+            }}
+          >
+            <Download size={14} />
+            CSV
           </button>
           <button
             onClick={() => setIsRegisterOpen(true)}
@@ -432,22 +475,25 @@ export const SchoolsDirectory: React.FC<SchoolsDirectoryProps> = ({ onNavigate, 
               <thead>
                 <tr style={{ backgroundColor: theme.colors.neutral[50], borderBottom: `1px solid ${theme.colors.neutral[200]}` }}>
                   <th style={{ padding: '14px 16px', fontSize: theme.typography.fontSizes.xs, fontWeight: 700, color: theme.colors.neutral[600] }}>
-                    اسم المدرسة / الكود
+                    المدرسة والكود
                   </th>
                   <th style={{ padding: '14px 16px', fontSize: theme.typography.fontSizes.xs, fontWeight: 700, color: theme.colors.neutral[600] }}>
-                    المرحلة والنوع
+                    المحافظة والمديرية
+                  </th>
+                  <th style={{ padding: '14px 16px', fontSize: theme.typography.fontSizes.xs, fontWeight: 700, color: theme.colors.neutral[600] }}>
+                    نوع المدرسة
                   </th>
                   <th style={{ padding: '14px 16px', fontSize: theme.typography.fontSizes.xs, fontWeight: 700, color: theme.colors.neutral[600] }}>
                     مدير المدرسة
                   </th>
                   <th style={{ padding: '14px 16px', fontSize: theme.typography.fontSizes.xs, fontWeight: 700, color: theme.colors.neutral[600] }}>
-                    مسؤول/فريق التقييم
+                    فريق التقييم المدرسي
                   </th>
                   <th style={{ padding: '14px 16px', fontSize: theme.typography.fontSizes.xs, fontWeight: 700, color: theme.colors.neutral[600] }}>
-                    حالة الجاهزية
+                    الجاهزية
                   </th>
                   <th style={{ padding: '14px 16px', fontSize: theme.typography.fontSizes.xs, fontWeight: 700, color: theme.colors.neutral[600], textAlign: 'center' }}>
-                    إجراء
+                    إجراءات المدرسة
                   </th>
                 </tr>
               </thead>
@@ -487,17 +533,21 @@ export const SchoolsDirectory: React.FC<SchoolsDirectoryProps> = ({ onNavigate, 
                   </tr>
                 ) : (
                   filteredSchools.map((school, idx) => {
-                    const schoolEvaluators = (users || []).filter(
+                    const schoolEvaluators = school.evaluators && school.evaluators.length > 0
+                      ? school.evaluators
+                      : (users || []).filter(
+                          (u) =>
+                            u.schoolId === school.schoolId &&
+                            (u.roleName === 'school_evaluator' || u.roleCode === 'S1' || u.roleId === 2)
+                        );
+                    const schoolPrincipal = school.principal || (users || []).find(
                       (u) =>
                         u.schoolId === school.schoolId &&
-                        (u.roleName === 'school_evaluator' || u.roleCode === 'S1' || u.roleId === 2)
-                    );
-                    const schoolPrincipal = (users || []).find(
-                      (u) =>
-                        u.schoolId === school.schoolId &&
-                        (u.roleName === 'school_principal' || u.roleCode === 'S2' || u.roleId === 3)
+                        (u.roleName === 'school_principal' || u.roleCode === 'P1' || u.roleId === 3)
                     );
                     const hasEvaluator = schoolEvaluators.length > 0 || !!school.evaluatorName;
+                    const hasPrincipal = !!schoolPrincipal;
+                    const isFullyReady = hasEvaluator && hasPrincipal;
 
                     return (
                       <tr
@@ -507,126 +557,186 @@ export const SchoolsDirectory: React.FC<SchoolsDirectoryProps> = ({ onNavigate, 
                           backgroundColor: idx % 2 === 0 ? theme.colors.neutral.white : '#FAFAFA',
                         }}
                       >
-                        {/* Name & Code - Separated into clear distinct lines */}
+                        {/* 1. School Name & Code */}
                         <td style={{ padding: '14px 16px' }}>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                             <span style={{ fontSize: theme.typography.fontSizes.sm, fontWeight: 700, color: theme.colors.neutral[900], lineHeight: 1.4 }}>
                               {school.schoolName}
                             </span>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                              <span
-                                style={{
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  padding: '2px 8px',
-                                  borderRadius: '6px',
-                                  backgroundColor: school.schoolType === 'government' ? '#EFF6FF' : '#FEF3C7',
-                                  color: school.schoolType === 'government' ? '#1D4ED8' : '#92400E',
-                                  fontSize: '0.7rem',
-                                  fontWeight: 700,
-                                  fontFamily: 'monospace',
-                                  border: `1px solid ${school.schoolType === 'government' ? '#DBEAFE' : '#FDE68A'}`,
-                                }}
-                              >
-                                كود: {school.schoolCode}
-                              </span>
-                            </div>
+                            <span
+                              style={{
+                                display: 'inline-block',
+                                width: 'fit-content',
+                                padding: '1px 6px',
+                                borderRadius: '4px',
+                                backgroundColor: '#F1F5F9',
+                                color: '#475569',
+                                fontSize: '0.7rem',
+                                fontWeight: 700,
+                                fontFamily: 'monospace',
+                              }}
+                            >
+                              {school.schoolCode}
+                            </span>
                           </div>
                         </td>
 
-                        {/* Stage & Type */}
+                        {/* 2. Governorate & Directorate */}
                         <td style={{ padding: '14px 16px' }}>
-                          <div style={{ fontSize: theme.typography.fontSizes.sm, color: theme.colors.neutral[700] }}>
+                          <div style={{ fontSize: theme.typography.fontSizes.sm, fontWeight: 600, color: theme.colors.neutral[800] }}>
+                            {school.directorate || school.educationalDistrict || '---'}
+                          </div>
+                          <div style={{ fontSize: '0.75rem', color: theme.colors.neutral[500] }}>
+                            {school.governorate}
+                          </div>
+                        </td>
+
+                        {/* 3. School Type & Stage */}
+                        <td style={{ padding: '14px 16px' }}>
+                          <span
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              padding: '3px 8px',
+                              borderRadius: '6px',
+                              backgroundColor: school.schoolType === 'private' ? '#FEF3C7' : '#EFF6FF',
+                              color: school.schoolType === 'private' ? '#92400E' : '#1D4ED8',
+                              fontSize: '0.75rem',
+                              fontWeight: 700,
+                              border: `1px solid ${school.schoolType === 'private' ? '#FDE68A' : '#DBEAFE'}`,
+                            }}
+                          >
+                            {school.schoolType === 'private' ? 'مدرسة أهلية' : 'مدرسة حكومية'}
+                          </span>
+                          <div style={{ fontSize: '0.7rem', color: theme.colors.neutral[400], marginTop: '3px' }}>
                             {school.educationalStage}
                           </div>
-                          <div style={{ fontSize: '0.75rem', color: theme.colors.neutral[400] }}>
-                            {school.schoolType === 'government' ? 'مدرسة حكومية' : 'مدرسة أهلية'}
+                        </td>
+
+                        {/* 4. Principal Column */}
+                        <td style={{ padding: '14px 16px' }}>
+                          {hasPrincipal ? (
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                              <div>
+                                <span style={{ fontSize: theme.typography.fontSizes.sm, fontWeight: 700, color: '#065F46', display: 'block' }}>
+                                  {schoolPrincipal.fullName || (schoolPrincipal as any).username}
+                                </span>
+                                <span style={{ fontSize: '0.7rem', color: theme.colors.neutral[400] }}>
+                                  {schoolPrincipal.email}
+                                </span>
+                              </div>
+                              <button
+                                onClick={() => setAssigningPrincipalSchool(school)}
+                                title="تغيير مدير المدرسة"
+                                style={{
+                                  padding: '4px 8px',
+                                  borderRadius: theme.radii.md,
+                                  border: '1px solid #BBF7D0',
+                                  backgroundColor: '#F0FDF4',
+                                  color: '#15803D',
+                                  fontSize: '0.7rem',
+                                  fontWeight: 600,
+                                  cursor: 'pointer',
+                                }}
+                              >
+                                تغيير
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => setAssigningPrincipalSchool(school)}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                padding: '5px 10px',
+                                borderRadius: theme.radii.md,
+                                border: '1px dashed #F59E0B',
+                                backgroundColor: '#FFFBEB',
+                                color: '#B45309',
+                                fontSize: '0.75rem',
+                                fontWeight: 600,
+                                cursor: 'pointer',
+                              }}
+                            >
+                              <UserCheck size={13} />
+                              + إسناد مدير
+                            </button>
+                          )}
+                        </td>
+
+                        {/* 5. Evaluators Column */}
+                        <td style={{ padding: '14px 16px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                              {schoolEvaluators.length > 0 ? (
+                                schoolEvaluators.map((ev) => (
+                                  <span key={ev.userId} style={{ fontSize: '0.75rem', fontWeight: 600, color: theme.colors.neutral[800] }}>
+                                    • {ev.fullName}
+                                  </span>
+                                ))
+                              ) : school.evaluatorName ? (
+                                <span style={{ fontSize: '0.75rem', fontWeight: 600, color: theme.colors.neutral[800] }}>
+                                  • {school.evaluatorName}
+                                </span>
+                              ) : (
+                                <span style={{ fontSize: '0.75rem', color: '#DC2626', fontWeight: 600 }}>
+                                  لا يوجد مقيم
+                                </span>
+                              )}
+                            </div>
+                            <button
+                              onClick={() => setLinkingSchool(school)}
+                              title="إدارة فريق التقييم"
+                              style={{
+                                padding: '4px 8px',
+                                borderRadius: theme.radii.md,
+                                border: '1px solid #E2E8F0',
+                                backgroundColor: '#F8FAFC',
+                                color: '#475569',
+                                fontSize: '0.7rem',
+                                fontWeight: 600,
+                                cursor: 'pointer',
+                                flexShrink: 0,
+                              }}
+                            >
+                              إدارة ({schoolEvaluators.length})
+                            </button>
                           </div>
                         </td>
 
-                        {/* Principal */}
-                        <td style={{ padding: '14px 16px' }}>
-                          {schoolPrincipal ? (
-                            <div>
-                              <div style={{ fontSize: theme.typography.fontSizes.sm, fontWeight: 600, color: theme.colors.neutral[800] }}>
-                                {schoolPrincipal.fullName || schoolPrincipal.username}
-                              </div>
-                              <div style={{ fontSize: '0.75rem', color: theme.colors.neutral[400], direction: 'ltr', textAlign: 'right' }}>
-                                {schoolPrincipal.email}
-                              </div>
-                            </div>
-                          ) : (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#D97706', fontSize: '0.75rem', fontWeight: 600 }}>
-                              <AlertTriangle size={14} />
-                              غير مرتبط بمدير
-                            </div>
-                          )}
-                        </td>
-
-                        {/* Evaluators */}
-                        <td style={{ padding: '14px 16px' }}>
-                          {schoolEvaluators.length > 0 ? (
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                              {schoolEvaluators.map((ev) => (
-                                <div key={ev.userId} style={{ fontSize: theme.typography.fontSizes.sm, fontWeight: 600, color: theme.colors.neutral[800] }}>
-                                  {ev.fullName || ev.username}
-                                  <span style={{ fontSize: '0.7rem', color: theme.colors.neutral[400], marginRight: '4px' }}>
-                                    ({ev.email})
-                                  </span>
-                                </div>
-                              ))}
-                            </div>
-                          ) : school.evaluatorName ? (
-                            <div>
-                              <div style={{ fontSize: theme.typography.fontSizes.sm, fontWeight: 600, color: theme.colors.neutral[800] }}>
-                                {school.evaluatorName}
-                              </div>
-                              <div style={{ fontSize: '0.75rem', color: theme.colors.neutral[400], direction: 'ltr', textAlign: 'right' }}>
-                                {school.evaluatorEmail || '---'}
-                              </div>
-                            </div>
-                          ) : (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#DC2626', fontSize: '0.75rem', fontWeight: 600 }}>
-                              <AlertTriangle size={14} />
-                              غير مرتبط بمقيم
-                            </div>
-                          )}
-                        </td>
-
-                        {/* Link Status */}
+                        {/* 6. Readiness Badge */}
                         <td style={{ padding: '14px 16px' }}>
                           <StatusBadge
-                            variant={hasEvaluator ? 'linked' : 'unlinked'}
-                            label={hasEvaluator ? 'جاهزة ومرتبطة ✓' : 'غير مهيأة ⚠'}
+                            variant={isFullyReady ? 'linked' : 'unlinked'}
+                            label={isFullyReady ? 'مكتملة الجاهزية ✓' : 'غير مكتملة ⚠'}
                             size="md"
                           />
                         </td>
 
-                        {/* Actions */}
+                        {/* 7. Action: Edit School Button */}
                         <td style={{ padding: '14px 16px', textAlign: 'center' }}>
                           <button
-                            onClick={() => setLinkingSchool(school)}
-                            title={hasEvaluator ? 'إسناد / تغيير مسؤول التقييم' : 'ربط مسؤول تقييم بالمدرسة'}
+                            onClick={() => setEditingSchool(school)}
+                            title="تعديل بيانات المدرسة الرسمية"
                             style={{
-                              padding: '6px 14px',
+                              padding: '6px 12px',
                               borderRadius: theme.radii.md,
-                              border: hasEvaluator ? `1px solid ${theme.colors.neutral[200]}` : 'none',
-                              background: hasEvaluator
-                                ? theme.colors.neutral.white
-                                : 'linear-gradient(90deg, #7C3AED, #8B5CF6)',
-                              color: hasEvaluator ? theme.colors.neutral[700] : '#fff',
+                              border: `1px solid ${theme.colors.neutral[300]}`,
+                              backgroundColor: theme.colors.neutral.white,
+                              color: theme.colors.neutral[800],
                               fontSize: theme.typography.fontSizes.xs,
                               fontWeight: 700,
                               cursor: 'pointer',
                               display: 'inline-flex',
                               alignItems: 'center',
                               gap: '4px',
-                              boxShadow: hasEvaluator ? 'none' : '0 2px 6px rgba(124, 58, 237, 0.3)',
                               fontFamily: theme.typography.fontFamily.sans,
+                              boxShadow: theme.shadows.sm,
                             }}
                           >
-                            {hasEvaluator ? <Edit size={12} /> : <LinkIcon size={12} />}
-                            {hasEvaluator ? 'تعديل / إضافة' : 'ربط مقيم'}
+                            <Edit size={13} color="#4F46E5" />
+                            تعديل المدرسة
                           </button>
                         </td>
                       </tr>
@@ -676,7 +786,7 @@ export const SchoolsDirectory: React.FC<SchoolsDirectoryProps> = ({ onNavigate, 
         }}
       >
         <button
-          onClick={handleExport}
+          onClick={handleExportExcel}
           style={{
             display: 'flex',
             alignItems: 'center',
@@ -751,6 +861,23 @@ export const SchoolsDirectory: React.FC<SchoolsDirectoryProps> = ({ onNavigate, 
         isOpen={!!linkingSchool}
         school={linkingSchool}
         onClose={() => setLinkingSchool(null)}
+        onSuccess={fetchData}
+        addToast={addToast}
+      />
+
+      <AssignPrincipalModal
+        isOpen={!!assigningPrincipalSchool}
+        school={assigningPrincipalSchool}
+        onClose={() => setAssigningPrincipalSchool(null)}
+        onSuccess={fetchData}
+        addToast={addToast}
+      />
+
+      <EditSchoolModal
+        isOpen={!!editingSchool}
+        school={editingSchool}
+        directorates={directorates}
+        onClose={() => setEditingSchool(null)}
         onSuccess={fetchData}
         addToast={addToast}
       />
