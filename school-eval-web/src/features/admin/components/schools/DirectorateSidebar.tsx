@@ -8,6 +8,7 @@ interface DirectorateSidebarProps {
   selectedDirectorateId: number | null;
   onSelect: (id: number | null) => void;
   onAddDirectorate: () => void;
+  isMobile?: boolean;
 }
 
 export const DirectorateSidebar: React.FC<DirectorateSidebarProps> = ({
@@ -15,13 +16,15 @@ export const DirectorateSidebar: React.FC<DirectorateSidebarProps> = ({
   selectedDirectorateId,
   onSelect,
   onAddDirectorate,
+  isMobile = false,
 }) => {
   const totalSchools = directorates.reduce((acc, d) => acc + d.schoolCount, 0);
 
   return (
     <div
       style={{
-        width: '280px',
+        width: isMobile ? '100%' : '280px',
+        maxWidth: isMobile ? '100%' : '280px',
         flexShrink: 0,
         backgroundColor: theme.colors.neutral.white,
         borderRadius: theme.radii.xl,
@@ -50,7 +53,7 @@ export const DirectorateSidebar: React.FC<DirectorateSidebarProps> = ({
       </div>
 
       {/* Directorate List */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '8px' }}>
+      <div style={{ flex: 1, maxHeight: isMobile ? '180px' : '480px', overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '8px' }}>
         {/* All Directorates item */}
         <button
           onClick={() => onSelect(null)}

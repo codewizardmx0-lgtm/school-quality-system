@@ -79,7 +79,7 @@ export const BackupArchiveTable: React.FC<BackupArchiveTableProps> = ({
       </div>
 
       <div style={{ overflowX: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'right' }}>
+        <table style={{ width: '100%', minWidth: '650px', borderCollapse: 'collapse', textAlign: 'right' }}>
           <thead>
             <tr style={{ backgroundColor: theme.colors.neutral[50], borderBottom: `1px solid ${theme.colors.neutral[200]}` }}>
               <th style={{ padding: '12px 16px', fontSize: theme.typography.fontSizes.xs, fontWeight: 700, color: theme.colors.neutral[600] }}>

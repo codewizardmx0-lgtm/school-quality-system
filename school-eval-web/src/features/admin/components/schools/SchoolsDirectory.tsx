@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   School as SchoolIcon,
   Building2,
@@ -28,9 +28,22 @@ import type { School, AdminScreen } from '../../types/admin.types';
 interface SchoolsDirectoryProps {
   onNavigate: (screen: AdminScreen) => void;
   addToast: (type: 'success' | 'error' | 'info' | 'warning', msg: string) => void;
+  isMobile?: boolean;
 }
 
-export const SchoolsDirectory: React.FC<SchoolsDirectoryProps> = ({ onNavigate, addToast }) => {
+export const SchoolsDirectory: React.FC<SchoolsDirectoryProps> = ({ onNavigate, addToast, isMobile }) => {
+  const [internalIsMobile, setInternalIsMobile] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') return window.innerWidth < 1024;
+    return false;
+  });
+
+  useEffect(() => {
+    const handleResize = () => setInternalIsMobile(window.innerWidth < 1024);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  const activeIsMobile = isMobile !== undefined ? isMobile : internalIsMobile;
   const {
     schools,
     filteredSchools,
@@ -108,7 +121,7 @@ export const SchoolsDirectory: React.FC<SchoolsDirectoryProps> = ({ onNavigate, 
   };
 
   return (
-    <div style={{ padding: '32px', direction: 'rtl', fontFamily: theme.typography.fontFamily.sans }}>
+    <div style={{ padding: '24px 20px', direction: 'rtl', fontFamily: theme.typography.fontFamily.sans, boxSizing: 'border-box' }}>
       {/* Header & Primary Action */}
       <div
         style={{
@@ -208,18 +221,28 @@ export const SchoolsDirectory: React.FC<SchoolsDirectoryProps> = ({ onNavigate, 
         />
       </div>
 
-      {/* Split View Layout: Directorate Selector (Right) + Schools Table (Left) */}
-      <div style={{ display: 'flex', gap: '20px', alignItems: 'flex-start', marginBottom: '24px' }}>
-        {/* Directorate Sidebar (Right in RTL) */}
+      {/* Split View Layout: Directorate Selector (Top on mobile, Right on desktop) + Schools Table (Below on mobile, Left on desktop) */}
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: activeIsMobile ? 'column' : 'row',
+          gap: '20px',
+          alignItems: 'stretch',
+          marginBottom: '24px',
+          width: '100%',
+        }}
+      >
+        {/* Directorate Sidebar */}
         <DirectorateSidebar
           directorates={directorates}
           selectedDirectorateId={selectedDirectorateId}
           onSelect={setSelectedDirectorateId}
           onAddDirectorate={() => setIsAddDirOpen(true)}
+          isMobile={activeIsMobile}
         />
 
-        {/* Schools Table & Filter Container (Left in RTL) */}
-        <div style={{ flex: 1, minWidth: 0 }}>
+        {/* Schools Table & Filter Container */}
+        <div style={{ flex: 1, minWidth: 0, width: '100%' }}>
           {/* Header & Type Filter */}
           <div
             style={{
@@ -369,11 +392,14 @@ export const SchoolsDirectory: React.FC<SchoolsDirectoryProps> = ({ onNavigate, 
               backgroundColor: theme.colors.neutral.white,
               borderRadius: theme.radii.xl,
               border: `1px solid ${theme.colors.neutral[200]}`,
-              overflow: 'hidden',
+              overflowX: 'auto',
+              overflowY: 'hidden',
+              WebkitOverflowScrolling: 'touch',
               boxShadow: theme.shadows.sm,
+              maxWidth: '100%',
             }}
           >
-            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'right' }}>
+            <table style={{ width: '100%', minWidth: '820px', borderCollapse: 'collapse', textAlign: 'right' }}>
               <thead>
                 <tr style={{ backgroundColor: theme.colors.neutral[50], borderBottom: `1px solid ${theme.colors.neutral[200]}` }}>
                   <th style={{ padding: '14px 16px', fontSize: theme.typography.fontSizes.xs, fontWeight: 700, color: theme.colors.neutral[600] }}>

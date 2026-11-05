@@ -84,7 +84,7 @@ export const SecurityAudit: React.FC<SecurityAuditProps> = ({ onNavigate, addToa
   };
 
   return (
-    <div style={{ padding: '32px', direction: 'rtl', fontFamily: theme.typography.fontFamily.sans }}>
+    <div style={{ padding: '24px 20px', direction: 'rtl', fontFamily: theme.typography.fontFamily.sans, boxSizing: 'border-box' }}>
       {/* Header & Primary Action */}
       <div
         style={{
@@ -261,12 +261,15 @@ export const SecurityAudit: React.FC<SecurityAuditProps> = ({ onNavigate, addToa
           backgroundColor: theme.colors.neutral.white,
           borderRadius: theme.radii.xl,
           border: `1px solid ${theme.colors.neutral[200]}`,
-          overflow: 'hidden',
+          overflowX: 'auto',
+          overflowY: 'hidden',
+          WebkitOverflowScrolling: 'touch',
           boxShadow: theme.shadows.sm,
           marginBottom: '24px',
+          maxWidth: '100%',
         }}
       >
-        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'right' }}>
+        <table style={{ width: '100%', minWidth: '920px', borderCollapse: 'collapse', textAlign: 'right' }}>
           <thead>
             <tr style={{ backgroundColor: theme.colors.neutral[50], borderBottom: `1px solid ${theme.colors.neutral[200]}` }}>
               <th style={{ padding: '14px 16px', fontSize: theme.typography.fontSizes.xs, fontWeight: 700, color: theme.colors.neutral[600] }}>

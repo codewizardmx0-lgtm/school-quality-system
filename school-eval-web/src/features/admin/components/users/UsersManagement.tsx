@@ -119,7 +119,7 @@ export const UsersManagement: React.FC<UsersManagementProps> = ({ onNavigate, ad
   };
 
   return (
-    <div style={{ padding: '32px', direction: 'rtl', fontFamily: theme.typography.fontFamily.sans }}>
+    <div style={{ padding: '24px 20px', direction: 'rtl', fontFamily: theme.typography.fontFamily.sans, boxSizing: 'border-box' }}>
       {/* Header & Primary Action */}
       <div
         style={{
@@ -377,12 +377,14 @@ export const UsersManagement: React.FC<UsersManagementProps> = ({ onNavigate, ad
           backgroundColor: theme.colors.neutral.white,
           borderRadius: theme.radii.xl,
           border: `1px solid ${theme.colors.neutral[200]}`,
-          overflow: 'hidden',
-          boxShadow: theme.shadows.sm,
-          marginBottom: '24px',
+          overflowX: 'auto',
+        overflowY: 'hidden',
+        WebkitOverflowScrolling: 'touch',
+        boxShadow: theme.shadows.sm,
+        marginBottom: '24px',
         }}
       >
-        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'right' }}>
+        <table style={{ width: '100%', minWidth: '840px', borderCollapse: 'collapse', textAlign: 'right' }}>
           <thead>
             <tr
               style={{

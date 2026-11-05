@@ -67,7 +67,7 @@ export const BackupAndSettings: React.FC<BackupAndSettingsProps> = ({ onNavigate
   const latestSuccessBackup = backups.find((b) => b.status === 'completed');
 
   return (
-    <div style={{ padding: '32px', direction: 'rtl', fontFamily: theme.typography.fontFamily.sans }}>
+    <div style={{ padding: '24px 20px', direction: 'rtl', fontFamily: theme.typography.fontFamily.sans, boxSizing: 'border-box' }}>
       {/* Header & Primary Action */}
       <div
         style={{
@@ -228,7 +228,7 @@ export const BackupAndSettings: React.FC<BackupAndSettingsProps> = ({ onNavigate
       </div>
 
       {/* Split View Layout: Backup Archives (Right) + Settings Form (Left) */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '24px', alignItems: 'flex-start', marginBottom: '24px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 380px), 1fr))', gap: '24px', alignItems: 'flex-start', marginBottom: '24px' }}>
         {/* Right Column: Backup Archives & Recovery */}
         <div>
           <div style={{ marginBottom: '16px' }}>

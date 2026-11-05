@@ -139,7 +139,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate, addT
   };
 
   return (
-    <div style={{ padding: '32px', maxWidth: '1600px', margin: '0 auto' }}>
+    <div style={{ padding: '24px 20px', maxWidth: '1600px', margin: '0 auto', boxSizing: 'border-box' }}>
       {/* 1. Dashboard Header */}
       <div
         style={{
@@ -776,7 +776,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate, addT
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(480px, 1fr))',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 380px), 1fr))',
           gap: '24px',
           marginBottom: '32px',
         }}
