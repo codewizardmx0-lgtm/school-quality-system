@@ -7,6 +7,7 @@ import {
   Plus,
   ArrowRight,
   AlertTriangle,
+  ShieldAlert,
   ExternalLink,
 } from 'lucide-react';
 import { theme } from '../../theme';
@@ -159,6 +160,30 @@ export const BackupAndSettings: React.FC<BackupAndSettingsProps> = ({ onNavigate
         </div>
       )}
 
+            {/* Inactive Services Notice Banner */}
+      <div
+        style={{
+          backgroundColor: '#FEF2F2',
+          border: '1px solid #FCA5A5',
+          borderRadius: theme.radii.lg,
+          padding: '12px 18px',
+          marginBottom: '20px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '12px',
+        }}
+      >
+        <ShieldAlert size={20} color="#DC2626" style={{ flexShrink: 0 }} />
+        <div>
+          <div style={{ fontSize: theme.typography.fontSizes.sm, fontWeight: 700, color: '#991B1B' }}>
+            تنبيه: خدمات النسخ السحابي والذكاء الاصطناعي قيد الإعداد (ميزة مستقبلية)
+          </div>
+          <div style={{ fontSize: theme.typography.fontSizes.xs, color: '#7F1D1D', marginTop: '2px' }}>
+            خدمات النسخ الاحتياطي التلقائي ومستودع الوثائق السحابي والذكاء الاصطناعي غير مفعلة حالياً في البيئة التشغيلية وتخضع للمحاكاة التجريبية.
+          </div>
+        </div>
+      </div>
+
       {/* 4 Stat Cards */}
       <div
         style={{
@@ -179,7 +204,7 @@ export const BackupAndSettings: React.FC<BackupAndSettingsProps> = ({ onNavigate
         <StatCard
           title="حجم قاعدة البيانات العلائقية"
           value="3.85 GB"
-          subtitle="تشمل سجلات 48 مدرسة"
+          subtitle="محاكاة تجريبية - غير مفعلة"
           icon={<HardDrive size={24} />}
           iconBgColor="#EFF6FF"
           iconColor="#2563EB"
@@ -187,15 +212,15 @@ export const BackupAndSettings: React.FC<BackupAndSettingsProps> = ({ onNavigate
         <StatCard
           title="مستودع الشواهد والملفات"
           value="2,410 ملفاً"
-          subtitle="مساحة تخزين 38.7 GB"
+          subtitle="محاكاة تجريبية - غير مفعلة"
           icon={<FileText size={24} />}
           iconBgColor="#FEF3C7"
           iconColor="#D97706"
         />
         <StatCard
           title="محرك الذكاء الاصطناعي المساند"
-          value="متصل وجاهز"
-          subtitle="استجابة: 320ms"
+          value="غير مفعل حالياً"
+          subtitle="ميزة مستقبلية قيد الربط"
           icon={<Bot size={24} />}
           iconBgColor="#EDE9FE"
           iconColor="#7C3AED"

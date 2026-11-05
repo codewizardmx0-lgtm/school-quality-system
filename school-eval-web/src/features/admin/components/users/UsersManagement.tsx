@@ -61,11 +61,11 @@ export const UsersManagement: React.FC<UsersManagementProps> = ({ onNavigate, ad
   };
 
   // Stat Counts dynamically computed
-  const totalUsers = users.length || 68;
-  const activeUsers = users.filter((u) => u.status === 'Active').length || 65;
-  const schoolEvaluatorsCount = users.filter((u) => u.userType === 'school').length || 48;
-  const ministrySupervisorsCount = users.filter((u) => u.userType === 'ministry').length || 14;
-  const systemAdminsCount = users.filter((u) => u.userType === 'system').length || 6;
+  const totalUsers = users.length;
+  const activeUsers = users.filter((u) => u.status === 'Active').length;
+  const schoolEvaluatorsCount = users.filter((u) => u.userType === 'school').length;
+  const ministrySupervisorsCount = users.filter((u) => u.userType === 'ministry').length;
+  const systemAdminsCount = users.filter((u) => u.userType === 'system').length;
 
   // Toggle User Status via API Hook
   const handleToggleStatus = async () => {
@@ -73,7 +73,7 @@ export const UsersManagement: React.FC<UsersManagementProps> = ({ onNavigate, ad
     setToggleLoading(true);
     try {
       const updated = await toggleUserStatus(toggleConfirmUser.userId);
-      const action = updated.status === 'Active' ? 'تفعيل' : 'تعليق';
+      const action = updated.status === 'Active' ? 'تنشيط' : 'تعطيل';
       addToast('success', `تم ${action} حساب ${updated.fullName} بنجاح`);
     } catch (err: any) {
       addToast('error', err?.message || 'حدث خطأ أثناء تغيير حالة الحساب');
@@ -104,7 +104,7 @@ export const UsersManagement: React.FC<UsersManagementProps> = ({ onNavigate, ad
       u.userType === 'school' ? 'مدرسة' : u.userType === 'ministry' ? 'مشرف وزاري' : 'إدارة النظام',
       u.roleName,
       u.schoolName ? `${u.schoolName} (${u.schoolCode})` : u.directorate || 'المركز الرئيسي',
-      u.status === 'Active' ? 'نشط' : 'معلق مؤقتاً',
+      u.status === 'Active' ? 'نشط' : 'معطل',
       formatRelativeArabic(u.lastActivity),
     ]);
     downloadXlsx('erteqa_users_directory.xlsx', headers, rows);
@@ -187,15 +187,15 @@ export const UsersManagement: React.FC<UsersManagementProps> = ({ onNavigate, ad
       >
         <StatCard
           title="إجمالي الحسابات المسجلة"
-          value={`${totalUsers} مستخدماً`}
-          subtitle={`${activeUsers} حساباً نشطاً`}
+          value={loading ? '...' : `${totalUsers} مستخدماً`}
+          subtitle={loading ? '...' : `${activeUsers} حساباً نشطاً`}
           icon={<Users size={24} />}
           iconBgColor="#EFF6FF"
           iconColor="#2563EB"
         />
         <StatCard
           title="مسؤولو التقييم بالمدارس"
-          value={`${schoolEvaluatorsCount} مستخدماً`}
+          value={loading ? '...' : `${schoolEvaluatorsCount} مستخدماً`}
           subtitle="مستخدم واحد لكل مدرسة نشطة"
           icon={<UserCheck size={24} />}
           iconBgColor="#ECFDF5"
@@ -203,7 +203,7 @@ export const UsersManagement: React.FC<UsersManagementProps> = ({ onNavigate, ad
         />
         <StatCard
           title="فريق الإشراف الوزاري"
-          value={`${ministrySupervisorsCount} مشرفاً`}
+          value={loading ? '...' : `${ministrySupervisorsCount} مشرفاً`}
           subtitle="موزعون على المديريات"
           icon={<Building size={24} />}
           iconBgColor="#CFFAFE"
@@ -211,7 +211,7 @@ export const UsersManagement: React.FC<UsersManagementProps> = ({ onNavigate, ad
         />
         <StatCard
           title="إدارة المرجعية والنظام"
-          value={`${systemAdminsCount} حسابات`}
+          value={loading ? '...' : `${systemAdminsCount} حسابات`}
           subtitle="صلاحيات حوكمة عليا"
           icon={<ShieldCheck size={24} />}
           iconBgColor="#FEF3C7"
@@ -343,8 +343,8 @@ export const UsersManagement: React.FC<UsersManagementProps> = ({ onNavigate, ad
             }}
           >
             <option value="الكل">الكل</option>
-            <option value="نشط">نشط</option>
-            <option value="معلق مؤقتاً">معلق مؤقتاً</option>
+            <option value="نشط">نشط (Active)</option>
+            <option value="معطل">معطل (Disabled)</option>
           </select>
         </div>
 
@@ -548,7 +548,7 @@ export const UsersManagement: React.FC<UsersManagementProps> = ({ onNavigate, ad
                     <td style={{ padding: '14px 16px' }}>
                       <StatusBadge
                         variant={user.status === 'Active' ? 'active' : 'disabled'}
-                        label={user.status === 'Active' ? 'نشط' : 'معلق مؤقتاً'}
+                        label={user.status === 'Active' ? 'نشط' : 'معطل'}
                         size="md"
                       />
                     </td>
@@ -581,7 +581,7 @@ export const UsersManagement: React.FC<UsersManagementProps> = ({ onNavigate, ad
                         {/* Lock / Unlock */}
                         <button
                           onClick={() => setToggleConfirmUser(user)}
-                          title={user.status === 'Active' ? 'تعليق الحساب' : 'تفعيل الحساب'}
+                          title={user.status === 'Active' ? 'تعطيل الحساب' : 'تنشيط الحساب'}
                           style={{
                             padding: '6px 10px',
                             borderRadius: theme.radii.md,
@@ -597,7 +597,7 @@ export const UsersManagement: React.FC<UsersManagementProps> = ({ onNavigate, ad
                           }}
                         >
                           {user.status === 'Active' ? <Lock size={13} /> : <Unlock size={13} />}
-                          {user.status === 'Active' ? 'قفل' : 'تفعيل'}
+                          {user.status === 'Active' ? 'تعطيل' : 'تنشيط'}
                         </button>
 
                         {/* Reset Password */}
@@ -755,13 +755,13 @@ export const UsersManagement: React.FC<UsersManagementProps> = ({ onNavigate, ad
 
       <ConfirmationDialog
         isOpen={!!toggleConfirmUser}
-        title={toggleConfirmUser?.status === 'Active' ? 'تعليق حساب مستخدم' : 'تفعيل حساب مستخدم'}
+        title={toggleConfirmUser?.status === 'Active' ? 'تعطيل حساب مستخدم' : 'تنشيط حساب مستخدم'}
         message={
           toggleConfirmUser?.status === 'Active'
-            ? `هل أنت متأكد من رغبتك في تعليق حساب "${toggleConfirmUser?.fullName}"؟ لن يتمكن من تسجيل الدخول للنظام لحين إعادة تفعيله.`
-            : `هل أنت متأكد من تفعيل حساب "${toggleConfirmUser?.fullName}"؟ سيتمكن من الوصول للنظام فوراً.`
+            ? `هل أنت متأكد من رغبتك في تعطيل حساب "${toggleConfirmUser?.fullName}"؟ لن يتمكن من تسجيل الدخول للنظام لحين إعادة تنشيطه.`
+            : `هل أنت متأكد من تنشيط حساب "${toggleConfirmUser?.fullName}"؟ سيتمكن من الوصول للنظام فوراً.`
         }
-        confirmLabel={toggleConfirmUser?.status === 'Active' ? 'نعم، قم بالقفل' : 'نعم، قم بالتفعيل'}
+        confirmLabel={toggleConfirmUser?.status === 'Active' ? 'نعم، قم بالتعطيل' : 'نعم، قم بالتنشيط'}
         cancelLabel="إلغاء"
         variant={toggleConfirmUser?.status === 'Active' ? 'danger' : 'info'}
         isLoading={toggleLoading}

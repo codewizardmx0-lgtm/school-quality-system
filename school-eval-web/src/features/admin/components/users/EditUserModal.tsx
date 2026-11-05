@@ -332,8 +332,8 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
               value={form.status}
               onChange={(e) => handleChange('status', e.target.value as 'Active' | 'Disabled')}
             >
-              <option value="Active">نشط (Active)</option>
-              <option value="Disabled">معلق (Disabled)</option>
+              <option value="Active">حساب نشط (Active)</option>
+              <option value="Disabled">حساب معطل (Disabled)</option>
             </select>
           </div>
 

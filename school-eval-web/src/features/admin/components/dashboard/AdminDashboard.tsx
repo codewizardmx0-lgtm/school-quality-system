@@ -18,7 +18,6 @@ import {
   AlertTriangle,
   Server,
   Activity,
-  CheckCircle,
 } from 'lucide-react';
 import { theme } from '../../theme';
 import { useAdminDashboard } from '../../hooks/useAdminDashboard';
@@ -353,7 +352,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate, addT
           </div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '10px', marginBottom: '8px' }}>
             <span style={{ fontSize: '1.75rem', fontWeight: 800, color: '#0B0F19' }}>
-              {stats?.totalSchools ?? (schools.length > 0 ? schools.length : 48)} مدرسة
+              {loading ? '...' : (stats?.totalSchools ?? schools.length)} مدرسة
             </span>
             <span
               style={{
@@ -365,13 +364,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate, addT
                 borderRadius: '6px',
               }}
             >
-              جاهزة {stats?.schoolsReadinessRate ?? 91.6}%
+              جاهزة {loading ? '...' : `${schools.length > 0 ? Math.round((schools.filter((s) => s.isLinked).length / schools.length) * 100) : (stats?.schoolsReadinessRate ?? 0)}%`}
             </span>
           </div>
           <div style={{ fontSize: '0.8rem', color: '#64748B', display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <span style={{ color: '#059669', fontWeight: 600 }}>44 مدرسة جاهزة</span>
-            <span>•</span>
-            <span style={{ color: '#D97706', fontWeight: 600 }}>4 بحاجة لربط منسق</span>
+            <span style={{ color: '#059669', fontWeight: 600 }}>{loading ? '...' : schools.filter((s) => s.isLinked).length} مدرسة جاهزة</span><span>•</span><span style={{ color: '#D97706', fontWeight: 600 }}>{loading ? '...' : schools.filter((s) => !s.isLinked).length} بحاجة لربط</span>
           </div>
         </div>
 
@@ -399,9 +396,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate, addT
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
-            <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#64748B' }}>
-              المستخدمون النشطون الآن
-            </span>
+            <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#64748B' }}>الحسابات المفعلة والنشطة</span>
             <div
               style={{
                 width: '42px',
@@ -419,7 +414,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate, addT
           </div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '10px', marginBottom: '8px' }}>
             <span style={{ fontSize: '1.75rem', fontWeight: 800, color: '#0B0F19' }}>
-              {stats?.totalUsers ?? 68} حساباً
+              {loading ? '...' : (stats?.totalUsers ?? 0)} حساباً
             </span>
             <span
               style={{
@@ -431,11 +426,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate, addT
                 borderRadius: '6px',
               }}
             >
-              {stats?.activeUsers ?? 12} متصل الآن
+              {loading ? '...' : (stats?.activeUsers ?? 0)} مفعّل
             </span>
           </div>
           <div style={{ fontSize: '0.8rem', color: '#64748B' }}>
-            12 متصلين حالياً في دورة التقييم الذاتي
+            {loading ? 'جاري التحقق من الحسابات...' : `${stats?.activeUsers ?? 0} حساباً مفعلاً في قاعدة البيانات`}
           </div>
         </div>
 
@@ -483,23 +478,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate, addT
           </div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '10px', marginBottom: '8px' }}>
             <span style={{ fontSize: '1.75rem', fontWeight: 800, color: '#0B0F19' }}>
-              {stats?.securityIndex ? `${stats.securityIndex}% مؤكد` : '100% مؤكد'}
+              قيد التهيئة
             </span>
             <span
               style={{
                 fontSize: '0.75rem',
                 fontWeight: 700,
-                color: '#059669',
-                backgroundColor: '#ECFDF5',
+                color: '#DC2626',
+                backgroundColor: '#FEF2F2',
+                border: '1px solid #FECACA',
                 padding: '2px 8px',
                 borderRadius: '6px',
               }}
             >
-              محمي بالكامل
+              غير مفعلة حالياً
             </span>
           </div>
-          <div style={{ fontSize: '0.8rem', color: '#64748B' }}>
-            0 اختراقات • 3 محاولات محظورة ومسجلة
+          <div style={{ fontSize: '0.8rem', color: '#94A3B8' }}>
+            مراقبة الحوادث الرقمية ميزة مستقبلية
           </div>
         </div>
 
@@ -546,22 +542,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate, addT
             </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '10px', marginBottom: '8px' }}>
-            <span style={{ fontSize: '1.75rem', fontWeight: 800, color: '#0B0F19' }}>مستقر ومجدول</span>
+            <span style={{ fontSize: '1.75rem', fontWeight: 800, color: '#0B0F19' }}>ميزة مستقبلية
+            </span>
             <span
               style={{
                 fontSize: '0.75rem',
                 fontWeight: 700,
-                color: '#059669',
-                backgroundColor: '#ECFDF5',
+                color: '#DC2626',
+                backgroundColor: '#FEF2F2',
+                border: '1px solid #FECACA',
                 padding: '2px 8px',
                 borderRadius: '6px',
               }}
             >
-              100% تشغيل
+              غير مفعلة حالياً
             </span>
           </div>
-          <div style={{ fontSize: '0.8rem', color: '#64748B' }}>
-            آخر نسخة: اليوم 02:00 ص • السيرفرات تعمل
+          <div style={{ fontSize: '0.8rem', color: '#94A3B8' }}>
+            خدمات النسخ الاحتياطي السحابي قيد الإعداد
           </div>
         </div>
       </div>
@@ -959,7 +957,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate, addT
               e.currentTarget.style.borderColor = '#CBD5E1';
             }}
           >
-            <span>عرض كافة المدارس والمديريات (48)</span>
+            <span>عرض كافة المدارس والمديريات ({loading ? '...' : schools.length})</span>
             <ArrowLeft size={16} />
           </button>
         </div>
@@ -1014,9 +1012,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate, addT
               style={{
                 fontSize: '0.75rem',
                 fontWeight: 700,
-                color: '#059669',
-                backgroundColor: '#ECFDF5',
-                border: '1px solid #A7F3D0',
+                color: '#DC2626',
+                backgroundColor: '#FEF2F2',
+                border: '1px solid #FECACA',
                 padding: '3px 10px',
                 borderRadius: '9999px',
                 display: 'inline-flex',
@@ -1024,8 +1022,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate, addT
                 gap: '5px',
               }}
             >
-              <CheckCircle size={12} />
-              الخدمات مثالية
+              <AlertTriangle size={12} /> متوقفة مؤقتاً / قيد التهيئة
             </span>
           </div>
 
@@ -1062,8 +1059,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate, addT
                   <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#0B0F19' }}>
                     محرك الذكاء الاصطناعي (Artaqa-Assist v2.4)
                   </div>
-                  <div style={{ fontSize: '0.75rem', color: '#059669', fontWeight: 600 }}>
-                    متصل • زمن الاستجابة 320ms
+                  <div style={{ fontSize: '0.75rem', color: '#DC2626', fontWeight: 600 }}>
+                    قيد التهيئة البرمجية • غير متصل
                   </div>
                 </div>
               </div>
@@ -1077,7 +1074,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate, addT
                   borderRadius: '6px',
                 }}
               >
-                جاهز للاستشارات
+                ميزة مستقبلية
               </span>
             </div>
 
@@ -1114,7 +1111,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate, addT
                       مستودع الشواهد السحابي (S3 Storage)
                     </div>
                     <div style={{ fontSize: '0.75rem', color: '#64748B' }}>
-                      42.6 GB من 500 GB مستخدمة (8.5%)
+                      تخزين محلي مؤقت • التخزين السحابي غير مفعل
                     </div>
                   </div>
                 </div>
@@ -1128,7 +1125,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate, addT
                     borderRadius: '6px',
                   }}
                 >
-                  مشفر AES-256
+                  تجريبي محلي
                 </span>
               </div>
               {/* Storage progress bar */}
@@ -1183,8 +1180,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate, addT
                   <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#0B0F19' }}>
                     خادم البريد والإشعارات (SMTP Gateway)
                   </div>
-                  <div style={{ fontSize: '0.75rem', color: '#059669', fontWeight: 600 }}>
-                    يعمل بكفاءة 100% • 0 أخطاء في الطابور
+                  <div style={{ fontSize: '0.75rem', color: '#DC2626', fontWeight: 600 }}>
+                    خدمة البريد SMTP غير مفعلة في البيئة الحالية
                   </div>
                 </div>
               </div>
@@ -1198,7 +1195,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate, addT
                   borderRadius: '6px',
                 }}
               >
-                طبيعي
+                غير مفعل
               </span>
             </div>
 
@@ -1248,7 +1245,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate, addT
                   borderRadius: '6px',
                 }}
               >
-                درع نشط
+                حماية أساسية
               </span>
             </div>
           </div>

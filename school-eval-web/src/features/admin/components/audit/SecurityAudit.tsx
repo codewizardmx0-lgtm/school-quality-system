@@ -141,6 +141,27 @@ export const SecurityAudit: React.FC<SecurityAuditProps> = ({ onNavigate, addToa
         </button>
       </div>
 
+            {/* Advisory Notice Banner for Non-active KPI metrics */}
+      <div
+        style={{
+          backgroundColor: '#FFFBEB',
+          border: '1px solid #FDE68A',
+          borderRadius: theme.radii.lg,
+          padding: '12px 16px',
+          marginBottom: '20px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '10px',
+          fontSize: theme.typography.fontSizes.xs,
+          color: '#B45309',
+        }}
+      >
+        <ShieldAlert size={18} style={{ flexShrink: 0 }} />
+        <span>
+          تنبيه: سجل التدقيق الأمني في الجدول أدناه موصول مباشرة بالـ API ويعرض العمليات الحقيقية، بينما البطاقات الإحصائية العلوية تمثل محاكاة استرشادية لمؤشرات الأمان.
+        </span>
+      </div>
+
       {/* 4 Stat Cards */}
       <div
         style={{
@@ -151,9 +172,9 @@ export const SecurityAudit: React.FC<SecurityAuditProps> = ({ onNavigate, addToa
         }}
       >
         <StatCard
-          title="أحداث النظام المسجلة اليوم"
-          value="1,428 عملية"
-          subtitle="معدل نشاط طبيعي"
+          title="سجل العمليات الموثقة بالـ API"
+          value={loading ? '...' : `${logs.length} عملية`}
+          subtitle="سجلات تدقيق فعلية بالنظام"
           icon={<Activity size={24} />}
           iconBgColor="#EFF6FF"
           iconColor="#2563EB"
@@ -161,7 +182,7 @@ export const SecurityAudit: React.FC<SecurityAuditProps> = ({ onNavigate, addToa
         <StatCard
           title="عمليات حوكمة حساسة"
           value="18 عملية"
-          subtitle="قفل معايير وتعديل صلاحيات"
+          subtitle="إحصائية استرشادية (محاكاة)"
           icon={<ShieldAlert size={24} />}
           iconBgColor="#FEF3C7"
           iconColor="#D97706"
@@ -169,7 +190,7 @@ export const SecurityAudit: React.FC<SecurityAuditProps> = ({ onNavigate, addToa
         <StatCard
           title="محاولات دخول غير مصرح بها"
           value="3 محاولات"
-          subtitle="تم حظر الـ IP تلقائياً"
+          subtitle="إحصائية استرشادية (محاكاة)"
           icon={<AlertOctagon size={24} />}
           iconBgColor="#FEE2E2"
           iconColor="#EF4444"
@@ -177,7 +198,7 @@ export const SecurityAudit: React.FC<SecurityAuditProps> = ({ onNavigate, addToa
         <StatCard
           title="المزامنة مع خادم الأرشيف"
           value="متزامن 100%"
-          subtitle="SHA-256 Validated"
+          subtitle="إحصائية استرشادية (محاكاة)"
           icon={<CheckCircle2 size={24} />}
           iconBgColor="#ECFDF5"
           iconColor="#059669"
