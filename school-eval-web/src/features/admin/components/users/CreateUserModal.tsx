@@ -3,6 +3,8 @@ import { X, Eye, EyeOff } from 'lucide-react';
 import { theme } from '../../theme';
 import { usersApi } from '../../api/usersApi';
 import { schoolsApi } from '../../api/schoolsApi';
+import { SearchableSelect, type SearchableOption } from '../common/SearchableSelect';
+import { formatRoleNameAr } from '../../utils/roleUtils';
 import type { CreateUserDto, UserType, Role, Directorate } from '../../types/admin.types';
 
 interface CreateUserModalProps {
@@ -12,13 +14,6 @@ interface CreateUserModalProps {
   addToast: (type: 'success' | 'error', msg: string) => void;
 }
 
-const ROLE_ARABIC_NAMES: Record<string, string> = {
-  admin: 'مدير النظام المركزي',
-  school_evaluator: 'مقيّم جودة بالمدرسة',
-  school_principal: 'مدير مدرسة / مراجع داخلي',
-  ministry_standards_manager: 'مسؤول المعايير بالوزارة',
-  ministry_supervisor: 'مشرف ومراجع وزاري',
-};
 
 export const CreateUserModal: React.FC<CreateUserModalProps> = ({ isOpen, onClose, onSuccess, addToast }) => {
   const [form, setForm] = useState<CreateUserDto>({
@@ -50,6 +45,13 @@ export const CreateUserModal: React.FC<CreateUserModalProps> = ({ isOpen, onClos
   }, [isOpen]);
 
   if (!isOpen) return null;
+
+  const schoolOptions: SearchableOption[] = schools.map((s) => ({
+    value: s.schoolId,
+    label: s.schoolName,
+    code: s.schoolCode,
+    sublabel: (s as any).educationalDistrict || (s as any).directorate,
+  }));
 
   // Filter roles dynamically according to official DB roles
   const filteredRoles = roles.filter((r) => {
@@ -241,7 +243,7 @@ export const CreateUserModal: React.FC<CreateUserModalProps> = ({ isOpen, onClos
               <select style={inputStyle()} value={form.roleId} onChange={(e) => handleChange('roleId', Number(e.target.value))}>
                 {filteredRoles.map((r) => (
                   <option key={r.roleId} value={r.roleId}>
-                    {ROLE_ARABIC_NAMES[r.roleName] || r.description || r.roleName}
+                    {formatRoleNameAr(r.roleName, r.description)}
                   </option>
                 ))}
               </select>
@@ -251,14 +253,13 @@ export const CreateUserModal: React.FC<CreateUserModalProps> = ({ isOpen, onClos
           {form.userType === 'school' && (
             <div>
               <label style={labelStyle}>المدرسة التابعة *</label>
-              <select style={inputStyle(!!errors.schoolId)} value={form.schoolId || ''} onChange={(e) => handleChange('schoolId', e.target.value ? Number(e.target.value) : null)}>
-                <option value="">-- اختر المدرسة من قاعدة البيانات --</option>
-                {schools.map((s) => (
-                  <option key={s.schoolId} value={s.schoolId}>
-                    {s.schoolName} ({s.schoolCode})
-                  </option>
-                ))}
-              </select>
+              <SearchableSelect
+                options={schoolOptions}
+                value={form.schoolId}
+                onChange={(val) => handleChange('schoolId', val ? Number(val) : null)}
+                placeholder="ابحث باسم المدرسة أو الكود (مثال: بلقيس، 1000)..."
+                error={errors.schoolId}
+              />
               {errors.schoolId && <p style={errorStyle}>{errors.schoolId}</p>}
             </div>
           )}

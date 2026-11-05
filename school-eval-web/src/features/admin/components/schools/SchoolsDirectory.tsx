@@ -18,6 +18,7 @@ import { theme } from '../../theme';
 import { StatCard } from '../common/StatCard';
 import { StatusBadge } from '../common/StatusBadge';
 import { DirectorateSidebar } from './DirectorateSidebar';
+import { RefreshButton } from '../common/RefreshButton';
 import { RegisterSchoolModal } from './RegisterSchoolModal';
 import { LinkEvaluatorModal } from './LinkEvaluatorModal';
 import { AddDirectorateModal } from './AddDirectorateModal';
@@ -32,6 +33,9 @@ interface SchoolsDirectoryProps {
 }
 
 export const SchoolsDirectory: React.FC<SchoolsDirectoryProps> = ({ onNavigate, addToast, isMobile }) => {
+  const [lastUpdated, setLastUpdated] = useState<string>(() => {
+    return new Date().toLocaleTimeString('ar-YE', { hour: '2-digit', minute: '2-digit' });
+  });
   const [internalIsMobile, setInternalIsMobile] = useState<boolean>(() => {
     if (typeof window !== 'undefined') return window.innerWidth < 1024;
     return false;
@@ -65,8 +69,9 @@ export const SchoolsDirectory: React.FC<SchoolsDirectoryProps> = ({ onNavigate, 
   const [isAddDirOpen, setIsAddDirOpen] = useState(false);
   const [linkingSchool, setLinkingSchool] = useState<School | null>(null);
 
-  const handleRefresh = () => {
-    void fetchData();
+  const handleRefresh = async () => {
+    await fetchData();
+    setLastUpdated(new Date().toLocaleTimeString('ar-YE', { hour: '2-digit', minute: '2-digit' }));
   };
 
   const selectedDirName = selectedDirectorateId
@@ -155,27 +160,51 @@ export const SchoolsDirectory: React.FC<SchoolsDirectoryProps> = ({ onNavigate, 
           </p>
         </div>
 
-        <button
-          onClick={() => setIsRegisterOpen(true)}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-            padding: '10px 20px',
-            borderRadius: theme.radii.lg,
-            border: 'none',
-            background: 'linear-gradient(90deg, #4F46E5, #6366F1)',
-            color: '#fff',
-            fontSize: theme.typography.fontSizes.sm,
-            fontWeight: 600,
-            cursor: 'pointer',
-            boxShadow: '0 4px 12px rgba(79, 70, 229, 0.3)',
-            fontFamily: theme.typography.fontFamily.sans,
-          }}
-        >
-          <Plus size={18} />
-          + تسجيل مدرسة جديدة
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+          <RefreshButton onRefresh={handleRefresh} loading={loading} lastUpdated={lastUpdated} />
+          <button
+            onClick={handleExport}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '9px 16px',
+              borderRadius: theme.radii.lg,
+              border: `1px solid ${theme.colors.neutral[200]}`,
+              backgroundColor: theme.colors.neutral.white,
+              color: theme.colors.neutral[700],
+              fontSize: theme.typography.fontSizes.sm,
+              fontWeight: 600,
+              cursor: 'pointer',
+              fontFamily: theme.typography.fontFamily.sans,
+              boxShadow: theme.shadows.sm,
+            }}
+          >
+            <Download size={16} />
+            تصدير CSV
+          </button>
+          <button
+            onClick={() => setIsRegisterOpen(true)}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              padding: '10px 20px',
+              borderRadius: theme.radii.lg,
+              border: 'none',
+              background: 'linear-gradient(90deg, #4F46E5, #6366F1)',
+              color: '#fff',
+              fontSize: theme.typography.fontSizes.sm,
+              fontWeight: 600,
+              cursor: 'pointer',
+              boxShadow: '0 4px 12px rgba(79, 70, 229, 0.3)',
+              fontFamily: theme.typography.fontFamily.sans,
+            }}
+          >
+            <Plus size={18} />
+            + تسجيل مدرسة جديدة
+          </button>
+        </div>
       </div>
 
       {/* 4 Dynamic Stat Cards */}
@@ -268,7 +297,7 @@ export const SchoolsDirectory: React.FC<SchoolsDirectoryProps> = ({ onNavigate, 
             </div>
 
             {/* Type Filter Buttons */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', flex: '1 1 auto', maxWidth: '100%', justifyContent: 'flex-end' }}>
               <div
                 style={{
                   display: 'flex',
@@ -302,7 +331,7 @@ export const SchoolsDirectory: React.FC<SchoolsDirectoryProps> = ({ onNavigate, 
               </div>
 
               {/* Search */}
-              <div style={{ position: 'relative', minWidth: '180px' }}>
+              <div style={{ position: 'relative', flex: '1 1 200px', minWidth: '150px', maxWidth: '100%', boxSizing: 'border-box' }}>
                 <Search
                   size={15}
                   color={theme.colors.neutral[400]}
@@ -478,25 +507,30 @@ export const SchoolsDirectory: React.FC<SchoolsDirectoryProps> = ({ onNavigate, 
                           backgroundColor: idx % 2 === 0 ? theme.colors.neutral.white : '#FAFAFA',
                         }}
                       >
-                        {/* Name & Code */}
+                        {/* Name & Code - Separated into clear distinct lines */}
                         <td style={{ padding: '14px 16px' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <span
-                              style={{
-                                padding: '2px 8px',
-                                borderRadius: '6px',
-                                backgroundColor: school.schoolType === 'government' ? '#EFF6FF' : '#FEF3C7',
-                                color: school.schoolType === 'government' ? '#1D4ED8' : '#92400E',
-                                fontSize: '0.7rem',
-                                fontWeight: 700,
-                                fontFamily: 'monospace',
-                              }}
-                            >
-                              {school.schoolCode}
-                            </span>
-                            <span style={{ fontSize: theme.typography.fontSizes.sm, fontWeight: 700, color: theme.colors.neutral[900] }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            <span style={{ fontSize: theme.typography.fontSizes.sm, fontWeight: 700, color: theme.colors.neutral[900], lineHeight: 1.4 }}>
                               {school.schoolName}
                             </span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <span
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  padding: '2px 8px',
+                                  borderRadius: '6px',
+                                  backgroundColor: school.schoolType === 'government' ? '#EFF6FF' : '#FEF3C7',
+                                  color: school.schoolType === 'government' ? '#1D4ED8' : '#92400E',
+                                  fontSize: '0.7rem',
+                                  fontWeight: 700,
+                                  fontFamily: 'monospace',
+                                  border: `1px solid ${school.schoolType === 'government' ? '#DBEAFE' : '#FDE68A'}`,
+                                }}
+                              >
+                                كود: {school.schoolCode}
+                              </span>
+                            </div>
                           </div>
                         </td>
 

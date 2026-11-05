@@ -6,6 +6,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { usersApi, type UsersQueryParams } from '../api/usersApi';
 import type { User, Role, CreateUserDto, EditUserDto } from '../types/admin.types';
+import { formatRoleNameAr } from '../utils/roleUtils';
 
 export function useAdminUsers() {
   const [users, setUsers] = useState<User[]>([]);
@@ -100,7 +101,8 @@ export function useAdminUsers() {
 
       const matchRole =
         roleFilter === 'الكل' ||
-        u.roleName === roleFilter;
+        u.roleName === roleFilter ||
+        formatRoleNameAr(u.roleName) === roleFilter;
 
       const matchStatus =
         statusFilter === 'الكل' ||

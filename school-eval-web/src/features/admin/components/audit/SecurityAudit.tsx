@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { theme } from '../../theme';
 import { StatCard } from '../common/StatCard';
+import { RefreshButton } from '../common/RefreshButton';
 import { StatusBadge } from '../common/StatusBadge';
 import { AuditFilterBar } from './AuditFilterBar';
 import { BlockedIpsModal } from './BlockedIpsModal';
@@ -25,6 +26,9 @@ interface SecurityAuditProps {
 }
 
 export const SecurityAudit: React.FC<SecurityAuditProps> = ({ onNavigate, addToast }) => {
+  const [lastUpdated, setLastUpdated] = useState<string>(() => {
+    return new Date().toLocaleTimeString('ar-YE', { hour: '2-digit', minute: '2-digit' });
+  });
   const {
     logs,
     filteredLogs,
@@ -43,9 +47,7 @@ export const SecurityAudit: React.FC<SecurityAuditProps> = ({ onNavigate, addToa
   // Modals
   const [isBlockedIpsOpen, setIsBlockedIpsOpen] = useState(false);
 
-  const handleRefresh = () => {
-    void fetchData();
-  };
+  const handleRefresh = async () => { await fetchData(); setLastUpdated(new Date().toLocaleTimeString('ar-YE', { hour: '2-digit', minute: '2-digit' })); };
 
   // Export encrypted CSV
   const handleExport = () => {
@@ -118,27 +120,76 @@ export const SecurityAudit: React.FC<SecurityAuditProps> = ({ onNavigate, addToa
           </p>
         </div>
 
-        <button
-          onClick={handleExport}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-            padding: '10px 20px',
-            borderRadius: theme.radii.lg,
-            border: 'none',
-            background: 'linear-gradient(90deg, #059669, #10B981)',
-            color: '#fff',
-            fontSize: theme.typography.fontSizes.sm,
-            fontWeight: 600,
-            cursor: 'pointer',
-            boxShadow: '0 4px 12px rgba(16, 185, 129, 0.3)',
-            fontFamily: theme.typography.fontFamily.sans,
-          }}
-        >
-          <Download size={18} />
-          تصدير السجل المشفّر (CSV) ↓
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+
+
+          <RefreshButton onRefresh={handleRefresh} loading={loading} lastUpdated={lastUpdated} />
+
+
+          <button
+
+
+            onClick={handleExport}
+
+
+            style={{
+
+
+              display: 'flex',
+
+
+              alignItems: 'center',
+
+
+              gap: '8px',
+
+
+              padding: '10px 20px',
+
+
+              borderRadius: theme.radii.lg,
+
+
+              border: 'none',
+
+
+              background: 'linear-gradient(90deg, #059669, #10B981)',
+
+
+              color: '#fff',
+
+
+              fontSize: theme.typography.fontSizes.sm,
+
+
+              fontWeight: 600,
+
+
+              cursor: 'pointer',
+
+
+              boxShadow: '0 4px 12px rgba(16, 185, 129, 0.3)',
+
+
+              fontFamily: theme.typography.fontFamily.sans,
+
+
+            }}
+
+
+          >
+
+
+            <Download size={18} />
+
+
+            تصدير السجل المشفّر (CSV) ↓
+
+
+          </button>
+
+
+        </div>
       </div>
 
             {/* Advisory Notice Banner for Non-active KPI metrics */}

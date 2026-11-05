@@ -3,6 +3,8 @@ import { X } from 'lucide-react';
 import { theme } from '../../theme';
 import { usersApi } from '../../api/usersApi';
 import { schoolsApi } from '../../api/schoolsApi';
+import { SearchableSelect, type SearchableOption } from '../common/SearchableSelect';
+import { formatRoleNameAr } from '../../utils/roleUtils';
 import type { User, EditUserDto, UserType, Role, Directorate } from '../../types/admin.types';
 
 interface EditUserModalProps {
@@ -13,13 +15,6 @@ interface EditUserModalProps {
   addToast: (type: 'success' | 'error', msg: string) => void;
 }
 
-const ROLE_ARABIC_NAMES: Record<string, string> = {
-  admin: 'مدير النظام المركزي',
-  school_evaluator: 'مقيّم جودة بالمدرسة',
-  school_principal: 'مدير مدرسة / مراجع داخلي',
-  ministry_standards_manager: 'مسؤول المعايير بالوزارة',
-  ministry_supervisor: 'مشرف ومراجع وزاري',
-};
 
 export const EditUserModal: React.FC<EditUserModalProps> = ({
   isOpen,
@@ -76,6 +71,13 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
   }
 
   if (!isOpen || !user) return null;
+
+  const schoolOptions: SearchableOption[] = schools.map((s) => ({
+    value: s.schoolId,
+    label: s.schoolName,
+    code: s.schoolCode,
+    sublabel: (s as any).educationalDistrict || (s as any).directorate,
+  }));
 
   const filteredRoles = roles.filter((r) => {
     if (form.userType === 'school') {
@@ -280,7 +282,7 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
               >
                 {filteredRoles.map((r) => (
                   <option key={r.roleId} value={r.roleId}>
-                    {ROLE_ARABIC_NAMES[r.roleName] || r.description || r.roleName}
+                    {formatRoleNameAr(r.roleName, r.description)}
                   </option>
                 ))}
               </select>
@@ -290,18 +292,13 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
           {form.userType === 'school' && (
             <div>
               <label style={labelStyle}>المدرسة التابعة *</label>
-              <select
-                style={inputStyle(!!errors.schoolId)}
-                value={form.schoolId || ''}
-                onChange={(e) => handleChange('schoolId', e.target.value ? Number(e.target.value) : null)}
-              >
-                <option value="">-- اختر المدرسة من قاعدة البيانات --</option>
-                {schools.map((s) => (
-                  <option key={s.schoolId} value={s.schoolId}>
-                    {s.schoolName} ({s.schoolCode})
-                  </option>
-                ))}
-              </select>
+              <SearchableSelect
+                options={schoolOptions}
+                value={form.schoolId}
+                onChange={(val) => handleChange('schoolId', val ? Number(val) : null)}
+                placeholder="ابحث باسم المدرسة أو الكود (مثال: بلقيس، 1000)..."
+                error={errors.schoolId}
+              />
               {errors.schoolId && <p style={errorStyle}>{errors.schoolId}</p>}
             </div>
           )}

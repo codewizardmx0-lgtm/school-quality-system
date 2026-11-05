@@ -866,11 +866,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate, addT
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
-                    padding: '14px 16px',
+                    padding: '12px 14px',
                     borderRadius: '12px',
                     backgroundColor: '#F8FAFC',
                     border: '1px solid #E2E8F0',
                     transition: 'all 0.15s ease',
+                    flexWrap: 'wrap',
+                    gap: '10px',
                   }}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -1354,7 +1356,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate, addT
                   flexWrap: 'wrap',
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '14px', minWidth: '240px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0, flex: '1 1 200px' }}>
                   <div
                     style={{
                       width: '40px',

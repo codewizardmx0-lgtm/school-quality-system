@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { theme } from '../../theme';
 import { StatCard } from '../common/StatCard';
+import { RefreshButton } from '../common/RefreshButton';
 import { BackupArchiveTable } from './BackupArchiveTable';
 import { IntegrationSettingsForm } from './IntegrationSettingsForm';
 import { TriggerBackupModal } from './TriggerBackupModal';
@@ -26,6 +27,9 @@ interface BackupAndSettingsProps {
 }
 
 export const BackupAndSettings: React.FC<BackupAndSettingsProps> = ({ onNavigate, addToast }) => {
+  const [lastUpdated, setLastUpdated] = useState<string>(() => {
+    return new Date().toLocaleTimeString('ar-YE', { hour: '2-digit', minute: '2-digit' });
+  });
   const {
     backups,
     settings,
@@ -33,6 +37,11 @@ export const BackupAndSettings: React.FC<BackupAndSettingsProps> = ({ onNavigate
     error,
     fetchData,
   } = useAdminBackup();
+
+  const handleRefresh = async () => {
+    await fetchData();
+    setLastUpdated(new Date().toLocaleTimeString('ar-YE', { hour: '2-digit', minute: '2-digit' }));
+  };
 
   // Modals
   const [isTriggerOpen, setIsTriggerOpen] = useState(false);
@@ -101,27 +110,76 @@ export const BackupAndSettings: React.FC<BackupAndSettingsProps> = ({ onNavigate
           </p>
         </div>
 
-        <button
-          onClick={() => setIsTriggerOpen(true)}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-            padding: '10px 20px',
-            borderRadius: theme.radii.lg,
-            border: 'none',
-            background: 'linear-gradient(90deg, #059669, #10B981)',
-            color: '#fff',
-            fontSize: theme.typography.fontSizes.sm,
-            fontWeight: 600,
-            cursor: 'pointer',
-            boxShadow: '0 4px 12px rgba(16, 185, 129, 0.3)',
-            fontFamily: theme.typography.fontFamily.sans,
-          }}
-        >
-          <Plus size={18} />
-          + إنشاء نسخة احتياطية فورية
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+
+
+          <RefreshButton onRefresh={handleRefresh} loading={loading} lastUpdated={lastUpdated} />
+
+
+          <button
+
+
+            onClick={() => setIsTriggerOpen(true)}
+
+
+            style={{
+
+
+              display: 'flex',
+
+
+              alignItems: 'center',
+
+
+              gap: '8px',
+
+
+              padding: '10px 20px',
+
+
+              borderRadius: theme.radii.lg,
+
+
+              border: 'none',
+
+
+              background: 'linear-gradient(90deg, #059669, #10B981)',
+
+
+              color: '#fff',
+
+
+              fontSize: theme.typography.fontSizes.sm,
+
+
+              fontWeight: 600,
+
+
+              cursor: 'pointer',
+
+
+              boxShadow: '0 4px 12px rgba(16, 185, 129, 0.3)',
+
+
+              fontFamily: theme.typography.fontFamily.sans,
+
+
+            }}
+
+
+          >
+
+
+            <Plus size={18} />
+
+
+            + إنشاء نسخة احتياطية فورية
+
+
+          </button>
+
+
+        </div>
       </div>
 
       {/* Error Fallback Prompt */}

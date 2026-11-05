@@ -19,12 +19,14 @@ import {
 import { theme } from '../../theme';
 import { StatCard } from '../common/StatCard';
 import { StatusBadge } from '../common/StatusBadge';
+import { RefreshButton } from '../common/RefreshButton';
+import { formatRoleNameAr } from '../../utils/roleUtils';
 import { ConfirmationDialog } from '../common/ConfirmationDialog';
 import { CreateUserModal } from './CreateUserModal';
 import { EditUserModal } from './EditUserModal';
 import { ResetPasswordModal } from './ResetPasswordModal';
 import { useAdminUsers } from '../../hooks/useAdminUsers';
-import { downloadXlsx } from '../../utils/exportUtils';
+import { downloadCsv } from '../../utils/exportUtils';
 import { formatRelativeArabic } from '../../utils/dateUtils';
 import type { User, AdminScreen } from '../../types/admin.types';
 
@@ -55,10 +57,11 @@ export const UsersManagement: React.FC<UsersManagementProps> = ({ onNavigate, ad
   const [resetUser, setResetUser] = useState<User | null>(null);
   const [toggleConfirmUser, setToggleConfirmUser] = useState<User | null>(null);
   const [toggleLoading, setToggleLoading] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<string>(() => {
+    return new Date().toLocaleTimeString('ar-YE', { hour: '2-digit', minute: '2-digit' });
+  });
 
-  const handleRefresh = () => {
-    void fetchUsers();
-  };
+  const handleRefresh = async () => { await fetchUsers(); setLastUpdated(new Date().toLocaleTimeString('ar-YE', { hour: '2-digit', minute: '2-digit' })); };
 
   // Stat Counts dynamically computed
   const totalUsers = users.length;
@@ -102,13 +105,13 @@ export const UsersManagement: React.FC<UsersManagementProps> = ({ onNavigate, ad
       u.username,
       u.email,
       u.userType === 'school' ? 'مدرسة' : u.userType === 'ministry' ? 'مشرف وزاري' : 'إدارة النظام',
-      u.roleName,
+      formatRoleNameAr(u.roleName),
       u.schoolName ? `${u.schoolName} (${u.schoolCode})` : u.directorate || 'المركز الرئيسي',
       u.status === 'Active' ? 'نشط' : 'معطل',
       formatRelativeArabic(u.lastActivity),
     ]);
-    downloadXlsx('erteqa_users_directory.xlsx', headers, rows);
-    addToast('success', 'تم تصدير دليل المستخدمين بنجاح بصيغة XLSX');
+    downloadCsv('erteqa_users_directory.csv', headers, rows);
+    addToast('success', 'تم تصدير دليل المستخدمين بنجاح بصيغة CSV المتوافقة مع Excel');
   };
 
   // Get user initials for avatar
@@ -153,27 +156,51 @@ export const UsersManagement: React.FC<UsersManagementProps> = ({ onNavigate, ad
           </p>
         </div>
 
-        <button
-          onClick={() => setIsCreateOpen(true)}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-            padding: '10px 20px',
-            borderRadius: theme.radii.lg,
-            border: 'none',
-            background: 'linear-gradient(90deg, #4F46E5, #6366F1)',
-            color: '#fff',
-            fontSize: theme.typography.fontSizes.sm,
-            fontWeight: 600,
-            cursor: 'pointer',
-            boxShadow: '0 4px 12px rgba(79, 70, 229, 0.3)',
-            fontFamily: theme.typography.fontFamily.sans,
-          }}
-        >
-          <UserPlus size={18} />
-          + إنشاء مستخدم جديد
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+          <RefreshButton onRefresh={handleRefresh} loading={loading} lastUpdated={lastUpdated} />
+          <button
+            onClick={handleExport}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '9px 16px',
+              borderRadius: theme.radii.lg,
+              border: `1px solid ${theme.colors.neutral[200]}`,
+              backgroundColor: theme.colors.neutral.white,
+              color: theme.colors.neutral[700],
+              fontSize: theme.typography.fontSizes.sm,
+              fontWeight: 600,
+              cursor: 'pointer',
+              fontFamily: theme.typography.fontFamily.sans,
+              boxShadow: theme.shadows.sm,
+            }}
+          >
+            <Download size={16} />
+            تصدير CSV
+          </button>
+          <button
+            onClick={() => setIsCreateOpen(true)}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              padding: '10px 20px',
+              borderRadius: theme.radii.lg,
+              border: 'none',
+              background: 'linear-gradient(90deg, #4F46E5, #6366F1)',
+              color: '#fff',
+              fontSize: theme.typography.fontSizes.sm,
+              fontWeight: 600,
+              cursor: 'pointer',
+              boxShadow: '0 4px 12px rgba(79, 70, 229, 0.3)',
+              fontFamily: theme.typography.fontFamily.sans,
+            }}
+          >
+            <UserPlus size={18} />
+            + إنشاء مستخدم جديد
+          </button>
+        </div>
       </div>
 
       {/* 4 Stat Cards */}
@@ -194,9 +221,9 @@ export const UsersManagement: React.FC<UsersManagementProps> = ({ onNavigate, ad
           iconColor="#2563EB"
         />
         <StatCard
-          title="مسؤولو التقييم بالمدارس"
+          title="مقيّمو ومسؤولو الجودة بالمدرسة"
           value={loading ? '...' : `${schoolEvaluatorsCount} مستخدماً`}
-          subtitle="مستخدم واحد لكل مدرسة نشطة"
+          subtitle="المقيّمون المعتمدون بالمدارس"
           icon={<UserCheck size={24} />}
           iconBgColor="#ECFDF5"
           iconColor="#059669"
@@ -505,7 +532,7 @@ export const UsersManagement: React.FC<UsersManagementProps> = ({ onNavigate, ad
 
                     {/* Role */}
                     <td style={{ padding: '14px 16px' }}>
-                      <StatusBadge variant={roleBadgeVariant} label={`${user.roleName} (${user.roleCode})`} size="md" />
+                      <StatusBadge variant={roleBadgeVariant} label={formatRoleNameAr(user.roleName)} size="md" />
                     </td>
 
                     {/* Affiliation */}
