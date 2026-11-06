@@ -1,13 +1,10 @@
 import React from 'react';
-import { useAuth } from '../../../auth/AuthContext';
 import {
   LayoutDashboard,
   Users,
   School,
   ShieldCheck,
   Database,
-  LogOut,
-  KeyRound,
   ChevronRight,
   ChevronLeft,
   X,
@@ -31,37 +28,17 @@ interface AdminSidebarProps {
 export const AdminSidebar: React.FC<AdminSidebarProps> = ({
   activeScreen,
   onNavigate,
-  onLogout,
-  onOpenChangePassword,
   isCollapsed = false,
   onToggleCollapse,
   isMobile = false,
   isMobileOpen = false,
   onCloseMobile,
 }) => {
-  const { user: authUser } = useAuth();
-  const displayName = authUser?.fullName || authUser?.username || 'مسؤول النظام';
-  const roleObj = authUser?.roles?.[0];
-  const roleNameMap: Record<string, string> = {
-    admin: 'مدير النظام المركزي',
-    school_evaluator: 'مقيّم المدرسة',
-    school_principal: 'مدير المدرسة',
-    ministry_standards_manager: 'مسؤول إدارة المعايير',
-    ministry_supervisor: 'مشرف وزاري معتمد',
-  };
-  const displayRole = roleObj ? (roleNameMap[roleObj.roleName] || roleObj.description || roleObj.roleName) : 'مدير النظام المركزي';
-  const userInitials = displayName
-    .trim()
-    .split(' ')
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((w) => w[0])
-    .join('') || 'من';
   const navItems: Array<{ id: AdminScreen; label: string; icon: React.ReactNode; badge?: string }> = [
     { id: 'dashboard', label: 'لوحة التحكم الرئيسية', icon: <LayoutDashboard size={20} /> },
-    { id: 'users', label: 'إدارة المستخدمين والصلاحيات', icon: <Users size={20} /> },
+    { id: 'users', label: 'المستخدمين والصلاحيات', icon: <Users size={20} /> },
     { id: 'schools', label: 'دليل المدارس والمديريات', icon: <School size={20} /> },
-    { id: 'audit', label: 'سجل الأمان والتدقيق العام', icon: <ShieldCheck size={20} />, badge: 'نشط' },
+    { id: 'audit', label: 'الأمان والتدقيق', icon: <ShieldCheck size={20} />, badge: 'نشط' },
     { id: 'backup', label: 'النسخ الاحتياطي والتهيئة', icon: <Database size={20} /> },
   ];
 
@@ -119,73 +96,82 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <div
-            title={SYSTEM_NAME}
             style={{
-              width: '40px',
-              height: '40px',
+              width: '36px',
+              height: '36px',
               borderRadius: '10px',
               background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              color: '#fff',
+              color: '#FFFFFF',
               fontWeight: 800,
-              fontSize: '1.1rem',
+              fontSize: '1.15rem',
               boxShadow: '0 4px 12px rgba(16, 185, 129, 0.3)',
               flexShrink: 0,
             }}
           >
-            ار
+            {SYSTEM_SHORT_NAME[0]}
           </div>
           {(!isCollapsed || isMobile) && (
-            <div>
-              <div style={{ fontSize: '1rem', fontWeight: 800, color: '#fff', letterSpacing: '0.02em', whiteSpace: 'nowrap' }}>
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <span style={{ fontSize: '1rem', fontWeight: 800, color: '#F8FAFC', letterSpacing: '-0.02em', lineHeight: 1.2 }}>
                 {SYSTEM_SHORT_NAME}
-              </div>
-              <div style={{ fontSize: '0.7rem', color: '#94A3B8', marginTop: '2px', whiteSpace: 'nowrap' }}>
-                بوابة مسؤول النظام المركزي
-              </div>
+              </span>
+              <span style={{ fontSize: '0.68rem', color: '#64748B', fontWeight: 600 }}>
+                لوحة الإدارة المركزية
+              </span>
             </div>
           )}
         </div>
 
         {/* Mobile Close Button */}
-        {isMobile && (
+        {isMobile && onCloseMobile && (
           <button
             onClick={onCloseMobile}
             title="إغلاق القائمة"
             style={{
-              background: 'none',
-              border: 'none',
-              color: '#94A3B8',
-              cursor: 'pointer',
-              padding: '6px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
+              width: '32px',
+              height: '32px',
               borderRadius: '8px',
+              border: 'none',
+              backgroundColor: 'rgba(255, 255, 255, 0.08)',
+              color: '#94A3B8',
+              cursor: 'pointer',
             }}
           >
-            <X size={20} />
+            <X size={18} />
           </button>
         )}
 
-        {/* Desktop Collapse Button in Header */}
+        {/* Desktop Collapse Toggle in Header */}
         {!isMobile && !isCollapsed && onToggleCollapse && (
           <button
             onClick={onToggleCollapse}
             title="طي القائمة الجانبية"
             style={{
-              background: 'rgba(255, 255, 255, 0.05)',
-              border: '1px solid #1E293B',
-              color: '#94A3B8',
-              cursor: 'pointer',
-              padding: '6px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              borderRadius: '8px',
+              width: '28px',
+              height: '28px',
+              borderRadius: '6px',
+              border: '1px solid #1E293B',
+              backgroundColor: 'transparent',
+              color: '#64748B',
+              cursor: 'pointer',
               transition: 'all 0.15s ease',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.color = '#F8FAFC';
+              e.currentTarget.style.borderColor = '#334155';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.color = '#64748B';
+              e.currentTarget.style.borderColor = '#1E293B';
             }}
           >
             <ChevronRight size={16} />
@@ -193,50 +179,30 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
         )}
       </div>
 
-      {/* Nav List */}
+      {/* Navigation Links */}
       <nav
         style={{
           flex: 1,
-          padding: isCollapsed && !isMobile ? '16px 8px' : '20px 12px',
-          overflowY: 'auto',
-          overflowX: 'hidden',
+          padding: isCollapsed && !isMobile ? '16px 8px' : '16px 12px',
           display: 'flex',
           flexDirection: 'column',
           gap: '6px',
+          overflowY: 'auto',
         }}
       >
-        {(!isCollapsed || isMobile) && (
-          <div
-            style={{
-              padding: '0 8px 8px 8px',
-              fontSize: '0.65rem',
-              fontWeight: 700,
-              color: '#64748B',
-              textTransform: 'uppercase',
-              letterSpacing: '0.05em',
-            }}
-          >
-            الوحدات الإدارية المركزية
-          </div>
-        )}
-
         {navItems.map((item) => {
           const isActive = activeScreen === item.id;
           return (
             <button
               key={item.id}
-              onClick={() => {
-                onNavigate(item.id);
-                if (isMobile && onCloseMobile) onCloseMobile();
-              }}
+              onClick={() => onNavigate(item.id)}
               title={isCollapsed && !isMobile ? item.label : undefined}
               style={{
-                width: '100%',
                 display: 'flex',
                 alignItems: 'center',
+                gap: isCollapsed && !isMobile ? 0 : '12px',
                 justifyContent: isCollapsed && !isMobile ? 'center' : 'flex-start',
-                gap: isCollapsed && !isMobile ? '0' : '12px',
-                padding: isCollapsed && !isMobile ? '12px 0' : '11px 14px',
+                padding: isCollapsed && !isMobile ? '12px' : '12px 14px',
                 borderRadius: '10px',
                 border: 'none',
                 backgroundColor: isActive ? '#1E293B' : 'transparent',
@@ -292,7 +258,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
 
       {/* Collapse Toggle Footer for Desktop when collapsed */}
       {!isMobile && isCollapsed && onToggleCollapse && (
-        <div style={{ padding: '10px', borderTop: '1px solid #1E293B', display: 'flex', justifyContent: 'center' }}>
+        <div style={{ padding: '8px', borderTop: '1px solid #1E293B', display: 'flex', justifyContent: 'center' }}>
           <button
             onClick={onToggleCollapse}
             title="توسيع القائمة الجانبية"
@@ -301,7 +267,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
               border: '1px solid #1E293B',
               color: '#94A3B8',
               cursor: 'pointer',
-              padding: '8px',
+              padding: '6px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -309,107 +275,82 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
               width: '100%',
             }}
           >
-            <ChevronLeft size={18} />
+            <ChevronLeft size={16} />
           </button>
         </div>
       )}
 
-      {/* Admin User Info Footer */}
+      {/* System Status & Identity Balanced Footer */}
       <div
         style={{
-          padding: isCollapsed && !isMobile ? '14px 8px' : '16px 20px',
+          padding: isCollapsed && !isMobile ? '14px 8px' : '14px 16px',
           borderTop: '1px solid #1E293B',
           backgroundColor: '#080C14',
           display: 'flex',
-          flexDirection: isCollapsed && !isMobile ? 'column' : 'row',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: '8px',
+          flexDirection: 'column',
+          gap: '4px',
         }}
       >
-        <div
-          title={`${displayName} - ${displayRole}`}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '10px',
-            justifyContent: isCollapsed && !isMobile ? 'center' : 'flex-start',
-            width: isCollapsed && !isMobile ? 'auto' : undefined,
-          }}
-        >
+        {isCollapsed && !isMobile ? (
           <div
+            title={`${SYSTEM_NAME} • الخادم متصل ومستقر (v1.0)`}
             style={{
-              width: '34px',
-              height: '34px',
-              borderRadius: '50%',
-              backgroundColor: '#4F46E5',
-              color: '#fff',
               display: 'flex',
+              flexDirection: 'column',
               alignItems: 'center',
               justifyContent: 'center',
-              fontWeight: 700,
-              fontSize: '0.75rem',
-              flexShrink: 0,
+              gap: '6px',
             }}
           >
-            {userInitials}
+            <span
+              style={{
+                width: '10px',
+                height: '10px',
+                borderRadius: '50%',
+                backgroundColor: '#10B981',
+                boxShadow: '0 0 10px rgba(16, 185, 129, 0.7)',
+              }}
+            />
+            <span style={{ fontSize: '0.62rem', color: '#64748B', fontWeight: 700 }}>
+              v1.0
+            </span>
           </div>
-          {(!isCollapsed || isMobile) && (
-            <div>
-              <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#F8FAFC', whiteSpace: 'nowrap' }}>
-                {displayName}
+        ) : (
+          <>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span
+                  style={{
+                    width: '8px',
+                    height: '8px',
+                    borderRadius: '50%',
+                    backgroundColor: '#10B981',
+                    boxShadow: '0 0 8px rgba(16, 185, 129, 0.6)',
+                  }}
+                />
+                <span style={{ fontSize: '0.72rem', fontWeight: 600, color: '#94A3B8' }}>
+                  المنظومة متصلة ومستقرة
+                </span>
               </div>
-              <div style={{ fontSize: '0.65rem', color: '#94A3B8', whiteSpace: 'nowrap' }}>
-                {displayRole}
-              </div>
+              <span
+                style={{
+                  fontSize: '0.65rem',
+                  fontWeight: 700,
+                  padding: '1px 6px',
+                  borderRadius: '4px',
+                  backgroundColor: 'rgba(99, 102, 241, 0.15)',
+                  color: '#818CF8',
+                  border: '1px solid rgba(99, 102, 241, 0.3)',
+                }}
+              >
+                v1.0
+              </span>
             </div>
-          )}
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-          {onOpenChangePassword && (
-            <button
-              onClick={onOpenChangePassword}
-              title="تغيير كلمة المرور"
-              style={{
-                background: 'none',
-                border: 'none',
-                color: '#94A3B8',
-                cursor: 'pointer',
-                padding: '6px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                borderRadius: '6px',
-                transition: 'color 0.15s ease',
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.color = '#38BDF8')}
-              onMouseLeave={(e) => (e.currentTarget.style.color = '#94A3B8')}
-            >
-              <KeyRound size={16} />
-            </button>
-          )}
-
-          {onLogout && (
-            <button
-              onClick={onLogout}
-              title="تسجيل الخروج"
-              style={{
-                background: 'none',
-                border: 'none',
-                color: '#64748B',
-                cursor: 'pointer',
-                padding: '6px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                borderRadius: '6px',
-              }}
-            >
-              <LogOut size={16} />
-            </button>
-          )}
-        </div>
+            <div style={{ fontSize: '0.65rem', color: '#64748B', lineHeight: 1.4, marginTop: '2px' }}>
+              وزارة التربية والتعليم والبحث العلمي
+            </div>
+          </>
+        )}
       </div>
     </aside>
   );

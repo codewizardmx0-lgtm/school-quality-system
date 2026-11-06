@@ -165,6 +165,8 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
           onToggleMobileMenu={() => setIsMobileOpen((prev) => !prev)}
           isCollapsed={isCollapsed}
           onToggleCollapse={() => setIsCollapsed((prev) => !prev)}
+          onOpenChangePassword={() => setIsChangePasswordOpen(true)}
+          onLogout={onLogout}
         />
         <main
           style={{
