@@ -34,6 +34,7 @@ export const SecurityAudit: React.FC<SecurityAuditProps> = ({ onNavigate, addToa
     logs,
     filteredLogs,
     availableEventTypes,
+    availableEventOptions,
     availableActors,
     blockedIps,
     loading,
@@ -44,6 +45,8 @@ export const SecurityAudit: React.FC<SecurityAuditProps> = ({ onNavigate, addToa
     setActor,
     timeScope,
     setTimeScope,
+    searchQuery,
+    setSearchQuery,
     currentPage,
     setCurrentPage,
     totalPages,
@@ -245,12 +248,15 @@ export const SecurityAudit: React.FC<SecurityAuditProps> = ({ onNavigate, addToa
         onActorChange={setActor}
         timeScope={timeScope}
         onTimeScopeChange={setTimeScope}
+        searchQuery={searchQuery}
+        onSearchQueryChange={setSearchQuery}
         onRefresh={handleRefresh}
         isLoading={loading}
-        totalFiltered={logs.length}
+        totalFiltered={filteredLogs.length}
         currentPage={currentPage}
         perPage={15}
         totalLogs={totalCount}
+        availableEventOptions={availableEventOptions}
         availableEventTypes={availableEventTypes}
         availableActors={availableActors}
       />
@@ -315,10 +321,13 @@ export const SecurityAudit: React.FC<SecurityAuditProps> = ({ onNavigate, addToa
                 الفاعل والحساب
               </th>
               <th style={{ padding: '14px 16px', fontSize: theme.typography.fontSizes.xs, fontWeight: 700, color: theme.colors.neutral[600] }}>
-                نوع الحدث والتصنيف
+                نوع العملية والتصنيف
               </th>
               <th style={{ padding: '14px 20px', fontSize: theme.typography.fontSizes.xs, fontWeight: 700, color: theme.colors.neutral[600] }}>
-                البيان والتفاصيل
+                الشرح والتفاصيل
+              </th>
+              <th style={{ padding: '14px 16px', fontSize: theme.typography.fontSizes.xs, fontWeight: 700, color: theme.colors.neutral[600] }}>
+                البصمة والتوثيق
               </th>
               <th style={{ padding: '14px 16px', fontSize: theme.typography.fontSizes.xs, fontWeight: 700, color: theme.colors.neutral[600] }}>
                 عنوان IP والجهاز
@@ -349,6 +358,9 @@ export const SecurityAudit: React.FC<SecurityAuditProps> = ({ onNavigate, addToa
                     <div style={{ width: '80px', height: '12px', backgroundColor: '#F1F5F9', borderRadius: '4px' }} />
                   </td>
                   <td style={{ padding: '16px' }}>
+                    <div style={{ width: '70px', height: '14px', backgroundColor: '#E5E7EB', borderRadius: '4px' }} />
+                  </td>
+                  <td style={{ padding: '16px' }}>
                     <div style={{ width: '90px', height: '14px', backgroundColor: '#E5E7EB', borderRadius: '4px' }} />
                   </td>
                   <td style={{ padding: '16px', textAlign: 'center' }}>
@@ -358,7 +370,7 @@ export const SecurityAudit: React.FC<SecurityAuditProps> = ({ onNavigate, addToa
               ))
             ) : filteredLogs.length === 0 ? (
               <tr>
-                <td colSpan={6} style={{ padding: '40px', textAlign: 'center', color: theme.colors.neutral[400] }}>
+                <td colSpan={7} style={{ padding: '40px', textAlign: 'center', color: theme.colors.neutral[400] }}>
                   لا توجد سجلات تدقيق مطابقة لمعايير التصفية المحددة
                 </td>
               </tr>
@@ -416,26 +428,29 @@ export const SecurityAudit: React.FC<SecurityAuditProps> = ({ onNavigate, addToa
                     />
                   </td>
 
-                  {/* Description & Digital Hash */}
-                  <td style={{ padding: '14px 20px', maxWidth: '320px' }}>
-                    <div style={{ fontSize: theme.typography.fontSizes.xs, color: theme.colors.neutral[700], lineHeight: 1.5 }}>
+                  {/* Detailed Explanation */}
+                  <td style={{ padding: '14px 20px', maxWidth: '340px' }}>
+                    <div style={{ fontSize: theme.typography.fontSizes.xs, color: theme.colors.neutral[800], lineHeight: 1.6, fontWeight: 500 }}>
                       {log.descriptionAr || log.description || "عملية موثقة في النظام"}
                     </div>
-                    <div style={{ marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      <span
-                        style={{
-                          fontSize: '0.65rem',
-                          fontFamily: 'monospace',
-                          padding: '1px 6px',
-                          borderRadius: '4px',
-                          backgroundColor: '#F1F5F9',
-                          color: '#475569',
-                          border: '1px solid #E2E8F0',
-                        }}
-                      >
-                        {log.digitalHash}
-                      </span>
-                    </div>
+                  </td>
+
+                  {/* Digital Hash */}
+                  <td style={{ padding: '14px 16px', whiteSpace: 'nowrap' }}>
+                    <span
+                      style={{
+                        fontSize: '0.65rem',
+                        fontFamily: 'monospace',
+                        padding: '2px 8px',
+                        borderRadius: '4px',
+                        backgroundColor: '#F1F5F9',
+                        color: '#475569',
+                        border: '1px solid #E2E8F0',
+                        display: 'inline-block',
+                      }}
+                    >
+                      {log.digitalHash}
+                    </span>
                   </td>
 
                   {/* IP & Device */}

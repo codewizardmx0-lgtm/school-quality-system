@@ -10,6 +10,7 @@ use App\Http\Responses\ApiResponse;
 use App\Models\Directorate;
 use App\Models\Governorate;
 use App\Models\School;
+use App\Models\User;
 use App\Services\AuditLoggerService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -27,20 +28,18 @@ class SchoolController extends Controller
     /**
      * استعراض قائمة المدارس مع العزل بحسب دور ونطاق المستخدم.
      */
-        /**
-     * اقتراح كود المدرسة تلقائيًا وفق الصيغة SCH-{GOV_CODE}-2026-{serial}
+    /**
+     * توليد الكود التالي للمدرسة في محافظة محددة (الترقيم التراكمي التصاعدي المستمر).
+     * يضمن عدم تكرار الأرقام القديمة حتى لو حُذفت مدرسة، مع فحص الفرادة التامة.
      */
-    public function suggestCode(Request $request): JsonResponse
+    public static function generateNextCodeForGovernorate(int $govId): string
     {
-        $govId = (int) $request->query('governorateId', 1);
         $gov = Governorate::find($govId);
         $govCode = $gov?->code ?? 'AMANA';
-
         $prefix = "SCH-{$govCode}-2026-";
-        $schools = School::where('governorate_id', $govId)
-            ->orWhere('identification_data', 'like', "{$prefix}%")
-            ->get();
 
+        // البحث عن أعلى رقم متسلسل مسجل في نفس المحافظة لتطبيق الترقيم التراكمي التصاعدي المستمر
+        $schools = School::where('governorate_id', $govId)->get(['identification_data']);
         $maxSerial = 0;
         foreach ($schools as $school) {
             $code = $school->identification_data ?? '';
@@ -52,12 +51,38 @@ class SchoolController extends Controller
             }
         }
 
-        $nextCode = sprintf('%s%03d', $prefix, $maxSerial + 1);
+        $nextSerial = $maxSerial + 1;
+        $nextCode = sprintf('%s%03d', $prefix, $nextSerial);
+
+        // حماية إضافية ضد أي تضارب محتمل (Uniqueness Guarantee)
+        while (School::where('identification_data', $nextCode)->exists()) {
+            $nextSerial++;
+            $nextCode = sprintf('%s%03d', $prefix, $nextSerial);
+        }
+
+        return $nextCode;
+    }
+
+    /**
+     * اقتراح كود المدرسة تلقائيًا وفق الصيغة SCH-{GOV_CODE}-2026-{serial}
+     */
+    public function suggestCode(Request $request): JsonResponse
+    {
+        $govId = (int) ($request->query('governorateId') ?? $request->query('governorate_id') ?? 1);
+        $gov = Governorate::find($govId);
+        $govCode = $gov?->code ?? 'AMANA';
+
+        $nextCode = self::generateNextCodeForGovernorate($govId);
+        $prefix = "SCH-{$govCode}-2026-";
+        $serial = 1;
+        if (preg_match('/' . preg_quote($prefix, '/') . '(\d+)/', $nextCode, $matches)) {
+            $serial = (int) $matches[1];
+        }
 
         return ApiResponse::success([
             'code'       => $nextCode,
             'govCode'    => $govCode,
-            'nextSerial' => $maxSerial + 1,
+            'nextSerial' => $serial,
         ]);
     }
 
@@ -154,11 +179,17 @@ class SchoolController extends Controller
             $dirId = $dir->first()?->directorate_id;
         }
 
+        // توليد كود المدرسة تلقائياً وفق الترقيم التراكمي المستمر بالمحافظة وضمان فرادته المطلقة
+        $code = $data['identificationData'] ?? null;
+        if (empty($code) || School::where('identification_data', $code)->exists()) {
+            $code = self::generateNextCodeForGovernorate($govId ?? 1);
+        }
+
         $school = School::create([
             'school_name'          => $data['schoolName'],
             'school_type'          => $data['schoolType'] ?? 'government',
             'educational_stage'    => $data['educationalStage'],
-            'identification_data'  => $data['identificationData'] ?? null,
+            'identification_data'  => $code,
             'governorate_id'       => $govId,
             'directorate_id'       => $dirId,
             'educational_district' => $data['educationalDistrict'],
@@ -205,7 +236,8 @@ class SchoolController extends Controller
         if (isset($data['educationalStage'])) {
             $fields['educational_stage'] = $data['educationalStage'];
         }
-        if (array_key_exists('identificationData', $data)) {
+        // كود المدرسة دائم ومقفل، لا يمكن تعديله بعد إنشائه إلا إذا كان فارغاً تماماً
+        if (array_key_exists('identificationData', $data) && empty($school->identification_data)) {
             $fields['identification_data'] = $data['identificationData'];
         }
         if (isset($data['governorateId'])) {
@@ -275,6 +307,15 @@ class SchoolController extends Controller
         $newStatus = $school->status === 'Active' ? 'Inactive' : 'Active';
         $school->update(['status' => $newStatus]);
 
+        (new AuditLoggerService())->log(
+            action: 'school.status_toggled',
+            targetType: 'School',
+            targetId: $school->school_id,
+            newValues: ['status' => $newStatus],
+            schoolId: $school->school_id,
+            descriptionAr: 'قام مسؤول النظام بـ' . ($newStatus === 'Active' ? 'تفعيل' : 'تعطيل') . " مدرسة ({$school->school_name})"
+        );
+
         $message = $newStatus === 'Active' 
             ? 'تم تفعيل المدرسة بنجاح.' 
             : 'تم تعطيل المدرسة بنجاح.';
@@ -282,6 +323,69 @@ class SchoolController extends Controller
         return ApiResponse::success(
             data: (new SchoolResource($school->fresh()))->resolve($request),
             message: $message
+        );
+    }
+
+    /**
+     * حذف مدرسة أُنشئت بالخطأ بشرط عدم ارتباطها بأي مستخدم أو تقييمات أو شواهد (UI-ADM-02).
+     */
+    public function destroy(Request $request, int $id): JsonResponse
+    {
+        $user = $request->user();
+        if (!$user->hasPermission('schools.manage') && !$user->hasPermission('users.manage')) {
+            return ApiResponse::forbidden('غير مصرح لك بحذف المدارس.');
+        }
+
+        $school = School::find($id);
+        if (!$school) {
+            return ApiResponse::notFound('المدرسة المطلوبة غير موجودة.');
+        }
+
+        // 1. تحقق من عدم ارتباط أي مستخدمين بالمدرسة (مدير، مقيم جودة، كادر)
+        $usersCount = User::where('school_id', $school->school_id)->count();
+        if ($usersCount > 0) {
+            return ApiResponse::unprocessable('لا يمكن حذف المدرسة لأنها مرتبطة بكادر ومستخدمين مسجلين في النظام.');
+        }
+
+        // 2. تحقق من عدم وجود عمليات تقييم مرتبطة
+        if (class_exists(\App\Models\Evaluation::class) && \App\Models\Evaluation::where('school_id', $school->school_id)->exists()) {
+            return ApiResponse::unprocessable('لا يمكن حذف المدرسة لوجود عمليات تقييم ذاتي مرتبطة بها.');
+        }
+
+        // 3. تحقق من دورات التقييم
+        if (class_exists(\App\Models\CycleParticipation::class) && \App\Models\CycleParticipation::where('school_id', $school->school_id)->exists()) {
+            return ApiResponse::unprocessable('لا يمكن حذف المدرسة لأنها مسجلة ومشاركة في دورات تقييم.');
+        }
+
+        // 4. تحقق من خطط التحسين
+        if (class_exists(\App\Models\ImprovementPlan::class) && \App\Models\ImprovementPlan::where('school_id', $school->school_id)->exists()) {
+            return ApiResponse::unprocessable('لا يمكن حذف المدرسة لوجود خطط تحسين مرتبطة بها.');
+        }
+
+        // 5. تحقق من المستندات والشواهد
+        if (class_exists(\App\Models\SchoolDocument::class) && \App\Models\SchoolDocument::where('school_id', $school->school_id)->exists()) {
+            return ApiResponse::unprocessable('لا يمكن حذف المدرسة لوجود وثائق وشواهد مرتبطة بها.');
+        }
+
+        $schoolName = $school->school_name;
+        $schoolCode = $school->identification_data;
+
+        $school->delete();
+
+        // توثيق عملية الحذف في سجل التدقيق
+        (new AuditLoggerService())->log(
+            action: 'school.deleted',
+            targetType: 'School',
+            targetId: $id,
+            oldValues: ['name' => $schoolName, 'code' => $schoolCode],
+            newValues: null,
+            userId: $user->user_id,
+            descriptionAr: "قام مسؤول النظام بحذف مدرسة ({$schoolName}) ذات الرمز [{$schoolCode}] نهائياً لعدم وجود أي ارتباطات تشغيلية بها"
+        );
+
+        return ApiResponse::success(
+            data: ['schoolId' => $id],
+            message: "تم حذف مدرسة ({$schoolName}) بنجاح."
         );
     }
 }

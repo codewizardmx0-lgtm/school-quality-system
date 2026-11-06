@@ -120,6 +120,7 @@ export interface AuditLogEntry {
   actorName: string;
   actorRole: string;
   actorRoleCode: string;
+  action?: string;
   eventType: string;
   eventCategory: AuditSeverity;
   description: string;

@@ -3,6 +3,7 @@
 namespace App\Http\Requests\Admin;
 
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 /**
  * طلب التحقق لتعديل بيانات مدرسة (UI-ADM-03).
@@ -53,7 +54,12 @@ class UpdateSchoolRequest extends FormRequest
             'schoolName'          => ['sometimes', 'required', 'string', 'max:150'],
             'schoolType'          => ['nullable', 'string', 'in:government,private'],
             'educationalStage'    => ['sometimes', 'required', 'string', 'max:50'],
-            'identificationData'  => ['nullable', 'string', 'max:100'],
+            'identificationData'  => [
+                'nullable',
+                'string',
+                'max:100',
+                Rule::unique('schools', 'identification_data')->ignore($this->route('id') ?? $this->route('school'), 'school_id'),
+            ],
             'governorateId'       => ['nullable', 'integer', 'exists:governorates,governorate_id'],
             'directorateId'       => ['nullable', 'integer', 'exists:directorates,directorate_id'],
             'educationalDistrict' => ['nullable', 'string', 'max:100'],

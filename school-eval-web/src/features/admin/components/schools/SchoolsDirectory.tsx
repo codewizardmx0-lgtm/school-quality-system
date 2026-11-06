@@ -12,10 +12,12 @@ import {
   ArrowRight,
   ShieldAlert,
   RefreshCw,
+  Trash2,
 } from 'lucide-react';
 import { theme } from '../../theme';
 import { StatCard } from '../common/StatCard';
 import { StatusBadge } from '../common/StatusBadge';
+import { ConfirmationDialog } from '../common/ConfirmationDialog';
 import { DirectorateTopSection } from './DirectorateTopSection';
 import { RefreshButton } from '../common/RefreshButton';
 import { RegisterSchoolModal } from './RegisterSchoolModal';
@@ -83,6 +85,33 @@ export const SchoolsDirectory: React.FC<SchoolsDirectoryProps> = ({ onNavigate, 
   const [linkingSchool, setLinkingSchool] = useState<School | null>(null);
   const [editingSchool, setEditingSchool] = useState<School | null>(null);
   const [assigningPrincipalSchool, setAssigningPrincipalSchool] = useState<School | null>(null);
+  const [deletingSchool, setDeletingSchool] = useState<School | null>(null);
+  const [isDeletingSchool, setIsDeletingSchool] = useState<boolean>(false);
+
+  const handleToggleStatus = async (school: School) => {
+    try {
+      const res = await schoolsApi.toggleSchoolStatus(school.schoolId);
+      addToast('success', res?.message || 'تم تحديث حالة المدرسة بنجاح');
+      await fetchData();
+    } catch (err: any) {
+      addToast('error', err?.message || 'تعذر تحديث حالة المدرسة');
+    }
+  };
+
+  const handleDeleteSchool = async () => {
+    if (!deletingSchool) return;
+    setIsDeletingSchool(true);
+    try {
+      const res = await schoolsApi.deleteSchool(deletingSchool.schoolId);
+      addToast('success', res?.message || `تم حذف مدرسة (${deletingSchool.schoolName}) بنجاح`);
+      setDeletingSchool(null);
+      await fetchData();
+    } catch (err: any) {
+      addToast('error', err?.message || 'لا يمكن حذف المدرسة لأنها مرتبطة بسجلات أو مستخدمين');
+    } finally {
+      setIsDeletingSchool(false);
+    }
+  };
 
   const handleDeleteDirectorate = async () => {
     if (!deletingDirectorate) return;
@@ -541,6 +570,9 @@ export const SchoolsDirectory: React.FC<SchoolsDirectoryProps> = ({ onNavigate, 
                   <th style={{ padding: '14px 16px', fontSize: theme.typography.fontSizes.xs, fontWeight: 700, color: theme.colors.neutral[600] }}>
                     الجاهزية
                   </th>
+                  <th style={{ padding: '14px 16px', fontSize: theme.typography.fontSizes.xs, fontWeight: 700, color: theme.colors.neutral[600] }}>
+                    حالة المدرسة
+                  </th>
                   <th style={{ padding: '14px 16px', fontSize: theme.typography.fontSizes.xs, fontWeight: 700, color: theme.colors.neutral[600], textAlign: 'center' }}>
                     إجراءات المدرسة
                   </th>
@@ -569,14 +601,17 @@ export const SchoolsDirectory: React.FC<SchoolsDirectoryProps> = ({ onNavigate, 
                       <td style={{ padding: '16px' }}>
                         <div style={{ width: '80px', height: '22px', backgroundColor: '#E5E7EB', borderRadius: '12px' }} />
                       </td>
+                      <td style={{ padding: '16px' }}>
+                        <div style={{ width: '60px', height: '22px', backgroundColor: '#E5E7EB', borderRadius: '12px' }} />
+                      </td>
                       <td style={{ padding: '16px', textAlign: 'center' }}>
-                        <div style={{ width: '60px', height: '26px', backgroundColor: '#E5E7EB', borderRadius: '6px', margin: '0 auto' }} />
+                        <div style={{ width: '100px', height: '26px', backgroundColor: '#E5E7EB', borderRadius: '6px', margin: '0 auto' }} />
                       </td>
                     </tr>
                   ))
                 ) : filteredSchools.length === 0 ? (
                   <tr>
-                    <td colSpan={6} style={{ padding: '40px', textAlign: 'center', color: theme.colors.neutral[400] }}>
+                    <td colSpan={7} style={{ padding: '40px', textAlign: 'center', color: theme.colors.neutral[400] }}>
                       لا توجد مدارس مسجلة في هذا النطاق بالمعايير المحددة
                     </td>
                   </tr>
@@ -763,30 +798,87 @@ export const SchoolsDirectory: React.FC<SchoolsDirectoryProps> = ({ onNavigate, 
                           />
                         </td>
 
-                        {/* 7. Action: Edit School Button */}
+                        {/* 7. School Status Column (معطلة / مفعلة) */}
+                        <td style={{ padding: '14px 16px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <StatusBadge
+                              variant={school.status === 'Active' ? 'active' : 'disabled'}
+                              label={school.status === 'Active' ? 'مفعلة' : 'معطلة'}
+                              size="sm"
+                            />
+                            <button
+                              onClick={() => handleToggleStatus(school)}
+                              title={school.status === 'Active' ? 'انقر لتعطيل المدرسة' : 'انقر لتفعيل المدرسة'}
+                              style={{
+                                padding: '3px 8px',
+                                borderRadius: theme.radii.md,
+                                border: school.status === 'Active' ? '1px solid #FECACA' : '1px solid #BBF7D0',
+                                backgroundColor: school.status === 'Active' ? '#FEF2F2' : '#F0FDF4',
+                                color: school.status === 'Active' ? '#DC2626' : '#16A34A',
+                                fontSize: '0.7rem',
+                                fontWeight: 600,
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '2px',
+                                transition: 'all 0.15s ease',
+                              }}
+                            >
+                              {school.status === 'Active' ? 'تعطيل' : 'تفعيل'}
+                            </button>
+                          </div>
+                        </td>
+
+                        {/* 8. Action: Edit & Delete School Buttons */}
                         <td style={{ padding: '14px 16px', textAlign: 'center' }}>
-                          <button
-                            onClick={() => setEditingSchool(school)}
-                            title="تعديل بيانات المدرسة الرسمية"
-                            style={{
-                              padding: '6px 12px',
-                              borderRadius: theme.radii.md,
-                              border: `1px solid ${theme.colors.neutral[300]}`,
-                              backgroundColor: theme.colors.neutral.white,
-                              color: theme.colors.neutral[800],
-                              fontSize: theme.typography.fontSizes.xs,
-                              fontWeight: 700,
-                              cursor: 'pointer',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '4px',
-                              fontFamily: theme.typography.fontFamily.sans,
-                              boxShadow: theme.shadows.sm,
-                            }}
-                          >
-                            <Edit size={13} color="#4F46E5" />
-                            تعديل المدرسة
-                          </button>
+                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                            <button
+                              onClick={() => setEditingSchool(school)}
+                              title="تعديل بيانات المدرسة الرسمية"
+                              style={{
+                                padding: '6px 10px',
+                                borderRadius: theme.radii.md,
+                                border: `1px solid ${theme.colors.neutral[300]}`,
+                                backgroundColor: theme.colors.neutral.white,
+                                color: theme.colors.neutral[800],
+                                fontSize: theme.typography.fontSizes.xs,
+                                fontWeight: 700,
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                fontFamily: theme.typography.fontFamily.sans,
+                                boxShadow: theme.shadows.sm,
+                              }}
+                            >
+                              <Edit size={13} color="#4F46E5" />
+                              تعديل
+                            </button>
+
+                            <button
+                              onClick={() => setDeletingSchool(school)}
+                              title="حذف المدرسة (في حال أُنشئت بالخطأ دون أي ارتباطات)"
+                              style={{
+                                padding: '6px 10px',
+                                borderRadius: theme.radii.md,
+                                border: '1px solid #FECACA',
+                                backgroundColor: '#FEF2F2',
+                                color: '#DC2626',
+                                fontSize: theme.typography.fontSizes.xs,
+                                fontWeight: 700,
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                fontFamily: theme.typography.fontFamily.sans,
+                                boxShadow: theme.shadows.sm,
+                                transition: 'all 0.15s ease',
+                              }}
+                            >
+                              <Trash2 size={13} color="#DC2626" />
+                              حذف
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     );
@@ -1060,6 +1152,18 @@ export const SchoolsDirectory: React.FC<SchoolsDirectoryProps> = ({ onNavigate, 
           </div>
         </div>
       )}
+
+      {/* Delete School Confirmation Dialog */}
+      <ConfirmationDialog
+        isOpen={!!deletingSchool}
+        title="تأكيد حذف المدرسة"
+        message={`هل أنت متأكد من حذف مدرسة (${deletingSchool?.schoolName}) ذات الكود [${deletingSchool?.schoolCode}] نهائياً؟ هذا الإجراء غير قابل للتراجع ومسموح به فقط للمدارس التي ليس لها أي ارتباطات.`}
+        confirmLabel={isDeletingSchool ? 'جاري الحذف...' : 'نعم، حذف نهائي'}
+        cancelLabel="إلغاء"
+        variant="danger"
+        onConfirm={handleDeleteSchool}
+        onCancel={() => setDeletingSchool(null)}
+      />
     </div>
   );
 };

@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { Bot, HardDrive, Mail, Power, Check, Send } from 'lucide-react';
 import { theme } from '../../theme';
 import { backupApi } from '../../api/backupApi';
-import { mockAdminService } from '../../services/mockAdminData';
 import type { SystemSettings } from '../../types/admin.types';
 
 interface IntegrationSettingsFormProps {
@@ -11,14 +10,37 @@ interface IntegrationSettingsFormProps {
   addToast: (type: 'success' | 'error' | 'info', msg: string) => void;
 }
 
+const DEFAULT_SETTINGS: SystemSettings = {
+  aiEngine: { isEnabled: true, model: 'Artaqa-Assist v2.4', responseMs: 320, status: 'connected' },
+  cloudStorage: { isEnabled: true, endpoint: 's3.arteqa-storage.ye', maxFileSizeMb: 25, encryptionAlgorithm: 'AES-256' },
+  smtp: { isEnabled: true, senderEmail: 'noreply@arteqa.edu.ye', smtpHost: 'mail.arteqa.edu.ye', smtpPort: 587, status: 'running' },
+  maintenanceMode: { isEnabled: false, scheduledAt: null, reason: '' },
+};
+
 export const IntegrationSettingsForm: React.FC<IntegrationSettingsFormProps> = ({
   settings,
   onSave,
   addToast,
 }) => {
-  const [form, setForm] = useState<SystemSettings>({ ...settings });
+  const [form, setForm] = useState<SystemSettings>(() => ({
+    aiEngine: { ...DEFAULT_SETTINGS.aiEngine, ...settings?.aiEngine },
+    cloudStorage: { ...DEFAULT_SETTINGS.cloudStorage, ...settings?.cloudStorage },
+    smtp: { ...DEFAULT_SETTINGS.smtp, ...settings?.smtp },
+    maintenanceMode: { ...DEFAULT_SETTINGS.maintenanceMode, ...settings?.maintenanceMode },
+  }));
   const [isSaving, setIsSaving] = useState(false);
   const [isSendingMail, setIsSendingMail] = useState(false);
+
+  React.useEffect(() => {
+    if (settings) {
+      setForm({
+        aiEngine: { ...DEFAULT_SETTINGS.aiEngine, ...settings.aiEngine },
+        cloudStorage: { ...DEFAULT_SETTINGS.cloudStorage, ...settings.cloudStorage },
+        smtp: { ...DEFAULT_SETTINGS.smtp, ...settings.smtp },
+        maintenanceMode: { ...DEFAULT_SETTINGS.maintenanceMode, ...settings.maintenanceMode },
+      });
+    }
+  }, [settings]);
 
   const handleToggle = (
     section: keyof SystemSettings,
@@ -53,7 +75,7 @@ export const IntegrationSettingsForm: React.FC<IntegrationSettingsFormProps> = (
   const handleTestEmail = async () => {
     setIsSendingMail(true);
     try {
-      await mockAdminService.sendTestEmail();
+      await backupApi.sendTestEmail(form.smtp.senderEmail);
       addToast('info', `تم إرسال بريد اختباري إلى (${form.smtp.senderEmail}) بنجاح`);
     } catch {
       addToast('error', 'فشل إرسال البريد الاختباري');

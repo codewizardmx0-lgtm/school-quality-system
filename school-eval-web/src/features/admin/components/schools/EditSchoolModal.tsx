@@ -96,6 +96,26 @@ export const EditSchoolModal: React.FC<EditSchoolModalProps> = ({
     }
   };
 
+  const handleCancel = () => {
+    if (school) {
+      const govId = school.governorateId || 1;
+      setSelectedGovId(govId);
+      setForm({
+        schoolName: school.schoolName || '',
+        schoolCode: school.schoolCode || '',
+        schoolType: school.schoolType || 'government',
+        educationalStage: school.educationalStage || 'ثانوي (10-12)',
+        directorate: school.directorate || school.educationalDistrict || (initialDirectorates[0]?.directorateName ?? 'مديرية التحرير'),
+        directorateId: school.directorateId || 1,
+        governorate: school.governorate || 'أمانة العاصمة',
+        governorateId: govId,
+        status: school.status || 'Active',
+      });
+    }
+    setErrors({});
+    onClose();
+  };
+
   if (!isOpen || !school) return null;
 
   const handleChange = (field: string, value: any) => {
@@ -182,6 +202,9 @@ export const EditSchoolModal: React.FC<EditSchoolModalProps> = ({
         padding: '16px',
         direction: 'rtl',
       }}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) handleCancel();
+      }}
     >
       <div
         style={{
@@ -232,7 +255,7 @@ export const EditSchoolModal: React.FC<EditSchoolModalProps> = ({
             </div>
           </div>
           <button
-            onClick={onClose}
+            onClick={handleCancel}
             style={{
               border: 'none',
               background: 'transparent',
@@ -271,21 +294,26 @@ export const EditSchoolModal: React.FC<EditSchoolModalProps> = ({
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
             <div>
               <label style={{ display: 'block', fontSize: theme.typography.fontSizes.xs, fontWeight: 600, color: theme.colors.neutral[700], marginBottom: '6px' }}>
-                كود المدرسة <span style={{ color: '#DC2626' }}>*</span>
+                كود المدرسة (معرّف دائم غير قابل للتعديل)
               </label>
               <input
                 type="text"
-                style={inputStyle(errors.schoolCode)}
+                style={{
+                  ...inputStyle(errors.schoolCode),
+                  backgroundColor: '#F1F5F9',
+                  color: '#475569',
+                  cursor: 'not-allowed',
+                  fontWeight: 700,
+                }}
                 value={form.schoolCode}
-                onChange={(e) => handleChange('schoolCode', e.target.value)}
+                disabled
+                readOnly
                 placeholder="SCH-AMANA-2026-001"
                 dir="ltr"
               />
-              {errors.schoolCode && (
-                <span style={{ fontSize: '0.75rem', color: '#DC2626', marginTop: '4px', display: 'block' }}>
-                  {errors.schoolCode}
-                </span>
-              )}
+              <span style={{ fontSize: '0.7rem', color: theme.colors.neutral[400], marginTop: '4px', display: 'block' }}>
+                🔒 كود المدرسة ثابت لضمان سلامة الربط والنزاهة
+              </span>
             </div>
 
             <div>
@@ -391,7 +419,7 @@ export const EditSchoolModal: React.FC<EditSchoolModalProps> = ({
           >
             <button
               type="button"
-              onClick={onClose}
+              onClick={handleCancel}
               disabled={loading}
               style={{
                 padding: '9px 18px',

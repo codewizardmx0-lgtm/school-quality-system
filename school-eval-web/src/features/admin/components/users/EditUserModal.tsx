@@ -23,22 +23,37 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
   onSuccess,
   addToast,
 }) => {
-  const [prevUserId, setPrevUserId] = useState<number | undefined>(user?.userId);
-  const [form, setForm] = useState<EditUserDto>(() => ({
-    username: user?.username || '',
-    fullName: user?.fullName || '',
-    email: user?.email || '',
-    userType: user?.userType || 'school',
-    roleId: user?.roleId || 2,
-    schoolId: user?.schoolId || null,
-    directorateId: user?.directorateId || null,
-    status: user?.status || 'Active',
-  }));
+  const [form, setForm] = useState<EditUserDto>({
+    username: '',
+    fullName: '',
+    email: '',
+    userType: 'school',
+    roleId: 2,
+    schoolId: null,
+    directorateId: null,
+    status: 'Active',
+  });
   const [roles, setRoles] = useState<Role[]>([]);
   const [schools, setSchools] = useState<Array<{ schoolId: number; schoolName: string; schoolCode: string }>>([]);
   const [directorates, setDirectorates] = useState<Directorate[]>([]);
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    if (isOpen && user) {
+      setForm({
+        username: user.username || '',
+        fullName: user.fullName || '',
+        email: user.email || '',
+        userType: user.userType || 'school',
+        roleId: user.roleId || 2,
+        schoolId: user.schoolId ?? null,
+        directorateId: user.directorateId ?? null,
+        status: user.status || 'Active',
+      });
+      setErrors({});
+    }
+  }, [isOpen, user]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -57,20 +72,22 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
     return () => { ignore = true; };
   }, [isOpen]);
 
-  if (user && user.userId !== prevUserId) {
-    setPrevUserId(user.userId);
-    setForm({
-      username: user.username,
-      fullName: user.fullName,
-      email: user.email,
-      userType: user.userType,
-      roleId: user.roleId,
-      schoolId: user.schoolId,
-      directorateId: user.directorateId,
-      status: user.status,
-    });
+  const handleCancel = () => {
+    if (user) {
+      setForm({
+        username: user.username || '',
+        fullName: user.fullName || '',
+        email: user.email || '',
+        userType: user.userType || 'school',
+        roleId: user.roleId || 2,
+        schoolId: user.schoolId ?? null,
+        directorateId: user.directorateId ?? null,
+        status: user.status || 'Active',
+      });
+    }
     setErrors({});
-  }
+    onClose();
+  };
 
   if (!isOpen || !user) return null;
 
@@ -79,6 +96,12 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
     label: s.schoolName,
     code: s.schoolCode,
     sublabel: (s as any).educationalDistrict || (s as any).directorate,
+  }));
+
+  const directorateOptions: SearchableOption[] = directorates.map((d) => ({
+    value: d.directorateId,
+    label: d.directorateName,
+    sublabel: d.governorate,
   }));
 
   const filteredRoles = roles.filter((r) => {
@@ -190,7 +213,7 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
         backdropFilter: 'blur(4px)',
       }}
       onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
+        if (e.target === e.currentTarget) handleCancel();
       }}
     >
       <div
@@ -224,7 +247,7 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
               تعديل الصلاحيات والمدرسة والارتباط الوظيفي
             </p>
           </div>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#94A3B8', cursor: 'pointer', padding: '4px' }}>
+          <button onClick={handleCancel} style={{ background: 'none', border: 'none', color: '#94A3B8', cursor: 'pointer', padding: '4px' }}>
             <X size={20} />
           </button>
         </div>
@@ -311,18 +334,13 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
           {form.userType === 'ministry' && (
             <div>
               <label style={labelStyle}>المديرية التابعة *</label>
-              <select
-                style={inputStyle(!!errors.directorateId)}
-                value={form.directorateId || ''}
-                onChange={(e) => handleChange('directorateId', e.target.value ? Number(e.target.value) : null)}
-              >
-                <option value="">-- اختر المديرية --</option>
-                {directorates.map((d) => (
-                  <option key={d.directorateId} value={d.directorateId}>
-                    {d.directorateName} ({d.governorate})
-                  </option>
-                ))}
-              </select>
+              <SearchableSelect
+                options={directorateOptions}
+                value={form.directorateId}
+                onChange={(val) => handleChange('directorateId', val ? Number(val) : null)}
+                placeholder="ابحث باسم المديرية أو المحافظة..."
+                error={errors.directorateId}
+              />
               {errors.directorateId && <p style={errorStyle}>{errors.directorateId}</p>}
             </div>
           )}
@@ -351,7 +369,7 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
           >
             <button
               type="button"
-              onClick={onClose}
+              onClick={handleCancel}
               style={{
                 padding: '9px 20px',
                 borderRadius: theme.radii.lg,

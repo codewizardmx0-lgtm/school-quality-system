@@ -39,19 +39,6 @@ export { useAdminDashboard } from './hooks/useAdminDashboard';
 // Types & DTOs
 export * from './types/admin.types';
 
-// Mock Services & Data
-export {
-  mockAdminService,
-  MOCK_ROLES,
-  MOCK_DIRECTORATES,
-  MOCK_SCHOOLS,
-  MOCK_USERS,
-  MOCK_AUDIT_LOGS,
-  MOCK_BLOCKED_IPS,
-  MOCK_BACKUPS,
-  MOCK_SYSTEM_SETTINGS,
-} from './services/mockAdminData';
-
 // Utilities
 export { exportToExcel, downloadXlsx, downloadEncryptedLog, formatExportFilename, formatNumber } from './utils/exportUtils';
 export { formatArabicDate, formatArabicTime, formatArabicDateTime, formatRelativeArabic, formatFileSize } from './utils/dateUtils';

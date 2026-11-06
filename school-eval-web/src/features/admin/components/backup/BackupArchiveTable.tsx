@@ -100,7 +100,14 @@ export const BackupArchiveTable: React.FC<BackupArchiveTableProps> = ({
             </tr>
           </thead>
           <tbody>
-            {backups.map((b, idx) => (
+            {backups.length === 0 ? (
+              <tr>
+                <td colSpan={5} style={{ padding: '36px', textAlign: 'center', color: theme.colors.neutral[400], fontSize: theme.typography.fontSizes.sm }}>
+                  لا توجد نسخ احتياطية مسجلة حالياً في النظام
+                </td>
+              </tr>
+            ) : (
+              backups.map((b, idx) => (
               <tr
                 key={b.backupId}
                 style={{
@@ -222,7 +229,7 @@ export const BackupArchiveTable: React.FC<BackupArchiveTableProps> = ({
                   </div>
                 </td>
               </tr>
-            ))}
+            )))}
           </tbody>
         </table>
       </div>

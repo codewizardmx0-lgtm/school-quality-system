@@ -73,7 +73,8 @@ export const BackupAndSettings: React.FC<BackupAndSettingsProps> = ({ onNavigate
     addToast('info', 'تم إنشاء وتنزيل تقرير صحة الخوادم بنجاح');
   };
 
-  const latestSuccessBackup = backups.find((b) => b.status === 'completed');
+  const safeBackups = Array.isArray(backups) ? backups : [];
+  const latestSuccessBackup = safeBackups.find((b) => b?.status === 'completed');
 
   return (
     <div style={{ padding: '24px 20px', direction: 'rtl', fontFamily: theme.typography.fontFamily.sans, boxSizing: 'border-box' }}>
@@ -296,7 +297,7 @@ export const BackupAndSettings: React.FC<BackupAndSettingsProps> = ({ onNavigate
           </div>
 
           <BackupArchiveTable
-            backups={backups}
+            backups={safeBackups}
             onRestore={(b) => setRestoreBackup(b)}
             addToast={addToast}
           />

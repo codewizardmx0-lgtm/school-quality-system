@@ -47,10 +47,46 @@ class AuditLogController extends Controller
             $query->where('school_id', (int) $request->input('school_id'));
         }
 
-        // فلترة بنوع العملية
-        $action = $request->input('action') ?? $request->input('actionType');
+        // فلترة بنوع العملية مع دعم المفتاح البرمجي أو التسمية العربية
+        $action = $request->input('action') ?? $request->input('actionType') ?? $request->input('action_type');
         if ($action && $action !== 'الكل') {
-            $query->where('action', (string) $action);
+            $arabicToKey = [
+                'تسجيل دخول ناجح' => 'auth.login_success',
+                'فشل تسجيل الدخول' => 'auth.login_failed',
+                'محاولة دخول فاشلة' => 'auth.login_failed',
+                'تسجيل خروج' => 'auth.logout',
+                'تغيير كلمة المرور' => 'auth.password_changed',
+                'تسجيل مدرسة جديدة' => 'school.created',
+                'تعديل بيانات مدرسة' => 'school.updated',
+                'حذف مدرسة' => 'school.deleted',
+                'تعديل حالة مدرسة' => 'school.status_toggled',
+                'إسناد مدير لمدرسة' => 'school.assigned_principal',
+                'فك ارتباط مدير عن مدرسة' => 'school.unassigned_principal',
+                'إسناد مقيم جودة' => 'school.assigned_evaluator',
+                'فك ارتباط مقيم جودة' => 'school.unassigned_evaluator',
+                'إنشاء حساب مستخدم جديد' => 'user.created',
+                'تعديل بيانات مستخدم' => 'user.updated',
+                'تعديل حالة حساب مستخدم' => 'user.status_toggled',
+                'إعادة ضبط كلمة المرور' => 'user.password_reset',
+                'إنشاء مديرية تعليمية' => 'directorate.created',
+                'تعديل مديرية تعليمية' => 'directorate.updated',
+                'حذف مديرية تعليمية' => 'directorate.deleted',
+                'رصد درجات التقييم' => 'evaluation.scored',
+                'إرسال التقييم للاعتماد' => 'evaluation.submitted',
+                'إغلاق التقييم واعتماده' => 'evaluation.direct_closed',
+                'طلب استكمال شواهد' => 'completion.created',
+                'تمديد مهلة استكمال' => 'completion.deadline_extended',
+                'إعادة تسليم استكمال' => 'completion.resubmitted',
+                'إغلاق ملف الاستكمال' => 'completion.closed',
+                'اعتماد ملف استكمال' => 'completion.closed',
+                'فك ارتباط شواهد' => 'evidence.unlinked',
+                'تفعيل وثيقة معايير' => 'standard_version.activated',
+                'أرشفة وثيقة معايير تلقائيًا' => 'standard_version.auto_archived',
+                'تبديل وضع الصيانة' => 'system.maintenance_mode_toggled',
+                'إرسال بريد اختباري' => 'system.test_email_sent',
+            ];
+            $canonicalAction = $arabicToKey[$action] ?? $action;
+            $query->where('action', (string) $canonicalAction);
         }
 
         // فلترة بالمستخدم المنفذ
@@ -62,6 +98,30 @@ class AuditLogController extends Controller
         // فلترة بنوع الكيان المستهدف
         if ($request->filled('target_type')) {
             $query->where('target_type', (string) $request->input('target_type'));
+        }
+
+        // بحث نصي في السجلات (الملاحظة / الوصف العربي أو رمز العملية أو اسم المستخدم)
+        $search = $request->input('q') ?? $request->input('search');
+        if (!empty($search)) {
+            $query->where(function ($q) use ($search) {
+                $q->where('description_ar', 'like', "%{$search}%")
+                    ->orWhere('action', 'like', "%{$search}%")
+                    ->orWhere('target_type', 'like', "%{$search}%")
+                    ->orWhereHas('user', function ($uq) use ($search) {
+                        $uq->where('full_name', 'like', "%{$search}%")
+                            ->orWhere('username', 'like', "%{$search}%");
+                    });
+            });
+        }
+
+        // فلترة بالنطاق الزمني السريع (24h, 7d, 30d)
+        $timeScope = $request->input('timeScope') ?? $request->input('time_scope');
+        if ($timeScope === '24h') {
+            $query->where('created_at', '>=', now()->subDay());
+        } elseif ($timeScope === '7d') {
+            $query->where('created_at', '>=', now()->subDays(7));
+        } elseif ($timeScope === '30d') {
+            $query->where('created_at', '>=', now()->subDays(30));
         }
 
         // فلترة بالتاريخ من - إلى

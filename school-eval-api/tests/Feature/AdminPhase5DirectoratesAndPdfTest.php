@@ -610,4 +610,313 @@ class AdminPhase5DirectoratesAndPdfTest extends TestCase
         $resAden->assertStatus(200);
         $this->assertCount(0, $resAden->json('data'), 'المحافظة التي لم تسجل لها مديريات تعيد مصفوفة فارغة');
     }
+
+    /**
+     * Phase 6 الدفعة الختامية (إصلاحات نهائية): اختبار عزل احتساب كود المدرسة حسب المحافظة فقط.
+     */
+    public function test_suggest_school_code_isolated_per_governorate(): void
+    {
+        Sanctum::actingAs($this->admin);
+
+        $amana = Governorate::where('code', 'AMANA')->firstOrFail();
+        $aden = Governorate::where('code', 'ADEN')->firstOrFail();
+
+        // 1. محافظة عدن بدون مدارس -> تبدأ برقم 001
+        $resAden = $this->getJson("/api/v1/schools/suggest-code?governorateId={$aden->governorate_id}");
+        $resAden->assertStatus(200);
+        $this->assertEquals('SCH-ADEN-2026-001', $resAden->json('data.code'));
+
+        // 2. أمانة العاصمة تحسب متسلسلها المستقل
+        $resAmana1 = $this->getJson("/api/v1/schools/suggest-code?governorateId={$amana->governorate_id}");
+        $resAmana1->assertStatus(200);
+        $amanaSerial1 = $resAmana1->json('data.nextSerial');
+        $this->assertStringStartsWith('SCH-AMANA-2026-', $resAmana1->json('data.code'));
+
+        // 3. إنشاء مدرسة تجريبية في عدن بالكود 001
+        $tahreer = Directorate::where('name_ar', 'مديرية التحرير')->firstOrFail();
+        School::create([
+            'school_name' => 'مدرسة اختبار عدن النموذجية',
+            'school_type' => 'government',
+            'educational_stage' => 'أساسي',
+            'governorate_id' => $aden->governorate_id,
+            'directorate_id' => $tahreer->directorate_id,
+            'educational_district' => 'صيرة',
+            'governorate' => $aden->name_ar,
+            'identification_data' => 'SCH-ADEN-2026-001',
+            'status' => 'Active',
+        ]);
+
+        // 4. الآن كود عدن المقترح يجب أن ينتقل تلقائياً إلى 002
+        $resAden2 = $this->getJson("/api/v1/schools/suggest-code?governorateId={$aden->governorate_id}");
+        $resAden2->assertStatus(200);
+        $this->assertEquals('SCH-ADEN-2026-002', $resAden2->json('data.code'));
+
+        // 5. متسلسل أمانة العاصمة معزول تماماً ولم يتأثر بإضافة مدرسة عدن
+        $resAmana2 = $this->getJson("/api/v1/schools/suggest-code?governorateId={$amana->governorate_id}");
+        $resAmana2->assertStatus(200);
+        $this->assertEquals($amanaSerial1, $resAmana2->json('data.nextSerial'), 'متسلسل كود أمانة العاصمة معزول ومحمي');
+    }
+
+    /**
+     * Phase 6 الدفعة الختامية (إصلاحات نهائية): التحقق من دعم المعاملات بكلا الصيغتين governorateId و governorate_id.
+     */
+    public function test_directorates_accepts_camel_and_snake_case(): void
+    {
+        Sanctum::actingAs($this->admin);
+
+        $amana = Governorate::where('code', 'AMANA')->firstOrFail();
+
+        $resCamel = $this->getJson("/api/v1/directorates?governorateId={$amana->governorate_id}");
+        $resCamel->assertStatus(200);
+        $this->assertCount(10, $resCamel->json('data'));
+
+        $resSnake = $this->getJson("/api/v1/directorates?governorate_id={$amana->governorate_id}");
+        $resSnake->assertStatus(200);
+        $this->assertCount(10, $resSnake->json('data'));
+    }
+
+    /**
+     * Phase 6 الدفعة الختامية (إصلاحات نهائية): اختبار تسجيل الوصف العربي description_ar في سجل التدقيق.
+     */
+    public function test_user_audit_log_has_arabic_description(): void
+    {
+        Sanctum::actingAs($this->admin);
+
+        $targetUser = User::create([
+            'username' => 'audit_test_usr',
+            'full_name' => 'مستخدم اختبار التدقيق',
+            'email' => 'audit_test_usr@example.com',
+            'password_hash' => bcrypt('password123'),
+            'user_type' => 'school',
+            'status' => 'Active',
+        ]);
+
+        // Toggle user status
+        $response = $this->patchJson("/api/v1/users/{$targetUser->user_id}/status");
+        $response->assertStatus(200);
+
+        $this->assertDatabaseHas('audit_logs', [
+            'action' => 'user.status_toggled',
+            'target_type' => 'User',
+            'target_id' => $targetUser->user_id,
+        ]);
+
+        $log = \App\Models\AuditLog::where('target_id', $targetUser->user_id)->where('action', 'user.status_toggled')->first();
+        $this->assertNotNull($log);
+        $this->assertNotNull($log->description_ar);
+        $this->assertStringContainsString('تعطيل حساب المستخدم', $log->description_ar);
+    }
+
+    /**
+     * Phase 6 الدفعة الختامية (إصلاحات نهائية): اختبار تبديل وضع الصيانة وإرسال بريد اختباري.
+     */
+    public function test_maintenance_mode_and_test_email_endpoints(): void
+    {
+        Sanctum::actingAs($this->admin);
+
+        // Toggle maintenance
+        $mRes = $this->postJson('/api/v1/system-settings/maintenance');
+        $mRes->assertStatus(200);
+        $this->assertArrayHasKey('isEnabled', $mRes->json('data'));
+
+        // Toggle back
+        $mRes2 = $this->postJson('/api/v1/system-settings/maintenance');
+        $mRes2->assertStatus(200);
+
+        // Send test email
+        $mailRes = $this->postJson('/api/v1/system-settings/test-email', [
+            'email' => 'admin_test@erteqa.ye',
+        ]);
+        $mailRes->assertStatus(200);
+        $this->assertTrue($mailRes->json('data.sent'));
+        $this->assertEquals('admin_test@erteqa.ye', $mailRes->json('data.recipient'));
+    }
+
+    /**
+     * Phase 6 الإصلاحات المستعجلة: البحث النصي في سجل التدقيق عبر بارامتر q.
+     */
+    public function test_audit_logs_text_search_filter(): void
+    {
+        Sanctum::actingAs($this->admin);
+
+        (new \App\Services\AuditLoggerService())->log(
+            action: 'custom.search_target',
+            targetType: 'School',
+            targetId: 1,
+            userId: $this->admin->user_id,
+            descriptionAr: 'عملية تدقيق خاصة برمز فريد للبحث كود_مميز_12345'
+        );
+
+        $res = $this->getJson('/api/v1/audit-logs?q=كود_مميز_12345');
+        $res->assertStatus(200);
+        $data = $res->json('data');
+        $this->assertNotEmpty($data);
+        $this->assertStringContainsString('كود_مميز_12345', $data[0]['description_ar'] ?? $data[0]['descriptionAr']);
+
+        // بحث عن كلمة غير موجودة
+        $resEmpty = $this->getJson('/api/v1/audit-logs?q=كلمة_مستحيل_وجودها_99999');
+        $resEmpty->assertStatus(200);
+        $this->assertEmpty($resEmpty->json('data'));
+    }
+
+    /**
+     * Phase 6 الإصلاحات المستعجلة: اختبار فلترة سجل التدقيق بنوع العملية (بالمفتاح الإنجليزي أو التسمية العربية).
+     */
+    public function test_audit_logs_filter_by_action_key_and_arabic_label(): void
+    {
+        Sanctum::actingAs($this->admin);
+
+        (new \App\Services\AuditLoggerService())->log(
+            action: 'school.created',
+            targetType: 'School',
+            targetId: 99,
+            userId: $this->admin->user_id,
+            descriptionAr: 'تسجيل مدرسة نموذجية لاختبار الفلتر'
+        );
+
+        // 1. فلترة بالمفتاح البرمجي الإنجليزي: school.created
+        $resKey = $this->getJson('/api/v1/audit-logs?actionType=school.created');
+        $resKey->assertStatus(200);
+        $dataKey = $resKey->json('data');
+        $this->assertNotEmpty($dataKey);
+        foreach ($dataKey as $row) {
+            $this->assertEquals('school.created', $row['action']);
+        }
+
+        // 2. فلترة بالتسمية العربية المعتمدة: تسجيل مدرسة جديدة
+        $resAr = $this->getJson('/api/v1/audit-logs?actionType=' . urlencode('تسجيل مدرسة جديدة'));
+        $resAr->assertStatus(200);
+        $dataAr = $resAr->json('data');
+        $this->assertNotEmpty($dataAr);
+        foreach ($dataAr as $row) {
+            $this->assertEquals('school.created', $row['action']);
+        }
+    }
+
+    /**
+     * Phase 6 الإصلاحات المستعجلة: التحقق من إلزامية فرادة كود المدرسة (Uniqueness).
+     */
+    public function test_school_code_uniqueness_validation(): void
+    {
+        Sanctum::actingAs($this->admin);
+
+        $existing = School::first();
+        $this->assertNotNull($existing);
+
+        $payload = [
+            'schoolName' => 'مدرسة تجريبية لاختبار الكود المتكرر',
+            'identificationData' => $existing->identification_data,
+            'governorateId' => $existing->governorate_id,
+            'directorateId' => $existing->directorate_id,
+            'educationalStage' => 'ثانوي',
+        ];
+
+        $res = $this->postJson('/api/v1/schools', $payload);
+        $res->assertStatus(422);
+        $res->assertJsonValidationErrors(['identificationData']);
+    }
+
+    /**
+     * Phase 6 الإصلاحات المستعجلة: كود المدرسة غير قابل للتعديل بعد الإنشاء (Immutable).
+     */
+    public function test_school_code_immutable_on_update(): void
+    {
+        Sanctum::actingAs($this->admin);
+
+        $school = School::first();
+        $originalCode = $school->identification_data;
+
+        $updatePayload = [
+            'schoolName' => $school->school_name . ' - محدث',
+            'identificationData' => 'HACKED-CODE-999',
+            'governorateId' => $school->governorate_id,
+            'directorateId' => $school->directorate_id,
+            'educationalStage' => $school->educational_stage ?? 'أساسي',
+        ];
+
+        $res = $this->putJson("/api/v1/schools/{$school->school_id}", $updatePayload);
+        $res->assertStatus(200);
+
+        $school->refresh();
+        $this->assertEquals($originalCode, $school->identification_data, 'كود المدرسة لم يتغير وظل محميًا');
+        $this->assertEquals($updatePayload['schoolName'], $school->school_name);
+    }
+
+    /**
+     * Phase 6 الإصلاحات المستعجلة: رفض حذف مدرسة مرتبطة بمستخدم أو بيانات.
+     */
+    public function test_delete_school_rejected_when_linked(): void
+    {
+        Sanctum::actingAs($this->admin);
+
+        // العثور على مدرسة مرتبطة بمستخدمين (مثل بلقيس أو الفاروق)
+        $schoolWithUsers = School::whereHas('users')->first();
+        $this->assertNotNull($schoolWithUsers);
+
+        $res = $this->deleteJson("/api/v1/schools/{$schoolWithUsers->school_id}");
+        $res->assertStatus(422);
+        $this->assertStringContainsString('لا يمكن حذف المدرسة', $res->json('message'));
+
+        $this->assertDatabaseHas('schools', ['school_id' => $schoolWithUsers->school_id]);
+    }
+
+    /**
+     * Phase 6 الإصلاحات المستعجلة: نجاح حذف مدرسة غير مرتبطة بأي بيانات وتوثيق الحدث.
+     */
+    public function test_delete_school_succeeds_when_not_linked(): void
+    {
+        Sanctum::actingAs($this->admin);
+
+        // إنشاء مدرسة فارغة بدون أي ارتباطات
+        $school = School::create([
+            'school_name' => 'مدرسة فارغة أُنشئت بالخطأ',
+            'identification_data' => 'SCH-TEST-DEL-001',
+            'governorate_id' => 1,
+            'directorate_id' => 1,
+            'governorate' => 'أمانة العاصمة',
+            'educational_district' => 'صنعاء القديمة',
+            'educational_stage' => 'أساسي',
+            'school_type' => 'government',
+            'status' => 'Active',
+        ]);
+
+        $res = $this->deleteJson("/api/v1/schools/{$school->school_id}");
+        $res->assertStatus(200);
+
+        $this->assertDatabaseMissing('schools', ['school_id' => $school->school_id]);
+
+        // التحقق من تسجيل الحدث في سجل التدقيق
+        $this->assertDatabaseHas('audit_logs', [
+            'action' => 'school.deleted',
+            'target_type' => 'School',
+            'target_id' => $school->school_id,
+        ]);
+    }
+
+    /**
+     * Phase 6 الإصلاحات المستعجلة: تبديل حالة المدرسة بين نشط ومعطل وتوثيق الحدث.
+     */
+    public function test_toggle_school_status(): void
+    {
+        Sanctum::actingAs($this->admin);
+
+        $school = School::first();
+        $originalStatus = $school->status;
+        $expectedNewStatus = ($originalStatus === 'Active') ? 'Inactive' : 'Active';
+
+        $res = $this->patchJson("/api/v1/schools/{$school->school_id}/toggle-status");
+        $res->assertStatus(200);
+        $this->assertNull($res->json('errors'));
+        $this->assertEquals($expectedNewStatus, $res->json('data.status'));
+
+        $school->refresh();
+        $this->assertEquals($expectedNewStatus, $school->status);
+
+        // التحقق من تسجيل الحدث في سجل التدقيق
+        $this->assertDatabaseHas('audit_logs', [
+            'action' => 'school.status_toggled',
+            'target_type' => 'School',
+            'target_id' => $school->school_id,
+        ]);
+    }
 }

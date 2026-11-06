@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, School as SchoolIcon } from 'lucide-react';
+import { X, School as SchoolIcon, RefreshCw } from 'lucide-react';
 import { theme } from '../../theme';
 import { schoolsApi } from '../../api/schoolsApi';
 import type { RegisterSchoolDto, Directorate, Governorate } from '../../types/admin.types';
@@ -9,7 +9,7 @@ interface RegisterSchoolModalProps {
   directorates?: Directorate[];
   onClose: () => void;
   onSuccess: () => void;
-  addToast: (type: 'success' | 'error', msg: string) => void;
+  addToast: (type: 'success' | 'error' | 'info' | 'warning', msg: string) => void;
 }
 
 export const RegisterSchoolModal: React.FC<RegisterSchoolModalProps> = ({
@@ -53,33 +53,62 @@ export const RegisterSchoolModal: React.FC<RegisterSchoolModalProps> = ({
       .catch((err) => console.warn('Failed to fetch governorates:', err));
   }, [isOpen]);
 
+  const [isSuggestingCode, setIsSuggestingCode] = useState(false);
+
   const loadDirectoratesAndCode = async (govId: number, govName: string, userEditedCode: boolean) => {
     try {
       const dirRes = await schoolsApi.getDirectorates(govId);
-      if (dirRes.data) {
-        setFilteredDirectorates(dirRes.data);
-        const firstDir = dirRes.data[0];
-        setForm((prev) => ({
-          ...prev,
-          governorate: govName,
-          governorateId: govId,
-          directorateId: firstDir ? firstDir.directorateId : 0,
-        }));
-      }
+      const dirs = (dirRes && Array.isArray(dirRes.data)) ? dirRes.data : [];
+      setFilteredDirectorates(dirs);
+      const firstDir = dirs[0];
+      setForm((prev) => ({
+        ...prev,
+        governorate: govName,
+        governorateId: govId,
+        directorateId: firstDir ? firstDir.directorateId : 0,
+      }));
     } catch (err) {
       console.warn('Failed to load directorates:', err);
+      setFilteredDirectorates([]);
+      setForm((prev) => ({
+        ...prev,
+        governorate: govName,
+        governorateId: govId,
+        directorateId: 0,
+      }));
     }
 
     if (!userEditedCode) {
       try {
         const codeRes = await schoolsApi.suggestSchoolCode(govId);
-        const codeData = codeRes?.data;
-        if (codeData && codeData.code) {
-          setForm((prev) => ({ ...prev, schoolCode: codeData.code }));
+        const suggested = codeRes?.data?.code;
+        if (suggested) {
+          setForm((prev) => ({ ...prev, schoolCode: suggested }));
         }
       } catch (err) {
         console.warn('Failed to suggest school code:', err);
       }
+    }
+  };
+
+  const handleRegenerateCode = async () => {
+    setIsSuggestingCode(true);
+    try {
+      const res = await schoolsApi.suggestSchoolCode(selectedGovId);
+      const suggested = res?.data?.code;
+      if (suggested) {
+        setForm((prev) => ({ ...prev, schoolCode: suggested }));
+        setIsCodeCustom(false);
+        setErrors((prev) => ({ ...prev, schoolCode: '' }));
+        addToast('info', `تم اقتراح الكود (${suggested}) بناءً على المحافظة.`);
+      } else {
+        addToast('error', 'تعذر الحصول على كود مقترح من الخادم.');
+      }
+    } catch (err: any) {
+      console.error('Failed to suggest school code:', err);
+      addToast('error', err?.message || 'تعذر توليد كود تلقائي، يمكنك إدخاله يدوياً.');
+    } finally {
+      setIsSuggestingCode(false);
     }
   };
 
@@ -260,17 +289,48 @@ export const RegisterSchoolModal: React.FC<RegisterSchoolModalProps> = ({
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
             <div>
-              <label style={labelStyle}>كود المدرسة المقترح (SCH-XXX) *</label>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                <label style={{ ...labelStyle, marginBottom: 0 }}>كود المدرسة المقترح (SCH-XXX) *</label>
+                <button
+                  type="button"
+                  onClick={handleRegenerateCode}
+                  disabled={isSuggestingCode}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: '#4F46E5',
+                    fontSize: '0.72rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    padding: '2px 6px',
+                    borderRadius: '4px',
+                  }}
+                  title="إعادة اقتراح كود المدرسة"
+                >
+                  <RefreshCw size={12} className={isSuggestingCode ? 'animate-spin' : ''} />
+                  <span>اقتراح كود</span>
+                </button>
+              </div>
               <input
-                style={inputStyle(!!errors.schoolCode)}
-                value={form.schoolCode}
-                onChange={(e) => handleChange('schoolCode', e.target.value)}
+                style={{
+                  ...inputStyle(!!errors.schoolCode),
+                  backgroundColor: '#F1F5F9',
+                  color: '#475569',
+                  cursor: 'not-allowed',
+                  fontWeight: 700,
+                }}
+                value={form.schoolCode || 'جاري التوليد التلقائي...'}
+                disabled
+                readOnly
                 placeholder="SCH-AMANA-2026-001"
                 dir="ltr"
               />
               {errors.schoolCode && <p style={errorStyle}>{errors.schoolCode}</p>}
-              <span style={{ fontSize: '0.7rem', color: theme.colors.neutral[400], display: 'block', marginTop: '3px' }}>
-                {isCodeCustom ? '✏️ كود مخصص يدوياً' : '⚡ تم اقتراح الكود تلقائياً بناءً على المحافظة'}
+              <span style={{ fontSize: '0.7rem', color: '#059669', display: 'block', marginTop: '3px', fontWeight: 600 }}>
+                ⚡ يتولد الكود تلقائياً حسب المحافظة المختارة وفق الترقيم التراكمي المستمر
               </span>
             </div>
             <div>

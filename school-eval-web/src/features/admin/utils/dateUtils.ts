@@ -1,4 +1,4 @@
-﻿/**
+/**
  * dateUtils.ts
  * Arabic date/time formatting utilities (§6 - Dates stored as ISO 8601, displayed in Arabic Gregorian)
  */
@@ -45,8 +45,10 @@ export function formatArabicDateTime(isoString: string): string {
  * Returns relative display (اليوم / أمس / date) with time
  * e.g. "اليوم • 04:30 م"
  */
-export function formatRelativeArabic(isoString: string): string {
+export function formatRelativeArabic(isoString?: string | null): string {
+  if (!isoString) return '—';
   const date = new Date(isoString);
+  if (isNaN(date.getTime())) return '—';
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const yesterday = new Date(today.getTime() - 86400000);

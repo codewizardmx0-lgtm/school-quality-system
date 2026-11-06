@@ -1,6 +1,7 @@
 /**
  * useAdminSchools.ts
  * React Hook managing Schools and Directorates state, filtering, and mutations
+ * Conforms to conventions.md (§2, §3, §7, §8) - Zero Mock Fallback
  */
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
@@ -100,25 +101,38 @@ export function useAdminSchools() {
   }, []);
 
   const filteredSchools = useMemo(() => {
-    return schools.filter((s) => {
-      const selectedDir = selectedDirectorateId !== null
-        ? directorates.find((d) => d.directorateId === selectedDirectorateId)
-        : null;
+    const selectedGov = selectedGovernorateId !== null
+      ? governorates.find((g) => g.governorateId === selectedGovernorateId)
+      : null;
 
+    const selectedDir = selectedDirectorateId !== null
+      ? directorates.find((d) => d.directorateId === selectedDirectorateId)
+      : null;
+
+    return schools.filter((s) => {
+      // 1. Governorate match
+      const matchGov =
+        selectedGovernorateId === null ||
+        (s.governorateId !== null && s.governorateId !== undefined && s.governorateId === selectedGovernorateId) ||
+        (selectedGov && s.governorate && s.governorate.includes(selectedGov.nameAr.replace('محافظة ', '')));
+
+      // 2. Directorate match
       const matchDir =
         selectedDirectorateId === null ||
+        (s.directorateId !== null && s.directorateId !== undefined && s.directorateId === selectedDirectorateId) ||
         (selectedDir && (
           s.directorate === selectedDir.directorateName ||
           s.educationalDistrict === selectedDir.directorateName ||
-          (s.directorate && s.directorate.includes(selectedDir.directorateName)) ||
-          (selectedDir.directorateName && selectedDir.directorateName.includes(s.directorate))
-        )) ||
-        (s.directorateId !== null && s.directorateId !== undefined && s.directorateId === selectedDirectorateId);
+          (s.directorate && selectedDir.directorateName && s.directorate.includes(selectedDir.directorateName.replace('مديرية ', ''))) ||
+          (selectedDir.directorateName && s.directorate && selectedDir.directorateName.includes(s.directorate.replace('مديرية ', '')))
+        ));
 
+      // 3. Type match
       const matchType =
         typeFilter === 'all' ||
         s.schoolType === typeFilter;
 
+      // 4. Readiness match
       const hasPrincipal = Boolean(s.principal?.userId || s.principal?.fullName);
       const hasEvaluator = Boolean((s.evaluators && s.evaluators.length > 0) || (s.evaluatorName && s.evaluatorName.trim() !== ''));
       const isComplete = hasPrincipal && hasEvaluator;
@@ -128,19 +142,16 @@ export function useAdminSchools() {
         (readinessFilter === 'complete' && isComplete) ||
         (readinessFilter === 'incomplete' && !isComplete);
 
-      const matchGov =
-        selectedGovernorateId === null ||
-        s.governorateId === selectedGovernorateId;
-
+      // 5. Search match
       const matchSearch =
         !searchQuery.trim() ||
         s.schoolName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         s.schoolCode?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         (s.evaluatorName && s.evaluatorName.toLowerCase().includes(searchQuery.toLowerCase()));
 
-      return matchDir && matchType && matchReadiness && matchGov && matchSearch;
+      return matchGov && matchDir && matchType && matchReadiness && matchSearch;
     });
-  }, [schools, directorates, selectedDirectorateId, selectedGovernorateId, typeFilter, readinessFilter, searchQuery]);
+  }, [schools, directorates, governorates, selectedDirectorateId, selectedGovernorateId, typeFilter, readinessFilter, searchQuery]);
 
   return {
     schools,

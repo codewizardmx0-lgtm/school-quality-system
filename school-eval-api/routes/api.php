@@ -59,6 +59,7 @@ Route::prefix('v1')->group(function () {
             Route::get('/suggest-code', [SchoolController::class, 'suggestCode'])->name('api.v1.schools.suggest-code');
             Route::get('/{id}', [SchoolController::class, 'show'])->name('api.v1.schools.show');
             Route::put('/{id}', [SchoolController::class, 'update'])->name('api.v1.schools.update');
+            Route::delete('/{id}', [SchoolController::class, 'destroy'])->name('api.v1.schools.destroy');
             Route::patch('/{id}/toggle-status', [SchoolController::class, 'toggleStatus'])->name('api.v1.schools.toggle-status');
             Route::post('/{id}/assign-evaluator', [\App\Http\Controllers\Api\V1\AdminController::class, 'assignEvaluator'])->name('api.v1.schools.assign-evaluator');
             Route::post('/{id}/unassign-evaluator', [\App\Http\Controllers\Api\V1\AdminController::class, 'unassignEvaluator'])->name('api.v1.schools.unassign-evaluator');
@@ -121,6 +122,7 @@ Route::prefix('v1')->group(function () {
             Route::get('/', [\App\Http\Controllers\Api\V1\AdminController::class, 'systemSettings'])->name('api.v1.system-settings.index');
             Route::put('/', [\App\Http\Controllers\Api\V1\AdminController::class, 'updateSystemSettings'])->name('api.v1.system-settings.update');
             Route::post('/maintenance', [\App\Http\Controllers\Api\V1\AdminController::class, 'toggleMaintenance'])->name('api.v1.system-settings.maintenance');
+            Route::post('/test-email', [\App\Http\Controllers\Api\V1\AdminController::class, 'sendTestEmail'])->name('api.v1.system-settings.test-email');
         });
 
         Route::prefix('admin')->group(function () {

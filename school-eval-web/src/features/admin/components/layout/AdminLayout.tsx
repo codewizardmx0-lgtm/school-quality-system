@@ -9,6 +9,7 @@ import { SchoolsDirectory } from '../schools/SchoolsDirectory';
 import { SecurityAudit } from '../audit/SecurityAudit';
 import { BackupAndSettings } from '../backup/BackupAndSettings';
 import { ChangePasswordModal } from '../../../auth/ChangePasswordModal';
+import { backupApi } from '../../api/backupApi';
 import type { AdminScreen } from '../../types/admin.types';
 
 interface AdminLayoutProps {
@@ -22,8 +23,23 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
 }) => {
   const [activeScreen, setActiveScreen] = useState<AdminScreen>(initialScreen);
   const [isMaintenanceMode, setIsMaintenanceMode] = useState(false);
+  const [isTogglingMaintenance, setIsTogglingMaintenance] = useState(false);
   const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
   const { toasts, addToast, dismissToast } = useToast();
+
+  useEffect(() => {
+    let mounted = true;
+    backupApi.getSystemSettings().then((res) => {
+      if (mounted && res?.data?.maintenanceMode) {
+        setIsMaintenanceMode(!!res.data.maintenanceMode.isEnabled);
+      }
+    }).catch((err) => {
+      console.error('Failed to load initial maintenance mode setting', err);
+    });
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   // Responsive & Sidebar Collapse state
   const [isCollapsed, setIsCollapsed] = useState(false);
@@ -47,17 +63,24 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  const handleToggleMaintenance = () => {
-    setIsMaintenanceMode((prev) => {
-      const next = !prev;
+  const handleToggleMaintenance = async () => {
+    if (isTogglingMaintenance) return;
+    setIsTogglingMaintenance(true);
+    try {
+      const res = await backupApi.toggleMaintenanceMode();
+      const nextState = res?.data?.isEnabled ?? !isMaintenanceMode;
+      setIsMaintenanceMode(nextState);
       addToast(
-        next ? 'warning' : 'info',
-        next
+        nextState ? 'warning' : 'info',
+        nextState
           ? 'تم تفعيل وضع الصيانة المجدولة: تم تعليق وصول المستخدمين العاديين للنظام'
           : 'تم إلغاء وضع الصيانة: النظام متاح الآن لكافة المدارس والمشرفين'
       );
-      return next;
-    });
+    } catch (err) {
+      addToast('error', 'تعذر تغيير حالة وضع الصيانة، يرجى المحاولة لاحقاً');
+    } finally {
+      setIsTogglingMaintenance(false);
+    }
   };
 
   const renderScreen = () => {

@@ -53,6 +53,12 @@ export const CreateUserModal: React.FC<CreateUserModalProps> = ({ isOpen, onClos
     sublabel: (s as any).educationalDistrict || (s as any).directorate,
   }));
 
+  const directorateOptions: SearchableOption[] = directorates.map((d) => ({
+    value: d.directorateId,
+    label: d.directorateName,
+    sublabel: d.governorate,
+  }));
+
   // Filter roles dynamically according to official DB roles
   const filteredRoles = roles.filter((r) => {
     if (form.userType === 'school') {
@@ -267,14 +273,13 @@ export const CreateUserModal: React.FC<CreateUserModalProps> = ({ isOpen, onClos
           {form.userType === 'ministry' && (
             <div>
               <label style={labelStyle}>المديرية التابعة *</label>
-              <select style={inputStyle(!!errors.directorateId)} value={form.directorateId || ''} onChange={(e) => handleChange('directorateId', e.target.value ? Number(e.target.value) : null)}>
-                <option value="">-- اختر المديرية --</option>
-                {directorates.map((d) => (
-                  <option key={d.directorateId} value={d.directorateId}>
-                    {d.directorateName} ({d.governorate})
-                  </option>
-                ))}
-              </select>
+              <SearchableSelect
+                options={directorateOptions}
+                value={form.directorateId}
+                onChange={(val) => handleChange('directorateId', val ? Number(val) : null)}
+                placeholder="ابحث باسم المديرية أو المحافظة..."
+                error={errors.directorateId}
+              />
               {errors.directorateId && <p style={errorStyle}>{errors.directorateId}</p>}
             </div>
           )}

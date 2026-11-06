@@ -1,7 +1,8 @@
 import React from 'react';
-import { Filter, User, Clock, RefreshCw } from 'lucide-react';
+import { Filter, User, Clock, RefreshCw, Search } from 'lucide-react';
 import { theme } from '../../theme';
-import { AUDIT_EVENT_LABELS } from '../../hooks/useAdminAudit';
+import { AUDIT_EVENT_OPTIONS } from '../../hooks/useAdminAudit';
+import type { AuditEventOption } from '../../hooks/useAdminAudit';
 
 interface AuditFilterBarProps {
   actionType: string;
@@ -10,12 +11,15 @@ interface AuditFilterBarProps {
   onActorChange: (val: string) => void;
   timeScope: string;
   onTimeScopeChange: (val: string) => void;
+  searchQuery?: string;
+  onSearchQueryChange?: (val: string) => void;
   onRefresh: () => void;
   isLoading: boolean;
   totalFiltered: number;
   totalLogs: number;
   currentPage?: number;
   perPage?: number;
+  availableEventOptions?: AuditEventOption[];
   availableEventTypes?: string[];
   availableActors?: string[];
 }
@@ -33,13 +37,16 @@ export const AuditFilterBar: React.FC<AuditFilterBarProps> = ({
   onActorChange,
   timeScope,
   onTimeScopeChange,
+  searchQuery = '',
+  onSearchQueryChange,
   onRefresh,
   isLoading,
   totalFiltered: _totalFiltered,
   totalLogs,
   currentPage = 1,
   perPage = 15,
-  availableEventTypes = [],
+  availableEventOptions,
+  availableEventTypes: _availableEventTypes = [],
   availableActors = [],
 }) => {
   const selectStyle: React.CSSProperties = {
@@ -68,6 +75,37 @@ export const AuditFilterBar: React.FC<AuditFilterBarProps> = ({
         flexWrap: 'wrap',
       }}
     >
+      {/* Live Text Search */}
+      {onSearchQueryChange && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: '220px', flex: '1 1 220px' }}>
+          <div style={{ position: 'relative', width: '100%' }}>
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => onSearchQueryChange(e.target.value)}
+              placeholder="بحث بالفاعل، العملية، الشرح، أو عنوان IP..."
+              style={{
+                width: '100%',
+                padding: '8px 32px 8px 12px',
+                borderRadius: theme.radii.lg,
+                border: `1px solid ${theme.colors.neutral[200]}`,
+                fontSize: theme.typography.fontSizes.xs,
+                backgroundColor: theme.colors.neutral.white,
+                color: theme.colors.neutral[800],
+                outline: 'none',
+                fontFamily: theme.typography.fontFamily.sans,
+                boxSizing: 'border-box',
+              }}
+            />
+            <Search
+              size={14}
+              color={theme.colors.neutral[400]}
+              style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)' }}
+            />
+          </div>
+        </div>
+      )}
+
       {/* Action Type Filter */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
         <Filter size={15} color={theme.colors.neutral[400]} />
@@ -76,9 +114,9 @@ export const AuditFilterBar: React.FC<AuditFilterBarProps> = ({
         </span>
         <select value={actionType} onChange={(e) => onActionTypeChange(e.target.value)} style={selectStyle}>
           <option value="الكل">الكل (جميع العمليات)</option>
-          {availableEventTypes.map((evt) => (
-            <option key={evt} value={evt}>
-              {AUDIT_EVENT_LABELS[evt] ? `${AUDIT_EVENT_LABELS[evt]} (${evt})` : evt}
+          {(availableEventOptions && availableEventOptions.length > 0 ? availableEventOptions : AUDIT_EVENT_OPTIONS).map((opt) => (
+            <option key={opt.key} value={opt.key}>
+              {opt.label}
             </option>
           ))}
         </select>

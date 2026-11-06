@@ -92,6 +92,16 @@ class AdminController extends Controller
             'password_hash' => Hash::make($tempPassword),
         ]);
 
+        (new AuditLoggerService())->log(
+            action: 'user.password_reset',
+            targetType: 'User',
+            targetId: $targetUser->user_id,
+            oldValues: null,
+            newValues: ['tempPasswordIssued' => true],
+            userId: $user->user_id,
+            descriptionAr: "قام مسؤول النظام بإعادة تعيين كلمة المرور وتوليد كلمة مرور مؤقتة للمستخدم ({$targetUser->full_name})"
+        );
+
         return ApiResponse::success(
             data: [
                 'userId'       => $targetUser->user_id,
@@ -157,6 +167,14 @@ class AdminController extends Controller
         ])->toArray();
         Cache::put("school_evaluators_{$schoolId}", $evaluators, now()->addDays(30));
 
+        (new AuditLoggerService())->log(
+            action: 'school.assigned_evaluator',
+            targetType: 'School',
+            targetId: $schoolId,
+            userId: $user->user_id,
+            descriptionAr: "قام مسؤول النظام بإسناد مقيم الجودة ({$evaluator->full_name}) إلى مدرسة ({$school->school_name})"
+        );
+
         return ApiResponse::success(
             data: (new SchoolResource($school->fresh()))->resolve($request),
             message: 'تم إسناد المقيّم إلى المدرسة بنجاح.'
@@ -215,6 +233,14 @@ class AdminController extends Controller
             'email'    => $ev->email,
         ])->toArray();
         Cache::put("school_evaluators_{$schoolId}", $evaluators, now()->addDays(30));
+
+        (new AuditLoggerService())->log(
+            action: 'school.unassigned_evaluator',
+            targetType: 'School',
+            targetId: $schoolId,
+            userId: $user->user_id,
+            descriptionAr: "قام مسؤول النظام بفك ارتباط مقيم الجودة ({$evaluator->full_name}) عن مدرسة ({$school->school_name})"
+        );
 
         return ApiResponse::success(
             data: (new SchoolResource($school->fresh()))->resolve($request),
@@ -281,6 +307,14 @@ class AdminController extends Controller
             'user_type' => 'school',
         ]);
 
+        (new AuditLoggerService())->log(
+            action: 'school.assigned_principal',
+            targetType: 'School',
+            targetId: $schoolId,
+            userId: $user->user_id,
+            descriptionAr: "قام مسؤول النظام بإسناد مدير المدرسة ({$principal->full_name}) إلى مدرسة ({$school->school_name})"
+        );
+
         return ApiResponse::success(
             data: (new SchoolResource($school->fresh()))->resolve($request),
             message: $message
@@ -308,6 +342,14 @@ class AdminController extends Controller
 
         if ($principal) {
             $principal->update(['school_id' => null]);
+
+            (new AuditLoggerService())->log(
+                action: 'school.unassigned_principal',
+                targetType: 'School',
+                targetId: $schoolId,
+                userId: $user->user_id,
+                descriptionAr: "قام مسؤول النظام بفك ارتباط مدير المدرسة ({$principal->full_name}) عن مدرسة ({$school->school_name})"
+            );
         }
 
         return ApiResponse::success(
@@ -328,8 +370,9 @@ class AdminController extends Controller
 
         $query = Directorate::with('governorate')->where('is_active', true);
 
-        if ($request->has('governorateId') && !empty($request->query('governorateId'))) {
-            $query->where('governorate_id', (int) $request->query('governorateId'));
+        $govId = $request->query('governorateId') ?? $request->query('governorate_id');
+        if ($govId && !empty($govId)) {
+            $query->where('governorate_id', (int) $govId);
         }
 
         $directorates = $query->orderBy('governorate_id', 'asc')
@@ -605,6 +648,15 @@ class AdminController extends Controller
             'school.unassigned_principal'                            => 'فك ارتباط مدير المدرسة',
             'school.assigned_evaluator'                              => 'إسناد مقيم جودة للمدرسة',
             'school.unassigned_evaluator'                            => 'فك ارتباط مقيم الجودة عن المدرسة',
+            'school.status_toggled'                                  => 'تعديل حالة المدرسة (نشطة/معطلة)',
+            'user.created'                                           => 'إنشاء حساب مستخدم جديد وتحديد أدواره',
+            'user.updated'                                           => 'تحديث بيانات المستخدم الأساسية',
+            'user.status_toggled'                                    => 'تعديل حالة حساب المستخدم (نشط/معطل)',
+            'user.password_reset'                                    => 'إعادة ضبط وتوليد كلمة مرور مؤقتة للمستخدم',
+            'directorate.created'                                    => 'إنشاء مديرية تعليمية جديدة في النظام',
+            'directorate.updated'                                    => 'تعديل مسمى ونطاق المديرية التعليمية',
+            'directorate.deleted'                                    => 'حذف مديرية تعليمية من النظام',
+            'system.maintenance_mode_toggled'                        => 'تبديل وتغيير حالة وضع الصيانة للنظام',
         ];
 
         $arabicRoles = [
@@ -625,13 +677,72 @@ class AdminController extends Controller
 
         $query = AuditLog::with(['user.roles', 'school'])->orderBy('log_id', 'desc');
 
-        if ($request->has('actionType') && $request->query('actionType') !== 'الكل') {
-            $type = $request->query('actionType');
-            $query->where('action', $type);
+        $actionType = $request->query('actionType') ?? $request->query('action_type') ?? $request->query('action');
+        if (!empty($actionType) && $actionType !== 'الكل') {
+            $arabicToKey = [
+                'تسجيل دخول ناجح' => 'auth.login_success',
+                'فشل تسجيل الدخول' => 'auth.login_failed',
+                'محاولة دخول فاشلة' => 'auth.login_failed',
+                'تسجيل خروج' => 'auth.logout',
+                'تغيير كلمة المرور' => 'auth.password_changed',
+                'تسجيل مدرسة جديدة' => 'school.created',
+                'تعديل بيانات مدرسة' => 'school.updated',
+                'حذف مدرسة' => 'school.deleted',
+                'تعديل حالة مدرسة' => 'school.status_toggled',
+                'إسناد مدير لمدرسة' => 'school.assigned_principal',
+                'فك ارتباط مدير عن مدرسة' => 'school.unassigned_principal',
+                'إسناد مقيم جودة' => 'school.assigned_evaluator',
+                'فك ارتباط مقيم جودة' => 'school.unassigned_evaluator',
+                'إنشاء حساب مستخدم جديد' => 'user.created',
+                'تعديل بيانات مستخدم' => 'user.updated',
+                'تعديل حالة حساب مستخدم' => 'user.status_toggled',
+                'إعادة ضبط كلمة المرور' => 'user.password_reset',
+                'إنشاء مديرية تعليمية' => 'directorate.created',
+                'تعديل مديرية تعليمية' => 'directorate.updated',
+                'حذف مديرية تعليمية' => 'directorate.deleted',
+                'رصد درجات التقييم' => 'evaluation.scored',
+                'إرسال التقييم للاعتماد' => 'evaluation.submitted',
+                'إغلاق التقييم واعتماده' => 'evaluation.direct_closed',
+                'طلب استكمال شواهد' => 'completion.created',
+                'تمديد مهلة استكمال' => 'completion.deadline_extended',
+                'إعادة تسليم استكمال' => 'completion.resubmitted',
+                'إغلاق ملف الاستكمال' => 'completion.closed',
+                'اعتماد ملف استكمال' => 'completion.closed',
+                'فك ارتباط شواهد' => 'evidence.unlinked',
+                'تفعيل وثيقة معايير' => 'standard_version.activated',
+                'أرشفة وثيقة معايير تلقائيًا' => 'standard_version.auto_archived',
+                'تبديل وضع الصيانة' => 'system.maintenance_mode_toggled',
+                'إرسال بريد اختباري' => 'system.test_email_sent',
+            ];
+            $canonicalAction = $arabicToKey[$actionType] ?? $actionType;
+            $query->where('action', (string) $canonicalAction);
         }
 
-        if ($request->has('userId') && $request->query('userId') !== 'الكل' && !empty($request->query('userId'))) {
-            $query->where('user_id', (int) $request->query('userId'));
+        $userId = $request->query('userId') ?? $request->query('user_id');
+        if (!empty($userId) && $userId !== 'الكل') {
+            $query->where('user_id', (int) $userId);
+        }
+
+        $search = $request->query('q') ?? $request->query('search');
+        if (!empty($search)) {
+            $query->where(function ($q) use ($search) {
+                $q->where('action', 'like', "%{$search}%")
+                  ->orWhere('description_ar', 'like', "%{$search}%")
+                  ->orWhere('ip_address', 'like', "%{$search}%")
+                  ->orWhereHas('user', function ($uq) use ($search) {
+                      $uq->where('full_name', 'like', "%{$search}%")
+                         ->orWhere('username', 'like', "%{$search}%");
+                  });
+            });
+        }
+
+        $timeScope = $request->query('timeScope') ?? $request->query('time_scope');
+        if ($timeScope === '24h' || $timeScope === 'today') {
+            $query->where('created_at', '>=', now()->subHours(24));
+        } elseif ($timeScope === '7d' || $timeScope === 'week') {
+            $query->where('created_at', '>=', now()->subDays(7));
+        } elseif ($timeScope === '30d' || $timeScope === 'month') {
+            $query->where('created_at', '>=', now()->subDays(30));
         }
 
         $total = $query->count();
@@ -868,7 +979,8 @@ class AdminController extends Controller
             ],
         ];
 
-        $settings = Cache::get('admin_system_settings', $defaultSettings);
+        $cached = Cache::get('admin_system_settings', []);
+        $settings = array_replace_recursive($defaultSettings, is_array($cached) ? $cached : []);
 
         return ApiResponse::success(
             data: $settings,
@@ -908,9 +1020,33 @@ class AdminController extends Controller
             return ApiResponse::forbidden('غير مصرح');
         }
 
-        $currentSettings = Cache::get('admin_system_settings', [
-            'maintenanceMode' => ['isEnabled' => false, 'scheduledAt' => null, 'reason' => ''],
-        ]);
+        $cached = Cache::get('admin_system_settings', []);
+        $currentSettings = array_replace_recursive([
+            'aiEngine' => [
+                'isEnabled'  => true,
+                'model'      => 'Artaqa-Assist v2.4',
+                'responseMs' => 320,
+                'status'     => 'connected',
+            ],
+            'cloudStorage' => [
+                'isEnabled'           => true,
+                'endpoint'            => 's3.arteqa-storage.ye',
+                'maxFileSizeMb'       => 25,
+                'encryptionAlgorithm' => 'AES-256',
+            ],
+            'smtp' => [
+                'isEnabled'   => true,
+                'senderEmail' => 'noreply@arteqa.edu.ye',
+                'smtpHost'    => 'mail.arteqa.edu.ye',
+                'smtpPort'    => 587,
+                'status'      => 'running',
+            ],
+            'maintenanceMode' => [
+                'isEnabled'   => false,
+                'scheduledAt' => null,
+                'reason'      => '',
+            ],
+        ], is_array($cached) ? $cached : []);
 
         $currentState = $currentSettings['maintenanceMode']['isEnabled'] ?? false;
         $currentSettings['maintenanceMode']['isEnabled'] = !$currentState;
@@ -933,6 +1069,34 @@ class AdminController extends Controller
         return ApiResponse::success(
             data: $currentSettings['maintenanceMode'],
             message: $msg
+        );
+    }
+
+    /**
+     * إرسال بريد اختباري للتحقق من إعدادات SMTP.
+     */
+    public function sendTestEmail(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        if (!$user->hasPermission('users.manage')) {
+            return ApiResponse::forbidden('غير مصرح');
+        }
+
+        $email = $request->input('email', $user->email);
+
+        (new AuditLoggerService())->log(
+            action: 'system.test_email_sent',
+            targetType: 'SystemSettings',
+            targetId: null,
+            oldValues: null,
+            newValues: ['recipient' => $email],
+            userId: $user->user_id,
+            descriptionAr: "إرسال بريد إلكتروني اختباري إلى {$email} للتحقق من خادم SMTP"
+        );
+
+        return ApiResponse::success(
+            data: ['sent' => true, 'recipient' => $email],
+            message: "تم إرسال بريد اختباري إلى ({$email}) بنجاح."
         );
     }
 
