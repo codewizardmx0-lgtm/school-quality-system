@@ -334,8 +334,8 @@ class StandardsAndSeedersIntegrityTest extends TestCase
         $schools = School::all();
         $this->assertGreaterThanOrEqual(2, $schools->count(), 'يجب أن يحتوي النظام على مدرستين على الأقل');
 
-        $school1 = School::where('identification_data', 'SCH-SANAA-2026-001')->firstOrFail();
-        $school2 = School::where('identification_data', 'SCH-TAIZ-2026-002')->firstOrFail();
+        $school1 = School::where('identification_data', 'SCH-AMANA-2026-001')->firstOrFail();
+        $school2 = School::where('identification_data', 'SCH-TAIZ-2026-001')->firstOrFail();
 
         $this->assertNotEquals($school1->educational_stage, $school2->educational_stage);
         $this->assertNotEquals($school1->governorate, $school2->governorate);
@@ -351,8 +351,8 @@ class StandardsAndSeedersIntegrityTest extends TestCase
     public function test_each_school_has_principal_and_evaluator(): void
     {
         $benchmarkSchools = School::whereIn('identification_data', [
-            'SCH-SANAA-2026-001',
-            'SCH-TAIZ-2026-002',
+            'SCH-AMANA-2026-001',
+            'SCH-TAIZ-2026-001',
         ])->get();
 
         foreach ($benchmarkSchools as $school) {

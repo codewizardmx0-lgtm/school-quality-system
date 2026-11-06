@@ -49,8 +49,8 @@ class EducationalPlansFeatureTest extends TestCase
     {
         parent::setUp();
 
-        $this->schoolBelqees = School::where('identification_data', 'SCH-SANAA-2026-001')->firstOrFail();
-        $this->schoolFarouq  = School::where('identification_data', 'SCH-TAIZ-2026-002')->firstOrFail();
+        $this->schoolBelqees = School::where('identification_data', 'SCH-AMANA-2026-001')->firstOrFail();
+        $this->schoolFarouq  = School::where('identification_data', 'SCH-TAIZ-2026-001')->firstOrFail();
 
         $this->evaluatorBelqees = User::where('username', 'quality_belqees')->firstOrFail();
         $this->evaluatorFarouq  = User::where('username', 'quality_farouq')->firstOrFail();

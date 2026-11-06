@@ -23,7 +23,7 @@ class SchoolMetricsAndFacilitiesSeeder extends Seeder
     public function run(): void
     {
         $belqees = School::where('identification_data', 'SCH-AMANA-2026-001')
-            ->orWhere('identification_data', 'SCH-SANAA-2026-001')
+            ->orWhere('identification_data', 'SCH-AMANA-2026-001')
             ->orWhere('school_name', 'like', '%بلقيس%')
             ->first();
         if ($belqees) {
@@ -31,7 +31,7 @@ class SchoolMetricsAndFacilitiesSeeder extends Seeder
         }
 
         $farouq = School::where('identification_data', 'SCH-TAIZ-2026-001')
-            ->orWhere('identification_data', 'SCH-TAIZ-2026-002')
+            ->orWhere('identification_data', 'SCH-TAIZ-2026-001')
             ->orWhere('school_name', 'like', '%الفاروق%')
             ->first();
         if ($farouq) {

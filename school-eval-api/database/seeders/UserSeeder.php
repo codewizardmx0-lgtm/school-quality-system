@@ -43,11 +43,11 @@ class UserSeeder extends Seeder
 
         // جلب معرفات المدارس والوزارة لربط المستخدمين وفق قاعدة التكامل المرجعي
         $schoolBelqees = School::where('identification_data', 'SCH-AMANA-2026-001')
-            ->orWhere('identification_data', 'SCH-SANAA-2026-001')
+            ->orWhere('identification_data', 'SCH-AMANA-2026-001')
             ->orWhere('school_name', 'like', '%بلقيس%')
             ->firstOrFail();
         $schoolFarouq  = School::where('identification_data', 'SCH-TAIZ-2026-001')
-            ->orWhere('identification_data', 'SCH-TAIZ-2026-002')
+            ->orWhere('identification_data', 'SCH-TAIZ-2026-001')
             ->orWhere('school_name', 'like', '%الفاروق%')
             ->firstOrFail();
         $ministry      = Ministry::where('ministry_name', 'وزارة التربية والتعليم والبحث العلمي')->firstOrFail();

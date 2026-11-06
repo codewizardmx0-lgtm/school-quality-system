@@ -25,10 +25,10 @@ class DemoEvaluationSeeder extends Seeder
     {
         $cycle = EvaluationCycle::firstOrFail();
         $schoolBelqees = School::where('identification_data', 'SCH-AMANA-2026-001')
-            ->orWhere('identification_data', 'SCH-SANAA-2026-001')
+            ->orWhere('identification_data', 'SCH-AMANA-2026-001')
             ->orWhere('school_name', 'like', '%بلقيس%')
             ->firstOrFail();
-        $schoolFarouq  = School::where('identification_data', 'SCH-TAIZ-2026-002')->firstOrFail();
+        $schoolFarouq  = School::where('identification_data', 'SCH-TAIZ-2026-001')->firstOrFail();
 
         $evaluatorBelqees = User::where('username', 'quality_belqees')->firstOrFail();
         $evaluatorFarouq  = User::where('username', 'quality_farouq')->firstOrFail();

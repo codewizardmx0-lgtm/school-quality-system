@@ -49,7 +49,7 @@ class SecurityAuditCorrectionTest extends TestCase
         $this->supervisorUser = User::where('username', 'supervisor_ministry')->firstOrFail();
         $this->principalUser = User::where('username', 'principal_belqees')->firstOrFail();
         $this->evaluatorUser = User::where('username', 'quality_belqees')->firstOrFail();
-        $this->school = School::where('identification_data', 'SCH-SANAA-2026-001')->firstOrFail();
+        $this->school = School::where('identification_data', 'SCH-AMANA-2026-001')->firstOrFail();
     }
 
     /**
