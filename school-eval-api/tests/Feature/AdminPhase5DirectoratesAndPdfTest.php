@@ -30,6 +30,14 @@ class AdminPhase5DirectoratesAndPdfTest extends TestCase
 
         $this->admin = User::where('username', 'admin')->firstOrFail();
         Cache::forget('admin_directorates');
+        Cache::forget('admin_system_settings');
+    }
+
+    protected function tearDown(): void
+    {
+        Cache::forget('admin_directorates');
+        Cache::forget('admin_system_settings');
+        parent::tearDown();
     }
 
     /**
@@ -323,6 +331,10 @@ class AdminPhase5DirectoratesAndPdfTest extends TestCase
         $this->assertNotEmpty($latestLog->description_ar);
         $this->assertStringContainsString('وضع الصيانة', $latestLog->description_ar);
         $this->assertEquals($this->admin->user_id, $latestLog->user_id);
+
+        // إعادة إيقاف وضع الصيانة وتطهير الكاش لمنع التأثير على بقية الاختبارات
+        $this->postJson('/api/v1/system-settings/maintenance');
+        Cache::forget('admin_system_settings');
     }
 
     /**
@@ -357,6 +369,9 @@ class AdminPhase5DirectoratesAndPdfTest extends TestCase
         $createdSchool = School::findOrFail($schoolId);
         $this->assertEquals($capital->governorate_id, $createdSchool->governorate_id);
         $this->assertEquals($tahreer->directorate_id, $createdSchool->directorate_id);
+
+        // تنظيف المدرسة المنشأة لمنع تسربها لأي اختبارات تالية
+        $createdSchool->delete();
     }
 
     /**
@@ -918,5 +933,8 @@ class AdminPhase5DirectoratesAndPdfTest extends TestCase
             'target_type' => 'School',
             'target_id' => $school->school_id,
         ]);
+
+        // إعادة الحالة الأصلية لتفادي التأثير على الاختبارات الأخرى
+        $this->patchJson("/api/v1/schools/{$school->school_id}/toggle-status");
     }
 }
