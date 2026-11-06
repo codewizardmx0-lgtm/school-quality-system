@@ -46,7 +46,7 @@ export const backupApi = {
       data: {
         aiEngine: { isEnabled: false, model: 'gemini-1.5-pro', responseMs: 0, status: 'disconnected' },
         cloudStorage: { isEnabled: false, endpoint: '', maxFileSizeMb: 10, encryptionAlgorithm: 'AES-256' },
-        smtp: { isEnabled: false, senderEmail: 'noreply@erteqa.ye', smtpHost: 'smtp.mailtrap.io', smtpPort: 2525, status: 'stopped' },
+        smtp: { isEnabled: false, senderEmail: 'noreply@school-eval.gov.ye', smtpHost: 'smtp.mailtrap.io', smtpPort: 2525, status: 'stopped' },
         maintenanceMode: { isEnabled: false, scheduledAt: null, reason: '' },
       },
       message: null,

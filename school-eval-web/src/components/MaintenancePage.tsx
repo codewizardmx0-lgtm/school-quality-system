@@ -1,6 +1,6 @@
 import React from 'react';
 import { Wrench, RefreshCw, Shield } from 'lucide-react';
-import { SYSTEM_NAME } from '../constants/systemConstants';
+import { SYSTEM_FULL_NAME } from '../constants/systemConstants';
 
 interface MaintenancePageProps {
   message?: string;
@@ -72,7 +72,7 @@ export const MaintenancePage: React.FC<MaintenancePageProps> = ({
         <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '6px 14px', borderRadius: '9999px', backgroundColor: 'rgba(99, 102, 241, 0.15)', border: '1px solid rgba(99, 102, 241, 0.3)', marginBottom: '28px' }}>
           <Shield size={16} color="#818CF8" />
           <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#C7D2FE' }}>
-            {SYSTEM_NAME}
+            {SYSTEM_FULL_NAME}
           </span>
         </div>
 

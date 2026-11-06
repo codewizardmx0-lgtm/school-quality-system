@@ -165,7 +165,7 @@ export const Sidebar: React.FC<{ activeTab: string; onSelectTab: (tab: string) =
                 fontWeight: theme.typography.fontWeights.semibold,
               }}
             >
-              لتقويم جودة المدارس
+              للتقييم الذاتي والتحسين المدرسي
             </div>
           </div>
         </div>

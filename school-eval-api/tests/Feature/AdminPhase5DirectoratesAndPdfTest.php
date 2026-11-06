@@ -168,7 +168,7 @@ class AdminPhase5DirectoratesAndPdfTest extends TestCase
 
         $response->assertStatus(200);
         $this->assertEquals('application/pdf', $response->headers->get('content-type'));
-        $this->assertStringContainsString('attachment; filename="erteqa_executive_report_', $response->headers->get('content-disposition'));
+        $this->assertStringContainsString('attachment; filename="school_eval_executive_report_', $response->headers->get('content-disposition'));
 
         $content = $response->getContent();
         $this->assertNotEmpty($content);
@@ -372,9 +372,9 @@ class AdminPhase5DirectoratesAndPdfTest extends TestCase
         $contentDisposition = $response->headers->get('content-disposition');
         $this->assertNotNull($contentDisposition);
 
-        // الصيغة: erteqa_executive_report_YYYY-MM-DD_HH-mm.pdf
+        // الصيغة: school_eval_executive_report_YYYY-MM-DD_HH-mm.pdf
         $this->assertMatchesRegularExpression(
-            '/attachment; filename="erteqa_executive_report_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}\.pdf"/',
+            '/attachment; filename="school_eval_executive_report_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}\.pdf"/',
             $contentDisposition
         );
     }

@@ -60,7 +60,7 @@ export const BackupAndSettings: React.FC<BackupAndSettingsProps> = ({ onNavigate
 
   const handleHealthReport = () => {
     // Generate mock server health report PDF simulation
-    const content = `تقرير صحة الخوادم والخدمات المركزية - منصة ارتقاء\nالتاريخ: ${new Date().toLocaleDateString('ar-YE')}\nقاعدة البيانات: متصلة ونشطة\nوحدة التخزين السحابي: متصلة ومؤمّنة (SHA-256 Validated)\nمحرك الذكاء الاصطناعي: استجابة 320ms`;
+    const content = `تقرير صحة الخوادم والخدمات المركزية - منصة ارتقاء للتقييم الذاتي والتحسين المدرسي\nالتاريخ: ${new Date().toLocaleDateString('ar-YE')}\nقاعدة البيانات: متصلة ونشطة\nوحدة التخزين السحابي: متصلة ومؤمّنة (SHA-256 Validated)\nمحرك الذكاء الاصطناعي: استجابة 320ms`;
     const blob = new Blob([content], { type: 'text/plain;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');

@@ -612,7 +612,7 @@ class AdminController extends Controller
         $reportService = new \App\Services\AdminExecutiveReportService();
         $pdfContent = $reportService->generateExecutivePdf();
 
-        $fileName = 'erteqa_executive_report_' . date('Y-m-d_H-i') . '.pdf';
+        $fileName = 'school_eval_executive_report_' . date('Y-m-d_H-i') . '.pdf';
 
         return response($pdfContent, 200, [
             'Content-Type'        => 'application/pdf',

@@ -232,7 +232,7 @@ export const schoolsApi = {
     if (!downloadFilename) {
       const now = new Date();
       const pad = (n: number) => String(n).padStart(2, '0');
-      downloadFilename = `erteqa_executive_report_${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}_${pad(now.getHours())}-${pad(now.getMinutes())}.pdf`;
+      downloadFilename = `school_eval_executive_report_${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}_${pad(now.getHours())}-${pad(now.getMinutes())}.pdf`;
     }
 
     link.download = downloadFilename;

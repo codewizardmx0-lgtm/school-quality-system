@@ -80,7 +80,7 @@ export const AppContent: React.FC = () => {
     return <AdminLayout onLogout={logout} />;
   }
 
-  // إذا كان التبويب هو بوابة إدارة النظام المركزية (ارتقاء) أو شاشات الإدارة للمخولين
+  // إذا كان التبويب هو بوابة إدارة النظام المركزية (منصة ارتقاء) أو شاشات الإدارة للمخولين
   if (activeTab === 'admin-suite' || activeTab === 'schools' || activeTab === 'users') {
     const screenMap: Record<string, AdminScreen> = {
       schools: 'schools',

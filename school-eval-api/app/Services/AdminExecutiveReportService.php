@@ -15,7 +15,7 @@ use Mpdf\Config\FontVariables;
 use Mpdf\Mpdf;
 
 /**
- * خدمة توليد التقرير التنفيذي الرسمي الشامل لمنصة ارتقاء بتنسيق PDF عبر محرك mPDF.
+ * خدمة توليد التقرير التنفيذي الرسمي الشامل لمنصة ارتقاء للتقييم الذاتي والتحسين المدرسي بتنسيق PDF عبر محرك mPDF.
  */
 class AdminExecutiveReportService
 {
@@ -77,7 +77,7 @@ class AdminExecutiveReportService
         $viewData = [
             'generated_at'   => $now->locale('ar')->isoFormat('YYYY/MM/DD - HH:mm'),
             'ref_number'     => $now->format('Ymd') . '-' . substr(strval(crc32($totalSchools . $now->timestamp)), 0, 4),
-            'digital_hash'   => substr(hash('sha256', "ERTEQA-REPORT-{$now->timestamp}-{$totalSchools}"), 0, 10),
+            'digital_hash'   => substr(hash('sha256', "EVAL-REPORT-{$now->timestamp}-{$totalSchools}"), 0, 10),
             'total_schools'  => $totalSchools,
             'gov_schools'    => $govSchools,
             'pvt_schools'    => $pvtSchools,
@@ -136,8 +136,8 @@ class AdminExecutiveReportService
 
         $mpdf = new Mpdf($mpdfConfig);
         $mpdf->SetDirectionality('rtl');
-        $mpdf->SetTitle('التقرير التنفيذي الشامل - منظومة ارتقاء لتقويم جودة المدارس');
-        $mpdf->SetAuthor('منظومة ارتقاء لتقويم جودة المدارس');
+        $mpdf->SetTitle('التقرير التنفيذي الشامل - منصة ارتقاء للتقييم الذاتي والتحسين المدرسي');
+        $mpdf->SetAuthor('منصة ارتقاء للتقييم الذاتي والتحسين المدرسي');
         $mpdf->WriteHTML($html);
 
         return $mpdf->Output('', 'S');

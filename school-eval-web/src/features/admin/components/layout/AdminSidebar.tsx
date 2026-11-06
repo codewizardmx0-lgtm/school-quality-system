@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import { theme } from '../../theme';
 import type { AdminScreen } from '../../types/admin.types';
-import { SYSTEM_NAME, SYSTEM_SHORT_NAME } from '../../../../constants/systemConstants';
+import { SYSTEM_SHORT_NAME } from '../../../../constants/systemConstants';
 
 interface AdminSidebarProps {
   activeScreen: AdminScreen;
@@ -293,7 +293,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
       >
         {isCollapsed && !isMobile ? (
           <div
-            title={`${SYSTEM_NAME} • الخادم متصل ومستقر (v1.0)`}
+            title={`${SYSTEM_SHORT_NAME} • الخادم متصل ومستقر (v1.0)`}
             style={{
               display: 'flex',
               flexDirection: 'column',

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from './AuthContext';
 import { theme } from '../../styles/theme';
-import { SYSTEM_NAME, SYSTEM_TAGLINE, SYSTEM_DESCRIPTION } from '../../constants/systemConstants';
+import { SYSTEM_FULL_NAME, SYSTEM_TAGLINE, SYSTEM_DESCRIPTION } from '../../constants/systemConstants';
 import {
   Lock,
   User as UserIcon,
@@ -134,7 +134,7 @@ export const LoginPage: React.FC = () => {
                 margin: 0,
               }}
             >
-              {SYSTEM_NAME} — يرجى إدخال بيانات حسابك
+              {SYSTEM_FULL_NAME} — يرجى إدخال بيانات حسابك
             </p>
           </div>
 
@@ -503,7 +503,7 @@ export const LoginPage: React.FC = () => {
                 fontWeight: theme.typography.fontWeights.semibold,
               }}
             >
-              {SYSTEM_NAME} — دورة 2026/2027
+              {SYSTEM_FULL_NAME} — دورة 2026/2027
             </span>
           </div>
 

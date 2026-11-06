@@ -2,7 +2,7 @@
 <html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <title>التقرير التنفيذي الشامل - منظومة ارتقاء لتقويم جودة المدارس</title>
+    <title>التقرير التنفيذي الشامل - منصة ارتقاء للتقييم الذاتي والتحسين المدرسي</title>
     <style>
         @page {
             margin-top: 46mm;
@@ -170,12 +170,12 @@
                     قطاع التوجيه والمناهج • إدارة الجودة
                 </td>
                 <td class="header-center">
-                    <h1>منظومة ارتقاء لتقويم جودة المدارس</h1>
+                    <h1>منصة ارتقاء للتقييم الذاتي والتحسين المدرسي</h1>
                     <h2>التقرير التنفيذي الشامل للجاهزية والمدارس</h2>
                 </td>
                 <td class="header-left">
                     تاريخ الإصدار: {{ $generated_at }}<br>
-                    الرقم المرجعي: ERT-EXEC-{{ $ref_number }}<br>
+                    الرقم المرجعي: EVAL-EXEC-{{ $ref_number }}<br>
                     المستوى: حوكمة النظام المركزي
                 </td>
             </tr>
@@ -185,7 +185,7 @@
     <!-- HTML Footer -->
     <htmlpagefooter name="reportFooter">
         <div class="footer-note">
-            منظومة ارتقاء لتقويم جودة المدارس • وثيقة رسمية صادرة آلياً • صفحة {PAGENO} من {nbpg} • البصمة الرقمية: SHA-{{ $digital_hash }}
+            منصة ارتقاء للتقييم الذاتي والتحسين المدرسي • وثيقة رسمية صادرة آلياً • صفحة {PAGENO} من {nbpg} • البصمة الرقمية: SHA-{{ $digital_hash }}
         </div>
     </htmlpagefooter>
 
