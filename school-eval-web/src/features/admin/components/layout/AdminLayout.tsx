@@ -58,7 +58,9 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
       style={{
         display: 'flex',
         minHeight: '100vh',
-        width: '100vw',
+        width: '100%',
+        maxWidth: '100%',
+        overflowX: 'hidden',
         direction: 'rtl',
         backgroundColor: '#F8FAFC',
         fontFamily: "'Cairo', 'Tajawal', system-ui, -apple-system, sans-serif",
@@ -72,13 +74,13 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
       />
 
       {/* Main Content Area */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, overflow: 'hidden' }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, overflowX: 'hidden' }}>
         <AdminTopBar
           activeScreen={activeScreen}
           isMaintenanceMode={isMaintenanceMode}
           onToggleMaintenance={handleToggleMaintenance}
         />
-        <main style={{ flex: 1, overflowY: 'auto' }}>
+        <main style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', minWidth: 0 }}>
           {renderScreen()}
         </main>
       </div>

@@ -31,6 +31,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
 
   return (
     <aside
+      className="admin-sidebar"
       style={{
         width: '260px',
         backgroundColor: '#0B0F19', // Dark Navy as specified
@@ -43,11 +44,13 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
         top: 0,
         borderLeft: '1px solid #1E293B',
         fontFamily: theme.typography.fontFamily.sans,
+        overflow: 'hidden',
       }}
     >
-      {/* Brand Header */}
+      {/* Brand Header (flexShrink: 0) */}
       <div
         style={{
+          flexShrink: 0,
           padding: '24px 20px',
           borderBottom: '1px solid #1E293B',
           display: 'flex',
@@ -82,8 +85,21 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
         </div>
       </div>
 
-      {/* Nav List */}
-      <nav style={{ flex: 1, padding: '20px 12px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+      {/* Nav List (flex: 1, minHeight: 0, overflowY: 'auto', hidden scrollbar) */}
+      <nav
+        className="hide-scrollbar"
+        style={{
+          flex: 1,
+          minHeight: 0,
+          padding: '20px 12px',
+          overflowY: 'auto',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '4px',
+          scrollbarWidth: 'none',
+          msOverflowStyle: 'none',
+        }}
+      >
         <div style={{ padding: '0 8px 8px 8px', fontSize: '0.65rem', fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
           الوحدات الإدارية المركزية
         </div>
@@ -147,9 +163,11 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
         })}
       </nav>
 
-      {/* Admin User Info Footer */}
+      {/* Admin User Info Footer & Logout (Fixed at bottom with mt-auto, flexShrink: 0) */}
       <div
         style={{
+          marginTop: 'auto',
+          flexShrink: 0,
           padding: '16px 20px',
           borderTop: '1px solid #1E293B',
           backgroundColor: '#080C14',

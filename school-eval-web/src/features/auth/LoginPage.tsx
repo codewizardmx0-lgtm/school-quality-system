@@ -66,7 +66,9 @@ export const LoginPage: React.FC = () => {
       style={{
         display: 'flex',
         minHeight: '100vh',
-        width: '100vw',
+        width: '100%',
+        maxWidth: '100%',
+        overflowX: 'hidden',
         direction: 'rtl',
         fontFamily: theme.typography.fontFamily.sans,
         backgroundColor: theme.colors.neutral[50],

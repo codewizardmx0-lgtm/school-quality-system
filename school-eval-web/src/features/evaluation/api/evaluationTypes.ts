@@ -1,0 +1,347 @@
+/**
+ * evaluationTypes.ts
+ * Strict TypeScript domain models & interfaces according to conventions.md (§3, §5, §10, §11)
+ */
+
+export type SubmissionStatus = 'Draft' | 'Submitted' | 'UnderReview' | 'NeedsCompletion' | 'Completed';
+export type CompletionStatus = 'Pending' | 'Completed';
+export type PriorityLevel = 'Low' | 'Medium' | 'High';
+export type PlanStatus = 'Draft' | 'Active' | 'Completed' | 'Cancelled';
+export type ActionStatus = 'Pending' | 'InProgress' | 'Done' | 'Cancelled';
+export type RequestStatus = 'Open' | 'Resolved';
+export type ItemStatus = 'Pending' | 'Resolved';
+export type AiAnalysisStatus = 'Pending' | 'Completed' | 'Failed';
+export type AiRecommendationStatus = 'PendingReview' | 'Accepted' | 'Modified' | 'Ignored';
+export type AiRecommendationType = 'strength' | 'improvement' | 'recommendation' | 'draft';
+export type VerificationTagStatus = 'Compliant' | 'NeedsReplacement' | 'UnderReview';
+
+export interface EvaluatorSchoolInfo {
+  schoolId: number;
+  schoolName: string;
+  status: SubmissionStatus;
+  statusArabic: string;
+  currentEvaluator: string;
+  academicYear: string;
+  cycleName: string;
+}
+
+export interface EvaluatorKpis {
+  completionPercentage: number;
+  totalIndicators: number;
+  scoredIndicators: number;
+  documentedEvidences: number;
+  targetEvidences: number;
+  strengthsCount: number;
+  gapsCount: number;
+}
+
+export interface CycleStep {
+  id: number;
+  label: string;
+  status: 'completed' | 'current' | 'pending';
+  date: string;
+}
+
+export interface StandardProgressItem {
+  standardId: number;
+  code: string;
+  title: string;
+  totalIndicators: number;
+  scoredIndicators: number;
+  percentage: number;
+}
+
+export interface PendingIndicatorItem {
+  indicatorId: number;
+  code: string;
+  name: string;
+  standardName: string;
+  status: string;
+}
+
+export interface CompletionAlert {
+  requestId: number;
+  message: string;
+  deadline: string;
+  itemsCount: number;
+}
+
+export interface EvaluatorDashboardData {
+  schoolInfo: EvaluatorSchoolInfo;
+  kpis: EvaluatorKpis;
+  cycleSteps: CycleStep[];
+  standardsProgress: StandardProgressItem[];
+  pendingIndicators: PendingIndicatorItem[];
+  completionAlert: CompletionAlert | null;
+}
+
+export interface ScoreDescriptor {
+  descriptorId: number;
+  level: number; // 0, 1, 2, 3
+  title: string;
+  description: string;
+}
+
+export interface VerificationMethod {
+  id: number;
+  name: string;
+  description?: string;
+}
+
+export interface IndicatorNode {
+  indicatorId: number;
+  code: string;
+  title: string;
+  description: string;
+  weight: number;
+  descriptors: ScoreDescriptor[];
+  verificationMethods: VerificationMethod[];
+}
+
+export interface SubStandardNode {
+  subStandardId: number;
+  code: string;
+  title: string;
+  indicators: IndicatorNode[];
+}
+
+export interface StandardNode {
+  standardId: number;
+  code: string;
+  title: string;
+  description: string;
+  weight: number;
+  subStandards: SubStandardNode[];
+}
+
+export interface StandardsTreeData {
+  versionId: number;
+  versionCode: string;
+  title: string;
+  standards: StandardNode[];
+}
+
+export interface LinkedEvidenceBrief {
+  linkId: number;
+  documentId?: number;
+  title: string;
+  fileName: string;
+  fileSize: number;
+  versionNumber: number;
+  status?: string;
+}
+
+export interface EvaluationResultData {
+  resultId: number | null;
+  evaluationId: number;
+  indicatorId: number;
+  score: number | null;
+  scoreDescriptorId: number | null;
+  completionStatus: CompletionStatus;
+  justification: string;
+  verificationMethods: number[];
+  evidenceLinks: LinkedEvidenceBrief[];
+  updatedAt?: string;
+}
+
+export interface SaveEvaluationResultPayload {
+  indicatorId: number;
+  score: number;
+  scoreDescriptorId?: number | null;
+  justification?: string;
+  verificationMethods?: number[];
+  completionStatus?: CompletionStatus;
+}
+
+export interface EvidenceVaultStats {
+  totalEvidences: number;
+  compliantEvidences: number;
+  needsReplacement: number;
+  storageUsedMb: number;
+  storageLimitMb: number;
+  storagePercentage: number;
+}
+
+export interface EvidenceItem {
+  id: number;
+  documentId: number;
+  title: string;
+  fileName: string;
+  mimeType: string;
+  fileSize: number;
+  formattedSize: string;
+  versionNumber: number;
+  standardCode: string;
+  standardName: string;
+  indicatorCode: string;
+  indicatorTitle: string;
+  uploadedAt: string;
+  uploadedBy: string;
+  verificationStatus: VerificationTagStatus;
+  verificationStatusArabic: string;
+}
+
+export interface EvidencesRepositoryResponse {
+  vaultStats: EvidenceVaultStats;
+  evidences: EvidenceItem[];
+}
+
+export interface UploadEvidencePayload {
+  file: File;
+  title?: string;
+  indicatorId?: number;
+  actionId?: number;
+  notes?: string;
+  documentId?: number; // for replacing an existing evidence with a new version
+}
+
+export interface AiStrengthWeakness {
+  id: number;
+  title: string;
+  description: string;
+  priority: PriorityLevel;
+}
+
+export interface AiInitiative {
+  id: number;
+  title: string;
+  description: string;
+  priority: PriorityLevel;
+  status: AiRecommendationStatus;
+  humanModifications?: string | null;
+}
+
+export interface AiAnalysisData {
+  analysisId: number;
+  summary: string;
+  averageScore: number;
+  evaluatedEvidences: number;
+  totalEvidences: number;
+  suggestedInitiativesCount: number;
+  createdAt: string;
+}
+
+export interface AiRecommendationsResponse {
+  analysisId: number;
+  summary?: string;
+  strengths: AiStrengthWeakness[];
+  improvements: AiStrengthWeakness[];
+  initiatives: AiInitiative[];
+}
+
+export interface ImprovementPlanAction {
+  actionId: number;
+  planId: number;
+  title: string;
+  standardName: string;
+  leader: string;
+  startDate: string;
+  dueDate: string;
+  status: ActionStatus;
+  statusArabic: string;
+  completionPercentage: number;
+  progressDescription: string;
+}
+
+export interface ImprovementPlanSummary {
+  totalActions: number;
+  inProgressActions: number;
+  doneActions: number;
+  pendingActions: number;
+}
+
+export interface ImprovementPlanData {
+  planId: number;
+  title: string;
+  status: PlanStatus;
+  startDate: string;
+  endDate: string;
+  summary: ImprovementPlanSummary;
+  actions: ImprovementPlanAction[];
+}
+
+export interface CreateImprovementActionPayload {
+  title: string;
+  leader?: string;
+  startDate?: string;
+  dueDate?: string;
+  status?: ActionStatus;
+  progressDescription?: string;
+  completionPercentage?: number;
+  recommendationId?: number;
+}
+
+export interface UpdateImprovementActionPayload {
+  title?: string;
+  leader?: string;
+  startDate?: string;
+  dueDate?: string;
+  status?: ActionStatus;
+  progressDescription?: string;
+  completionPercentage?: number;
+}
+
+export interface PreflightCheckCriterion {
+  id: string;
+  title: string;
+  description: string;
+  passed: boolean;
+  weight: number;
+}
+
+export interface PreflightCheckData {
+  canSubmit: boolean;
+  readinessPercentage: number;
+  passedCriteriaCount: number;
+  totalCriteriaCount: number;
+  checklist: PreflightCheckCriterion[];
+  digitalSealInfo: {
+    systemCode: string;
+    hashAlgorithm: string;
+    submissionNotice: string;
+  };
+}
+
+export interface FinalSubmissionResponse {
+  submissionId: number;
+  reportId: number;
+  status: SubmissionStatus;
+  trackingCode: string;
+  digitalHash: string;
+  submittedAt: string;
+  evaluatorName: string;
+  isReadOnlyLocked: boolean;
+}
+
+export interface FlaggedCompletionItem {
+  itemId: number;
+  indicatorId: number;
+  indicatorCode: string;
+  indicatorTitle: string;
+  standardTitle: string;
+  missingDescription: string;
+  status: ItemStatus;
+  resolutionNotes: string;
+}
+
+export interface CompletionRequestData {
+  requestId: number;
+  status: RequestStatus;
+  supervisorName: string;
+  issuedAt: string;
+  completionDeadline: string;
+  remainingDays: number;
+  supervisorGeneralNotes: string;
+  flaggedItems: FlaggedCompletionItem[];
+}
+
+export type EvaluatorScreen =
+  | 'dashboard'
+  | 'standards-tree'
+  | 'rubric-assessment'
+  | 'evidences'
+  | 'ai-assistant'
+  | 'improvement-plan'
+  | 'final-review'
+  | 'completion-request'
+  | 'notifications';
