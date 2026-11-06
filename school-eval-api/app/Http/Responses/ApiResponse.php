@@ -67,6 +67,17 @@ class ApiResponse
     }
 
     /**
+     * استجابة تعذر معالجة الطلب لتعارضه مع حالة السجل 422 Unprocessable Entity.
+     *
+     * @param string $message
+     * @return JsonResponse
+     */
+    public static function unprocessable(string $message = 'لا يمكن إتمام العملية نظراً لوجود ارتباطات قائمة.'): JsonResponse
+    {
+        return self::error($message, 422);
+    }
+
+    /**
      * استجابة خطأ غير مصادَق 401 Unauthorized.
      *
      * @param string $message
@@ -168,5 +179,23 @@ class ApiResponse
             'errors'  => null,
             'meta'    => null,
         ], 500, [], JSON_UNESCAPED_UNICODE);
+    }
+
+    /**
+     * استجابة خطأ مخصص برمز حالة محدد (مثل 503 Service Unavailable).
+     *
+     * @param string $message
+     * @param int $status
+     * @param array<string, mixed>|null $errors
+     * @return JsonResponse
+     */
+    public static function error(string $message = 'حدث خطأ في النظام', int $status = 500, ?array $errors = null): JsonResponse
+    {
+        return response()->json([
+            'data'    => null,
+            'message' => $message,
+            'errors'  => $errors,
+            'meta'    => null,
+        ], $status, [], JSON_UNESCAPED_UNICODE);
     }
 }

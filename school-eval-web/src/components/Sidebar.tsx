@@ -1,6 +1,7 @@
 import React from 'react';
 import { useAuth } from '../features/auth/AuthContext';
 import { theme } from '../styles/theme';
+import { SYSTEM_SHORT_NAME } from '../constants/systemConstants';
 import {
   LayoutDashboard,
   School,
@@ -45,6 +46,9 @@ export const Sidebar: React.FC<{ activeTab: string; onSelectTab: (tab: string) =
     }
     if (perms.includes('users.manage')) {
       items.push({ id: 'users', label: 'إدارة المستخدمين', icon: <Users size={18} /> });
+    }
+    if (primaryRole === 'admin' || perms.includes('users.manage')) {
+      items.push({ id: 'admin-suite', label: 'بوابة مسؤول النظام المركزية', icon: <ShieldCheck size={18} /> });
     }
     if (perms.includes('standards.manage')) {
       items.push(
@@ -152,7 +156,7 @@ export const Sidebar: React.FC<{ activeTab: string; onSelectTab: (tab: string) =
                 lineHeight: '1.2',
               }}
             >
-              التقييم الذاتي
+              {SYSTEM_SHORT_NAME}
             </div>
             <div
               style={{
@@ -161,7 +165,7 @@ export const Sidebar: React.FC<{ activeTab: string; onSelectTab: (tab: string) =
                 fontWeight: theme.typography.fontWeights.semibold,
               }}
             >
-              والاعتماد المدرسي
+              للتقييم الذاتي والتحسين المدرسي
             </div>
           </div>
         </div>

@@ -35,7 +35,7 @@ Route::prefix('v1')->group(function () {
     // --------------------------------------------------------------------------
     // مسارات محمية بمصادقة Sanctum Bearer Token وفرض الخمول (30 دقيقة)
     // --------------------------------------------------------------------------
-    Route::middleware(['auth:sanctum', 'session.timeout'])->group(function () {
+    Route::middleware(['auth:sanctum', 'session.timeout', 'check.maintenance'])->group(function () {
 
         // مصادقة المستخدم والجلسة (Auth & Session Management)
         Route::prefix('auth')->group(function () {
@@ -44,6 +44,9 @@ Route::prefix('v1')->group(function () {
             Route::post('/password/change', [AuthController::class, 'changePassword'])
                 ->middleware('throttle:auth.password.change')
                 ->name('api.v1.auth.password.change');
+            Route::post('/change-password', [AuthController::class, 'changePassword'])
+                ->middleware('throttle:auth.password.change')
+                ->name('api.v1.auth.change-password');
         });
 
         // سجل التدقيق للعمليات الحساسة (Audit Logs)
@@ -53,9 +56,15 @@ Route::prefix('v1')->group(function () {
         Route::prefix('schools')->group(function () {
             Route::get('/', [SchoolController::class, 'index'])->name('api.v1.schools.index');
             Route::post('/', [SchoolController::class, 'store'])->name('api.v1.schools.store');
+            Route::get('/suggest-code', [SchoolController::class, 'suggestCode'])->name('api.v1.schools.suggest-code');
             Route::get('/{id}', [SchoolController::class, 'show'])->name('api.v1.schools.show');
             Route::put('/{id}', [SchoolController::class, 'update'])->name('api.v1.schools.update');
+            Route::delete('/{id}', [SchoolController::class, 'destroy'])->name('api.v1.schools.destroy');
             Route::patch('/{id}/toggle-status', [SchoolController::class, 'toggleStatus'])->name('api.v1.schools.toggle-status');
+            Route::post('/{id}/assign-evaluator', [\App\Http\Controllers\Api\V1\AdminController::class, 'assignEvaluator'])->name('api.v1.schools.assign-evaluator');
+            Route::post('/{id}/unassign-evaluator', [\App\Http\Controllers\Api\V1\AdminController::class, 'unassignEvaluator'])->name('api.v1.schools.unassign-evaluator');
+            Route::post('/{id}/assign-principal', [\App\Http\Controllers\Api\V1\AdminController::class, 'assignPrincipal'])->name('api.v1.schools.assign-principal');
+            Route::post('/{id}/unassign-principal', [\App\Http\Controllers\Api\V1\AdminController::class, 'unassignPrincipal'])->name('api.v1.schools.unassign-principal');
 
             // الملف التعريفي وإحصاءات ومرافق المدرسة (الشريحة 6)
             Route::get('/{id}/profile', [\App\Http\Controllers\Api\V1\SchoolManagementController::class, 'getProfile'])->name('api.v1.schools.profile.get');
@@ -78,8 +87,48 @@ Route::prefix('v1')->group(function () {
             Route::get('/{id}', [\App\Http\Controllers\Api\V1\UserController::class, 'show'])->name('api.v1.users.show');
             Route::put('/{id}', [\App\Http\Controllers\Api\V1\UserController::class, 'update'])->name('api.v1.users.update');
             Route::patch('/{id}/toggle-status', [\App\Http\Controllers\Api\V1\UserController::class, 'toggleStatus'])->name('api.v1.users.toggle-status');
+            Route::patch('/{id}/status', [\App\Http\Controllers\Api\V1\UserController::class, 'toggleStatus'])->name('api.v1.users.status');
+            Route::post('/{id}/reset-password', [\App\Http\Controllers\Api\V1\AdminController::class, 'resetPassword'])->name('api.v1.users.reset-password');
         });
 
+        // الأدوار والمديريات وسجلات الأمان والنسخ الاحتياطي وإعدادات النظام لمسؤول النظام (React Admin)
+        Route::get('/roles', [\App\Http\Controllers\Api\V1\AdminController::class, 'roles'])->name('api.v1.roles.index');
+
+        // المحافظات والمديريات
+        Route::get('/governorates', [\App\Http\Controllers\Api\V1\GovernorateController::class, 'index'])->name('api.v1.governorates.index');
+        Route::get('/governorates/{id}', [\App\Http\Controllers\Api\V1\GovernorateController::class, 'show'])->name('api.v1.governorates.show');
+
+        Route::prefix('directorates')->group(function () {
+            Route::get('/', [\App\Http\Controllers\Api\V1\AdminController::class, 'directorates'])->name('api.v1.directorates.index');
+            Route::post('/', [\App\Http\Controllers\Api\V1\AdminController::class, 'storeDirectorate'])->name('api.v1.directorates.store');
+            Route::put('/{id}', [\App\Http\Controllers\Api\V1\AdminController::class, 'updateDirectorate'])->name('api.v1.directorates.update');
+            Route::delete('/{id}', [\App\Http\Controllers\Api\V1\AdminController::class, 'destroyDirectorate'])->name('api.v1.directorates.destroy');
+        });
+
+        Route::get('/admin/audit-logs', [\App\Http\Controllers\Api\V1\AdminController::class, 'auditLogs'])->name('api.v1.admin.audit-logs.index');
+
+        Route::prefix('security')->group(function () {
+            Route::get('/blocked-ips', [\App\Http\Controllers\Api\V1\AdminController::class, 'blockedIps'])->name('api.v1.security.blocked-ips');
+            Route::post('/unblock-ip', [\App\Http\Controllers\Api\V1\AdminController::class, 'unblockIp'])->name('api.v1.security.unblock-ip');
+        });
+
+        Route::prefix('backups')->group(function () {
+            Route::get('/', [\App\Http\Controllers\Api\V1\AdminController::class, 'backups'])->name('api.v1.backups.index');
+            Route::post('/', [\App\Http\Controllers\Api\V1\AdminController::class, 'triggerBackup'])->name('api.v1.backups.trigger');
+            Route::post('/{id}/verify', [\App\Http\Controllers\Api\V1\AdminController::class, 'verifyBackup'])->name('api.v1.backups.verify');
+        });
+
+        Route::prefix('system-settings')->group(function () {
+            Route::get('/', [\App\Http\Controllers\Api\V1\AdminController::class, 'systemSettings'])->name('api.v1.system-settings.index');
+            Route::put('/', [\App\Http\Controllers\Api\V1\AdminController::class, 'updateSystemSettings'])->name('api.v1.system-settings.update');
+            Route::post('/maintenance', [\App\Http\Controllers\Api\V1\AdminController::class, 'toggleMaintenance'])->name('api.v1.system-settings.maintenance');
+            Route::post('/test-email', [\App\Http\Controllers\Api\V1\AdminController::class, 'sendTestEmail'])->name('api.v1.system-settings.test-email');
+        });
+
+        Route::prefix('admin')->group(function () {
+            Route::get('/dashboard-stats', [\App\Http\Controllers\Api\V1\AdminController::class, 'dashboardStats'])->name('api.v1.admin.dashboard-stats');
+            Route::get('/export-report-pdf', [\App\Http\Controllers\Api\V1\AdminController::class, 'exportReportPdf'])->name('api.v1.admin.export-report-pdf');
+        });
         // الإصدارات المعيارية وإدارة معايير الاعتماد المدرسي (Standard Versions Management - الشريحة 7)
         Route::prefix('standard-versions')->group(function () {
             Route::get('/', [\App\Http\Controllers\Api\V1\StandardManagementController::class, 'index'])->name('api.v1.standard-versions.index');

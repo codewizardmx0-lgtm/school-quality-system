@@ -35,7 +35,9 @@ class DatabaseSeeder extends Seeder
             PermissionSeeder::class,                    // 11. الصلاحيات
             RolePermissionSeeder::class,                // 12. ربط الأدوار بالصلاحيات
             MinistrySeeder::class,                      // 13. وزارة التربية والتعليم
-            SchoolSeeder::class,                        // 14. المدرسة النموذجية
+            GovernorateSeeder::class,                   // 14. محافظات الجمهورية اليمنية الـ 22
+            DirectorateSeeder::class,                   // 15. مديريات أمانة العاصمة وتعز
+            SchoolSeeder::class,                        // 16. المدارس النموذجية العشر
             UserSeeder::class,                          // 15. المستخدمون الأساسيون
             UserRoleSeeder::class,                      // 16. إسناد الأدوار للمستخدمين
 
@@ -45,6 +47,7 @@ class DatabaseSeeder extends Seeder
 
             // المجموعة الرابعة: إحصاءات ومرافق المدارس النموذجية (الشريحة 6)
             SchoolMetricsAndFacilitiesSeeder::class,     // 19. إحصاءات الكادر والطلاب والمرافق النموذجية
+            AuditLogSeeder::class,                       // 20. سجل العمليات والتدقيق الأمني الحقيقي
         ]);
 
         // المجموعة الخامسة: ملفات وبيانات التقييم الذاتي التجريبية للمدارس (الشريحة 2 - لبيئة التطوير والنموذج الأولي)

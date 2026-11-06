@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from './AuthContext';
 import { theme } from '../../styles/theme';
+import { SYSTEM_FULL_NAME, SYSTEM_TAGLINE, SYSTEM_DESCRIPTION } from '../../constants/systemConstants';
 import {
   Lock,
   User as UserIcon,
@@ -61,15 +62,6 @@ export const LoginPage: React.FC = () => {
     }
   };
 
-  // تعبئة سريعة للحسابات التجريبية لاختبار الأدوار (تُستدعى كلمة المرور من متغيرات البيئة)
-  const fillCredentials = (user: string) => {
-    setUsername(user);
-    const devPassword = (import.meta.env.VITE_DEV_DEFAULT_PASSWORD as string | undefined) || '';
-    setPassword(devPassword);
-    setFieldErrors({});
-    setErrorMessage(null);
-  };
-
   return (
     <div
       style={{
@@ -120,7 +112,7 @@ export const LoginPage: React.FC = () => {
                   color: theme.colors.primary[700],
                 }}
               >
-                بوابة الاعتماد وضبط الجودة الوطنية
+                {SYSTEM_TAGLINE}
               </span>
             </div>
 
@@ -142,7 +134,7 @@ export const LoginPage: React.FC = () => {
                 margin: 0,
               }}
             >
-              منصة التقييم الذاتي والتحسين المدرسي — يرجى إدخال بيانات حسابك
+              {SYSTEM_FULL_NAME} — يرجى إدخال بيانات حسابك
             </p>
           </div>
 
@@ -411,149 +403,6 @@ export const LoginPage: React.FC = () => {
             </button>
           </form>
 
-          {/* قائمة تعبئة تجريبية سريعة للأدوار الخمسة (تظهر فقط في بيئة التطوير) */}
-          {import.meta.env.DEV && (
-            <div
-              style={{
-                marginTop: '28px',
-                paddingTop: '20px',
-                borderTop: `1px solid ${theme.colors.neutral[200]}`,
-              }}
-            >
-              <div
-                style={{
-                  fontSize: theme.typography.fontSizes.xs,
-                  fontWeight: theme.typography.fontWeights.bold,
-                  color: theme.colors.neutral[500],
-                  marginBottom: '10px',
-                  textAlign: 'center',
-                }}
-              >
-                حسابات تجريبية سريعة (بيئة التطوير والاختبار):
-              </div>
-              <div
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(2, 1fr)',
-                  gap: '8px',
-                }}
-              >
-                <button
-                  type="button"
-                  onClick={() => fillCredentials('quality_belqees')}
-                  style={{
-                    padding: '7px 10px',
-                    fontSize: '11px',
-                    backgroundColor: theme.colors.primary[50],
-                    border: `1px solid ${theme.colors.primary[200]}`,
-                    borderRadius: theme.radii.sm,
-                    color: theme.colors.primary[800],
-                    fontWeight: theme.typography.fontWeights.semibold,
-                    textAlign: 'center',
-                  }}
-                >
-                  تقييم (مدرسة بلقيس)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => fillCredentials('principal_belqees')}
-                  style={{
-                    padding: '7px 10px',
-                    fontSize: '11px',
-                    backgroundColor: theme.colors.neutral[100],
-                    border: `1px solid ${theme.colors.neutral[300]}`,
-                    borderRadius: theme.radii.sm,
-                    color: theme.colors.neutral[700],
-                    fontWeight: theme.typography.fontWeights.semibold,
-                    textAlign: 'center',
-                  }}
-                >
-                  مدير (مدرسة بلقيس)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => fillCredentials('quality_farouq')}
-                  style={{
-                    padding: '7px 10px',
-                    fontSize: '11px',
-                    backgroundColor: theme.colors.primary[50],
-                    border: `1px solid ${theme.colors.primary[200]}`,
-                    borderRadius: theme.radii.sm,
-                    color: theme.colors.primary[800],
-                    fontWeight: theme.typography.fontWeights.semibold,
-                    textAlign: 'center',
-                  }}
-                >
-                  تقييم (مدرسة الفاروق)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => fillCredentials('principal_farouq')}
-                  style={{
-                    padding: '7px 10px',
-                    fontSize: '11px',
-                    backgroundColor: theme.colors.neutral[100],
-                    border: `1px solid ${theme.colors.neutral[300]}`,
-                    borderRadius: theme.radii.sm,
-                    color: theme.colors.neutral[700],
-                    fontWeight: theme.typography.fontWeights.semibold,
-                    textAlign: 'center',
-                  }}
-                >
-                  مدير (مدرسة الفاروق)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => fillCredentials('supervisor_ministry')}
-                  style={{
-                    padding: '7px 10px',
-                    fontSize: '11px',
-                    backgroundColor: theme.colors.neutral[100],
-                    border: `1px solid ${theme.colors.neutral[300]}`,
-                    borderRadius: theme.radii.sm,
-                    color: theme.colors.neutral[700],
-                    fontWeight: theme.typography.fontWeights.semibold,
-                    textAlign: 'center',
-                  }}
-                >
-                  مشرف تربوي (وزاري)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => fillCredentials('standards_manager_ministry')}
-                  style={{
-                    padding: '7px 10px',
-                    fontSize: '11px',
-                    backgroundColor: theme.colors.neutral[100],
-                    border: `1px solid ${theme.colors.neutral[300]}`,
-                    borderRadius: theme.radii.sm,
-                    color: theme.colors.neutral[700],
-                    fontWeight: theme.typography.fontWeights.semibold,
-                    textAlign: 'center',
-                  }}
-                >
-                  مدير المعايير (وزاري)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => fillCredentials('admin')}
-                  style={{
-                    gridColumn: 'span 2',
-                    padding: '7px 10px',
-                    fontSize: '11px',
-                    backgroundColor: theme.colors.neutral[800],
-                    color: theme.colors.neutral.white,
-                    borderRadius: theme.radii.sm,
-                    fontWeight: theme.typography.fontWeights.semibold,
-                    textAlign: 'center',
-                  }}
-                >
-                  مسؤول النظام الفني (Admin)
-                </button>
-              </div>
-            </div>
-          )}
-
           {/* حاشية الدعم الفني والأمان */}
           <div
             style={{
@@ -654,7 +503,7 @@ export const LoginPage: React.FC = () => {
                 fontWeight: theme.typography.fontWeights.semibold,
               }}
             >
-              المنظومة الوطنية المعتمدة — دورة 2026/2027
+              {SYSTEM_FULL_NAME} — دورة 2026/2027
             </span>
           </div>
 
@@ -680,8 +529,8 @@ export const LoginPage: React.FC = () => {
               maxWidth: '520px',
             }}
           >
-            منظومة رقمية رائدة لأتمتة التقييم الذاتي وبناء خطط التحسين المدرسي ورفع الشواهد،
-            معززة بنظام ذكاء اصطناعي استشاري يدعم فرق الجودة والإشراف التربوي.
+            {SYSTEM_DESCRIPTION}
+
           </p>
         </div>
 

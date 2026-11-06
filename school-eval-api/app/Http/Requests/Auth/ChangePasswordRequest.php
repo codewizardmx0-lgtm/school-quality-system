@@ -30,6 +30,26 @@ class ChangePasswordRequest extends FormRequest
      *
      * @return array<string, array<int, string>>
      */
+        /**
+     * دعم حقول camelCase من الواجهة الأمامية.
+     */
+    protected function prepareForValidation(): void
+    {
+        $merge = [];
+        if ($this->has('currentPassword') && !$this->has('current_password')) {
+            $merge['current_password'] = $this->input('currentPassword');
+        }
+        if ($this->has('newPassword') && !$this->has('new_password')) {
+            $merge['new_password'] = $this->input('newPassword');
+        }
+        if ($this->has('newPasswordConfirmation') && !$this->has('new_password_confirmation')) {
+            $merge['new_password_confirmation'] = $this->input('newPasswordConfirmation');
+        }
+        if (!empty($merge)) {
+            $this->merge($merge);
+        }
+    }
+
     public function rules(): array
     {
         return [

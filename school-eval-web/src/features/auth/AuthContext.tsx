@@ -32,7 +32,7 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const queryClient = useQueryClient();
   const [token, setToken] = useState<string | null>(() => {
-    return sessionStorage.getItem(TOKEN_STORAGE_KEY);
+    return sessionStorage.getItem(TOKEN_STORAGE_KEY) || localStorage.getItem(TOKEN_STORAGE_KEY);
   });
   const [authError, setAuthError] = useState<string | null>(null);
 
@@ -83,6 +83,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     },
     onSuccess: (data) => {
       sessionStorage.setItem(TOKEN_STORAGE_KEY, data.token);
+      localStorage.setItem(TOKEN_STORAGE_KEY, data.token);
       setToken(data.token);
       // تحديث كاش المستخدم مباشرة
       queryClient.setQueryData(['auth', 'me', data.token], {

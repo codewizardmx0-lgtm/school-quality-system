@@ -71,7 +71,9 @@ return new class extends Migration
         });
 
         // قيد فحص موثق: يجب أن يرتبط المجال بمصدر واحد على الأقل (نتيجة أو مؤشر)
-        DB::statement('ALTER TABLE improvement_areas ADD CONSTRAINT chk_improvement_areas_source CHECK (result_id IS NOT NULL OR indicator_id IS NOT NULL)');
+        if (DB::getDriverName() !== 'sqlite') {
+            DB::statement('ALTER TABLE improvement_areas ADD CONSTRAINT chk_improvement_areas_source CHECK (result_id IS NOT NULL OR indicator_id IS NOT NULL)');
+        }
 
         // --------------------------------------------------------------------------------------
         // جدول improvement_plans: خطط تحسين الأداء للمدرسة
@@ -154,7 +156,9 @@ return new class extends Migration
         Schema::dropIfExists('improvement_plans');
 
         // إسقاط قيد الفحص قبل حذف جدول مجالات التحسين
-        DB::statement('ALTER TABLE improvement_areas DROP CHECK chk_improvement_areas_source');
+        if (DB::getDriverName() !== 'sqlite') {
+            DB::statement('ALTER TABLE improvement_areas DROP CHECK chk_improvement_areas_source');
+        }
         Schema::dropIfExists('improvement_areas');
     }
 };

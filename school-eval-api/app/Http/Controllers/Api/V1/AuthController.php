@@ -104,7 +104,8 @@ class AuthController extends Controller
             oldValues: null,
             newValues: ['session_id' => $session->session_id],
             userId: $user->user_id,
-            schoolId: $user->school_id
+            schoolId: $user->school_id,
+            descriptionAr: "تغيير كلمة المرور لحساب المستخدم ({$user->full_name})"
         );
 
         $responseData = [

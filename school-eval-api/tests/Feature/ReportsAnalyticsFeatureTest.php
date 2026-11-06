@@ -47,8 +47,8 @@ class ReportsAnalyticsFeatureTest extends TestCase
         parent::setUp();
 
         // جلب المدارس المعتمدة
-        $this->schoolBelqees = School::where('identification_data', 'SCH-SANAA-2026-001')->firstOrFail();
-        $this->schoolFarouq = School::where('identification_data', 'SCH-TAIZ-2026-002')->firstOrFail();
+        $this->schoolBelqees = School::where('identification_data', 'SCH-AMANA-2026-001')->firstOrFail();
+        $this->schoolFarouq = School::where('identification_data', 'SCH-TAIZ-2026-001')->firstOrFail();
 
         // جلب المستخدمين بمختلف الأدوار والصلاحيات
         $this->adminUser = User::where('username', 'admin')->firstOrFail();

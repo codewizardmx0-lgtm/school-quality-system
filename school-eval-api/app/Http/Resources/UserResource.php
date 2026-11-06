@@ -23,6 +23,9 @@ class UserResource extends JsonResource
         $activeRoles = $this->activeRoles ?? $this->roles()->wherePivot('active', true)->get();
         $permissions = $this->getPermissionCodes();
 
+        $firstRole = $activeRoles->first();
+        $roleResource = $firstRole ? (new RoleResource($firstRole))->toArray($request) : null;
+
         return [
             'userId'      => $this->user_id,
             'schoolId'    => $this->school_id,
@@ -32,6 +35,10 @@ class UserResource extends JsonResource
             'email'       => $this->email,
             'userType'    => $this->user_type,
             'status'      => $this->status,
+            'roleId'      => $firstRole?->role_id,
+            'roleName'    => $firstRole?->role_name,
+            'roleNameAr'  => $roleResource['roleNameAr'] ?? null,
+            'roleCode'    => $roleResource['roleCode'] ?? null,
             'school'      => $this->school ? [
                 'schoolId'   => $this->school->school_id,
                 'schoolName' => $this->school->school_name,
@@ -41,12 +48,8 @@ class UserResource extends JsonResource
                 'ministryId'   => $this->ministry->ministry_id,
                 'ministryName' => $this->ministry->ministry_name,
             ] : null,
-            'roles'       => $activeRoles->map(function ($role) {
-                return [
-                    'roleId'      => $role->role_id,
-                    'roleName'    => $role->role_name,
-                    'description' => $role->description,
-                ];
+            'roles'       => $activeRoles->map(function ($role) use ($request) {
+                return (new RoleResource($role))->toArray($request);
             })->values()->all(),
             'permissions' => $permissions,
             'createdAt'   => $this->created_at?->toIso8601ZuluString(),
