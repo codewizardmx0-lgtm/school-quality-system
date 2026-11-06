@@ -18,10 +18,11 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
 
         $middleware->alias([
-            'permission'       => \App\Http\Middleware\CheckPermission::class,
-            'role'             => \App\Http\Middleware\CheckRole::class,
-            'session.timeout'  => \App\Http\Middleware\EnforceSessionTimeout::class,
-            'security.headers' => \App\Http\Middleware\SecurityHeadersMiddleware::class,
+            'permission'        => \App\Http\Middleware\CheckPermission::class,
+            'role'              => \App\Http\Middleware\CheckRole::class,
+            'session.timeout'   => \App\Http\Middleware\EnforceSessionTimeout::class,
+            'security.headers'  => \App\Http\Middleware\SecurityHeadersMiddleware::class,
+            'check.maintenance' => \App\Http\Middleware\CheckMaintenanceMode::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

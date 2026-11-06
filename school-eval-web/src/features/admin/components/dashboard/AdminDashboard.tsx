@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   School as SchoolIcon,
   Users,
@@ -28,6 +28,7 @@ import type { AdminScreen, School, BackupRecord } from '../../types/admin.types'
 // Modals for Zero Dead Buttons
 import { TriggerBackupModal } from '../backup/TriggerBackupModal';
 import { LinkEvaluatorModal } from '../schools/LinkEvaluatorModal';
+import { AssignPrincipalModal } from '../schools/AssignPrincipalModal';
 import { CreateUserModal } from '../users/CreateUserModal';
 import { RegisterSchoolModal } from '../schools/RegisterSchoolModal';
 import { AddDirectorateModal } from '../schools/AddDirectorateModal';
@@ -61,10 +62,42 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate, addT
     });
   };
 
-  // Schools requiring immediate attention (evaluator not assigned)
-  const unassignedSchools = schools.filter(
-    (s) => !s.evaluatorName || s.evaluatorName.trim() === ''
-  ).slice(0, 4);
+  // Principal modal state
+  const [isPrincipalModalOpen, setIsPrincipalModalOpen] = useState(false);
+  const [selectedSchoolForPrincipal, setSelectedSchoolForPrincipal] = useState<School | null>(null);
+
+  // Incomplete schools: missing principal OR evaluator
+  const hasPrincipal = (s: School) => Boolean(s.principal?.userId || s.principal?.fullName);
+  const hasEvaluator = (s: School) => Boolean((s.evaluators && s.evaluators.length > 0) || (s.evaluatorName && s.evaluatorName.trim() !== ''));
+  const isCompleteSchool = (s: School) => hasPrincipal(s) && hasEvaluator(s);
+  const isIncompleteSchool = (s: School) => !isCompleteSchool(s);
+
+  const incompleteSchools = useMemo(() => {
+    return schools.filter(isIncompleteSchool);
+  }, [schools]);
+
+  const [urgentSearch, setUrgentSearch] = useState('');
+  const filteredUrgentSchools = useMemo(() => {
+    if (!urgentSearch.trim()) return incompleteSchools;
+    const q = urgentSearch.toLowerCase().trim();
+    return incompleteSchools.filter((s: School) =>
+      s.schoolName?.toLowerCase().includes(q) ||
+      s.schoolCode?.toLowerCase().includes(q) ||
+      s.directorate?.toLowerCase().includes(q)
+    );
+  }, [incompleteSchools, urgentSearch]);
+
+  const handleOpenPrincipalModal = (school: School) => {
+    setSelectedSchoolForPrincipal(school);
+    setIsPrincipalModalOpen(true);
+  };
+
+  const handlePrincipalSuccess = () => {
+    setIsPrincipalModalOpen(false);
+    setSelectedSchoolForPrincipal(null);
+    refreshData();
+    addToast('success', 'تم إسناد مدير المدرسة بنجاح');
+  };
 
   const [isExportingPdf, setIsExportingPdf] = useState(false);
 
@@ -327,11 +360,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate, addT
                 borderRadius: '6px',
               }}
             >
-              جاهزة {loading ? '...' : `${schools.length > 0 ? Math.round((schools.filter((s) => s.isLinked).length / schools.length) * 100) : (stats?.schoolsReadinessRate ?? 0)}%`}
+              جاهزة {loading ? '...' : `${schools.length > 0 ? Math.round((schools.filter(isCompleteSchool).length / schools.length) * 100) : 0}%`}
             </span>
           </div>
           <div style={{ fontSize: '0.8rem', color: '#64748B', display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <span style={{ color: '#059669', fontWeight: 600 }}>{loading ? '...' : schools.filter((s) => s.isLinked).length} مدرسة جاهزة</span><span>•</span><span style={{ color: '#D97706', fontWeight: 600 }}>{loading ? '...' : schools.filter((s) => !s.isLinked).length} بحاجة لربط</span>
+            <span style={{ color: '#059669', fontWeight: 600 }}>{loading ? '...' : schools.filter(isCompleteSchool).length} مدرسة مكتملة</span><span>•</span><span style={{ color: '#D97706', fontWeight: 600 }}>{loading ? '...' : incompleteSchools.length} بحاجة لإجراءات</span>
           </div>
         </div>
 
@@ -801,13 +834,33 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate, addT
                 borderRadius: '9999px',
               }}
             >
-              {unassignedSchools.length} مدارس بانتظار الربط
+              {incompleteSchools.length} مدارس بانتظار الإجراءات
             </span>
           </div>
 
-          {/* List of unassigned schools */}
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '16px' }}>
-            {unassignedSchools.length === 0 ? (
+          {/* Urgent Schools Search Filter */}
+          <div style={{ marginBottom: '12px' }}>
+            <input
+              type="text"
+              placeholder="ابحث في المدارس العاجلة بالاسم أو الكود..."
+              value={urgentSearch}
+              onChange={(e) => setUrgentSearch(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '8px 12px',
+                borderRadius: '8px',
+                border: '1px solid #E2E8F0',
+                fontSize: '0.8rem',
+                outline: 'none',
+                boxSizing: 'border-box',
+                backgroundColor: '#F8FAFC',
+              }}
+            />
+          </div>
+
+          {/* List of incomplete schools with max-height and scroll */}
+          <div style={{ flex: 1, maxHeight: '380px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '16px', paddingRight: '2px' }}>
+            {filteredUrgentSchools.length === 0 ? (
               <div
                 style={{
                   padding: '32px 16px',
@@ -819,79 +872,124 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate, addT
                   fontWeight: 600,
                 }}
               >
-                ✓ جميع المدارس المسجلة مرتبطة بمنسقي جودة معتمدين بنجاح
+                {urgentSearch.trim() ? 'لا توجد مدارس مطابقة لبحثك' : '✓ جميع المدارس المسجلة مكتملة ولها مدير ومقيّم معتمد بنجاح'}
               </div>
             ) : (
-              unassignedSchools.map((school) => (
-                <div
-                  key={school.schoolId}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    padding: '12px 14px',
-                    borderRadius: '12px',
-                    backgroundColor: '#F8FAFC',
-                    border: '1px solid #E2E8F0',
-                    transition: 'all 0.15s ease',
-                    flexWrap: 'wrap',
-                    gap: '10px',
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <div
-                      style={{
-                        width: '36px',
-                        height: '36px',
-                        borderRadius: '8px',
-                        backgroundColor: '#fff',
-                        border: '1px solid #E2E8F0',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        color: '#475569',
-                      }}
-                    >
-                      <SchoolIcon size={18} />
-                    </div>
-                    <div>
-                      <div style={{ fontSize: '0.875rem', fontWeight: 700, color: '#0B0F19' }}>
-                        {school.schoolName}
-                      </div>
-                      <div style={{ fontSize: '0.75rem', color: '#64748B', display: 'flex', gap: '8px', marginTop: '2px' }}>
-                        <span>{school.directorate}</span>
-                        <span>•</span>
-                        <span>{school.educationalStage}</span>
-                        <span>•</span>
-                        <span style={{ color: '#D97706', fontWeight: 600 }}>غير معينة</span>
-                      </div>
-                    </div>
-                  </div>
+              filteredUrgentSchools.map((school: School) => {
+                const missingPrincipal = !hasPrincipal(school);
+                const missingEvaluator = !hasEvaluator(school);
 
-                  <button
-                    onClick={() => handleOpenLinkModal(school)}
+                return (
+                  <div
+                    key={school.schoolId}
                     style={{
                       display: 'flex',
                       alignItems: 'center',
-                      gap: '6px',
-                      padding: '8px 14px',
-                      borderRadius: '8px',
-                      backgroundColor: '#4F46E5',
-                      border: 'none',
-                      color: '#fff',
-                      fontSize: '0.8rem',
-                      fontWeight: 700,
-                      cursor: 'pointer',
-                      transition: 'background-color 0.15s',
+                      justifyContent: 'space-between',
+                      padding: '12px 14px',
+                      borderRadius: '12px',
+                      backgroundColor: '#F8FAFC',
+                      border: '1px solid #E2E8F0',
+                      transition: 'all 0.15s ease',
+                      flexWrap: 'wrap',
+                      gap: '10px',
                     }}
-                    onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#4338CA')}
-                    onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#4F46E5')}
                   >
-                    <UserCheck size={14} />
-                    <span>ربط الآن</span>
-                  </button>
-                </div>
-              ))
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                      <div
+                        style={{
+                          width: '36px',
+                          height: '36px',
+                          borderRadius: '8px',
+                          backgroundColor: '#fff',
+                          border: '1px solid #E2E8F0',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: '#475569',
+                        }}
+                      >
+                        <SchoolIcon size={18} />
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '0.875rem', fontWeight: 700, color: '#0B0F19' }}>
+                          {school.schoolName}
+                        </div>
+                        <div style={{ fontSize: '0.75rem', color: '#64748B', display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
+                          <span>{school.directorate}</span>
+                          <span>•</span>
+                          <span>{school.educationalStage}</span>
+                          <span>•</span>
+                          {missingPrincipal && missingEvaluator ? (
+                            <span style={{ color: '#DC2626', backgroundColor: '#FEF2F2', padding: '1px 6px', borderRadius: '4px', fontWeight: 700 }}>
+                              بدون مدير ومقيّم
+                            </span>
+                          ) : missingPrincipal ? (
+                            <span style={{ color: '#D97706', backgroundColor: '#FFFBEB', padding: '1px 6px', borderRadius: '4px', fontWeight: 700 }}>
+                              بدون مدير
+                            </span>
+                          ) : (
+                            <span style={{ color: '#2563EB', backgroundColor: '#EFF6FF', padding: '1px 6px', borderRadius: '4px', fontWeight: 700 }}>
+                              بدون مقيّم
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      {missingPrincipal && (
+                        <button
+                          onClick={() => handleOpenPrincipalModal(school)}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            padding: '6px 10px',
+                            borderRadius: '8px',
+                            backgroundColor: '#059669',
+                            border: 'none',
+                            color: '#fff',
+                            fontSize: '0.75rem',
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            transition: 'background-color 0.15s',
+                          }}
+                          onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#047857')}
+                          onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#059669')}
+                        >
+                          <UserCheck size={13} />
+                          <span>إسناد مدير</span>
+                        </button>
+                      )}
+                      {missingEvaluator && (
+                        <button
+                          onClick={() => handleOpenLinkModal(school)}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            padding: '6px 10px',
+                            borderRadius: '8px',
+                            backgroundColor: '#4F46E5',
+                            border: 'none',
+                            color: '#fff',
+                            fontSize: '0.75rem',
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            transition: 'background-color 0.15s',
+                          }}
+                          onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#4338CA')}
+                          onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#4F46E5')}
+                        >
+                          <UserCheck size={13} />
+                          <span>إسناد مقيّم</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })
             )}
           </div>
 
@@ -1406,6 +1504,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate, addT
           setSelectedSchoolForLink(null);
         }}
         onSuccess={handleLinkSuccess}
+        addToast={addToast}
+      />
+
+      <AssignPrincipalModal
+        isOpen={isPrincipalModalOpen}
+        school={selectedSchoolForPrincipal}
+        onClose={() => {
+          setIsPrincipalModalOpen(false);
+          setSelectedSchoolForPrincipal(null);
+        }}
+        onSuccess={handlePrincipalSuccess}
         addToast={addToast}
       />
 

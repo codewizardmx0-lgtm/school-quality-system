@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, MapPin } from 'lucide-react';
 import { theme } from '../../theme';
 import { schoolsApi } from '../../api/schoolsApi';
-import type { AddDirectorateDto, Directorate } from '../../types/admin.types';
+import type { AddDirectorateDto, Directorate, Governorate } from '../../types/admin.types';
 
 interface AddDirectorateModalProps {
   isOpen: boolean;
@@ -21,23 +21,35 @@ export const AddDirectorateModal: React.FC<AddDirectorateModalProps> = ({
 }) => {
   const isEditing = Boolean(directorateToEdit);
 
+  const [governorates, setGovernorates] = useState<Governorate[]>([]);
   const [form, setForm] = useState<AddDirectorateDto>({
     directorateName: '',
     governorate: 'أمانة العاصمة',
+    governorateId: 1,
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    schoolsApi.getGovernorates().then((res) => {
+      if (res && res.data) {
+        setGovernorates(res.data);
+      }
+    }).catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (directorateToEdit) {
       setForm({
         directorateName: directorateToEdit.directorateName,
         governorate: directorateToEdit.governorate || 'أمانة العاصمة',
+        governorateId: directorateToEdit.governorateId || 1,
       });
     } else {
       setForm({
         directorateName: '',
         governorate: 'أمانة العاصمة',
+        governorateId: 1,
       });
     }
     setError('');
@@ -173,12 +185,19 @@ export const AddDirectorateModal: React.FC<AddDirectorateModalProps> = ({
 
           <div>
             <label style={{ fontSize: theme.typography.fontSizes.sm, fontWeight: 600, color: theme.colors.neutral[700], marginBottom: '4px', display: 'block' }}>
-              المحافظة *
+              المحافظة التابعة لها *
             </label>
-            <input
-              value={form.governorate}
-              onChange={(e) => setForm((prev) => ({ ...prev, governorate: e.target.value }))}
-              placeholder="مثال: أمانة العاصمة أو محافظة تعز..."
+            <select
+              value={form.governorateId || 1}
+              onChange={(e) => {
+                const govId = Number(e.target.value);
+                const found = governorates.find((g) => g.governorateId === govId);
+                setForm((prev) => ({
+                  ...prev,
+                  governorateId: govId,
+                  governorate: found?.nameAr || 'أمانة العاصمة',
+                }));
+              }}
               style={{
                 width: '100%',
                 padding: '9px 12px',
@@ -189,8 +208,19 @@ export const AddDirectorateModal: React.FC<AddDirectorateModalProps> = ({
                 color: theme.colors.neutral[800],
                 fontFamily: theme.typography.fontFamily.sans,
                 boxSizing: 'border-box',
+                cursor: 'pointer',
               }}
-            />
+            >
+              {governorates.length > 0 ? (
+                governorates.map((g) => (
+                  <option key={g.governorateId} value={g.governorateId}>
+                    {g.nameAr}
+                  </option>
+                ))
+              ) : (
+                <option value="1">أمانة العاصمة</option>
+              )}
+            </select>
           </div>
 
           <div

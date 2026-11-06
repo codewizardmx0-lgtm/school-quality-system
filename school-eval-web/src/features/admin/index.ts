@@ -53,5 +53,5 @@ export {
 } from './services/mockAdminData';
 
 // Utilities
-export { downloadCsv, downloadXlsx, downloadEncryptedLog, formatNumber } from './utils/exportUtils';
+export { exportToExcel, downloadXlsx, downloadEncryptedLog, formatExportFilename, formatNumber } from './utils/exportUtils';
 export { formatArabicDate, formatArabicTime, formatArabicDateTime, formatRelativeArabic, formatFileSize } from './utils/dateUtils';

@@ -4,6 +4,7 @@ import { LoginPage } from './features/auth/LoginPage';
 import { Sidebar } from './components/Sidebar';
 import { TopNavbar } from './components/TopNavbar';
 import { DashboardPage } from './components/DashboardPage';
+import { MaintenancePage } from './components/MaintenancePage';
 import { AdminLayout } from './features/admin';
 import type { AdminScreen } from './features/admin';
 import { theme } from './styles/theme';
@@ -12,6 +13,20 @@ import { Loader2 } from 'lucide-react';
 export const AppContent: React.FC = () => {
   const { user, isAuthenticated, isLoading, logout } = useAuth();
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [isMaintenanceMode, setIsMaintenanceMode] = useState(false);
+  const [maintenanceMessage, setMaintenanceMessage] = useState<string | undefined>(undefined);
+
+  React.useEffect(() => {
+    const handleMaintenance = (e: Event) => {
+      const customEvent = e as CustomEvent<{ message?: string }>;
+      setIsMaintenanceMode(true);
+      if (customEvent.detail?.message) {
+        setMaintenanceMessage(customEvent.detail.message);
+      }
+    };
+    window.addEventListener('app:maintenance', handleMaintenance);
+    return () => window.removeEventListener('app:maintenance', handleMaintenance);
+  }, []);
 
   if (isLoading) {
     return (
@@ -45,7 +60,20 @@ export const AppContent: React.FC = () => {
     return <LoginPage />;
   }
 
-  const isAdmin = user?.roles?.some((r) => r.roleName === 'admin');
+  const isAdmin = user?.roles?.some((r) => r.roleName === 'admin' || r.roleName === 'مسؤول النظام');
+
+  // في حال تفعيل وضع الصيانة، يُمنع المستخدمون العاديون وتُعرض صفحة الصيانة مع زر إعادة المحاولة
+  if (isMaintenanceMode && !isAdmin) {
+    return (
+      <MaintenancePage
+        message={maintenanceMessage}
+        onRetry={() => {
+          setIsMaintenanceMode(false);
+          window.location.reload();
+        }}
+      />
+    );
+  }
 
   // إذا كان المستخدم مسؤول نظام، يتم توجيهه مباشرة إلى بوابة مسؤول النظام المركزية
   if (isAdmin) {

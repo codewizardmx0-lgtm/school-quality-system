@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
@@ -53,6 +54,8 @@ class School extends Model
         'school_type',
         'educational_stage',
         'identification_data',
+        'governorate_id',
+        'directorate_id',
         'educational_district',
         'governorate',
         'status',
@@ -193,6 +196,22 @@ class School extends Model
     public function documents(): HasMany
     {
         return $this->hasMany(SchoolDocument::class, 'school_id', 'school_id');
+    }
+
+    /**
+     * المحافظة التابعة لها المدرسة.
+     */
+    public function governorateModel(): BelongsTo
+    {
+        return $this->belongsTo(Governorate::class, 'governorate_id', 'governorate_id');
+    }
+
+    /**
+     * المديرية التابعة لها المدرسة.
+     */
+    public function directorateModel(): BelongsTo
+    {
+        return $this->belongsTo(Directorate::class, 'directorate_id', 'directorate_id');
     }
 
     /**

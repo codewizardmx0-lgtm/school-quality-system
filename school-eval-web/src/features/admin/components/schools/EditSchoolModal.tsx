@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Building2, Save } from 'lucide-react';
 import { theme } from '../../theme';
 import { schoolsApi } from '../../api/schoolsApi';
-import type { School, Directorate, SchoolType, SchoolStatus } from '../../types/admin.types';
+import type { School, Directorate, Governorate, SchoolType, SchoolStatus } from '../../types/admin.types';
 
 interface EditSchoolModalProps {
   isOpen: boolean;
@@ -16,18 +16,24 @@ interface EditSchoolModalProps {
 export const EditSchoolModal: React.FC<EditSchoolModalProps> = ({
   isOpen,
   school,
-  directorates,
+  directorates: initialDirectorates,
   onClose,
   onSuccess,
   addToast,
 }) => {
+  const [governorates, setGovernorates] = useState<Governorate[]>([]);
+  const [selectedGovId, setSelectedGovId] = useState<number>(1);
+  const [filteredDirectorates, setFilteredDirectorates] = useState<Directorate[]>(initialDirectorates);
+
   const [form, setForm] = useState({
     schoolName: '',
     schoolCode: '',
     schoolType: 'government' as SchoolType,
     educationalStage: 'ثانوي (10-12)',
     directorate: '',
+    directorateId: 1,
     governorate: 'أمانة العاصمة',
+    governorateId: 1,
     status: 'Active' as SchoolStatus,
   });
 
@@ -35,25 +41,75 @@ export const EditSchoolModal: React.FC<EditSchoolModalProps> = ({
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
+    if (!isOpen) return;
+    schoolsApi.getGovernorates().then((res) => {
+      if (res.data && res.data.length > 0) {
+        setGovernorates(res.data);
+      }
+    }).catch((err) => console.warn('Failed to load governorates:', err));
+  }, [isOpen]);
+
+  useEffect(() => {
     if (school && isOpen) {
+      const govId = school.governorateId || 1;
+      setSelectedGovId(govId);
       setForm({
         schoolName: school.schoolName || '',
         schoolCode: school.schoolCode || '',
         schoolType: school.schoolType || 'government',
         educationalStage: school.educationalStage || 'ثانوي (10-12)',
-        directorate: school.directorate || school.educationalDistrict || (directorates[0]?.directorateName ?? 'مديرية التحرير'),
+        directorate: school.directorate || school.educationalDistrict || (initialDirectorates[0]?.directorateName ?? 'مديرية التحرير'),
+        directorateId: school.directorateId || 1,
         governorate: school.governorate || 'أمانة العاصمة',
+        governorateId: govId,
         status: school.status || 'Active',
       });
       setErrors({});
+
+      // Load directorates for this governorate
+      schoolsApi.getDirectorates(govId).then((res) => {
+        if (res.data) setFilteredDirectorates(res.data);
+      }).catch((err) => console.warn('Failed to load directorates:', err));
     }
-  }, [school, isOpen, directorates]);
+  }, [school, isOpen, initialDirectorates]);
+
+  const handleGovChange = async (govId: number) => {
+    setSelectedGovId(govId);
+    const gov = governorates.find((g) => g.governorateId === govId);
+    const govName = gov?.nameAr || 'أمانة العاصمة';
+
+    try {
+      const dirRes = await schoolsApi.getDirectorates(govId);
+      if (dirRes.data) {
+        setFilteredDirectorates(dirRes.data);
+        const firstDir = dirRes.data[0];
+        setForm((prev) => ({
+          ...prev,
+          governorate: govName,
+          governorateId: govId,
+          directorateId: firstDir ? firstDir.directorateId : 0,
+          directorate: firstDir ? firstDir.directorateName : '',
+        }));
+      }
+    } catch (err) {
+      console.warn('Failed to load directorates for governorate:', err);
+    }
+  };
 
   if (!isOpen || !school) return null;
 
-  const handleChange = (field: string, value: string) => {
+  const handleChange = (field: string, value: any) => {
     setForm((prev) => ({ ...prev, [field]: value }));
     setErrors((prev) => ({ ...prev, [field]: '' }));
+  };
+
+  const handleDirectorateChange = (dirId: number) => {
+    const dir = filteredDirectorates.find((d) => d.directorateId === dirId);
+    setForm((prev) => ({
+      ...prev,
+      directorateId: dirId,
+      directorate: dir ? dir.directorateName : prev.directorate,
+    }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -75,7 +131,9 @@ export const EditSchoolModal: React.FC<EditSchoolModalProps> = ({
         educationalStage: form.educationalStage,
         educationalDistrict: form.directorate,
         directorate: form.directorate,
+        directorateId: form.directorateId,
         governorate: form.governorate,
+        governorateId: form.governorateId,
         status: form.status,
       });
 
@@ -99,14 +157,15 @@ export const EditSchoolModal: React.FC<EditSchoolModalProps> = ({
 
   const inputStyle = (err?: string): React.CSSProperties => ({
     width: '100%',
-    padding: '9px 12px',
+    padding: '10px 14px',
     borderRadius: theme.radii.lg,
     border: `1px solid ${err ? '#DC2626' : theme.colors.neutral[300]}`,
     fontSize: theme.typography.fontSizes.sm,
+    fontFamily: theme.typography.fontFamily.sans,
     outline: 'none',
     boxSizing: 'border-box',
-    fontFamily: theme.typography.fontFamily.sans,
-    backgroundColor: '#FAFAFA',
+    backgroundColor: '#FFFFFF',
+    color: theme.colors.neutral[900],
   });
 
   return (
@@ -121,6 +180,7 @@ export const EditSchoolModal: React.FC<EditSchoolModalProps> = ({
         backgroundColor: 'rgba(15, 23, 42, 0.65)',
         backdropFilter: 'blur(4px)',
         padding: '16px',
+        direction: 'rtl',
       }}
     >
       <div
@@ -134,7 +194,6 @@ export const EditSchoolModal: React.FC<EditSchoolModalProps> = ({
           display: 'flex',
           flexDirection: 'column',
           overflow: 'hidden',
-          direction: 'rtl',
         }}
       >
         {/* Header */}
@@ -168,7 +227,7 @@ export const EditSchoolModal: React.FC<EditSchoolModalProps> = ({
                 تعديل بيانات المدرسة
               </h2>
               <p style={{ fontSize: theme.typography.fontSizes.xs, margin: 0, color: theme.colors.neutral[500] }}>
-                تحديث المعلومات الرسمية للمدرسة في النظام الوطني
+                تحديث المعلومات الأساسية للمؤسسة التعليمية
               </p>
             </div>
           </div>
@@ -188,36 +247,45 @@ export const EditSchoolModal: React.FC<EditSchoolModalProps> = ({
         </div>
 
         {/* Form Body */}
-        <form onSubmit={handleSubmit} style={{ overflowY: 'auto', padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        <form onSubmit={handleSubmit} style={{ overflowY: 'auto', padding: '24px', display: 'flex', flexDirection: 'column', gap: '18px' }}>
           {/* School Name */}
           <div>
             <label style={{ display: 'block', fontSize: theme.typography.fontSizes.xs, fontWeight: 600, color: theme.colors.neutral[700], marginBottom: '6px' }}>
-              اسم المدرسة الرسمي <span style={{ color: '#DC2626' }}>*</span>
+              اسم المدرسة <span style={{ color: '#DC2626' }}>*</span>
             </label>
             <input
               type="text"
               style={inputStyle(errors.schoolName)}
               value={form.schoolName}
               onChange={(e) => handleChange('schoolName', e.target.value)}
-              placeholder="مثال: مدرسة بلقيس الثانوية للبنات"
+              placeholder="مثال: ثانوية جمال عبدالناصر"
             />
-            {errors.schoolName && <span style={{ fontSize: '0.75rem', color: '#DC2626', marginTop: '4px', display: 'block' }}>{errors.schoolName}</span>}
+            {errors.schoolName && (
+              <span style={{ fontSize: '0.75rem', color: '#DC2626', marginTop: '4px', display: 'block' }}>
+                {errors.schoolName}
+              </span>
+            )}
           </div>
 
           {/* School Code & Type */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
             <div>
               <label style={{ display: 'block', fontSize: theme.typography.fontSizes.xs, fontWeight: 600, color: theme.colors.neutral[700], marginBottom: '6px' }}>
-                كود المدرسة التعريفي <span style={{ color: '#DC2626' }}>*</span>
+                كود المدرسة <span style={{ color: '#DC2626' }}>*</span>
               </label>
               <input
                 type="text"
                 style={inputStyle(errors.schoolCode)}
                 value={form.schoolCode}
                 onChange={(e) => handleChange('schoolCode', e.target.value)}
-                placeholder="SCH-SANAA-101"
+                placeholder="SCH-AMANA-2026-001"
+                dir="ltr"
               />
-              {errors.schoolCode && <span style={{ fontSize: '0.75rem', color: '#DC2626', marginTop: '4px', display: 'block' }}>{errors.schoolCode}</span>}
+              {errors.schoolCode && (
+                <span style={{ fontSize: '0.75rem', color: '#DC2626', marginTop: '4px', display: 'block' }}>
+                  {errors.schoolCode}
+                </span>
+              )}
             </div>
 
             <div>
@@ -235,18 +303,23 @@ export const EditSchoolModal: React.FC<EditSchoolModalProps> = ({
             </div>
           </div>
 
-          {/* Governorate & Directorate */}
+          {/* Cascading Governorate & Directorate */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
             <div>
               <label style={{ display: 'block', fontSize: theme.typography.fontSizes.xs, fontWeight: 600, color: theme.colors.neutral[700], marginBottom: '6px' }}>
                 المحافظة <span style={{ color: '#DC2626' }}>*</span>
               </label>
-              <input
-                type="text"
+              <select
                 style={inputStyle()}
-                value={form.governorate}
-                onChange={(e) => handleChange('governorate', e.target.value)}
-              />
+                value={selectedGovId}
+                onChange={(e) => handleGovChange(Number(e.target.value))}
+              >
+                {governorates.map((g) => (
+                  <option key={g.governorateId} value={g.governorateId}>
+                    {g.nameAr}
+                  </option>
+                ))}
+              </select>
             </div>
 
             <div>
@@ -255,14 +328,19 @@ export const EditSchoolModal: React.FC<EditSchoolModalProps> = ({
               </label>
               <select
                 style={inputStyle()}
-                value={form.directorate}
-                onChange={(e) => handleChange('directorate', e.target.value)}
+                value={form.directorateId || ''}
+                onChange={(e) => handleDirectorateChange(Number(e.target.value))}
+                disabled={filteredDirectorates.length === 0}
               >
-                {directorates.map((d) => (
-                  <option key={d.directorateId} value={d.directorateName}>
-                    {d.directorateName}
-                  </option>
-                ))}
+                {filteredDirectorates.length === 0 ? (
+                  <option value="">-- لا توجد مديريات بعد لهذه المحافظة --</option>
+                ) : (
+                  filteredDirectorates.map((d) => (
+                    <option key={d.directorateId} value={d.directorateId}>
+                      {d.directorateName}
+                    </option>
+                  ))
+                )}
               </select>
             </div>
           </div>
@@ -271,27 +349,28 @@ export const EditSchoolModal: React.FC<EditSchoolModalProps> = ({
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
             <div>
               <label style={{ display: 'block', fontSize: theme.typography.fontSizes.xs, fontWeight: 600, color: theme.colors.neutral[700], marginBottom: '6px' }}>
-                المرحلة التعليمية
+                المرحلة التعليمية <span style={{ color: '#DC2626' }}>*</span>
               </label>
               <select
                 style={inputStyle()}
                 value={form.educationalStage}
                 onChange={(e) => handleChange('educationalStage', e.target.value)}
               >
-                <option value="ثانوي (10-12)">ثانوي (10-12)</option>
                 <option value="أساسي (1-9)">أساسي (1-9)</option>
-                <option value="أساسي وثانوي (1-12)">أساسي وثانوي (1-12)</option>
+                <option value="ثانوي (10-12)">ثانوي (10-12)</option>
+                <option value="أساسي وثانوي مشترك">أساسي وثانوي مشترك</option>
+                <option value="مجمع تربوي متكامل">مجمع تربوي متكامل</option>
               </select>
             </div>
 
             <div>
               <label style={{ display: 'block', fontSize: theme.typography.fontSizes.xs, fontWeight: 600, color: theme.colors.neutral[700], marginBottom: '6px' }}>
-                حالة المدرسة
+                الحالة التشغيلية <span style={{ color: '#DC2626' }}>*</span>
               </label>
               <select
                 style={inputStyle()}
                 value={form.status}
-                onChange={(e) => handleChange('status', e.target.value)}
+                onChange={(e) => handleChange('status', e.target.value as SchoolStatus)}
               >
                 <option value="Active">نشطة ومفعلة</option>
                 <option value="Inactive">معطلة مؤقتاً</option>
@@ -305,7 +384,7 @@ export const EditSchoolModal: React.FC<EditSchoolModalProps> = ({
               display: 'flex',
               justifyContent: 'flex-end',
               gap: '12px',
-              marginTop: '16px',
+              marginTop: '12px',
               paddingTop: '16px',
               borderTop: `1px solid ${theme.colors.neutral[200]}`,
             }}
@@ -333,7 +412,7 @@ export const EditSchoolModal: React.FC<EditSchoolModalProps> = ({
               style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: '8px',
+                gap: '6px',
                 padding: '9px 22px',
                 borderRadius: theme.radii.lg,
                 border: 'none',

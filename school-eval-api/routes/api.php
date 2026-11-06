@@ -35,7 +35,7 @@ Route::prefix('v1')->group(function () {
     // --------------------------------------------------------------------------
     // مسارات محمية بمصادقة Sanctum Bearer Token وفرض الخمول (30 دقيقة)
     // --------------------------------------------------------------------------
-    Route::middleware(['auth:sanctum', 'session.timeout'])->group(function () {
+    Route::middleware(['auth:sanctum', 'session.timeout', 'check.maintenance'])->group(function () {
 
         // مصادقة المستخدم والجلسة (Auth & Session Management)
         Route::prefix('auth')->group(function () {
@@ -44,6 +44,9 @@ Route::prefix('v1')->group(function () {
             Route::post('/password/change', [AuthController::class, 'changePassword'])
                 ->middleware('throttle:auth.password.change')
                 ->name('api.v1.auth.password.change');
+            Route::post('/change-password', [AuthController::class, 'changePassword'])
+                ->middleware('throttle:auth.password.change')
+                ->name('api.v1.auth.change-password');
         });
 
         // سجل التدقيق للعمليات الحساسة (Audit Logs)
@@ -53,6 +56,7 @@ Route::prefix('v1')->group(function () {
         Route::prefix('schools')->group(function () {
             Route::get('/', [SchoolController::class, 'index'])->name('api.v1.schools.index');
             Route::post('/', [SchoolController::class, 'store'])->name('api.v1.schools.store');
+            Route::get('/suggest-code', [SchoolController::class, 'suggestCode'])->name('api.v1.schools.suggest-code');
             Route::get('/{id}', [SchoolController::class, 'show'])->name('api.v1.schools.show');
             Route::put('/{id}', [SchoolController::class, 'update'])->name('api.v1.schools.update');
             Route::patch('/{id}/toggle-status', [SchoolController::class, 'toggleStatus'])->name('api.v1.schools.toggle-status');
@@ -88,6 +92,10 @@ Route::prefix('v1')->group(function () {
 
         // الأدوار والمديريات وسجلات الأمان والنسخ الاحتياطي وإعدادات النظام لمسؤول النظام (React Admin)
         Route::get('/roles', [\App\Http\Controllers\Api\V1\AdminController::class, 'roles'])->name('api.v1.roles.index');
+
+        // المحافظات والمديريات
+        Route::get('/governorates', [\App\Http\Controllers\Api\V1\GovernorateController::class, 'index'])->name('api.v1.governorates.index');
+        Route::get('/governorates/{id}', [\App\Http\Controllers\Api\V1\GovernorateController::class, 'show'])->name('api.v1.governorates.show');
 
         Route::prefix('directorates')->group(function () {
             Route::get('/', [\App\Http\Controllers\Api\V1\AdminController::class, 'directorates'])->name('api.v1.directorates.index');

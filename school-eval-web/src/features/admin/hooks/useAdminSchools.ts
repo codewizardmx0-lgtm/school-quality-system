@@ -6,32 +6,42 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { schoolsApi } from '../api/schoolsApi';
 import { usersApi } from '../api/usersApi';
-import type { School, Directorate, User, RegisterSchoolDto, AddDirectorateDto } from '../types/admin.types';
+import type { School, Directorate, Governorate, User, RegisterSchoolDto, AddDirectorateDto } from '../types/admin.types';
 
 export function useAdminSchools() {
   const [schools, setSchools] = useState<School[]>([]);
   const [directorates, setDirectorates] = useState<Directorate[]>([]);
+  const [governorates, setGovernorates] = useState<Governorate[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
   // Filters: default to null to show all schools across all directorates
+  const [selectedGovernorateId, setSelectedGovernorateId] = useState<number | null>(null);
   const [selectedDirectorateId, setSelectedDirectorateId] = useState<number | null>(null);
   const [typeFilter, setTypeFilter] = useState<'all' | 'government' | 'private'>('all');
+  const [readinessFilter, setReadinessFilter] = useState<'all' | 'complete' | 'incomplete'>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
+
+  const handleSetSelectedGovernorateId = useCallback((id: number | null) => {
+    setSelectedGovernorateId(id);
+    setSelectedDirectorateId(null); // Reset directorate whenever governorate changes
+  }, []);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const [schoolsRes, dirRes, usersRes] = await Promise.all([
+      const [schoolsRes, dirRes, usersRes, govRes] = await Promise.all([
         schoolsApi.getSchools(),
         schoolsApi.getDirectorates(),
         usersApi.getUsers(),
+        schoolsApi.getGovernorates(),
       ]);
       if (schoolsRes.data) setSchools(schoolsRes.data);
       if (dirRes.data) setDirectorates(dirRes.data);
       if (usersRes.data) setUsers(usersRes.data);
+      if (govRes.data) setGovernorates(govRes.data);
     } catch (err: any) {
       setError(err?.message || 'فشل في تحميل بيانات المدارس والمديريات');
     } finally {
@@ -109,27 +119,45 @@ export function useAdminSchools() {
         typeFilter === 'all' ||
         s.schoolType === typeFilter;
 
+      const hasPrincipal = Boolean(s.principal?.userId || s.principal?.fullName);
+      const hasEvaluator = Boolean((s.evaluators && s.evaluators.length > 0) || (s.evaluatorName && s.evaluatorName.trim() !== ''));
+      const isComplete = hasPrincipal && hasEvaluator;
+
+      const matchReadiness =
+        readinessFilter === 'all' ||
+        (readinessFilter === 'complete' && isComplete) ||
+        (readinessFilter === 'incomplete' && !isComplete);
+
+      const matchGov =
+        selectedGovernorateId === null ||
+        s.governorateId === selectedGovernorateId;
+
       const matchSearch =
         !searchQuery.trim() ||
         s.schoolName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         s.schoolCode?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         (s.evaluatorName && s.evaluatorName.toLowerCase().includes(searchQuery.toLowerCase()));
 
-      return matchDir && matchType && matchSearch;
+      return matchDir && matchType && matchReadiness && matchGov && matchSearch;
     });
-  }, [schools, selectedDirectorateId, typeFilter, searchQuery]);
+  }, [schools, directorates, selectedDirectorateId, selectedGovernorateId, typeFilter, readinessFilter, searchQuery]);
 
   return {
     schools,
     filteredSchools,
     directorates,
+    governorates,
     users,
     loading,
     error,
+    selectedGovernorateId,
+    setSelectedGovernorateId: handleSetSelectedGovernorateId,
     selectedDirectorateId,
     setSelectedDirectorateId,
     typeFilter,
     setTypeFilter,
+    readinessFilter,
+    setReadinessFilter,
     searchQuery,
     setSearchQuery,
     fetchData,

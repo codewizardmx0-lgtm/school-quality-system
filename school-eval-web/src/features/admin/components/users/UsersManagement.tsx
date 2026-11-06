@@ -26,7 +26,7 @@ import { CreateUserModal } from './CreateUserModal';
 import { EditUserModal } from './EditUserModal';
 import { ResetPasswordModal } from './ResetPasswordModal';
 import { useAdminUsers } from '../../hooks/useAdminUsers';
-import { downloadCsv, exportToExcel } from '../../utils/exportUtils';
+import { exportToExcel, formatExportFilename } from '../../utils/exportUtils';
 import { FileSpreadsheet } from 'lucide-react';
 import { formatRelativeArabic } from '../../utils/dateUtils';
 import type { User, AdminScreen } from '../../types/admin.types';
@@ -88,7 +88,7 @@ export const UsersManagement: React.FC<UsersManagementProps> = ({ onNavigate, ad
     }
   };
 
-  // Export to XLSX / CSV
+  // Export to Excel (.xlsx) with RTL layout
   const getUserExportData = () => {
     const headers = [
       'معرف المستخدم',
@@ -117,14 +117,9 @@ export const UsersManagement: React.FC<UsersManagementProps> = ({ onNavigate, ad
 
   const handleExportExcel = () => {
     const { headers, rows } = getUserExportData();
-    exportToExcel('دليل_المستخدمين.xlsx', 'المستخدمين', headers, rows);
+    const filename = formatExportFilename('دليل_المستخدمين', 'xlsx');
+    exportToExcel(filename, 'المستخدمين', headers, rows);
     addToast('success', 'تم تصدير دليل المستخدمين بصيغة Excel بنجاح');
-  };
-
-  const handleExportCsv = () => {
-    const { headers, rows } = getUserExportData();
-    downloadCsv('دليل_المستخدمين.csv', headers, rows);
-    addToast('success', 'تم تصدير دليل المستخدمين بصيغة CSV بنجاح');
   };
 
   // Get user initials for avatar
@@ -192,26 +187,7 @@ export const UsersManagement: React.FC<UsersManagementProps> = ({ onNavigate, ad
             <FileSpreadsheet size={16} color="#059669" />
             تصدير Excel (.xlsx)
           </button>
-          <button
-            onClick={handleExportCsv}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '9px 12px',
-              borderRadius: theme.radii.lg,
-              border: `1px solid ${theme.colors.neutral[200]}`,
-              backgroundColor: theme.colors.neutral.white,
-              color: theme.colors.neutral[600],
-              fontSize: theme.typography.fontSizes.xs,
-              fontWeight: 600,
-              cursor: 'pointer',
-              fontFamily: theme.typography.fontFamily.sans,
-            }}
-          >
-            <Download size={14} />
-            CSV
-          </button>
+          
           <button
             onClick={() => setIsCreateOpen(true)}
             style={{

@@ -47,6 +47,7 @@ class AuditLog extends Model
         'user_id',
         'school_id',
         'action',
+        'description_ar',
         'target_type',
         'target_id',
         'old_values',

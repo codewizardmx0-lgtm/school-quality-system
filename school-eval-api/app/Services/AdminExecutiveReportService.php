@@ -41,33 +41,27 @@ class AdminExecutiveReportService
 
         $readinessRate = $totalSchools > 0 ? round(($readySchools / $totalSchools) * 100, 1) : 0.0;
 
-        // 2. جمع بيانات المديريات وتعداد المدارس الفعلي لكل منها
-        $baseDirectorates = [
-            ['directorateId' => 1, 'directorateName' => 'مديرية التحرير', 'governorate' => 'أمانة العاصمة'],
-            ['directorateId' => 2, 'directorateName' => 'مديرية الصافية', 'governorate' => 'أمانة العاصمة'],
-            ['directorateId' => 3, 'directorateName' => 'مديرية الوحدة', 'governorate' => 'أمانة العاصمة'],
-            ['directorateId' => 4, 'directorateName' => 'مديرية معين', 'governorate' => 'أمانة العاصمة'],
-            ['directorateId' => 5, 'directorateName' => 'مديرية السبعين', 'governorate' => 'أمانة العاصمة'],
-            ['directorateId' => 6, 'directorateName' => 'مديرية الثورة', 'governorate' => 'أمانة العاصمة'],
-            ['directorateId' => 7, 'directorateName' => 'مديرية شعوب', 'governorate' => 'أمانة العاصمة'],
-            ['directorateId' => 8, 'directorateName' => 'مديرية آزال', 'governorate' => 'أمانة العاصمة'],
-            ['directorateId' => 9, 'directorateName' => 'مديرية المظفر', 'governorate' => 'محافظة تعز'],
-        ];
+        // 2. جمع بيانات المديريات وتعداد المدارس الفعلي لكل منها من قاعدة البيانات
+        $directorates = \App\Models\Directorate::with('governorate')
+            ->where('is_active', true)
+            ->get()
+            ->map(function ($dir) {
+                $name = $dir->name_ar;
+                $shortName = str_replace('مديرية ', '', $name);
 
-        $storedDirectorates = Cache::get('admin_directorates', $baseDirectorates);
-        $directorates = array_map(function ($dir) {
-            $name = $dir['directorateName'];
-            $shortName = str_replace('مديرية ', '', $name);
+                $count = School::where(function ($q) use ($dir, $name, $shortName) {
+                    $q->where('directorate_id', $dir->directorate_id)
+                      ->orWhere('educational_district', $name)
+                      ->orWhere('educational_district', $shortName);
+                })->count();
 
-            $count = School::where(function ($q) use ($name, $shortName) {
-                $q->where('educational_district', $name)
-                  ->orWhere('educational_district', $shortName)
-                  ->orWhere('educational_district', 'LIKE', "%{$shortName}%");
-            })->count();
-
-            $dir['schoolCount'] = $count;
-            return $dir;
-        }, $storedDirectorates);
+                return [
+                    'directorateId'   => $dir->directorate_id,
+                    'directorateName' => $dir->name_ar,
+                    'governorate'     => $dir->governorate?->name_ar ?? 'أمانة العاصمة',
+                    'schoolCount'     => $count,
+                ];
+            })->toArray();
 
         // 3. جمع بيانات المدارس والكوادر المسندة
         $dummyRequest = Request::instance();
@@ -117,12 +111,12 @@ class AdminExecutiveReportService
             'mode'             => 'utf-8',
             'format'           => 'A4',
             'orientation'      => 'P',
-            'margin_left'      => 10,
-            'margin_right'     => 10,
-            'margin_top'       => 28,
-            'margin_bottom'    => 15,
-            'margin_header'    => 8,
-            'margin_footer'    => 8,
+            'margin_left'      => 12,
+            'margin_right'     => 12,
+            'margin_top'       => 46,
+            'margin_bottom'    => 20,
+            'margin_header'    => 10,
+            'margin_footer'    => 10,
             'autoScriptToLang' => true,
             'autoArabic'       => true,
             'autoLangToFont'   => true,
@@ -142,8 +136,8 @@ class AdminExecutiveReportService
 
         $mpdf = new Mpdf($mpdfConfig);
         $mpdf->SetDirectionality('rtl');
-        $mpdf->SetTitle('التقرير التنفيذي الشامل لجودة المدارس - منصة ارتقاء');
-        $mpdf->SetAuthor('منصة ارتقاء الوطنية');
+        $mpdf->SetTitle('التقرير التنفيذي الشامل - منظومة ارتقاء لتقويم جودة المدارس');
+        $mpdf->SetAuthor('منظومة ارتقاء لتقويم جودة المدارس');
         $mpdf->WriteHTML($html);
 
         return $mpdf->Output('', 'S');

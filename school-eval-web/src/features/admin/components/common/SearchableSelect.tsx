@@ -7,6 +7,7 @@ export interface SearchableOption {
   label: string;
   code?: string;
   sublabel?: string;
+  disabled?: boolean;
 }
 
 interface SearchableSelectProps {
@@ -14,8 +15,11 @@ interface SearchableSelectProps {
   value: number | string | null;
   onChange: (value: number | string | null) => void;
   placeholder?: string;
+  searchPlaceholder?: string;
+  emptyText?: string;
   disabled?: boolean;
   error?: string;
+  icon?: React.ReactNode;
 }
 
 export const SearchableSelect: React.FC<SearchableSelectProps> = ({
@@ -23,8 +27,11 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
   value,
   onChange,
   placeholder = 'ابحث باسم المدرسة أو الكود...',
+  searchPlaceholder = 'اكتب للبحث الفوري...',
+  emptyText = 'لا توجد نتائج مطابقة للبحث',
   disabled = false,
   error,
+  icon,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -67,8 +74,9 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
     });
   }, [options, searchTerm]);
 
-  const handleSelect = (optValue: number | string) => {
-    onChange(optValue);
+  const handleSelect = (opt: SearchableOption) => {
+    if (opt.disabled) return;
+    onChange(opt.value);
     setIsOpen(false);
     setSearchTerm('');
   };
@@ -78,6 +86,8 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
     onChange(null);
     setSearchTerm('');
   };
+
+  const defaultIcon = <SchoolIcon size={16} color={selectedOption ? '#4F46E5' : theme.colors.neutral[400]} style={{ flexShrink: 0 }} />;
 
   return (
     <div ref={containerRef} style={{ position: 'relative', width: '100%', fontFamily: theme.typography.fontFamily.sans }}>
@@ -103,7 +113,7 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, flex: 1 }}>
-          <SchoolIcon size={16} color={selectedOption ? '#4F46E5' : theme.colors.neutral[400]} style={{ flexShrink: 0 }} />
+          {icon ?? defaultIcon}
           {selectedOption ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, overflow: 'hidden' }}>
               <span
@@ -211,7 +221,7 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
             <input
               ref={searchInputRef}
               type="text"
-              placeholder="اكتب اسم المدرسة أو الكود للبحث الفوري..."
+              placeholder={searchPlaceholder}
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               style={{
@@ -259,32 +269,35 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
                   color: theme.colors.neutral[500],
                 }}
               >
-                لا توجد مدارس مطابقة للبحث «{searchTerm}»
+                {emptyText} «{searchTerm}»
               </div>
             ) : (
               filteredOptions.map((opt) => {
                 const isSelected = String(opt.value) === String(value);
+                const isOptDisabled = Boolean(opt.disabled);
+
                 return (
                   <div
                     key={opt.value}
-                    onClick={() => handleSelect(opt.value)}
+                    onClick={() => handleSelect(opt)}
                     style={{
                       padding: '8px 12px',
                       borderRadius: theme.radii.md,
-                      backgroundColor: isSelected ? '#EEF2FF' : 'transparent',
-                      color: isSelected ? '#4338CA' : theme.colors.neutral[800],
+                      backgroundColor: isSelected ? '#EEF2FF' : isOptDisabled ? '#F8FAFC' : 'transparent',
+                      color: isOptDisabled ? '#94A3B8' : isSelected ? '#4338CA' : theme.colors.neutral[800],
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'space-between',
-                      cursor: 'pointer',
+                      cursor: isOptDisabled ? 'not-allowed' : 'pointer',
+                      opacity: isOptDisabled ? 0.65 : 1,
                       gap: '8px',
                       transition: 'background-color 0.1s ease',
                     }}
                     onMouseEnter={(e) => {
-                      if (!isSelected) e.currentTarget.style.backgroundColor = theme.colors.neutral[50];
+                      if (!isSelected && !isOptDisabled) e.currentTarget.style.backgroundColor = theme.colors.neutral[50];
                     }}
                     onMouseLeave={(e) => {
-                      if (!isSelected) e.currentTarget.style.backgroundColor = 'transparent';
+                      if (!isSelected && !isOptDisabled) e.currentTarget.style.backgroundColor = 'transparent';
                     }}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
@@ -319,7 +332,7 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
 
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
                       {opt.sublabel && (
-                        <span style={{ fontSize: '0.7rem', color: theme.colors.neutral[400] }}>
+                        <span style={{ fontSize: '0.7rem', color: isOptDisabled ? '#94A3B8' : theme.colors.neutral[400] }}>
                           {opt.sublabel}
                         </span>
                       )}

@@ -72,7 +72,24 @@ class AuditLogController extends Controller
             $query->where('created_at', '<=', $request->input('date_to'));
         }
 
-        $perPage = min(max((int) $request->input('per_page', 20), 1), 100);
+        $isExportAll = $request->boolean('all') || $request->input('per_page') === 'all' || $request->input('perPage') === 'all';
+        $perPageInput = $request->input('per_page') ?? $request->input('perPage') ?? 20;
+
+        if ($isExportAll) {
+            $items = $query->orderByDesc('log_id')->get();
+            return ApiResponse::success(
+                data: $items,
+                message: 'تم جلب سجل التدقيق بنجاح.',
+                meta: [
+                    'currentPage' => 1,
+                    'lastPage'    => 1,
+                    'perPage'     => $items->count(),
+                    'total'       => $items->count(),
+                ]
+            );
+        }
+
+        $perPage = min(max((int) $perPageInput, 1), 100);
         $paginator = $query->orderByDesc('log_id')->paginate($perPage);
 
         return ApiResponse::success(

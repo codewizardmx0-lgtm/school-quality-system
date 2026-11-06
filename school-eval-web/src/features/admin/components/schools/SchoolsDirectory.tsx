@@ -16,18 +16,18 @@ import {
 import { theme } from '../../theme';
 import { StatCard } from '../common/StatCard';
 import { StatusBadge } from '../common/StatusBadge';
-import { DirectorateSidebar } from './DirectorateSidebar';
+import { DirectorateTopSection } from './DirectorateTopSection';
 import { RefreshButton } from '../common/RefreshButton';
 import { RegisterSchoolModal } from './RegisterSchoolModal';
 import { LinkEvaluatorModal } from './LinkEvaluatorModal';
 import { AssignPrincipalModal } from './AssignPrincipalModal';
 import { EditSchoolModal } from './EditSchoolModal';
-import { exportToExcel } from '../../utils/exportUtils';
+import { exportToExcel, formatExportFilename } from '../../utils/exportUtils';
 import { UserCheck, FileSpreadsheet } from 'lucide-react';
 import { schoolsApi } from '../../api/schoolsApi';
 import { AddDirectorateModal } from './AddDirectorateModal';
 import { useAdminSchools } from '../../hooks/useAdminSchools';
-import { downloadCsv } from '../../utils/exportUtils';
+
 import type { School, AdminScreen, Directorate } from '../../types/admin.types';
 
 interface SchoolsDirectoryProps {
@@ -56,13 +56,18 @@ export const SchoolsDirectory: React.FC<SchoolsDirectoryProps> = ({ onNavigate, 
     schools,
     filteredSchools,
     directorates,
+    governorates,
     users,
     loading,
     error,
+    selectedGovernorateId,
+    setSelectedGovernorateId,
     selectedDirectorateId,
     setSelectedDirectorateId,
     typeFilter,
     setTypeFilter,
+    readinessFilter,
+    setReadinessFilter,
     searchQuery,
     setSearchQuery,
     fetchData,
@@ -163,18 +168,12 @@ export const SchoolsDirectory: React.FC<SchoolsDirectoryProps> = ({ onNavigate, 
     return { headers, rows };
   };
 
-  // Export to Excel (.xlsx) with RTL layout
+  // Export to Excel (.xlsx) with RTL layout and timestamped filename
   const handleExportExcel = () => {
     const { headers, rows } = buildExportRows();
-    exportToExcel('erteqa_schools_directory.xlsx', 'دليل المدارس', headers, rows);
+    const filename = formatExportFilename('دليل_المدارس', 'xlsx');
+    exportToExcel(filename, 'دليل المدارس', headers, rows);
     addToast('success', 'تم تصدير دليل المدارس بنجاح إلى ملف Excel (.xlsx) حقيقي.');
-  };
-
-  // Export to CSV with UTF-8 BOM
-  const handleExportCsv = () => {
-    const { headers, rows } = buildExportRows();
-    downloadCsv('erteqa_schools_directory.csv', headers, rows);
-    addToast('success', 'تم تصدير دليل المدارس بصيغة CSV');
   };
 
   return (
@@ -235,26 +234,7 @@ export const SchoolsDirectory: React.FC<SchoolsDirectoryProps> = ({ onNavigate, 
             <FileSpreadsheet size={16} color="#059669" />
             تصدير Excel (.xlsx)
           </button>
-          <button
-            onClick={handleExportCsv}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '9px 14px',
-              borderRadius: theme.radii.lg,
-              border: `1px solid ${theme.colors.neutral[200]}`,
-              backgroundColor: theme.colors.neutral.white,
-              color: theme.colors.neutral[600],
-              fontSize: theme.typography.fontSizes.xs,
-              fontWeight: 600,
-              cursor: 'pointer',
-              fontFamily: theme.typography.fontFamily.sans,
-            }}
-          >
-            <Download size={14} />
-            CSV
-          </button>
+          
           <button
             onClick={() => setIsRegisterOpen(true)}
             style={{
@@ -322,39 +302,31 @@ export const SchoolsDirectory: React.FC<SchoolsDirectoryProps> = ({ onNavigate, 
         />
       </div>
 
-      {/* Split View Layout: Directorate Selector (Top on mobile, Right on desktop) + Schools Table (Below on mobile, Left on desktop) */}
-      <div
-        style={{
-          display: 'flex',
-          flexDirection: activeIsMobile ? 'column' : 'row',
-          gap: '20px',
-          alignItems: 'stretch',
-          marginBottom: '24px',
-          width: '100%',
+      {/* Top Section: Directorate & Governorate Navigation */}
+      <DirectorateTopSection
+        governorates={governorates}
+        selectedGovernorateId={selectedGovernorateId}
+        onSelectGovernorate={setSelectedGovernorateId}
+        directorates={directorates}
+        selectedDirectorateId={selectedDirectorateId}
+        onSelectDirectorate={setSelectedDirectorateId}
+        onAddDirectorate={() => {
+          setEditingDirectorate(null);
+          setIsAddDirOpen(true);
         }}
-      >
-        {/* Directorate Sidebar */}
-        <DirectorateSidebar
-          directorates={directorates}
-          selectedDirectorateId={selectedDirectorateId}
-          onSelect={setSelectedDirectorateId}
-          onAddDirectorate={() => {
-            setEditingDirectorate(null);
-            setIsAddDirOpen(true);
-          }}
-          onEditDirectorate={(d) => {
-            setEditingDirectorate(d);
-            setIsAddDirOpen(true);
-          }}
-          onDeleteDirectorate={(d) => {
-            setDeletingDirectorate(d);
-            setIsDeleteModalOpen(true);
-          }}
-          isMobile={activeIsMobile}
-        />
+        onEditDirectorate={(d) => {
+          setEditingDirectorate(d);
+          setIsAddDirOpen(true);
+        }}
+        onDeleteDirectorate={(d) => {
+          setDeletingDirectorate(d);
+          setIsDeleteModalOpen(true);
+        }}
+        isMobile={activeIsMobile}
+      />
 
-        {/* Schools Table & Filter Container */}
-        <div style={{ flex: 1, minWidth: 0, width: '100%' }}>
+      {/* Schools Table & Filter Container - Full Width 100% */}
+      <div style={{ width: '100%', minWidth: 0, marginBottom: '24px' }}>
           {/* Header & Type Filter */}
           <div
             style={{
@@ -409,6 +381,43 @@ export const SchoolsDirectory: React.FC<SchoolsDirectoryProps> = ({ onNavigate, 
                     }}
                   >
                     {type === 'all' ? 'الكل' : type === 'government' ? 'حكومية' : 'أهلية'}
+                  </button>
+                ))}
+              </div>
+
+              {/* Readiness Filter Buttons */}
+              <div
+                style={{
+                  display: 'flex',
+                  backgroundColor: theme.colors.neutral[100],
+                  padding: '3px',
+                  borderRadius: theme.radii.lg,
+                  gap: '2px',
+                }}
+              >
+                {([
+                  { id: 'all', label: 'الكل' },
+                  { id: 'complete', label: 'مكتملة' },
+                  { id: 'incomplete', label: 'غير مكتملة' },
+                ] as const).map((r) => (
+                  <button
+                    key={r.id}
+                    onClick={() => setReadinessFilter(r.id)}
+                    style={{
+                      padding: '5px 12px',
+                      borderRadius: theme.radii.md,
+                      border: 'none',
+                      backgroundColor: readinessFilter === r.id ? theme.colors.neutral.white : 'transparent',
+                      color: readinessFilter === r.id ? (r.id === 'complete' ? '#059669' : r.id === 'incomplete' ? '#D97706' : theme.colors.neutral[900]) : theme.colors.neutral[500],
+                      fontSize: theme.typography.fontSizes.xs,
+                      fontWeight: readinessFilter === r.id ? 700 : 500,
+                      cursor: 'pointer',
+                      boxShadow: readinessFilter === r.id ? theme.shadows.sm : 'none',
+                      fontFamily: theme.typography.fontFamily.sans,
+                      transition: 'all 0.15s ease',
+                    }}
+                  >
+                    {r.label}
                   </button>
                 ))}
               </div>
@@ -787,7 +796,6 @@ export const SchoolsDirectory: React.FC<SchoolsDirectoryProps> = ({ onNavigate, 
             </table>
           </div>
         </div>
-      </div>
 
       {/* Mandatory Assignment Callout Box */}
       <div
@@ -843,7 +851,7 @@ export const SchoolsDirectory: React.FC<SchoolsDirectoryProps> = ({ onNavigate, 
           }}
         >
           <Download size={16} />
-          تصدير دليل المدارس (CSV) ↓
+          تصدير دليل المدارس Excel (.xlsx) ↓
         </button>
 
         <div style={{ display: 'flex', gap: '10px' }}>

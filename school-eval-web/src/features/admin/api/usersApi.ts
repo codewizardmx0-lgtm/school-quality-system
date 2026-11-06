@@ -138,6 +138,17 @@ export const usersApi = {
   },
 
   /**
+   * Change current user password
+   */
+  async changePassword(dto: {
+    currentPassword: string;
+    newPassword: string;
+    newPasswordConfirmation: string;
+  }): Promise<ApiResponse<null>> {
+    return await post<null>('/auth/change-password', dto);
+  },
+
+  /**
    * Fetch available RBAC roles list
    */
   /**

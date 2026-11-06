@@ -9,6 +9,7 @@ import type { ApiResponse } from '../../../api/apiTypes';
 import type {
   School,
   Directorate,
+  Governorate,
   RegisterSchoolDto,
   AddDirectorateDto,
 } from '../types/admin.types';
@@ -139,11 +140,61 @@ export const schoolsApi = {
   },
 
   /**
-   * Fetch list of educational directorates with school counters
+   * Fetch list of all 22 Yemeni governorates
    */
-  async getDirectorates(): Promise<ApiResponse<Directorate[]>> {
+  async getGovernorates(): Promise<ApiResponse<Governorate[]>> {
     try {
-      const res = await get<Directorate[]>('/directorates');
+      const res = await get<Governorate[]>('/governorates');
+      if (res && Array.isArray(res.data)) {
+        return res;
+      }
+      return {
+        data: [
+          { governorateId: 1, nameAr: 'أمانة العاصمة', nameEn: "Sana'a City", code: 'AMANA' },
+          { governorateId: 2, nameAr: 'محافظة صنعاء', nameEn: "Sana'a", code: 'SANA' },
+          { governorateId: 3, nameAr: 'محافظة تعز', nameEn: 'Taiz', code: 'TAIZ' },
+          { governorateId: 4, nameAr: 'محافظة عدن', nameEn: 'Aden', code: 'ADEN' },
+          { governorateId: 5, nameAr: 'محافظة الحديدة', nameEn: 'Al Hudaydah', code: 'HOD' },
+          { governorateId: 6, nameAr: 'محافظة إب', nameEn: 'Ibb', code: 'IBB' },
+          { governorateId: 7, nameAr: 'محافظة ذمار', nameEn: 'Dhamar', code: 'DHAM' },
+          { governorateId: 8, nameAr: 'محافظة حضرموت', nameEn: 'Hadhramaut', code: 'HDM' },
+          { governorateId: 9, nameAr: 'محافظة حجة', nameEn: 'Hajjah', code: 'HAJJ' },
+          { governorateId: 10, nameAr: 'محافظة صعدة', nameEn: "Sa'dah", code: 'SAAD' },
+          { governorateId: 11, nameAr: 'محافظة عمران', nameEn: 'Amran', code: 'AMR' },
+          { governorateId: 12, nameAr: 'محافظة لحج', nameEn: 'Lahij', code: 'LAHJ' },
+          { governorateId: 13, nameAr: 'محافظة أبين', nameEn: 'Abyan', code: 'ABY' },
+          { governorateId: 14, nameAr: 'محافظة البيضاء', nameEn: 'Al Bayda', code: 'BAYD' },
+          { governorateId: 15, nameAr: 'محافظة شبوة', nameEn: 'Shabwah', code: 'SHAB' },
+          { governorateId: 16, nameAr: 'محافظة مأرب', nameEn: "Ma'rib", code: 'MAR' },
+          { governorateId: 17, nameAr: 'محافظة الجوف', nameEn: 'Al Jawf', code: 'JAW' },
+          { governorateId: 18, nameAr: 'محافظة المهرة', nameEn: 'Al Mahrah', code: 'MAH' },
+          { governorateId: 19, nameAr: 'محافظة المحويت', nameEn: 'Al Mahwit', code: 'MAHW' },
+          { governorateId: 20, nameAr: 'محافظة ريمة', nameEn: 'Raymah', code: 'RAYM' },
+          { governorateId: 21, nameAr: 'محافظة الضالع', nameEn: 'Al Dali', code: 'DHAL' },
+          { governorateId: 22, nameAr: 'محافظة سقطرى', nameEn: 'Socotra', code: 'SOQ' },
+        ],
+        message: null,
+        errors: null,
+        meta: null,
+      };
+    } catch (error) {
+      console.warn('Backend governorates API call failed:', error);
+      return {
+        data: [{ governorateId: 1, nameAr: 'أمانة العاصمة', nameEn: "Sana'a City", code: 'AMANA' }],
+        message: null,
+        errors: null,
+        meta: null,
+      };
+    }
+  },
+
+  /**
+   * Fetch list of educational directorates with school counters, optionally filtered by governorate
+   */
+  async getDirectorates(governorateId?: number): Promise<ApiResponse<Directorate[]>> {
+    try {
+      const url = governorateId ? `/directorates?governorateId=${governorateId}` : '/directorates';
+      const res = await get<Directorate[]>(url);
       if (res && res.data && res.data.length > 0) {
         return res;
       }
@@ -151,6 +202,31 @@ export const schoolsApi = {
     } catch (error) {
       console.warn('Backend directorates API call failed, falling back to mock:', error);
       return mockAdminService.getDirectorates();
+    }
+  },
+
+  /**
+   * Suggest automatic school code formatted as SCH-{GOV_CODE}-2026-{serial}
+   */
+  async suggestSchoolCode(governorateId: number): Promise<ApiResponse<{ code: string; govCode: string; nextSerial: number }>> {
+    try {
+      const res = await get<{ code: string; govCode: string; nextSerial: number }>(`/schools/suggest-code?governorateId=${governorateId}`);
+      if (res && res.data) {
+        return res;
+      }
+      return {
+        data: { code: `SCH-AMANA-2026-001`, govCode: 'AMANA', nextSerial: 1 },
+        message: null,
+        errors: null,
+        meta: null,
+      };
+    } catch (error) {
+      return {
+        data: { code: `SCH-AMANA-2026-001`, govCode: 'AMANA', nextSerial: 1 },
+        message: null,
+        errors: null,
+        meta: null,
+      };
     }
   },
 
@@ -209,7 +285,24 @@ export const schoolsApi = {
     const url = window.URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `erteqa_executive_report_${new Date().toISOString().slice(0, 10)}.pdf`;
+
+    // استخراج اسم الملف من ترويسة Content-Disposition أو توليده بالوقت والتاريخ بدقة 24 ساعة
+    let downloadFilename = '';
+    const disposition = response.headers.get('content-disposition');
+    if (disposition && disposition.includes('filename=')) {
+      const match = disposition.match(/filename="?([^";]+)"?/);
+      if (match && match[1]) {
+        downloadFilename = match[1];
+      }
+    }
+
+    if (!downloadFilename) {
+      const now = new Date();
+      const pad = (n: number) => String(n).padStart(2, '0');
+      downloadFilename = `erteqa_executive_report_${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}_${pad(now.getHours())}-${pad(now.getMinutes())}.pdf`;
+    }
+
+    link.download = downloadFilename;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);

@@ -36,8 +36,18 @@ export interface Role {
   userType: UserType;
 }
 
+// Governorate
+export interface Governorate {
+  governorateId: number;
+  nameAr: string;
+  nameEn: string;
+  code: string;
+  directoratesCount?: number;
+}
+
 // Directorate
 export interface Directorate {
+  governorateId?: number;
   directorateId: number;
   directorateName: string;
   governorate: string;
@@ -53,6 +63,7 @@ export interface School {
   schoolName: string;
   schoolType: SchoolType;
   educationalStage: string;
+  governorateId?: number | null;
   directorateId: number;
   directorate: string;
   educationalDistrict?: string;
@@ -112,6 +123,7 @@ export interface AuditLogEntry {
   eventType: string;
   eventCategory: AuditSeverity;
   description: string;
+  descriptionAr?: string;
   digitalHash: string;
   ipAddress: string;
   location: string;
@@ -191,6 +203,7 @@ export interface CreateUserDto {
 }
 
 export interface EditUserDto {
+  username?: string;
   fullName: string;
   email: string;
   userType: UserType;
@@ -204,8 +217,7 @@ export interface RegisterSchoolDto {
   schoolName: string;
   schoolCode: string;
   schoolType: SchoolType;
-  educationalStage: string;
-  directorateId: number;
+  educationalStage: string;  governorateId?: number;  directorateId: number;
   directorateName?: string;
   educationalDistrict?: string;
   governorate: string;
@@ -213,6 +225,7 @@ export interface RegisterSchoolDto {
 
 export interface AddDirectorateDto {
   directorateName: string;
+  governorateId?: number;
   governorate: string;
 }
 

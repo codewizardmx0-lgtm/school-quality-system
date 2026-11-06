@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, School as SchoolIcon } from 'lucide-react';
 import { theme } from '../../theme';
 import { schoolsApi } from '../../api/schoolsApi';
-import type { RegisterSchoolDto, Directorate } from '../../types/admin.types';
+import type { RegisterSchoolDto, Directorate, Governorate } from '../../types/admin.types';
 
 interface RegisterSchoolModalProps {
   isOpen: boolean;
@@ -19,38 +19,83 @@ export const RegisterSchoolModal: React.FC<RegisterSchoolModalProps> = ({
   onSuccess,
   addToast,
 }) => {
-  const [directorates, setDirectorates] = useState<Directorate[]>(propDirectorates || []);
+  const [governorates, setGovernorates] = useState<Governorate[]>([]);
+  const [selectedGovId, setSelectedGovId] = useState<number>(1);
+  const [filteredDirectorates, setFilteredDirectorates] = useState<Directorate[]>(propDirectorates || []);
+  const [isCodeCustom, setIsCodeCustom] = useState(false);
+
   const [form, setForm] = useState<RegisterSchoolDto>({
     schoolName: '',
     schoolCode: '',
     schoolType: 'government',
     educationalStage: 'ثانوي (10-12)',
+    governorateId: 1,
     directorateId: 1,
     governorate: 'أمانة العاصمة',
   });
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
+  // 1. Load Governorates on open
   useEffect(() => {
     if (!isOpen) return;
-    if (propDirectorates && propDirectorates.length > 0) {
-      setDirectorates(propDirectorates);
-      if (!form.directorateId && propDirectorates[0]) {
-        setForm((prev) => ({ ...prev, directorateId: propDirectorates[0].directorateId }));
-      }
-    } else {
-      schoolsApi.getDirectorates().then((res) => {
+    setIsCodeCustom(false);
+    schoolsApi
+      .getGovernorates()
+      .then((res) => {
         if (res.data && res.data.length > 0) {
-          setDirectorates(res.data);
-          setForm((prev) => ({ ...prev, directorateId: res.data![0].directorateId }));
+          setGovernorates(res.data);
+          const firstGov = res.data[0];
+          setSelectedGovId(firstGov.governorateId);
+          loadDirectoratesAndCode(firstGov.governorateId, firstGov.nameAr, false);
         }
-      }).catch((err) => console.warn('Failed to fetch directorates:', err));
+      })
+      .catch((err) => console.warn('Failed to fetch governorates:', err));
+  }, [isOpen]);
+
+  const loadDirectoratesAndCode = async (govId: number, govName: string, userEditedCode: boolean) => {
+    try {
+      const dirRes = await schoolsApi.getDirectorates(govId);
+      if (dirRes.data) {
+        setFilteredDirectorates(dirRes.data);
+        const firstDir = dirRes.data[0];
+        setForm((prev) => ({
+          ...prev,
+          governorate: govName,
+          governorateId: govId,
+          directorateId: firstDir ? firstDir.directorateId : 0,
+        }));
+      }
+    } catch (err) {
+      console.warn('Failed to load directorates:', err);
     }
-  }, [isOpen, propDirectorates]);
+
+    if (!userEditedCode) {
+      try {
+        const codeRes = await schoolsApi.suggestSchoolCode(govId);
+        const codeData = codeRes?.data;
+        if (codeData && codeData.code) {
+          setForm((prev) => ({ ...prev, schoolCode: codeData.code }));
+        }
+      } catch (err) {
+        console.warn('Failed to suggest school code:', err);
+      }
+    }
+  };
+
+  const handleGovChange = (govId: number) => {
+    setSelectedGovId(govId);
+    const gov = governorates.find((g) => g.governorateId === govId);
+    const govName = gov?.nameAr || 'أمانة العاصمة';
+    loadDirectoratesAndCode(govId, govName, isCodeCustom);
+  };
 
   if (!isOpen) return null;
 
   const handleChange = (field: keyof RegisterSchoolDto, value: string | number) => {
+    if (field === 'schoolCode') {
+      setIsCodeCustom(true);
+    }
     setForm((prev) => ({ ...prev, [field]: value }));
     setErrors((prev) => ({ ...prev, [field]: '' }));
   };
@@ -72,7 +117,7 @@ export const RegisterSchoolModal: React.FC<RegisterSchoolModalProps> = ({
     }
     setLoading(true);
     try {
-      const selectedDir = directorates.find((d) => d.directorateId === form.directorateId);
+      const selectedDir = filteredDirectorates.find((d) => d.directorateId === form.directorateId);
       await schoolsApi.registerSchool({
         ...form,
         directorateName: selectedDir ? selectedDir.directorateName : undefined,
@@ -99,27 +144,27 @@ export const RegisterSchoolModal: React.FC<RegisterSchoolModalProps> = ({
     width: '100%',
     padding: '9px 12px',
     borderRadius: theme.radii.lg,
-    border: `1px solid ${hasErr ? '#EF4444' : theme.colors.neutral[200]}`,
+    border: `1px solid ${hasErr ? '#DC2626' : theme.colors.neutral[200]}`,
     fontSize: theme.typography.fontSizes.sm,
-    backgroundColor: theme.colors.neutral.white,
+    fontFamily: theme.typography.fontFamily.sans,
     outline: 'none',
     boxSizing: 'border-box' as const,
-    fontFamily: theme.typography.fontFamily.sans,
   });
 
   const labelStyle = {
-    fontSize: theme.typography.fontSizes.xs,
-    fontWeight: theme.typography.fontWeights.semibold,
-    color: theme.colors.neutral[700],
-    marginBottom: '4px',
     display: 'block',
+    fontSize: theme.typography.fontSizes.xs,
+    fontWeight: 600,
+    color: theme.colors.neutral[700],
+    marginBottom: '6px',
+    fontFamily: theme.typography.fontFamily.sans,
   };
 
   const errorStyle = {
-    fontSize: '0.7rem',
-    color: '#EF4444',
-    marginTop: '3px',
-    margin: '3px 0 0',
+    color: '#DC2626',
+    fontSize: '0.75rem',
+    marginTop: '4px',
+    margin: '4px 0 0 0',
   };
 
   return (
@@ -127,72 +172,83 @@ export const RegisterSchoolModal: React.FC<RegisterSchoolModalProps> = ({
       style={{
         position: 'fixed',
         inset: 0,
-        zIndex: 8000,
+        backgroundColor: 'rgba(15, 23, 42, 0.65)',
+        backdropFilter: 'blur(4px)',
+        zIndex: 9999,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: 'rgba(15,23,42,0.6)',
-        backdropFilter: 'blur(4px)',
-      }}
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
+        padding: '16px',
+        direction: 'rtl',
       }}
     >
       <div
         style={{
           backgroundColor: theme.colors.neutral.white,
           borderRadius: theme.radii.xl,
-          width: '90%',
-          maxWidth: '540px',
+          width: '100%',
+          maxWidth: '560px',
+          boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+          overflow: 'hidden',
+          display: 'flex',
+          flexDirection: 'column',
           maxHeight: '90vh',
-          overflowY: 'auto',
-          boxShadow: theme.shadows.xl,
-          fontFamily: theme.typography.fontFamily.sans,
-          direction: 'rtl',
         }}
       >
+        {/* Modal Header */}
         <div
           style={{
-            padding: '20px 24px',
-            borderBottom: `1px solid ${theme.colors.neutral[200]}`,
+            padding: '18px 24px',
+            borderBottom: `1px solid ${theme.colors.neutral[100]}`,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            background: 'linear-gradient(135deg, #0B0F19 0%, #1e293b 100%)',
+            background: 'linear-gradient(135deg, #F8FAFC 0%, #FFFFFF 100%)',
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <div
               style={{
                 width: '36px',
                 height: '36px',
-                borderRadius: '8px',
-                backgroundColor: 'rgba(16, 185, 129, 0.2)',
+                borderRadius: theme.radii.lg,
+                backgroundColor: '#ECFDF5',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                color: '#34D399',
+                color: '#059669',
               }}
             >
               <SchoolIcon size={20} />
             </div>
             <div>
-              <h2 style={{ fontSize: theme.typography.fontSizes.base, fontWeight: 700, color: '#fff', margin: 0 }}>
-                تسجيل مدرسة جديدة بالدليل
-              </h2>
-              <p style={{ fontSize: theme.typography.fontSizes.xs, color: '#94A3B8', marginTop: '2px', margin: '2px 0 0' }}>
-                تسجيل بيانات المدرسة لتأهيلها لدورات التقييم الوطني
+              <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: theme.colors.neutral[900] }}>
+                تسجيل صرح تعليمي جديد
+              </h3>
+              <p style={{ margin: '2px 0 0', fontSize: theme.typography.fontSizes.xs, color: theme.colors.neutral[500] }}>
+                إضافة مدرسة جديدة لقاعدة البيانات الوطنية
               </p>
             </div>
           </div>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#94A3B8', cursor: 'pointer', padding: '4px' }}>
-            <X size={20} />
+          <button
+            onClick={onClose}
+            style={{
+              background: 'none',
+              border: 'none',
+              padding: '6px',
+              borderRadius: theme.radii.md,
+              cursor: 'pointer',
+              color: theme.colors.neutral[400],
+            }}
+          >
+            <X size={18} />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+        {/* Modal Body */}
+        <form onSubmit={handleSubmit} style={{ padding: '24px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '16px' }}>
           <div>
-            <label style={labelStyle}>اسم الصرح التعليمي / المدرسة *</label>
+            <label style={labelStyle}>اسم المدرسة الرسمي *</label>
             <input
               style={inputStyle(!!errors.schoolName)}
               value={form.schoolName}
@@ -204,15 +260,18 @@ export const RegisterSchoolModal: React.FC<RegisterSchoolModalProps> = ({
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
             <div>
-              <label style={labelStyle}>كود المدرسة الرقمي (SCH-XXX) *</label>
+              <label style={labelStyle}>كود المدرسة المقترح (SCH-XXX) *</label>
               <input
                 style={inputStyle(!!errors.schoolCode)}
                 value={form.schoolCode}
                 onChange={(e) => handleChange('schoolCode', e.target.value)}
-                placeholder="SCH-SANAA-2026-003"
+                placeholder="SCH-AMANA-2026-001"
                 dir="ltr"
               />
               {errors.schoolCode && <p style={errorStyle}>{errors.schoolCode}</p>}
+              <span style={{ fontSize: '0.7rem', color: theme.colors.neutral[400], display: 'block', marginTop: '3px' }}>
+                {isCodeCustom ? '✏️ كود مخصص يدوياً' : '⚡ تم اقتراح الكود تلقائياً بناءً على المحافظة'}
+              </span>
             </div>
             <div>
               <label style={labelStyle}>تصنيف المدرسة *</label>
@@ -241,16 +300,17 @@ export const RegisterSchoolModal: React.FC<RegisterSchoolModalProps> = ({
                 <option value="مجمع تربوي متكامل">مجمع تربوي متكامل</option>
               </select>
             </div>
+
             <div>
-              <label style={labelStyle}>المديرية التعليمية *</label>
+              <label style={labelStyle}>المحافظة *</label>
               <select
                 style={inputStyle()}
-                value={form.directorateId}
-                onChange={(e) => handleChange('directorateId', Number(e.target.value))}
+                value={selectedGovId}
+                onChange={(e) => handleGovChange(Number(e.target.value))}
               >
-                {directorates.map((d) => (
-                  <option key={d.directorateId} value={d.directorateId}>
-                    {d.directorateName}
+                {governorates.map((g) => (
+                  <option key={g.governorateId} value={g.governorateId}>
+                    {g.nameAr}
                   </option>
                 ))}
               </select>
@@ -258,12 +318,23 @@ export const RegisterSchoolModal: React.FC<RegisterSchoolModalProps> = ({
           </div>
 
           <div>
-            <label style={labelStyle}>المحافظة</label>
-            <input
-              style={{ ...inputStyle(), backgroundColor: '#F1F5F9', cursor: 'not-allowed' }}
-              value={form.governorate}
-              readOnly
-            />
+            <label style={labelStyle}>المديرية التعليمية *</label>
+            <select
+              style={inputStyle()}
+              value={form.directorateId || ''}
+              onChange={(e) => handleChange('directorateId', Number(e.target.value))}
+              disabled={filteredDirectorates.length === 0}
+            >
+              {filteredDirectorates.length === 0 ? (
+                <option value="">-- لا توجد مديريات بعد لهذه المحافظة --</option>
+              ) : (
+                filteredDirectorates.map((d) => (
+                  <option key={d.directorateId} value={d.directorateId}>
+                    {d.directorateName}
+                  </option>
+                ))
+              )}
+            </select>
           </div>
 
           <div

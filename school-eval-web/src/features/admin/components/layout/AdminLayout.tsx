@@ -8,6 +8,7 @@ import { UsersManagement } from '../users/UsersManagement';
 import { SchoolsDirectory } from '../schools/SchoolsDirectory';
 import { SecurityAudit } from '../audit/SecurityAudit';
 import { BackupAndSettings } from '../backup/BackupAndSettings';
+import { ChangePasswordModal } from '../../../auth/ChangePasswordModal';
 import type { AdminScreen } from '../../types/admin.types';
 
 interface AdminLayoutProps {
@@ -21,6 +22,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
 }) => {
   const [activeScreen, setActiveScreen] = useState<AdminScreen>(initialScreen);
   const [isMaintenanceMode, setIsMaintenanceMode] = useState(false);
+  const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
   const { toasts, addToast, dismissToast } = useToast();
 
   // Responsive & Sidebar Collapse state
@@ -112,6 +114,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
           if (isMobile) setIsMobileOpen(false);
         }}
         onLogout={onLogout}
+        onOpenChangePassword={() => setIsChangePasswordOpen(true)}
         isCollapsed={isCollapsed}
         onToggleCollapse={() => setIsCollapsed((prev) => !prev)}
         isMobile={isMobile}
@@ -152,6 +155,13 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
           {renderScreen()}
         </main>
       </div>
+
+      {/* Change Password Modal */}
+      <ChangePasswordModal
+        isOpen={isChangePasswordOpen}
+        onClose={() => setIsChangePasswordOpen(false)}
+        addToast={addToast}
+      />
 
       {/* Global Toast Notifications */}
       <ToastNotification toasts={toasts} onDismiss={dismissToast} />

@@ -25,6 +25,7 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
 }) => {
   const [prevUserId, setPrevUserId] = useState<number | undefined>(user?.userId);
   const [form, setForm] = useState<EditUserDto>(() => ({
+    username: user?.username || '',
     fullName: user?.fullName || '',
     email: user?.email || '',
     userType: user?.userType || 'school',
@@ -59,6 +60,7 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
   if (user && user.userId !== prevUserId) {
     setPrevUserId(user.userId);
     setForm({
+      username: user.username,
       fullName: user.fullName,
       email: user.email,
       userType: user.userType,
@@ -112,6 +114,7 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
 
   const validate = () => {
     const e: Record<string, string> = {};
+    if (!form.username?.trim()) e.username = 'اسم المستخدم مطلوب';
     if (!form.fullName.trim()) e.fullName = 'الاسم الكامل مطلوب';
     if (!form.email.trim() || !form.email.includes('@')) e.email = 'البريد الإلكتروني غير صالح';
     if (form.userType === 'school' && !form.schoolId) e.schoolId = 'يجب تحديد المدرسة';
@@ -228,13 +231,15 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
 
         <form onSubmit={handleSubmit} style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
           <div>
-            <label style={labelStyle}>اسم المستخدم (Sign In)</label>
+            <label style={labelStyle}>اسم المستخدم (Sign In) *</label>
             <input
-              style={{ ...inputStyle(), backgroundColor: '#F1F5F9', cursor: 'not-allowed' }}
-              value={user.username}
-              disabled
+              style={inputStyle(!!errors.username)}
+              value={form.username || ''}
+              onChange={(e) => handleChange('username', e.target.value)}
+              placeholder="اسم المستخدم بالأحرف الإنجليزية"
               dir="ltr"
             />
+            {errors.username && <p style={errorStyle}>{errors.username}</p>}
           </div>
 
           <div>

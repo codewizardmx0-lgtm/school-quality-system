@@ -1,4 +1,5 @@
 import React from 'react';
+import { useAuth } from '../../../auth/AuthContext';
 import {
   LayoutDashboard,
   Users,
@@ -6,17 +7,20 @@ import {
   ShieldCheck,
   Database,
   LogOut,
+  KeyRound,
   ChevronRight,
   ChevronLeft,
   X,
 } from 'lucide-react';
 import { theme } from '../../theme';
 import type { AdminScreen } from '../../types/admin.types';
+import { SYSTEM_NAME, SYSTEM_SHORT_NAME } from '../../../../constants/systemConstants';
 
 interface AdminSidebarProps {
   activeScreen: AdminScreen;
   onNavigate: (screen: AdminScreen) => void;
   onLogout?: () => void;
+  onOpenChangePassword?: () => void;
   isCollapsed?: boolean;
   onToggleCollapse?: () => void;
   isMobile?: boolean;
@@ -28,12 +32,31 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
   activeScreen,
   onNavigate,
   onLogout,
+  onOpenChangePassword,
   isCollapsed = false,
   onToggleCollapse,
   isMobile = false,
   isMobileOpen = false,
   onCloseMobile,
 }) => {
+  const { user: authUser } = useAuth();
+  const displayName = authUser?.fullName || authUser?.username || 'مسؤول النظام';
+  const roleObj = authUser?.roles?.[0];
+  const roleNameMap: Record<string, string> = {
+    admin: 'مدير النظام المركزي',
+    school_evaluator: 'مقيّم المدرسة',
+    school_principal: 'مدير المدرسة',
+    ministry_standards_manager: 'مسؤول إدارة المعايير',
+    ministry_supervisor: 'مشرف وزاري معتمد',
+  };
+  const displayRole = roleObj ? (roleNameMap[roleObj.roleName] || roleObj.description || roleObj.roleName) : 'مدير النظام المركزي';
+  const userInitials = displayName
+    .trim()
+    .split(' ')
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0])
+    .join('') || 'من';
   const navItems: Array<{ id: AdminScreen; label: string; icon: React.ReactNode; badge?: string }> = [
     { id: 'dashboard', label: 'لوحة التحكم الرئيسية', icon: <LayoutDashboard size={20} /> },
     { id: 'users', label: 'إدارة المستخدمين والصلاحيات', icon: <Users size={20} /> },
@@ -96,7 +119,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <div
-            title="منصة ارتقاء للتقييم المدرسي"
+            title={SYSTEM_NAME}
             style={{
               width: '40px',
               height: '40px',
@@ -117,7 +140,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
           {(!isCollapsed || isMobile) && (
             <div>
               <div style={{ fontSize: '1rem', fontWeight: 800, color: '#fff', letterSpacing: '0.02em', whiteSpace: 'nowrap' }}>
-                منصة ارتقاء
+                {SYSTEM_SHORT_NAME}
               </div>
               <div style={{ fontSize: '0.7rem', color: '#94A3B8', marginTop: '2px', whiteSpace: 'nowrap' }}>
                 بوابة مسؤول النظام المركزي
@@ -305,7 +328,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
         }}
       >
         <div
-          title="المهندس عادل ناصر - مدير النظام المركزي (SYS)"
+          title={`${displayName} - ${displayRole}`}
           style={{
             display: 'flex',
             alignItems: 'center',
@@ -329,39 +352,64 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
               flexShrink: 0,
             }}
           >
-            عن
+            {userInitials}
           </div>
           {(!isCollapsed || isMobile) && (
             <div>
               <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#F8FAFC', whiteSpace: 'nowrap' }}>
-                المهندس عادل ناصر
+                {displayName}
               </div>
               <div style={{ fontSize: '0.65rem', color: '#94A3B8', whiteSpace: 'nowrap' }}>
-                مدير النظام المركزي (SYS)
+                {displayRole}
               </div>
             </div>
           )}
         </div>
 
-        {onLogout && (
-          <button
-            onClick={onLogout}
-            title="تسجيل الخروج"
-            style={{
-              background: 'none',
-              border: 'none',
-              color: '#64748B',
-              cursor: 'pointer',
-              padding: '6px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              borderRadius: '6px',
-            }}
-          >
-            <LogOut size={16} />
-          </button>
-        )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+          {onOpenChangePassword && (
+            <button
+              onClick={onOpenChangePassword}
+              title="تغيير كلمة المرور"
+              style={{
+                background: 'none',
+                border: 'none',
+                color: '#94A3B8',
+                cursor: 'pointer',
+                padding: '6px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderRadius: '6px',
+                transition: 'color 0.15s ease',
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.color = '#38BDF8')}
+              onMouseLeave={(e) => (e.currentTarget.style.color = '#94A3B8')}
+            >
+              <KeyRound size={16} />
+            </button>
+          )}
+
+          {onLogout && (
+            <button
+              onClick={onLogout}
+              title="تسجيل الخروج"
+              style={{
+                background: 'none',
+                border: 'none',
+                color: '#64748B',
+                cursor: 'pointer',
+                padding: '6px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderRadius: '6px',
+              }}
+            >
+              <LogOut size={16} />
+            </button>
+          )}
+        </div>
       </div>
     </aside>
   );

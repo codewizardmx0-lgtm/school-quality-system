@@ -1,6 +1,7 @@
 import React from 'react';
 import { useAuth } from '../features/auth/AuthContext';
 import { theme } from '../styles/theme';
+import { SYSTEM_SHORT_NAME } from '../constants/systemConstants';
 import {
   LayoutDashboard,
   School,
@@ -155,7 +156,7 @@ export const Sidebar: React.FC<{ activeTab: string; onSelectTab: (tab: string) =
                 lineHeight: '1.2',
               }}
             >
-              التقييم الذاتي
+              {SYSTEM_SHORT_NAME}
             </div>
             <div
               style={{
@@ -164,7 +165,7 @@ export const Sidebar: React.FC<{ activeTab: string; onSelectTab: (tab: string) =
                 fontWeight: theme.typography.fontWeights.semibold,
               }}
             >
-              والاعتماد المدرسي
+              لتقويم جودة المدارس
             </div>
           </div>
         </div>

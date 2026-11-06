@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
-import { X, ShieldCheck, UserMinus, AlertCircle } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { X, ShieldCheck, UserMinus, AlertCircle, User as UserIcon } from 'lucide-react';
 import { theme } from '../../theme';
 import { schoolsApi } from '../../api/schoolsApi';
 import { usersApi } from '../../api/usersApi';
+import { SearchableSelect } from '../common/SearchableSelect';
 import type { School, User } from '../../types/admin.types';
 
 interface AssignPrincipalModalProps {
@@ -55,6 +56,25 @@ export const AssignPrincipalModal: React.FC<AssignPrincipalModalProps> = ({
       ignore = true;
     };
   }, [isOpen]);
+
+  const principalOptions = useMemo(() => {
+    if (!school) return [];
+    return principalsList.map((p) => {
+      const isCurrent = p.schoolId === school.schoolId;
+      const isAnotherSchool = p.schoolId && p.schoolId !== school.schoolId;
+      return {
+        value: p.userId,
+        label: p.fullName,
+        code: `@${p.username}`,
+        sublabel: isCurrent
+          ? '⭐ [المدير الحالي]'
+          : isAnotherSchool
+          ? `🔒 [مسند لمدرسة أخرى]`
+          : '✅ [متاح للإسناد]',
+        disabled: Boolean(isAnotherSchool),
+      };
+    });
+  }, [principalsList, school]);
 
   if (!isOpen || !school) return null;
 
@@ -230,43 +250,24 @@ export const AssignPrincipalModal: React.FC<AssignPrincipalModalProps> = ({
             💡 <strong>قاعدة الإسناد:</strong> لكل مدرسة مدير واحد فقط. عند إسناد مدير جديد لمدرسة تحتوي مديراً، سيتم فك ارتباط المدير السابق تلقائياً مع توثيق ذلك في النظام.
           </div>
 
-          {/* Select Principal */}
+          {/* Select Principal (Smart Searchable Dropdown) */}
           <div>
             <label style={{ display: 'block', fontSize: theme.typography.fontSizes.xs, fontWeight: 600, color: theme.colors.neutral[700], marginBottom: '8px' }}>
               اختر مدير المدرسة المراد إسناده:
             </label>
-            <select
-              value={selectedUserId}
-              onChange={(e) => {
-                setSelectedUserId(Number(e.target.value) || '');
+            <SearchableSelect
+              options={principalOptions}
+              value={selectedUserId || null}
+              onChange={(val) => {
+                setSelectedUserId(val ? Number(val) : '');
                 setError('');
               }}
-              style={{
-                width: '100%',
-                padding: '10px 12px',
-                borderRadius: theme.radii.lg,
-                border: `1px solid ${error ? '#DC2626' : theme.colors.neutral[300]}`,
-                fontSize: theme.typography.fontSizes.sm,
-                outline: 'none',
-                fontFamily: theme.typography.fontFamily.sans,
-                backgroundColor: '#FAFAFA',
-              }}
-            >
-              <option value="">-- اضغط للاختيار من قائمة المدراء المعتمدين --</option>
-              {principalsList.map((p) => {
-                const isCurrent = p.schoolId === school.schoolId;
-                const isAnotherSchool = p.schoolId && p.schoolId !== school.schoolId;
-                return (
-                  <option
-                    key={p.userId}
-                    value={p.userId}
-                    disabled={Boolean(isAnotherSchool)}
-                  >
-                    {p.fullName} ({p.username}) {isCurrent ? '⭐ [المدير الحالي]' : isAnotherSchool ? '🔒 [مسند لمدرسة أخرى - لا يمكن اختياره]' : '✅ [متاح للإسناد]'}
-                  </option>
-                );
-              })}
-            </select>
+              placeholder="-- اضغط للبحث واختيار مدير المدرسة --"
+              searchPlaceholder="ابحث باسم المدير، اسم المستخدم أو البريد..."
+              emptyText="لا يوجد مدراء مطابقين للبحث"
+              icon={<UserIcon size={16} color="#059669" style={{ flexShrink: 0 }} />}
+              error={error}
+            />
             {error && (
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#DC2626', fontSize: '0.75rem', marginTop: '6px' }}>
                 <AlertCircle size={14} />

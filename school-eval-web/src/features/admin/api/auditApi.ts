@@ -14,7 +14,8 @@ export interface AuditQueryParams {
   userId?: number;
   timeRange?: string;
   page?: number;
-  perPage?: number;
+  perPage?: number | 'all';
+  all?: boolean;
 }
 
 /**

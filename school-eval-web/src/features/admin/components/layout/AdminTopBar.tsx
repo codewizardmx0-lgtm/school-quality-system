@@ -9,6 +9,7 @@ import {
 import { theme } from '../../theme';
 import { formatArabicDate } from '../../utils/dateUtils';
 import type { AdminScreen } from '../../types/admin.types';
+import { SYSTEM_SHORT_NAME } from '../../../../constants/systemConstants';
 
 interface AdminTopBarProps {
   activeScreen: AdminScreen;
@@ -21,7 +22,7 @@ interface AdminTopBarProps {
 }
 
 const SCREEN_TITLES: Record<AdminScreen, { title: string; breadcrumb: string }> = {
-  dashboard: { title: 'لوحة التحكم الرئيسية وإدارة العمليات', breadcrumb: 'منصة ارتقاء / لوحة التحكم المركزية' },
+  dashboard: { title: 'لوحة التحكم الرئيسية وإدارة العمليات', breadcrumb: `${SYSTEM_SHORT_NAME} / لوحة التحكم المركزية` },
   users: { title: 'إدارة المستخدمين والأدوار', breadcrumb: 'لوحة التحكم / المستخدمين والصلاحيات' },
   schools: { title: 'دليل المدارس والربط الإداري', breadcrumb: 'لوحة التحكم / المدارس والمديريات' },
   audit: { title: 'سجل التدقيق الأمني ومراقبة النزاهة', breadcrumb: 'لوحة التحكم / الأمان والرقابة' },

@@ -34,12 +34,15 @@ class UpdateUserRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'fullName.required' => 'الاسم الكامل مطلوب.',
-            'email.required'    => 'البريد الإلكتروني مطلوب.',
-            'email.email'       => 'صيغة البريد الإلكتروني غير صحيحة.',
-            'email.unique'      => 'البريد الإلكتروني مستخدم بالفعل بحساب آخر.',
-            'password.min'      => 'كلمة المرور يجب ألا تقل عن 8 أحرف.',
-            'status.in'         => 'حالة الحساب يجب أن تكون Active أو Disabled.',
+            'username.required'   => 'اسم المستخدم مطلوب.',
+            'username.unique'     => 'اسم المستخدم مسجل مسبقاً بحساب آخر.',
+            'username.alpha_dash' => 'اسم المستخدم يجب أن يحتوي على أحرف وأرقام وشرطات فقط.',
+            'fullName.required'   => 'الاسم الكامل مطلوب.',
+            'email.required'      => 'البريد الإلكتروني مطلوب.',
+            'email.email'         => 'صيغة البريد الإلكتروني غير صحيحة.',
+            'email.unique'        => 'البريد الإلكتروني مستخدم بالفعل بحساب آخر.',
+            'password.min'        => 'كلمة المرور يجب ألا تقل عن 8 أحرف.',
+            'status.in'           => 'حالة الحساب يجب أن تكون Active أو Disabled.',
         ];
     }
 }

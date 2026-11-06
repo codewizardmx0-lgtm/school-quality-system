@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from './AuthContext';
 import { theme } from '../../styles/theme';
+import { SYSTEM_NAME, SYSTEM_TAGLINE, SYSTEM_DESCRIPTION } from '../../constants/systemConstants';
 import {
   Lock,
   User as UserIcon,
@@ -111,7 +112,7 @@ export const LoginPage: React.FC = () => {
                   color: theme.colors.primary[700],
                 }}
               >
-                بوابة الاعتماد وضبط الجودة الوطنية
+                {SYSTEM_TAGLINE}
               </span>
             </div>
 
@@ -133,7 +134,7 @@ export const LoginPage: React.FC = () => {
                 margin: 0,
               }}
             >
-              منصة التقييم الذاتي والتحسين المدرسي — يرجى إدخال بيانات حسابك
+              {SYSTEM_NAME} — يرجى إدخال بيانات حسابك
             </p>
           </div>
 
@@ -502,7 +503,7 @@ export const LoginPage: React.FC = () => {
                 fontWeight: theme.typography.fontWeights.semibold,
               }}
             >
-              المنظومة الوطنية المعتمدة — دورة 2026/2027
+              {SYSTEM_NAME} — دورة 2026/2027
             </span>
           </div>
 
@@ -528,8 +529,8 @@ export const LoginPage: React.FC = () => {
               maxWidth: '520px',
             }}
           >
-            منظومة رقمية رائدة لأتمتة التقييم الذاتي وبناء خطط التحسين المدرسي ورفع الشواهد،
-            معززة بنظام ذكاء اصطناعي استشاري يدعم فرق الجودة والإشراف التربوي.
+            {SYSTEM_DESCRIPTION}
+
           </p>
         </div>
 

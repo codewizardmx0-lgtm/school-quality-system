@@ -1,4 +1,4 @@
-﻿import React from 'react';
+import React from 'react';
 import { Filter, User, Clock, RefreshCw } from 'lucide-react';
 import { theme } from '../../theme';
 import { AUDIT_EVENT_LABELS } from '../../hooks/useAdminAudit';
@@ -14,6 +14,8 @@ interface AuditFilterBarProps {
   isLoading: boolean;
   totalFiltered: number;
   totalLogs: number;
+  currentPage?: number;
+  perPage?: number;
   availableEventTypes?: string[];
   availableActors?: string[];
 }
@@ -33,8 +35,10 @@ export const AuditFilterBar: React.FC<AuditFilterBarProps> = ({
   onTimeScopeChange,
   onRefresh,
   isLoading,
-  totalFiltered,
+  totalFiltered: _totalFiltered,
   totalLogs,
+  currentPage = 1,
+  perPage = 15,
   availableEventTypes = [],
   availableActors = [],
 }) => {
@@ -134,7 +138,7 @@ export const AuditFilterBar: React.FC<AuditFilterBarProps> = ({
       </button>
 
       <span style={{ marginRight: 'auto', fontSize: '0.75rem', color: theme.colors.neutral[400] }}>
-        عرض {totalFiltered} من أصل {totalLogs} سجلاً موثقاً
+        {totalLogs > 0 ? `عرض ${(currentPage - 1) * perPage + 1}-${Math.min(currentPage * perPage, totalLogs)} من أصل ${totalLogs} سجلاً موثقاً` : 'لا توجد سجلات موثقة'}
       </span>
     </div>
   );

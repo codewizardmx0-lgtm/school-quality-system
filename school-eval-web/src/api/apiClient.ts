@@ -73,6 +73,23 @@ apiClient.interceptors.response.use(
       );
     }
 
+    // 503 Maintenance Mode: إشعار وضع الصيانة المجدولة
+    if (status === 503) {
+      window.dispatchEvent(
+        new CustomEvent('app:maintenance', {
+          detail: { message: responseData?.message || 'النظام في وضع الصيانة المجدولة حاليًا، يرجى المحاولة لاحقًا.' },
+        })
+      );
+      return Promise.reject(
+        new ApiError(
+          responseData?.message || 'النظام في وضع الصيانة المجدولة حاليًا، يرجى المحاولة لاحقًا.',
+          503,
+          null,
+          responseData
+        )
+      );
+    }
+
     // 500 Server Error (§3 & §4): رسالة خادم عامة غير كاشفة
     if (status === 500) {
       return Promise.reject(

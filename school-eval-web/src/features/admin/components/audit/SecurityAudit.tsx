@@ -4,7 +4,7 @@ import {
   Activity,
   AlertOctagon,
   CheckCircle2,
-  Download,
+
   ShieldX,
   ArrowRight,
   Lock,
@@ -16,7 +16,7 @@ import { StatusBadge } from '../common/StatusBadge';
 import { AuditFilterBar } from './AuditFilterBar';
 import { BlockedIpsModal } from './BlockedIpsModal';
 import { useAdminAudit } from '../../hooks/useAdminAudit';
-import { exportToExcel, downloadCsv } from '../../utils/exportUtils';
+import { exportToExcel, formatExportFilename } from '../../utils/exportUtils';
 import { FileSpreadsheet, ChevronRight, ChevronLeft } from 'lucide-react';
 import { formatRelativeArabic, formatArabicDateTime } from '../../utils/dateUtils';
 import type { AdminScreen } from '../../types/admin.types';
@@ -49,58 +49,58 @@ export const SecurityAudit: React.FC<SecurityAuditProps> = ({ onNavigate, addToa
     totalPages,
     totalCount,
     fetchData,
+    fetchAllMatchingLogs,
   } = useAdminAudit();
+  const [isExporting, setIsExporting] = useState(false);
 
   // Modals
   const [isBlockedIpsOpen, setIsBlockedIpsOpen] = useState(false);
 
   const handleRefresh = async () => { await fetchData(); setLastUpdated(new Date().toLocaleTimeString('ar-YE', { hour: '2-digit', minute: '2-digit' })); };
 
-  // Export audit data
-  const getAuditData = () => {
-    const headers = [
-      'معرف السجل',
-      'الوقت والتاريخ',
-      'الفاعل',
-      'الدور',
-      'كود الدور',
-      'نوع الحدث',
-      'التصنيف',
-      'البيان والتفاصيل',
-      'البصمة الرقمية (SHA-256)',
-      'عنوان IP',
-      'الموقع الجغرافي',
-      'بيانات الجهاز',
-      'حالة الأمان',
-    ];
-    const rows = filteredLogs.map((l) => [
-      l.logId,
-      formatArabicDateTime(l.timestamp),
-      l.actorName,
-      l.actorRole,
-      l.actorRoleCode,
-      l.eventType,
-      l.eventCategory,
-      l.description,
-      l.digitalHash,
-      l.ipAddress,
-      l.location,
-      l.deviceInfo,
-      l.securityStatus === 'verified' ? 'موثق' : 'محظور',
-    ]);
-    return { headers, rows };
-  };
-
-  const handleExportExcel = () => {
-    const { headers, rows } = getAuditData();
-    exportToExcel('سجل_التدقيق_الامني.xlsx', 'سجل التدقيق', headers, rows);
-    addToast('success', 'تم تصدير سجل التدقيق الأمني بصيغة Excel بنجاح');
-  };
-
-  const handleExportCsv = () => {
-    const { headers, rows } = getAuditData();
-    downloadCsv('سجل_التدقيق_الامني.csv', headers, rows);
-    addToast('success', 'تم تصدير سجل التدقيق الأمني بصيغة CSV بنجاح');
+  // Export full audit data matching active filters
+  const handleExportExcel = async () => {
+    try {
+      setIsExporting(true);
+      const allLogs = await fetchAllMatchingLogs();
+      const headers = [
+        'معرف السجل',
+        'الوقت والتاريخ',
+        'الفاعل',
+        'الدور',
+        'كود الدور',
+        'نوع الحدث',
+        'التصنيف',
+        'البيان والتفاصيل',
+        'البصمة الرقمية (SHA-256)',
+        'عنوان IP',
+        'الموقع الجغرافي',
+        'بيانات الجهاز',
+        'حالة الأمان',
+      ];
+      const rows = allLogs.map((l) => [
+        l.logId,
+        formatArabicDateTime(l.timestamp),
+        l.actorName,
+        l.actorRole,
+        l.actorRoleCode,
+        l.eventType,
+        l.eventCategory,
+        (l.descriptionAr || l.description),
+        l.digitalHash,
+        l.ipAddress,
+        l.location,
+        l.deviceInfo,
+        l.securityStatus === 'verified' ? 'موثق' : 'محظور',
+      ]);
+      const filename = formatExportFilename('سجل_التدقيق_الامني', 'xlsx');
+      exportToExcel(filename, 'سجل التدقيق', headers, rows);
+      addToast('success', `تم تصدير ${allLogs.length} سجلاً بنجاح إلى ملف Excel (.xlsx)`);
+    } catch {
+      addToast('error', 'حدث خطأ أثناء تصدير سجل التدقيق الأمني');
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   return (
@@ -146,6 +146,7 @@ export const SecurityAudit: React.FC<SecurityAuditProps> = ({ onNavigate, addToa
 
           <button
             onClick={handleExportExcel}
+            disabled={isExporting}
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -157,34 +158,16 @@ export const SecurityAudit: React.FC<SecurityAuditProps> = ({ onNavigate, addToa
               color: '#065F46',
               fontSize: theme.typography.fontSizes.sm,
               fontWeight: 700,
-              cursor: 'pointer',
+              cursor: isExporting ? 'not-allowed' : 'pointer',
+              opacity: isExporting ? 0.7 : 1,
               fontFamily: theme.typography.fontFamily.sans,
               boxShadow: theme.shadows.sm,
             }}
           >
             <FileSpreadsheet size={16} color="#059669" />
-            تصدير Excel (.xlsx)
+            {isExporting ? 'جاري تصدير السجل...' : 'تصدير Excel (.xlsx)'}
           </button>
-          <button
-            onClick={handleExportCsv}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '9px 12px',
-              borderRadius: theme.radii.lg,
-              border: `1px solid ${theme.colors.neutral[300]}`,
-              backgroundColor: theme.colors.neutral.white,
-              color: theme.colors.neutral[700],
-              fontSize: theme.typography.fontSizes.sm,
-              fontWeight: 600,
-              cursor: 'pointer',
-              fontFamily: theme.typography.fontFamily.sans,
-            }}
-          >
-            <Download size={16} />
-            تصدير CSV
-          </button>
+          
 
 
         </div>
@@ -264,8 +247,10 @@ export const SecurityAudit: React.FC<SecurityAuditProps> = ({ onNavigate, addToa
         onTimeScopeChange={setTimeScope}
         onRefresh={handleRefresh}
         isLoading={loading}
-        totalFiltered={filteredLogs.length}
-        totalLogs={logs.length}
+        totalFiltered={logs.length}
+        currentPage={currentPage}
+        perPage={15}
+        totalLogs={totalCount}
         availableEventTypes={availableEventTypes}
         availableActors={availableActors}
       />
@@ -434,7 +419,7 @@ export const SecurityAudit: React.FC<SecurityAuditProps> = ({ onNavigate, addToa
                   {/* Description & Digital Hash */}
                   <td style={{ padding: '14px 20px', maxWidth: '320px' }}>
                     <div style={{ fontSize: theme.typography.fontSizes.xs, color: theme.colors.neutral[700], lineHeight: 1.5 }}>
-                      {log.description}
+                      {log.descriptionAr || log.description || "عملية موثقة في النظام"}
                     </div>
                     <div style={{ marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
                       <span

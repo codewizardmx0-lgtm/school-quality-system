@@ -1,13 +1,13 @@
 /**
  * useAdminAudit.ts
- * React Hook managing Security Audit Trail, Blocked IPs, and CSV Export
+ * React Hook managing Security Audit Trail, Blocked IPs, and Filtered Audit Export
  */
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { auditApi } from '../api/auditApi';
 import { usersApi } from '../api/usersApi';
-import { downloadEncryptedLog } from '../utils/exportUtils';
-import { formatArabicDateTime } from '../utils/dateUtils';
+
+
 import type { AuditLogEntry, BlockedIp, User } from '../types/admin.types';
 
 export const AUDIT_EVENT_LABELS: Record<string, string> = {
@@ -161,41 +161,22 @@ export function useAdminAudit() {
     });
   }, [logs, actionType, actor, timeScope]);
 
-  const exportAuditCsv = useCallback(() => {
-    const headers = [
-      'معرف السجل',
-      'التاريخ والوقت',
-      'المستخدم',
-      'الدور الوظيفي',
-      'نوع الحدث',
-      'مستوى الأمان',
-      'الوصف',
-      'عنوان IP',
-      'الموقع الجغرافي',
-      'البصمة الرقمية',
-      'الحالة الأمنية',
-    ];
-
-    const rows = filteredLogs.map((l) => [
-      l.logId,
-      formatArabicDateTime(l.timestamp),
-      l.actorName,
-      l.actorRole,
-      l.eventType,
-      l.eventCategory,
-      l.description,
-      l.ipAddress,
-      l.location,
-      l.digitalHash,
-      l.securityStatus === 'verified' ? 'موثوق ومحمي' : 'محظور',
-    ]);
-
-    downloadEncryptedLog(
-      `audit_log_${new Date().toISOString().slice(0, 10)}.csv`,
-      headers,
-      rows
-    );
-  }, [filteredLogs]);
+  const fetchAllMatchingLogs = useCallback(async (): Promise<AuditLogEntry[]> => {
+    try {
+      const selectedUser = actor !== 'الكل' ? rawUsers.find((u) => u.fullName === actor) : null;
+      const res = await auditApi.getAuditLogs({
+        actionType: actionType !== 'الكل' ? actionType : undefined,
+        userId: selectedUser ? selectedUser.userId : undefined,
+        all: true,
+      });
+      if (res && res.data && Array.isArray(res.data)) {
+        return res.data;
+      }
+      return filteredLogs;
+    } catch {
+      return filteredLogs;
+    }
+  }, [actionType, actor, rawUsers, filteredLogs]);
 
   return {
     logs,
@@ -217,6 +198,6 @@ export function useAdminAudit() {
     totalCount,
     fetchData,
     unblockIp,
-    exportAuditCsv,
+    fetchAllMatchingLogs,
   };
 }

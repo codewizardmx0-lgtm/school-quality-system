@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { X, UserMinus, AlertCircle, Plus, Users } from 'lucide-react';
 import { theme } from '../../theme';
 import { schoolsApi } from '../../api/schoolsApi';
 import { usersApi } from '../../api/usersApi';
+import { SearchableSelect } from '../common/SearchableSelect';
 import type { School, User } from '../../types/admin.types';
 
 interface LinkEvaluatorModalProps {
@@ -55,12 +56,33 @@ export const LinkEvaluatorModal: React.FC<LinkEvaluatorModalProps> = ({
     loadUsers();
   }, [isOpen]);
 
-  if (!isOpen || !school) return null;
+  const currentEvaluators = useMemo(() => {
+    if (!school) return [];
+    return school.evaluators && school.evaluators.length > 0
+      ? school.evaluators
+      : evaluatorsList.filter((u) => u.schoolId === school.schoolId);
+  }, [school, evaluatorsList]);
 
-  // Real evaluators currently linked to this school (from School resource evaluators or from users list)
-  const currentEvaluators = school.evaluators && school.evaluators.length > 0
-    ? school.evaluators
-    : evaluatorsList.filter((u) => u.schoolId === school.schoolId);
+  const evaluatorOptions = useMemo(() => {
+    if (!school) return [];
+    return evaluatorsList.map((ev) => {
+      const isAlreadyInThisSchool = currentEvaluators.some((c) => c.userId === ev.userId);
+      const isAnotherSchool = ev.schoolId && ev.schoolId !== school.schoolId;
+      return {
+        value: ev.userId,
+        label: ev.fullName,
+        code: `@${ev.username}`,
+        sublabel: isAlreadyInThisSchool
+          ? '⭐ [مسند لهذه المدرسة]'
+          : isAnotherSchool
+          ? '🔒 [مسند لمدرسة أخرى]'
+          : '✅ [متاح للإسناد]',
+        disabled: Boolean(isAlreadyInThisSchool || isAnotherSchool),
+      };
+    });
+  }, [evaluatorsList, currentEvaluators, school]);
+
+  if (!isOpen || !school) return null;
 
   const handleAssign = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -160,10 +182,10 @@ export const LinkEvaluatorModal: React.FC<LinkEvaluatorModalProps> = ({
             </div>
             <div>
               <h2 style={{ fontSize: theme.typography.fontSizes.lg, fontWeight: 700, margin: 0, color: theme.colors.neutral[900] }}>
-                فريق التقييم المدرسي
+                إدارة مقيّمي المدرسة
               </h2>
               <p style={{ fontSize: theme.typography.fontSizes.xs, margin: 0, color: theme.colors.neutral[500] }}>
-                مدرسة: {school.schoolName}
+                مدرسة: {school.schoolName} ({school.schoolCode})
               </p>
             </div>
           </div>
@@ -182,25 +204,29 @@ export const LinkEvaluatorModal: React.FC<LinkEvaluatorModalProps> = ({
           </button>
         </div>
 
-        {/* Content Body */}
+        {/* Modal Content */}
         <div style={{ overflowY: 'auto', padding: '24px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
-          {/* Current Evaluators List */}
+          {/* Linked Evaluators List */}
           <div>
-            <h4 style={{ fontSize: theme.typography.fontSizes.sm, fontWeight: 700, margin: '0 0 10px 0', color: theme.colors.neutral[800] }}>
-              المقيّمون المسندون حالياً ({currentEvaluators.length}):
-            </h4>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+              <h3 style={{ fontSize: theme.typography.fontSizes.sm, fontWeight: 700, margin: 0, color: theme.colors.neutral[800] }}>
+                المقيّمون المسندون حالياً ({currentEvaluators.length})
+              </h3>
+            </div>
+
             {currentEvaluators.length === 0 ? (
               <div
                 style={{
-                  backgroundColor: '#FFFBEB',
-                  border: '1px solid #FDE68A',
+                  padding: '20px',
                   borderRadius: theme.radii.lg,
-                  padding: '12px 16px',
-                  color: '#92400E',
-                  fontSize: '0.8rem',
+                  border: '1px dashed #CBD5E1',
+                  textAlign: 'center',
+                  backgroundColor: '#F8FAFC',
                 }}
               >
-                ⚠️ لا يوجد أي مقيّم مسند لهذه المدرسة حالياً. يرجى إضافة مقيّم واحد على الأقل لتجهيز المدرسة للتقييم.
+                <p style={{ margin: 0, fontSize: theme.typography.fontSizes.xs, color: theme.colors.neutral[500] }}>
+                  لا يوجد مقيّمون مسندون لهذه المدرسة حالياً. استخدم النموذج أدناه لإسناد مقيّم.
+                </p>
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -212,9 +238,10 @@ export const LinkEvaluatorModal: React.FC<LinkEvaluatorModalProps> = ({
                       alignItems: 'center',
                       justifyContent: 'space-between',
                       padding: '10px 14px',
-                      backgroundColor: '#F8FAFC',
                       borderRadius: theme.radii.lg,
                       border: `1px solid ${theme.colors.neutral[200]}`,
+                      backgroundColor: '#FFFFFF',
+                      boxShadow: '0 1px 2px rgba(0,0,0,0.02)',
                     }}
                   >
                     <div>
@@ -252,7 +279,7 @@ export const LinkEvaluatorModal: React.FC<LinkEvaluatorModalProps> = ({
             )}
           </div>
 
-          {/* Add Evaluator Form */}
+          {/* Add Evaluator Form (Smart Searchable Dropdown) */}
           <form
             onSubmit={handleAssign}
             style={{
@@ -271,38 +298,19 @@ export const LinkEvaluatorModal: React.FC<LinkEvaluatorModalProps> = ({
             </div>
 
             <div>
-              <select
-                value={selectedUserId}
-                onChange={(e) => {
-                  setSelectedUserId(Number(e.target.value) || '');
+              <SearchableSelect
+                options={evaluatorOptions}
+                value={selectedUserId || null}
+                onChange={(val) => {
+                  setSelectedUserId(val ? Number(val) : '');
                   setError('');
                 }}
-                style={{
-                  width: '100%',
-                  padding: '10px 12px',
-                  borderRadius: theme.radii.lg,
-                  border: `1px solid ${error ? '#DC2626' : theme.colors.neutral[300]}`,
-                  fontSize: theme.typography.fontSizes.sm,
-                  outline: 'none',
-                  fontFamily: theme.typography.fontFamily.sans,
-                  backgroundColor: '#FAFAFA',
-                }}
-              >
-                <option value="">-- اضغط لاختيار مقيّم من القائمة المعتمدة --</option>
-                {evaluatorsList.map((ev) => {
-                  const isAlreadyInThisSchool = currentEvaluators.some((c) => c.userId === ev.userId);
-                  const isAnotherSchool = ev.schoolId && ev.schoolId !== school.schoolId;
-                  return (
-                    <option
-                      key={ev.userId}
-                      value={ev.userId}
-                      disabled={Boolean(isAlreadyInThisSchool || isAnotherSchool)}
-                    >
-                      {ev.fullName} ({ev.username}) {isAlreadyInThisSchool ? '⭐ [مسند لهذه المدرسة]' : isAnotherSchool ? '🔒 [مسند لمدرسة أخرى]' : '✅ [متاح للإسناد]'}
-                    </option>
-                  );
-                })}
-              </select>
+                placeholder="-- اضغط للبحث واختيار مقيّم المدرسة --"
+                searchPlaceholder="ابحث باسم المقيّم، اسم المستخدم أو البريد..."
+                emptyText="لا يوجد مقيّمون مطابقون للبحث"
+                icon={<Users size={16} color="#4F46E5" style={{ flexShrink: 0 }} />}
+                error={error}
+              />
               {error && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#DC2626', fontSize: '0.75rem', marginTop: '6px' }}>
                   <AlertCircle size={14} />

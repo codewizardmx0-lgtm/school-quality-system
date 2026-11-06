@@ -2,13 +2,15 @@
 <html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <title>التقرير التشغيلي والتنفيذي الشامل - منصة ارتقاء</title>
+    <title>التقرير التنفيذي الشامل - منظومة ارتقاء لتقويم جودة المدارس</title>
     <style>
         @page {
-            margin-top: 12mm;
-            margin-bottom: 12mm;
+            margin-top: 46mm;
+            margin-bottom: 20mm;
             margin-left: 12mm;
             margin-right: 12mm;
+            margin-header: 10mm;
+            margin-footer: 10mm;
             header: html_reportHeader;
             footer: html_reportFooter;
         }
@@ -23,8 +25,8 @@
         .header-table {
             width: 100%;
             border-bottom: 2px solid #0f766e;
-            padding-bottom: 8px;
-            margin-bottom: 12px;
+            padding-bottom: 4px;
+            margin-bottom: 2px;
         }
         .header-right {
             width: 35%;
@@ -168,7 +170,7 @@
                     قطاع التوجيه والمناهج • إدارة الجودة
                 </td>
                 <td class="header-center">
-                    <h1>منصة ارتقاء الوطنية</h1>
+                    <h1>منظومة ارتقاء لتقويم جودة المدارس</h1>
                     <h2>التقرير التنفيذي الشامل للجاهزية والمدارس</h2>
                 </td>
                 <td class="header-left">
@@ -183,12 +185,12 @@
     <!-- HTML Footer -->
     <htmlpagefooter name="reportFooter">
         <div class="footer-note">
-            منظومة تقويم جودة المدارس (ارتقاء) • وثيقة رسمية صادرة آلياً • صفحة {PAGENO} من {nbpg} • البصمة الرقمية: SHA-{{ $digital_hash }}
+            منظومة ارتقاء لتقويم جودة المدارس • وثيقة رسمية صادرة آلياً • صفحة {PAGENO} من {nbpg} • البصمة الرقمية: SHA-{{ $digital_hash }}
         </div>
     </htmlpagefooter>
 
     <!-- Section 1: KPI Stats Grid -->
-    <div class="section-box" style="margin-top: 10px;">
+    <div class="section-box">
         <div class="section-title">أولاً: ملخص المؤشرات العامة للجاهزية والمنظومة</div>
         <table class="stats-grid">
             <tr>
