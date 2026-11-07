@@ -431,7 +431,22 @@ export const ImprovementPlanPage: React.FC<ImprovementPlanPageProps> = ({
                         title="إرفاق شاهد أو وثيقة إثبات لتنفيذ الإجراء"
                       >
                         <Paperclip size={13} />
-                        إرفاق شاهد
+                        <span>إرفاق شاهد</span>
+                        {action.evidences && action.evidences.length > 0 && (
+                          <span
+                            style={{
+                              backgroundColor: '#DBEAFE',
+                              color: '#1E40AF',
+                              fontSize: '11px',
+                              fontWeight: 700,
+                              padding: '1px 6px',
+                              borderRadius: '10px',
+                              marginRight: '3px',
+                            }}
+                          >
+                            {action.evidences.length}
+                          </span>
+                        )}
                       </button>
                     )}
                     <button

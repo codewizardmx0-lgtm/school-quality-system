@@ -420,9 +420,11 @@ export const RubricAssessmentPage: React.FC<RubricAssessmentPageProps> = ({
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '12px',
           backgroundColor: '#FFFFFF',
           borderRadius: '12px',
-          padding: '16px 24px',
+          padding: '16px 20px',
           border: '1px solid #E2E8F0',
           boxShadow: '0 2px 8px rgba(0,0,0,0.05)',
         }}

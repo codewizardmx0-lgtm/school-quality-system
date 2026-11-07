@@ -14,7 +14,7 @@ export const DraftReportPreview: React.FC<DraftReportPreviewProps> = ({
       style={{
         backgroundColor: '#FFFFFF',
         borderRadius: '14px',
-        padding: '32px',
+        padding: '24px',
         border: '1px solid #E2E8F0',
         boxShadow: '0 2px 10px rgba(0,0,0,0.04)',
       }}
@@ -25,6 +25,8 @@ export const DraftReportPreview: React.FC<DraftReportPreviewProps> = ({
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '14px',
           borderBottom: '2px solid #E2E8F0',
           paddingBottom: '20px',
           marginBottom: '24px',
@@ -111,7 +113,7 @@ export const DraftReportPreview: React.FC<DraftReportPreviewProps> = ({
         خلاصة مؤشرات المعايير الوطنية السبعة
       </h3>
       <div style={{ overflowX: 'auto', width: '100%', maxWidth: '100%' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'right', marginBottom: '24px' }}>
+        <table style={{ minWidth: '600px', width: '100%', borderCollapse: 'collapse', textAlign: 'right', marginBottom: '24px' }}>
           <thead>
             <tr style={{ backgroundColor: '#F1F5F9', borderBottom: '1px solid #CBD5E1' }}>
               <th style={{ padding: '10px 12px', fontSize: '12px', fontWeight: 700 }}>المعيار الوطني</th>

@@ -41,7 +41,8 @@ export const CycleProgressTracker: React.FC<CycleProgressTrackerProps> = ({ step
       </div>
 
       {/* Steps bar */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'relative' }}>
+      <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', width: '100%', paddingBottom: '8px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'relative', minWidth: '580px', padding: '0 8px' }}>
         {steps.map((step, idx) => {
           const isCompleted = step.status === 'completed';
           const isCurrent = step.status === 'current';
@@ -127,6 +128,7 @@ export const CycleProgressTracker: React.FC<CycleProgressTrackerProps> = ({ step
             </React.Fragment>
           );
         })}
+        </div>
       </div>
     </div>
   );

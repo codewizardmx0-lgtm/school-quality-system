@@ -190,7 +190,26 @@ export const NotificationsCenter: React.FC<NotificationsCenterProps> = ({ onNavi
 
       {/* Notifications List */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-        {filtered.map((item) => (
+        {filtered.length === 0 ? (
+          <div
+            style={{
+              padding: '48px 24px',
+              textAlign: 'center',
+              backgroundColor: '#FFFFFF',
+              borderRadius: '12px',
+              border: '1px solid #E2E8F0',
+            }}
+          >
+            <CheckCircle2 size={36} color="#059669" style={{ margin: '0 auto 10px' }} />
+            <div style={{ fontSize: '14.5px', fontWeight: 700, color: '#0F172A' }}>
+              لا توجد تنبيهات غير مقروءة حالياً
+            </div>
+            <div style={{ fontSize: '12px', color: '#64748B', marginTop: '4px' }}>
+              كافة الإشعارات الإدارية والتنبيهات الميدانية تمت قراءتها والاطلاع عليها.
+            </div>
+          </div>
+        ) : (
+          filtered.map((item) => (
           <div
             key={item.id}
             onClick={() => {
@@ -260,7 +279,8 @@ export const NotificationsCenter: React.FC<NotificationsCenterProps> = ({ onNavi
               </div>
             </div>
           </div>
-        ))}
+        ))
+        )}
       </div>
     </div>
   );

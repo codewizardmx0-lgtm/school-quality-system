@@ -84,7 +84,7 @@ export const StandardsTreePage: React.FC<StandardsTreePageProps> = ({
         </div>
 
         {/* Search Input */}
-        <div style={{ position: 'relative', width: '320px' }}>
+        <div style={{ position: 'relative', width: '100%', maxWidth: '340px' }}>
           <Search size={16} color="#94A3B8" style={{ position: 'absolute', right: '12px', top: '12px' }} />
           <input
             type="text"
@@ -141,6 +141,8 @@ export const StandardsTreePage: React.FC<StandardsTreePageProps> = ({
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'space-between',
+                  flexWrap: 'wrap',
+                  gap: '12px',
                   cursor: 'pointer',
                   userSelect: 'none',
                 }}
@@ -217,6 +219,8 @@ export const StandardsTreePage: React.FC<StandardsTreePageProps> = ({
                               display: 'flex',
                               alignItems: 'center',
                               justifyContent: 'space-between',
+                              flexWrap: 'wrap',
+                              gap: '12px',
                               padding: '12px 16px',
                               borderRadius: '8px',
                               border: '1px solid #E2E8F0',

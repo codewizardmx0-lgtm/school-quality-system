@@ -361,7 +361,7 @@ export const EvidencesRepository: React.FC<EvidencesRepositoryProps> = ({
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
           {/* Search */}
-          <div style={{ position: 'relative', width: '280px' }}>
+          <div style={{ position: 'relative', width: '100%', maxWidth: '280px' }}>
             <Search size={16} color="#94A3B8" style={{ position: 'absolute', right: '12px', top: '11px' }} />
             <input
               type="text"
@@ -677,7 +677,7 @@ export const EvidencesRepository: React.FC<EvidencesRepositoryProps> = ({
           </div>
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '16px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '16px' }}>
           {filteredEvidences.map((ev) => (
             <EvidenceCard
               key={ev.id}
