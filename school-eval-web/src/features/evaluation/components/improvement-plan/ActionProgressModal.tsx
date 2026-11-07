@@ -8,6 +8,7 @@ interface ActionProgressModalProps {
   action: ImprovementPlanAction | null;
   onUpdateAction: (actionId: number, payload: UpdateImprovementActionPayload) => Promise<void>;
   isSubmitting?: boolean;
+  readOnly?: boolean;
 }
 
 export const ActionProgressModal: React.FC<ActionProgressModalProps> = ({
@@ -16,6 +17,7 @@ export const ActionProgressModal: React.FC<ActionProgressModalProps> = ({
   action,
   onUpdateAction,
   isSubmitting = false,
+  readOnly = false,
 }) => {
   if (!isOpen || !action) return null;
 
@@ -262,29 +264,31 @@ export const ActionProgressModal: React.FC<ActionProgressModalProps> = ({
                 cursor: 'pointer',
               }}
             >
-              إلغاء
+              {readOnly ? 'إغلاق' : 'إلغاء'}
             </button>
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                padding: '9px 22px',
-                borderRadius: '8px',
-                backgroundColor: '#059669',
-                color: '#FFFFFF',
-                fontSize: '13px',
-                fontWeight: 700,
-                border: 'none',
-                cursor: 'pointer',
-                boxShadow: '0 2px 6px rgba(5, 150, 105, 0.25)',
-              }}
-            >
-              <Check size={16} />
-              <span>{isSubmitting ? 'جاري الحفظ...' : 'تحديث التقدم'}</span>
-            </button>
+            {!readOnly && (
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '9px 22px',
+                  borderRadius: '8px',
+                  backgroundColor: '#059669',
+                  color: '#FFFFFF',
+                  fontSize: '13px',
+                  fontWeight: 700,
+                  border: 'none',
+                  cursor: 'pointer',
+                  boxShadow: '0 2px 6px rgba(5, 150, 105, 0.25)',
+                }}
+              >
+                <Check size={16} />
+                <span>{isSubmitting ? 'جاري الحفظ...' : 'تحديث التقدم'}</span>
+              </button>
+            )}
           </div>
         </form>
       </div>

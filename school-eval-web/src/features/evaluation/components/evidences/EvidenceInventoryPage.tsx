@@ -19,11 +19,13 @@ import { LinkEvidenceModal } from './LinkEvidenceModal';
 interface EvidenceInventoryPageProps {
   onSuccessToast?: (msg: string) => void;
   onErrorToast?: (msg: string) => void;
+  readOnly?: boolean;
 }
 
 export const EvidenceInventoryPage: React.FC<EvidenceInventoryPageProps> = ({
   onSuccessToast,
   onErrorToast,
+  readOnly = false,
 }) => {
   const [data, setData] = useState<EvidenceInventoryData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -494,26 +496,28 @@ export const EvidenceInventoryPage: React.FC<EvidenceInventoryPageProps> = ({
                                     >
                                       {ev.title}
                                     </span>
-                                    <button
-                                      type="button"
-                                      onClick={() => handleOpenLinkModal(ev, ind, std)}
-                                      title="إدارة علاقات وربط هذا الشاهد"
-                                      style={{
-                                        padding: '2px 5px',
-                                        borderRadius: '4px',
-                                        backgroundColor: '#eff6ff',
-                                        border: '1px solid #bfdbfe',
-                                        color: '#1d4ed8',
-                                        fontSize: '10.5px',
-                                        cursor: 'pointer',
-                                        display: 'inline-flex',
-                                        alignItems: 'center',
-                                        gap: '3px',
-                                      }}
-                                    >
-                                      <Link2 size={11} />
-                                      إدارة
-                                    </button>
+                                    {!readOnly && (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleOpenLinkModal(ev, ind, std)}
+                                        title="إدارة علاقات وربط هذا الشاهد"
+                                        style={{
+                                          padding: '2px 5px',
+                                          borderRadius: '4px',
+                                          backgroundColor: '#eff6ff',
+                                          border: '1px solid #bfdbfe',
+                                          color: '#1d4ed8',
+                                          fontSize: '10.5px',
+                                          cursor: 'pointer',
+                                          display: 'inline-flex',
+                                          alignItems: 'center',
+                                          gap: '3px',
+                                        }}
+                                      >
+                                        <Link2 size={11} />
+                                        إدارة
+                                      </button>
+                                    )}
                                   </div>
                                 ))}
                               </div>

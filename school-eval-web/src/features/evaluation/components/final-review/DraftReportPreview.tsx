@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Download, ShieldCheck, Loader2 } from 'lucide-react';
+import { Download, ShieldCheck, Loader2, CheckCircle2 } from 'lucide-react';
 import { useAuth } from '../../../auth/AuthContext';
 import { evaluatorApi } from '../../api/evaluatorApi';
 import type { EvaluatorDashboardData } from '../../api/evaluationTypes';
@@ -7,16 +7,29 @@ import type { EvaluatorDashboardData } from '../../api/evaluationTypes';
 interface DraftReportPreviewProps {
   onExportPdf: () => void;
   isLocked?: boolean;
+  isPrincipal?: boolean;
   trackingCode?: string;
 }
 
 export const DraftReportPreview: React.FC<DraftReportPreviewProps> = ({
   onExportPdf,
+  isPrincipal = false,
   trackingCode,
 }) => {
   const { user } = useAuth();
   const [dashboardData, setDashboardData] = useState<EvaluatorDashboardData | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [principalNotes, setPrincipalNotes] = useState<string>(() => {
+    return localStorage.getItem('principal_review_notes') ||
+      'اطلعت إدارة المدرسة على نتائج رصد التقييم الذاتي والشواهد المودعة في المستودع ومصفوفة خطة التحسين المرفقة، وتؤكد صحة البيانات المسجلة ومطابقتها لواقع المدرسة تمهيداً للإرسال والاعتماد الوزاري.';
+  });
+  const [isSaved, setIsSaved] = useState<boolean>(false);
+
+  const handleSaveNotes = () => {
+    localStorage.setItem('principal_review_notes', principalNotes);
+    setIsSaved(true);
+    setTimeout(() => setIsSaved(false), 3000);
+  };
 
   useEffect(() => {
     let isMounted = true;
@@ -227,12 +240,74 @@ export const DraftReportPreview: React.FC<DraftReportPreviewProps> = ({
           backgroundColor: '#F0FDF4',
         }}
       >
-        <div style={{ fontSize: '13px', fontWeight: 800, color: '#065F46', marginBottom: '4px' }}>
-          اعتماد المراجعة الداخلية لمدير المدرسة
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', flexWrap: 'wrap', gap: '8px' }}>
+          <div style={{ fontSize: '13px', fontWeight: 800, color: '#065F46' }}>
+            اعتماد المراجعة الداخلية لمدير المدرسة
+          </div>
+          {isPrincipal && (
+            <span style={{ fontSize: '11px', color: '#047857', backgroundColor: '#D1FAE5', padding: '2px 8px', borderRadius: '4px', fontWeight: 700 }}>
+              صلاحية التدوين والاعتماد متاحة لمدير المدرسة
+            </span>
+          )}
         </div>
-        <p style={{ fontSize: '12.5px', color: '#166534', margin: 0, lineHeight: 1.6 }}>
-          «اطلعت إدارة المدرسة على نتائج رصد التقييم الذاتي والشواهد المودعة في المستودع ومصفوفة خطة التحسين المرفقة، وتؤكد صحة البيانات المسجلة ومطابقتها لواقع المدرسة تمهيداً للإرسال والاعتماد الوزاري.»
-        </p>
+
+        {isPrincipal ? (
+          <div>
+            <textarea
+              value={principalNotes}
+              onChange={(e) => {
+                setPrincipalNotes(e.target.value);
+                setIsSaved(false);
+              }}
+              rows={3}
+              style={{
+                width: '100%',
+                padding: '10px 12px',
+                borderRadius: '8px',
+                border: '1px solid #A7F3D0',
+                backgroundColor: '#FFFFFF',
+                color: '#0F172A',
+                fontSize: '12.5px',
+                lineHeight: 1.6,
+                fontFamily: 'inherit',
+                resize: 'vertical',
+                boxSizing: 'border-box',
+              }}
+              placeholder="اكتب ملاحظات وتوصيات المراجعة الداخلية هنا..."
+            />
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '10px' }}>
+              <button
+                type="button"
+                onClick={handleSaveNotes}
+                style={{
+                  padding: '7px 16px',
+                  borderRadius: '6px',
+                  backgroundColor: '#059669',
+                  color: '#FFFFFF',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  border: 'none',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                }}
+              >
+                <CheckCircle2 size={14} />
+                <span>حفظ وتثبيت ملاحظات المراجعة الداخلية</span>
+              </button>
+              {isSaved && (
+                <span style={{ fontSize: '11.5px', color: '#059669', fontWeight: 700 }}>
+                  ✓ تم حفظ ملاحظات المراجعة بنجاح
+                </span>
+              )}
+            </div>
+          </div>
+        ) : (
+          <p style={{ fontSize: '12.5px', color: '#166534', margin: 0, lineHeight: 1.6 }}>
+            «{principalNotes}»
+          </p>
+        )}
       </div>
     </div>
   );

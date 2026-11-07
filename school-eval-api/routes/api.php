@@ -41,6 +41,7 @@ Route::prefix('v1')->group(function () {
         Route::prefix('auth')->group(function () {
             Route::post('/logout', [AuthController::class, 'logout'])->name('api.v1.auth.logout');
             Route::get('/me', [AuthController::class, 'me'])->name('api.v1.auth.me');
+            Route::put('/profile', [AuthController::class, 'updateProfile'])->name('api.v1.auth.profile.update');
             Route::post('/password/change', [AuthController::class, 'changePassword'])
                 ->middleware('throttle:auth.password.change')
                 ->name('api.v1.auth.password.change');

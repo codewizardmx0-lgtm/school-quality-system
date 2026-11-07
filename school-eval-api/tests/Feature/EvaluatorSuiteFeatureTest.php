@@ -200,4 +200,35 @@ class EvaluatorSuiteFeatureTest extends TestCase
 
         $response->assertStatus(422); // document_id is required
     }
+
+    /**
+     * Test school principal cannot score indicators (403 Forbidden)
+     */
+    public function test_school_principal_cannot_score_indicators_403(): void
+    {
+        $principal = User::where('username', 'principal_farouq')->firstOrFail();
+
+        $response = $this->actingAs($principal, 'sanctum')
+            ->postJson('/api/v1/evaluation-results', [
+                'indicatorId' => 1,
+                'score'       => 3,
+            ]);
+
+        $response->assertStatus(403);
+    }
+
+    /**
+     * Test school principal cannot submit final evaluation (403 Forbidden)
+     */
+    public function test_school_principal_cannot_submit_final_evaluation_403(): void
+    {
+        $principal = User::where('username', 'principal_farouq')->firstOrFail();
+
+        $response = $this->actingAs($principal, 'sanctum')
+            ->postJson('/api/v1/evaluation-submissions/submit', [
+                'password' => 'DevTestPassword2026!',
+            ]);
+
+        $response->assertStatus(403);
+    }
 }

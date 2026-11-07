@@ -161,7 +161,7 @@ export const EvaluatorDashboard: React.FC<EvaluatorDashboardProps> = ({
               boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
             }}
           >
-            <span>متابعة رصد التقييم</span>
+            <span>{isLocked ? 'استعراض رصد التقييم' : 'متابعة رصد التقييم'}</span>
             <ArrowLeft size={16} />
           </button>
         </div>

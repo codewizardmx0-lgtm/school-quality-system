@@ -29,6 +29,7 @@ interface EvaluatorTopBarProps {
   isCollapsed?: boolean;
   onToggleCollapse?: () => void;
   onOpenChangePassword?: () => void;
+  onOpenProfile?: () => void;
   onLogout?: () => void;
   addToast?: (type: 'error' | 'success' | 'warning' | 'info', message: string, duration?: number) => void;
 }
@@ -43,6 +44,7 @@ export const EvaluatorTopBar: React.FC<EvaluatorTopBarProps> = ({
   isMobile = false,
   onOpenMobile,
   onOpenChangePassword,
+  onOpenProfile,
   onLogout,
   addToast,
 }) => {
@@ -400,6 +402,7 @@ export const EvaluatorTopBar: React.FC<EvaluatorTopBarProps> = ({
 
           {/* User Profile Capsule (UI_STANDARDS.md §3.2) */}
           <div
+            onClick={onOpenProfile}
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -408,7 +411,10 @@ export const EvaluatorTopBar: React.FC<EvaluatorTopBarProps> = ({
               borderRadius: '8px',
               backgroundColor: '#F1F5F9',
               border: '1px solid #E2E8F0',
+              cursor: onOpenProfile ? 'pointer' : 'default',
+              transition: 'background-color 0.15s ease',
             }}
+            title={onOpenProfile ? 'الملف الشخصي وإعدادات الحساب' : undefined}
           >
             <div
               style={{

@@ -464,10 +464,10 @@ export const ImprovementPlanPage: React.FC<ImprovementPlanPageProps> = ({
                         fontWeight: 600,
                         cursor: 'pointer',
                       }}
-                      title="تعديل التفاصيل ووصف الإنجاز الميداني"
+                      title={readOnly ? 'استعراض تفاصيل الإجراء' : 'تعديل التفاصيل ووصف الإنجاز الميداني'}
                     >
                       <Edit2 size={13} />
-                      تحديث
+                      {readOnly ? 'تفاصيل' : 'تحديث'}
                     </button>
                   </td>
                 </tr>
@@ -493,6 +493,7 @@ export const ImprovementPlanPage: React.FC<ImprovementPlanPageProps> = ({
         action={editingAction}
         onUpdateAction={updateAction}
         isSubmitting={isSubmitting}
+        readOnly={readOnly}
       />
       {/* Attach Evidence Modal */}
       <AttachActionEvidenceModal

@@ -16,8 +16,10 @@ import {
   ChevronRight,
   Lock,
   X,
+  User as UserIcon,
 } from 'lucide-react';
 import { SYSTEM_SHORT_NAME } from '../../../../constants/systemConstants';
+import { useAuth } from '../../../auth/AuthContext';
 
 interface EvaluatorSidebarProps {
   activeScreen: EvaluatorScreen;
@@ -25,6 +27,7 @@ interface EvaluatorSidebarProps {
   hasOpenCompletionRequest?: boolean;
   isLocked?: boolean;
   onLogout?: () => void;
+  onOpenProfile?: () => void;
   isCollapsed?: boolean;
   onToggleCollapse?: () => void;
   isMobile?: boolean;
@@ -38,12 +41,16 @@ export const EvaluatorSidebar: React.FC<EvaluatorSidebarProps> = ({
   hasOpenCompletionRequest = false,
   isLocked = false,
   onLogout,
+  onOpenProfile,
   isCollapsed = false,
   onToggleCollapse,
   isMobile = false,
   isMobileOpen = false,
   onCloseMobile,
 }) => {
+  const { user, hasPermission } = useAuth();
+  const isPrincipal = user?.roles?.some((r) => r.roleName === 'school_principal') || (!hasPermission('evaluations.edit') && user?.userType === 'school');
+
   const navItems: {
     id: EvaluatorScreen;
     label: string;
@@ -63,17 +70,15 @@ export const EvaluatorSidebar: React.FC<EvaluatorSidebarProps> = ({
     },
     {
       id: 'rubric-assessment',
-      label: 'استمارة الرصد',
+      label: isPrincipal ? 'استعراض الرصد' : 'استمارة الرصد',
       icon: <SlidersHorizontal size={19} />,
-      badge: isLocked ? 'مقفل' : undefined,
-      badgeColor: '#EF4444',
+      badge: isPrincipal ? 'للاطلاع' : isLocked ? 'مقفل' : undefined,
+      badgeColor: isPrincipal ? '#64748B' : '#EF4444',
     },
     {
       id: 'evidences',
       label: 'مستودع الشواهد',
       icon: <FolderLock size={19} />,
-      badge: '38',
-      badgeColor: '#059669',
     },
     {
       id: 'ai-assistant',
@@ -89,7 +94,7 @@ export const EvaluatorSidebar: React.FC<EvaluatorSidebarProps> = ({
     },
     {
       id: 'final-review',
-      label: 'المراجعة والختم',
+      label: isPrincipal ? 'المراجعة والاعتماد' : 'المراجعة والختم',
       icon: <FileCheck2 size={19} />,
       badge: isLocked ? 'مختوم' : undefined,
       badgeColor: '#10B981',
@@ -409,9 +414,29 @@ export const EvaluatorSidebar: React.FC<EvaluatorSidebarProps> = ({
                 display: 'flex',
                 flexDirection: 'column',
                 alignItems: 'center',
-                gap: '6px',
+                gap: '8px',
               }}
             >
+              {onOpenProfile && (
+                <button
+                  onClick={onOpenProfile}
+                  title="الملف الشخصي"
+                  style={{
+                    width: '32px',
+                    height: '32px',
+                    borderRadius: '8px',
+                    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+                    border: '1px solid #1E293B',
+                    color: '#34D399',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <UserIcon size={15} />
+                </button>
+              )}
               <span
                 style={{
                   width: '9px',
@@ -435,39 +460,67 @@ export const EvaluatorSidebar: React.FC<EvaluatorSidebarProps> = ({
                 }}
               >
                 <div style={{ fontSize: '11.5px', fontWeight: 700, color: '#E2E8F0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  مدرسة الأمل النموذجية
+                  {user?.school?.schoolName || 'مدرسة الفاروق الأساسية'}
                 </div>
-                <div style={{ fontSize: '10.5px', color: '#64748B', marginTop: '2px' }}>
-                  المقيم: عمار عمر عبدالله
+                <div style={{ fontSize: '10.5px', color: '#94A3B8', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {isPrincipal ? 'المدير: ' : 'المقيم: '}{user?.fullName || 'عمر محمد الشميري'}
                 </div>
                 <div style={{ fontSize: '10px', color: '#10B981', marginTop: '3px', fontWeight: 600 }}>
-                  العام الدراسي 2026/2027
+                  {isPrincipal ? 'المراجعة والاعتماد الداخلي' : 'دورة التقييم 2026/2027'}
                 </div>
               </div>
 
-              {onLogout && (
-                <button
-                  onClick={onLogout}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    width: '100%',
-                    padding: '8px 12px',
-                    borderRadius: '8px',
-                    color: '#F87171',
-                    backgroundColor: 'rgba(239, 68, 68, 0.08)',
-                    border: '1px solid rgba(239, 68, 68, 0.2)',
-                    cursor: 'pointer',
-                    fontSize: '12px',
-                    fontWeight: 600,
-                    justifyContent: 'center',
-                  }}
-                >
-                  <LogOut size={15} />
-                  تسجيل الخروج
-                </button>
-              )}
+              <div style={{ display: 'flex', gap: '6px' }}>
+                {onOpenProfile && (
+                  <button
+                    onClick={onOpenProfile}
+                    style={{
+                      flex: 1,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '5px',
+                      padding: '7px 8px',
+                      borderRadius: '8px',
+                      color: '#E2E8F0',
+                      backgroundColor: 'rgba(255, 255, 255, 0.08)',
+                      border: '1px solid #1E293B',
+                      cursor: 'pointer',
+                      fontSize: '11.5px',
+                      fontWeight: 700,
+                      justifyContent: 'center',
+                    }}
+                    title="الملف الشخصي وإعدادات الحساب"
+                  >
+                    <UserIcon size={14} color="#34D399" />
+                    بروفايلي
+                  </button>
+                )}
+
+                {onLogout && (
+                  <button
+                    onClick={onLogout}
+                    style={{
+                      flex: onOpenProfile ? undefined : 1,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '5px',
+                      padding: '7px 10px',
+                      borderRadius: '8px',
+                      color: '#F87171',
+                      backgroundColor: 'rgba(239, 68, 68, 0.08)',
+                      border: '1px solid rgba(239, 68, 68, 0.2)',
+                      cursor: 'pointer',
+                      fontSize: '11.5px',
+                      fontWeight: 600,
+                      justifyContent: 'center',
+                    }}
+                    title="تسجيل الخروج"
+                  >
+                    <LogOut size={14} />
+                    {!onOpenProfile && 'تسجيل الخروج'}
+                  </button>
+                )}
+              </div>
             </>
           )}
         </div>

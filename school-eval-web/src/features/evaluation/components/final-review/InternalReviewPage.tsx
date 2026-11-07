@@ -16,11 +16,13 @@ interface InternalReviewPageProps {
   onNavigate?: (screen: EvaluatorScreen) => void;
   onFinalLockSuccess?: () => void;
   isLocked?: boolean;
+  isPrincipal?: boolean;
 }
 
 export const InternalReviewPage: React.FC<InternalReviewPageProps> = ({
   onFinalLockSuccess,
   isLocked = false,
+  isPrincipal = false,
 }) => {
   const {
     preflightData,
@@ -150,7 +152,7 @@ export const InternalReviewPage: React.FC<InternalReviewPageProps> = ({
               نسبة الجاهزية: {readiness}%
             </div>
 
-            {!isLocked && (
+            {!isLocked && !isPrincipal && (
               <button
                 onClick={() => setIsLockModalOpen(true)}
                 disabled={!canSubmit || isSubmitting}
@@ -172,6 +174,26 @@ export const InternalReviewPage: React.FC<InternalReviewPageProps> = ({
                 <Lock size={16} />
                 <span>الختم الرقمي والرفع النهائي</span>
               </button>
+            )}
+
+            {!isLocked && isPrincipal && (
+              <div
+                style={{
+                  padding: '8px 14px',
+                  borderRadius: '8px',
+                  backgroundColor: '#FEF3C7',
+                  border: '1px solid #FCD34D',
+                  color: '#92400E',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                }}
+              >
+                <Lock size={14} />
+                <span>الختم الرقمي والتسليم النهائي محصور بمقيم المدرسة المعتمد</span>
+              </div>
             )}
           </div>
         </div>
@@ -228,6 +250,7 @@ export const InternalReviewPage: React.FC<InternalReviewPageProps> = ({
       <DraftReportPreview
         onExportPdf={handleExportPdfReport}
         isLocked={isLocked}
+        isPrincipal={isPrincipal}
         trackingCode={preflightData?.digitalSealInfo?.systemCode}
       />
 

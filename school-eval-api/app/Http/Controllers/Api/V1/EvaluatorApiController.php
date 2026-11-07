@@ -72,7 +72,6 @@ class EvaluatorApiController extends Controller
                 'cycle_id' => $cycleId,
                 'created_by_user_id' => $user?->user_id ?? 1,
                 'status' => 'InProgress',
-                'evaluation_date' => now(),
             ]);
         }
 
@@ -349,6 +348,10 @@ class EvaluatorApiController extends Controller
         }
 
         $user = $request->user();
+        if ($user && !$user->hasPermission('evaluations.edit')) {
+            return ApiResponse::forbidden('ليس لديك صلاحية رصد أو تعديل درجات المؤشرات. هذه الصلاحية محصورة بمقيم المدرسة.');
+        }
+
         $evaluation = $this->getActiveEvaluation($request);
         $indicatorId = $request->input('indicatorId');
         $score = $request->input('score');
@@ -432,6 +435,10 @@ class EvaluatorApiController extends Controller
         }
 
         $user = $request->user();
+        if ($user && !$user->hasPermission('evidence.manage')) {
+            return ApiResponse::forbidden('ليس لديك صلاحية رفع أو تعديل الشواهد. هذه الصلاحية محصورة بمقيم المدرسة.');
+        }
+
         $evaluation = $this->getActiveEvaluation($request);
         $schoolId = $evaluation->school_id;
         $uploadedFile = $request->file('file');
@@ -826,6 +833,11 @@ class EvaluatorApiController extends Controller
             return ApiResponse::validationError($validator->errors()->toArray());
         }
 
+        $user = $request->user();
+        if ($user && !$user->hasPermission('plans.manage')) {
+            return ApiResponse::forbidden('ليس لديك صلاحية إنشاء أو تعديل إجراءات خطة التحسين.');
+        }
+
         $evaluation = $this->getActiveEvaluation($request);
         $plan = ImprovementPlan::where('school_id', $evaluation->school_id)
             ->where('status', '!=', 'Cancelled')
@@ -897,6 +909,11 @@ class EvaluatorApiController extends Controller
 
         if ($validator->fails()) {
             return ApiResponse::validationError($validator->errors()->toArray());
+        }
+
+        $user = $request->user();
+        if ($user && !$user->hasPermission('plans.manage')) {
+            return ApiResponse::forbidden('ليس لديك صلاحية تعديل إجراءات خطة التحسين.');
         }
 
         $action = ImprovementAction::find($id);
@@ -1046,6 +1063,10 @@ class EvaluatorApiController extends Controller
         }
 
         $user = $request->user();
+        if ($user && !$user->hasPermission('evaluations.submit')) {
+            return ApiResponse::forbidden('ليس لديك صلاحية الختم الرقمي والتسليم النهائي. هذه الصلاحية محصورة بمقيم المدرسة.');
+        }
+
         $evaluation = $this->getActiveEvaluation($request);
 
         // التحقق من كلمة المرور (في بيئة التطوير نقبل كلمة المرور أو كلمة المرور الافتراضية)
@@ -1200,7 +1221,7 @@ class EvaluatorApiController extends Controller
     public function exportReportPdf(Request $request)
     {
         $user = $request->user();
-        if ($user && !$user->hasPermission('evaluations.view') && !$user->hasPermission('reports.view') && !$user->hasRole('admin') && !$user->hasRole('evaluator') && !$user->hasRole('school_principal')) {
+        if ($user && !$user->hasPermission('evaluations.view') && !$user->hasPermission('reports.view') && !$user->hasRole('admin') && !$user->hasRole('school_evaluator') && !$user->hasRole('school_principal')) {
             return ApiResponse::forbidden('ليس لديك صلاحية لتصدير تقرير التقييم.');
         }
 
@@ -1271,6 +1292,11 @@ class EvaluatorApiController extends Controller
 
         if ($validator->fails()) {
             return ApiResponse::validationError($validator->errors()->toArray());
+        }
+
+        $user = $request->user();
+        if ($user && !$user->hasPermission('evidence.manage')) {
+            return ApiResponse::forbidden('ليس لديك صلاحية إدارة روابط الشواهد. هذه الصلاحية محصورة بمقيم المدرسة.');
         }
 
         $evaluation = $this->getActiveEvaluation($request);

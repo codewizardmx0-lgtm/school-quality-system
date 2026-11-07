@@ -164,6 +164,7 @@ export const EvidencesRepository: React.FC<EvidencesRepositoryProps> = ({
 
       {activeTab === 'inventory' ? (
         <EvidenceInventoryPage
+          readOnly={readOnly}
           onSuccessToast={(msg) => addToast('success', msg)}
           onErrorToast={(err) => addToast('error', err)}
         />

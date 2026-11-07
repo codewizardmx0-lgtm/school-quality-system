@@ -11,9 +11,12 @@ import { InternalReviewPage } from '../final-review/InternalReviewPage';
 import { HandleCompletionPage } from '../completion-request/HandleCompletionPage';
 import { NotificationsCenter } from '../notifications/NotificationsCenter';
 import { ChangePasswordModal } from '../../../auth/ChangePasswordModal';
+import { ProfileModal } from '../../../auth/ProfileModal';
+import { useAuth } from '../../../auth/AuthContext';
 import { ToastNotification } from '../../../admin/components/common/ToastNotification';
 import { useToast } from '../../../admin/components/common/useToast';
 import type { EvaluatorScreen } from '../../api/evaluationTypes';
+import { ShieldAlert } from 'lucide-react';
 
 interface EvaluatorLayoutProps {
   initialScreen?: EvaluatorScreen;
@@ -24,12 +27,21 @@ export const EvaluatorLayout: React.FC<EvaluatorLayoutProps> = ({
   initialScreen = 'dashboard',
   onLogout,
 }) => {
+  const { user, hasPermission } = useAuth();
   const [activeScreen, setActiveScreen] = useState<EvaluatorScreen>(initialScreen);
   const [selectedIndicatorId, setSelectedIndicatorId] = useState<number | null>(null);
   const [isLocked, setIsLocked] = useState<boolean>(false);
   const [hasOpenCompletionRequest, setHasOpenCompletionRequest] = useState<boolean>(true);
   const [isChangePasswordOpen, setIsChangePasswordOpen] = useState<boolean>(false);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState<boolean>(false);
   const { toasts, addToast, dismissToast } = useToast();
+
+  const isPrincipal = Boolean(
+    user?.roles?.some((r) => r.roleName === 'school_principal') ||
+    (!hasPermission('evaluations.edit') && user?.userType === 'school')
+  );
+
+  const effectiveReadOnly = isLocked || isPrincipal;
 
   // Responsive & Sidebar Collapse state (UI_STANDARDS.md §2)
   const [isCollapsed, setIsCollapsed] = useState(false);
@@ -75,7 +87,7 @@ export const EvaluatorLayout: React.FC<EvaluatorLayoutProps> = ({
         return (
           <EvaluatorDashboard
             onNavigate={handleNavigate}
-            isLocked={isLocked}
+            isLocked={effectiveReadOnly}
           />
         );
       case 'standards-tree':
@@ -93,28 +105,28 @@ export const EvaluatorLayout: React.FC<EvaluatorLayoutProps> = ({
           <RubricAssessmentPage
             selectedIndicatorId={selectedIndicatorId}
             onNavigate={handleNavigate}
-            isLocked={isLocked}
+            isLocked={effectiveReadOnly}
           />
         );
       case 'evidences':
         return (
           <EvidencesRepository
             onNavigate={handleNavigate}
-            readOnly={isLocked}
+            readOnly={effectiveReadOnly}
           />
         );
       case 'ai-assistant':
         return (
           <GapAnalysisPage
             onNavigate={handleNavigate}
-            readOnly={isLocked}
+            readOnly={effectiveReadOnly}
           />
         );
       case 'improvement-plan':
         return (
           <ImprovementPlanPage
             onNavigate={handleNavigate}
-            readOnly={isLocked}
+            readOnly={effectiveReadOnly}
           />
         );
       case 'final-review':
@@ -123,6 +135,7 @@ export const EvaluatorLayout: React.FC<EvaluatorLayoutProps> = ({
             onNavigate={handleNavigate}
             onFinalLockSuccess={handleFinalLockSuccess}
             isLocked={isLocked}
+            isPrincipal={isPrincipal}
           />
         );
       case 'completion-request':
@@ -141,7 +154,7 @@ export const EvaluatorLayout: React.FC<EvaluatorLayoutProps> = ({
         return (
           <EvaluatorDashboard
             onNavigate={handleNavigate}
-            isLocked={isLocked}
+            isLocked={effectiveReadOnly}
           />
         );
     }
@@ -170,6 +183,7 @@ export const EvaluatorLayout: React.FC<EvaluatorLayoutProps> = ({
         hasOpenCompletionRequest={hasOpenCompletionRequest}
         isLocked={isLocked}
         onLogout={onLogout}
+        onOpenProfile={() => setIsProfileModalOpen(true)}
         isCollapsed={isCollapsed}
         onToggleCollapse={() => setIsCollapsed(!isCollapsed)}
         isMobile={isMobile}
@@ -201,10 +215,33 @@ export const EvaluatorLayout: React.FC<EvaluatorLayoutProps> = ({
           isCollapsed={isCollapsed}
           onToggleCollapse={() => setIsCollapsed(!isCollapsed)}
           onOpenChangePassword={() => setIsChangePasswordOpen(true)}
+          onOpenProfile={() => setIsProfileModalOpen(true)}
           onLogout={onLogout}
         />
 
         <main style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', minWidth: 0 }}>
+          {/* Prominent Banner for School Principal View & Internal Review Mode */}
+          {isPrincipal && (
+            <div
+              style={{
+                backgroundColor: '#FEF3C7',
+                borderBottom: '1px solid #FCD34D',
+                padding: '12px 24px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px',
+                color: '#92400E',
+                fontSize: '13px',
+                fontWeight: 700,
+              }}
+            >
+              <ShieldAlert size={19} color="#D97706" style={{ flexShrink: 0 }} />
+              <span>
+                أنت في وضع استعراض التقييم والمراجعة الداخلية — صلاحيات الرصد محصورة بمقيم المدرسة.
+              </span>
+            </div>
+          )}
+
           {renderScreenContent()}
         </main>
       </div>
@@ -214,6 +251,15 @@ export const EvaluatorLayout: React.FC<EvaluatorLayoutProps> = ({
         <ChangePasswordModal
           isOpen={isChangePasswordOpen}
           onClose={() => setIsChangePasswordOpen(false)}
+          addToast={addToast}
+        />
+      )}
+
+      {/* Profile Modal */}
+      {isProfileModalOpen && (
+        <ProfileModal
+          isOpen={isProfileModalOpen}
+          onClose={() => setIsProfileModalOpen(false)}
           addToast={addToast}
         />
       )}

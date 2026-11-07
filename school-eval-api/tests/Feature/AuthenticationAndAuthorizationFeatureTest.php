@@ -443,4 +443,35 @@ class AuthenticationAndAuthorizationFeatureTest extends TestCase
         $this->assertTrue($this->adminUser->hasPermission('schools.manage'));
         $this->assertTrue($this->adminUser->hasPermission('users.manage'));
     }
+
+    /**
+     * 13. اختبار تحديث البيانات الشخصية للمستخدم المصادق (PUT /api/v1/auth/profile)
+     */
+    public function test_authenticated_user_can_update_profile_and_validate(): void
+    {
+        Sanctum::actingAs($this->evaluatorFarouq);
+
+        // 1. تحديث ناجح للاسم الكامل
+        $res = $this->putJson('/api/v1/auth/profile', [
+            'fullName' => 'عمر محمد الشميري المحدث',
+            'email'    => 'quality.updated@farouq.edu.ye',
+        ]);
+
+        $res->assertStatus(200)
+            ->assertJsonPath('data.fullName', 'عمر محمد الشميري المحدث')
+            ->assertJsonPath('data.username', 'quality_farouq'); // username remains unchanged
+
+        $this->assertDatabaseHas('users', [
+            'username'  => 'quality_farouq',
+            'full_name' => 'عمر محمد الشميري المحدث',
+        ]);
+
+        // 2. التحقق من فشل الطلب عند إرسال اسم فارغ أو قصير
+        $invalidRes = $this->putJson('/api/v1/auth/profile', [
+            'fullName' => 'أ',
+        ]);
+
+        $invalidRes->assertStatus(422)
+            ->assertJsonValidationErrors(['fullName']);
+    }
 }
