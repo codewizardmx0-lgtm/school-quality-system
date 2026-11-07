@@ -1,6 +1,7 @@
 import { exportToExcel, formatExportFilename } from '../../../admin/utils/exportUtils';
 import React, { useState } from 'react';
 import { useEvidences } from '../../hooks/useEvidences';
+import { evaluatorApi } from '../../api/evaluatorApi';
 import { EvidenceCard } from './EvidenceCard';
 import { LinkEvidenceModal } from './LinkEvidenceModal';
 import { EvidenceInventoryPage } from './EvidenceInventoryPage';
@@ -81,26 +82,13 @@ export const EvidencesRepository: React.FC<EvidencesRepositoryProps> = ({
     setIsUploadModalOpen(true);
   };
 
-  const handleDownloadEvidence = (evidence: EvidenceItem) => {
-    const mockContent = `\uFEFFشاهد رقم: ${evidence.id}
-اسم المستند: ${evidence.title}
-الملف: ${evidence.fileName}
-المعيار: ${evidence.standardCode} - ${evidence.standardName}
-المؤشر: ${evidence.indicatorCode} - ${evidence.indicatorTitle}
-الإصدار: v${evidence.versionNumber}
-الحالة: ${evidence.verificationStatusArabic}
-تاريخ الرفع: ${evidence.uploadedAt}
-بواسطة: ${evidence.uploadedBy}
-`;
-    const blob = new Blob([mockContent], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `${evidence.fileName}.txt`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+  const handleDownloadEvidence = async (evidence: EvidenceItem) => {
+    try {
+      await evaluatorApi.downloadEvidence(evidence.id, evidence.fileName);
+      addToast('success', `تم بدء تحميل الملف: ${evidence.fileName}`);
+    } catch (err: unknown) {
+      addToast('error', (err as Error)?.message || 'تعذر تحميل الملف من الخادم.');
+    }
   };
 
   const handleExportExcel = () => {

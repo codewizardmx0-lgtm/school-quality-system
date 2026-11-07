@@ -100,29 +100,15 @@ class EvaluatorApiController extends Controller
             $scoredCount = $results->count();
         }
 
-        // إذا كانت البيئة تجريبية والبيانات فارغة، نقدم قيماً نموذجية مطابقة للمواصفات
-        if ($scoredCount === 0) {
-            $scoredCount = 42;
-            $totalIndicators = 56;
-        }
+        $completionPercentage = $totalIndicators > 0 ? round(($scoredCount / $totalIndicators) * 100) : 0;
 
-        $completionPercentage = round(($scoredCount / max(1, $totalIndicators)) * 100);
-
-        // عدد الشواهد
+        // عدد الشواهد الحقيقية
         $evidencesCount = EvidenceLink::where('evaluation_id', $evaluation->evaluation_id)->count();
-        if ($evidencesCount === 0) {
-            $evidencesCount = 38;
-        }
-        $targetEvidencesCount = 50;
+        $targetEvidencesCount = $totalIndicators > 0 ? $totalIndicators : 109;
 
         // نقاط القوة (تقدير 2-3) وفرص التحسين (0-1)
-        $strengthsCount = $results->filter(fn($r) => $r->score >= 2)->count();
+        $strengthsCount = $results->filter(fn($r) => $r->score !== null && $r->score >= 2)->count();
         $gapsCount = $results->filter(fn($r) => $r->score !== null && $r->score < 2)->count();
-
-        if ($strengthsCount === 0 && $gapsCount === 0) {
-            $strengthsCount = 28;
-            $gapsCount = 14;
-        }
 
         // مسار دورة التقييم ومراجعة المخرج
         $cycleSteps = [
@@ -136,41 +122,35 @@ class EvaluatorApiController extends Controller
         $standards = Standard::with('subStandards.indicators')->get();
         $standardsProgress = [];
 
-        if ($standards->count() >= 7) {
-            foreach ($standards->take(7) as $std) {
-                $indIds = $std->subStandards->flatMap(fn($sub) => $sub->indicators)->pluck('indicator_id');
-                $stdTotal = max(1, $indIds->count());
-                $stdScored = $results->whereIn('indicator_id', $indIds)->count();
-                $pct = min(100, round(($stdScored / $stdTotal) * 100));
-                $standardsProgress[] = [
-                    'standardId' => $std->standard_id,
-                    'code' => $std->code,
-                    'title' => $std->name,
-                    'totalIndicators' => $stdTotal,
-                    'scoredIndicators' => $stdScored,
-                    'percentage' => $pct > 0 ? $pct : rand(65, 85),
-                ];
-            }
-        } else {
-            // بيانات المعايير السبعة القياسية
-            $standardsProgress = [
-                ['standardId' => 1, 'code' => 'STD-01', 'title' => 'القيادة والإدارة المدرسية', 'totalIndicators' => 8, 'scoredIndicators' => 7, 'percentage' => 88],
-                ['standardId' => 2, 'code' => 'STD-02', 'title' => 'التعليم والتعلم وبيئة الصف', 'totalIndicators' => 10, 'scoredIndicators' => 8, 'percentage' => 80],
-                ['standardId' => 3, 'code' => 'STD-03', 'title' => 'نواتج التعلم والتحصيل الأكاديمي', 'totalIndicators' => 8, 'scoredIndicators' => 6, 'percentage' => 75],
-                ['standardId' => 4, 'code' => 'STD-04', 'title' => 'البيئة المدرسية والصحة والسلامة', 'totalIndicators' => 8, 'scoredIndicators' => 6, 'percentage' => 75],
-                ['standardId' => 5, 'code' => 'STD-05', 'title' => 'رعاية الطلبة والأنشطة اللاصفية', 'totalIndicators' => 8, 'scoredIndicators' => 5, 'percentage' => 63],
-                ['standardId' => 6, 'code' => 'STD-06', 'title' => 'المشاركة المجتمعية والشراكة الأسرية', 'totalIndicators' => 7, 'scoredIndicators' => 5, 'percentage' => 71],
-                ['standardId' => 7, 'code' => 'STD-07', 'title' => 'التطوير والتحسين المستمر', 'totalIndicators' => 7, 'scoredIndicators' => 5, 'percentage' => 71],
+        foreach ($standards as $std) {
+            $indIds = $std->subStandards->flatMap(fn($sub) => $sub->indicators)->pluck('indicator_id');
+            $stdTotal = max(1, $indIds->count());
+            $stdScored = $results->whereIn('indicator_id', $indIds)->where('score', '!==', null)->count();
+            $pct = round(($stdScored / $stdTotal) * 100);
+            $standardsProgress[] = [
+                'standardId' => $std->standard_id,
+                'code' => $std->code,
+                'title' => $std->name,
+                'totalIndicators' => $stdTotal,
+                'scoredIndicators' => $stdScored,
+                'percentage' => $pct,
             ];
         }
 
-        // عناصر تقييم بحاجة لاستكمال التوثيق والشواهد
-        $pendingIndicators = [
-            ['indicatorId' => 14, 'code' => 'IND-02-04', 'name' => 'تطبيق استراتيجيات التعلم النشط وتمايز التعليم', 'standardName' => 'التعليم والتعلم', 'status' => 'بحاجة لشواهد داعمة'],
-            ['indicatorId' => 22, 'code' => 'IND-03-02', 'name' => 'تحليل نتائج الاختبارات التشخيصية ومعالجة الفاقد التعليمي', 'standardName' => 'نواتج التعلم', 'status' => 'تقدير غير مدخل'],
-            ['indicatorId' => 31, 'code' => 'IND-04-03', 'name' => 'خطط الإخلاء الدوري واشتراطات الأمن والسلامة', 'standardName' => 'البيئة المدرسية', 'status' => 'بحاجة لأساليب تحقق'],
-            ['indicatorId' => 45, 'code' => 'IND-06-01', 'name' => 'تفعيل مجالس الآباء والأمهات والشراكة المجتمعية', 'standardName' => 'المشاركة المجتمعية', 'status' => 'مسودة غير مكتملة'],
-        ];
+        // عناصر تقييم بحاجة لاستكمال التوثيق أو التقديرات (Unscored Indicators)
+        $scoredIndicatorIds = $results->whereNotNull('score')->pluck('indicator_id')->toArray();
+        $unscoredIndicators = Indicator::whereNotIn('indicator_id', $scoredIndicatorIds)
+            ->with('subStandard.standard')
+            ->limit(10)
+            ->get();
+
+        $pendingIndicators = $unscoredIndicators->map(fn($ind) => [
+            'indicatorId' => $ind->indicator_id,
+            'code' => $ind->code,
+            'name' => $ind->name,
+            'standardName' => $ind->subStandard?->standard?->name ?? 'المعايير الوطنية',
+            'status' => 'تقدير غير مدخل',
+        ])->values()->all();
 
         // التحقق من وجود طلب استكمال مفتوح
         $completionRequest = CompletionRequest::where('status', 'Open')
@@ -566,44 +546,10 @@ class EvaluatorApiController extends Controller
             ];
         });
 
-        // إذا كانت القائمة فارغة نوفر قائمة نموذجية مكتملة
-        if ($evidencesList->isEmpty()) {
-            $evidencesList = collect([
-                [
-                    'id' => 101, 'documentId' => 1, 'title' => 'محاضر اجتماعات لجنة التميز والجودة المدرسية',
-                    'fileName' => 'quality_committee_minutes_2026.pdf', 'mimeType' => 'application/pdf', 'fileSize' => 2450000,
-                    'formattedSize' => '2.45 MB', 'versionNumber' => 1, 'standardCode' => 'STD-01', 'standardName' => 'القيادة والإدارة المدرسية',
-                    'indicatorCode' => 'IND-01-02', 'indicatorTitle' => 'تفعيل لجان الجودة والتميز المؤسسي', 'uploadedAt' => '2026-10-12',
-                    'uploadedBy' => 'عمار عمر عبدالله', 'verificationStatus' => 'Compliant', 'verificationStatusArabic' => 'مطابق ومعتمد داخلياً',
-                ],
-                [
-                    'id' => 102, 'documentId' => 2, 'title' => 'بطاقة الملاحظة الصفية لاستراتيجيات التدريس',
-                    'fileName' => 'classroom_observation_rubric.xlsx', 'mimeType' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'fileSize' => 1820000,
-                    'formattedSize' => '1.82 MB', 'versionNumber' => 2, 'standardCode' => 'STD-02', 'standardName' => 'التعليم والتعلم وبيئة الصف',
-                    'indicatorCode' => 'IND-02-01', 'indicatorTitle' => 'متابعة أداء المعلمين داخل الحجرة الصفية', 'uploadedAt' => '2026-10-14',
-                    'uploadedBy' => 'عمار عمر عبدالله', 'verificationStatus' => 'Compliant', 'verificationStatusArabic' => 'مطابق ومعتمد داخلياً',
-                ],
-                [
-                    'id' => 103, 'documentId' => 3, 'title' => 'سجل خطة الإخلاء ومحاكاة الطوارئ الميدانية',
-                    'fileName' => 'evacuation_plan_v1.docx', 'mimeType' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'fileSize' => 3200000,
-                    'formattedSize' => '3.20 MB', 'versionNumber' => 1, 'standardCode' => 'STD-04', 'standardName' => 'البيئة المدرسية والصحة والسلامة',
-                    'indicatorCode' => 'IND-04-03', 'indicatorTitle' => 'تطبيق تدابير الأمن والسلامة والإخلاء', 'uploadedAt' => '2026-10-18',
-                    'uploadedBy' => 'عمار عمر عبدالله', 'verificationStatus' => 'NeedsReplacement', 'verificationStatusArabic' => 'يتطلب استبدال',
-                ],
-                [
-                    'id' => 104, 'documentId' => 4, 'title' => 'تقرير تحليل نتائج الامتحانات النصفية ومعالجة الفاقد',
-                    'fileName' => 'midterm_learning_loss_analysis.pdf', 'mimeType' => 'application/pdf', 'fileSize' => 4100000,
-                    'formattedSize' => '4.10 MB', 'versionNumber' => 1, 'standardCode' => 'STD-03', 'standardName' => 'نواتج التعلم والتحصيل الأكاديمي',
-                    'indicatorCode' => 'IND-03-02', 'indicatorTitle' => 'تحليل مستويات التحصيل وعلاج الفاقد', 'uploadedAt' => '2026-10-20',
-                    'uploadedBy' => 'عمار عمر عبدالله', 'verificationStatus' => 'Compliant', 'verificationStatusArabic' => 'مطابق ومعتمد داخلياً',
-                ],
-            ]);
-        }
-
-        $totalDocs = 38;
-        $compliantDocs = 36;
-        $needsReplacementDocs = 2;
-        $storageUsedMb = 38.7;
+        $totalDocs = $versions->count();
+        $compliantDocs = $versions->where('version_number', '<=', 2)->count();
+        $needsReplacementDocs = $versions->where('version_number', '>', 2)->count();
+        $storageUsedMb = round($versions->sum('file_size') / (1024 * 1024), 2);
         $storageLimitMb = 500.0;
 
         return ApiResponse::success([
@@ -723,23 +669,12 @@ class EvaluatorApiController extends Controller
             ->get();
 
         if ($recommendations->isEmpty()) {
-            // في حال عدم وجود سجلات، نوفر نموذج التوصيات المعتمد
             return ApiResponse::success([
                 'analysisId' => $id,
-                'summary' => 'تحليل الفجوات الذكي المحدث',
-                'strengths' => [
-                    ['id' => 1, 'title' => 'فاعلية الحوكمة المدرسية وتوثيق أدلة القيادة', 'description' => 'تحقيق أعلى تقدير في تفعيل اللجان المدرسية وتوزيع المهام.', 'priority' => 'High'],
-                    ['id' => 2, 'title' => 'بيئة مدرسية آمنة ومحفزة تلتزم بمتطلبات السلامة', 'description' => 'اكتمال خطط الطوارئ ومخارج النجاة بنسبة 90%.', 'priority' => 'Medium'],
-                ],
-                'improvements' => [
-                    ['id' => 3, 'title' => 'فجوة في تطبيق وتوثيق استراتيجيات التعلم المتمايز', 'description' => 'حاجة 40% من الكادر لتدريب تخصصي على التعلم النشط.', 'priority' => 'High'],
-                    ['id' => 4, 'title' => 'ضعف انتظام قياس وتشخيص الفاقد التعليمي بعد الامتحانات', 'description' => 'غياب السجلات الإحصائية المنتظمة لمعالجة التعثر الدراسي.', 'priority' => 'High'],
-                ],
-                'initiatives' => [
-                    ['id' => 5, 'title' => 'مبادرة برنامج التمكين المهني لاستراتيجيات التدريس الحديثة', 'description' => 'ورش تدريبية وتطبيق دروس مصغرة لرفع كفاءة 25 معلماً.', 'priority' => 'High', 'status' => 'PendingReview'],
-                    ['id' => 6, 'title' => 'مبادرة بنك الخطط العلاجية لمعالجة الفاقد في القراءة والحساب', 'description' => 'بناء منصة متابعة فردية لحصص التقوية للطلبة المتعثرين.', 'priority' => 'High', 'status' => 'PendingReview'],
-                    ['id' => 7, 'title' => 'مبادرة تعزيز المشاركة المجتمعية عبر المنصات الرقمية', 'description' => 'تفعيل استبانات إلكترونية ولقاءات دورية لأولياء الأمور.', 'priority' => 'Medium', 'status' => 'PendingReview'],
-                ],
+                'summary' => 'لا توجد توصيات صادرة لهذا التحليل حتى الآن.',
+                'strengths' => [],
+                'improvements' => [],
+                'initiatives' => [],
             ]);
         }
 
@@ -826,73 +761,7 @@ class EvaluatorApiController extends Controller
                 'created_by_user_id' => $request->user()?->user_id ?? 1,
             ]);
 
-            // تهيئة إجراءات نموذجية أولية
-            $seedActions = [
-                [
-                    'plan_id' => $plan->plan_id,
-                    'title' => 'تطوير كفايات المعلمين في استخدام التكنولوجيا التفاعلية بالتعليم',
-                    'responsible_person_description' => 'أ. فاطمة العريقي — مسؤولة التطوير المهني',
-                    'start_date' => '2026-10-01',
-                    'due_date' => '2026-12-15',
-                    'status' => 'InProgress',
-                    'completion_percentage' => 60,
-                    'progress_description' => 'تم تنفيذ 3 ورش عمل تدريبية وحضر 18 معلماً وجاري التقييم الميداني للأثر.',
-                ],
-                [
-                    'plan_id' => $plan->plan_id,
-                    'title' => 'استكمال تجهيزات مختبر العلوم وتأمين وسائل الإسعافات والمخارج',
-                    'responsible_person_description' => 'م. خالد الصبري — مسؤول السلامة والعهد',
-                    'start_date' => '2026-09-15',
-                    'due_date' => '2026-11-01',
-                    'status' => 'Done',
-                    'completion_percentage' => 100,
-                    'progress_description' => 'تم شراء وتثبيت طفايات الحريق وصندوق الإسعافات وتجهيز خزائن المواد الكيميائية بالكامل.',
-                ],
-                [
-                    'plan_id' => $plan->plan_id,
-                    'title' => 'بناء قاعدة بيانات رقمية شاملة لمتابعة مستويات التحصيل والغياب',
-                    'responsible_person_description' => 'أ. هاني المنصوري — مسؤول شؤون الطلاب',
-                    'start_date' => '2026-10-15',
-                    'due_date' => '2027-01-30',
-                    'status' => 'InProgress',
-                    'completion_percentage' => 45,
-                    'progress_description' => 'تم توريد النظام وإدخال بيانات طلاب الصفوف الثانوية وجاري استكمال المرحلة الأساسية.',
-                ],
-                [
-                    'plan_id' => $plan->plan_id,
-                    'title' => 'تفعيل برنامج الإرشاد الأكاديمي والمهني لطلبة المرحلة الثانوية',
-                    'responsible_person_description' => 'د. سارة الحداد — المرشدة الطلابية',
-                    'start_date' => '2026-11-01',
-                    'due_date' => '2027-02-28',
-                    'status' => 'Pending',
-                    'completion_percentage' => 0,
-                    'progress_description' => 'بانتظار اعتماد ميزانية استضافة ممثلي الجامعات وسوق العمل.',
-                ],
-                [
-                    'plan_id' => $plan->plan_id,
-                    'title' => 'إعداد أدلة القياس التشخيصي للفاقد التعليمي في مادة الرياضيات',
-                    'responsible_person_description' => 'أ. منير شرف — رئيس شعبة الرياضيات',
-                    'start_date' => '2026-10-05',
-                    'due_date' => '2026-11-20',
-                    'status' => 'Done',
-                    'completion_percentage' => 100,
-                    'progress_description' => 'تم تسليم الاختبارات وتوزيع نماذج الإجابة وبدء تطبيق الاختبار القبلي.',
-                ],
-                [
-                    'plan_id' => $plan->plan_id,
-                    'title' => 'تنظيم ملتقى الشراكة المجتمعية لتعزيز التكافل المدرسي',
-                    'responsible_person_description' => 'أ. ناصر الزبيري — وكيل الأنشطة المدرسية',
-                    'start_date' => '2026-11-15',
-                    'due_date' => '2026-12-30',
-                    'status' => 'InProgress',
-                    'completion_percentage' => 30,
-                    'progress_description' => 'تم توجيه الدعوات وتحديد موعد الملتقى وإعداد جدول الأعمال مع مجلس الآباء.',
-                ],
-            ];
-
-            foreach ($seedActions as $act) {
-                ImprovementAction::create($act);
-            }
+            // الخطة تبدأ فارغة ليتم إدخال أو استيراد الإجراءات من بنك الإجراءات المعتمدة
         }
 
         $actions = ImprovementAction::where('plan_id', $plan->plan_id)->orderBy('action_id', 'desc')->get();
@@ -1244,48 +1113,7 @@ class EvaluatorApiController extends Controller
             ->first();
 
         if (!$completionRequest) {
-            // بيانات افتراضية لغايات العرض واختبار الشاشة 10
-            return ApiResponse::success([
-                'requestId' => 42,
-                'status' => 'Open',
-                'supervisorName' => 'د. عبدالرحمن الأنسي — المشرف التربوي الوزاري',
-                'issuedAt' => '2026-11-01',
-                'completionDeadline' => '2026-11-15',
-                'remainingDays' => 11,
-                'supervisorGeneralNotes' => 'يرجى استيفاء الشواهد المرفقة وإعادة تدقيق نتائج المؤشرات المحددة أدناه لعدم كفاية الأدلة المودعة مع توضيح آلية قياس الفاقد التعليمي.',
-                'flaggedItems' => [
-                    [
-                        'itemId' => 101,
-                        'indicatorId' => 14,
-                        'indicatorCode' => 'IND-02-04',
-                        'indicatorTitle' => 'تطبيق استراتيجيات التعلم النشط وتمايز التعليم',
-                        'standardTitle' => 'التعليم والتعلم وبيئة الصف',
-                        'missingDescription' => 'بطاقة الملاحظة الصفية المرفقة لا تحتوي على توقيع المعلم الأول ولا تبين تنوع المهام المتمايزة للطلبة ذوي التحصيل المتدني.',
-                        'status' => 'Pending',
-                        'resolutionNotes' => '',
-                    ],
-                    [
-                        'itemId' => 102,
-                        'indicatorId' => 22,
-                        'indicatorCode' => 'IND-03-02',
-                        'indicatorTitle' => 'تحليل نتائج الاختبارات التشخيصية ومعالجة الفاقد التعليمي',
-                        'standardTitle' => 'نواتج التعلم والتحصيل الأكاديمي',
-                        'missingDescription' => 'المستند المرفق عبارة عن مسودة غير مكتملة دون إحصائيات المقارنة القبلية والبعدية لخطة المعالجة.',
-                        'status' => 'Pending',
-                        'resolutionNotes' => '',
-                    ],
-                    [
-                        'itemId' => 103,
-                        'indicatorId' => 31,
-                        'indicatorCode' => 'IND-04-03',
-                        'indicatorTitle' => 'خطط الإخلاء الدوري واشتراطات الأمن والسلامة',
-                        'standardTitle' => 'البيئة المدرسية والصحة والسلامة',
-                        'missingDescription' => 'مطلوب إرفاق تقرير مصور لتنفيذ محاكاة خطة الإخلاء الميدانية للطلاب خلال الفصل الدراسي الحالي.',
-                        'status' => 'Pending',
-                        'resolutionNotes' => '',
-                    ],
-                ],
-            ]);
+            return ApiResponse::success(null);
         }
 
         $items = CompletionRequestItem::where('request_id', $completionRequest->request_id)->get();

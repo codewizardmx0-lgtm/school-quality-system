@@ -228,6 +228,7 @@ export const InternalReviewPage: React.FC<InternalReviewPageProps> = ({
       <DraftReportPreview
         onExportPdf={handleExportPdfReport}
         isLocked={isLocked}
+        trackingCode={preflightData?.digitalSealInfo?.systemCode}
       />
 
       {/* Final Lock Modal */}

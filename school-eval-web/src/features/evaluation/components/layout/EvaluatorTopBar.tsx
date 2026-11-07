@@ -14,6 +14,8 @@ import {
 } from 'lucide-react';
 import { SYSTEM_SHORT_NAME } from '../../../../constants/systemConstants';
 import { evaluatorApi } from '../../api/evaluatorApi';
+import { useAuth } from '../../../auth/AuthContext';
+import { useEffect } from 'react';
 
 interface EvaluatorTopBarProps {
   activeScreen: EvaluatorScreen;
@@ -45,6 +47,35 @@ export const EvaluatorTopBar: React.FC<EvaluatorTopBarProps> = ({
   addToast,
 }) => {
   const [isExportingPdf, setIsExportingPdf] = useState(false);
+  const [unreadNotificationsCount, setUnreadNotificationsCount] = useState<number>(0);
+
+  const { user: authUser } = useAuth();
+  const displayName = authUser?.fullName || authUser?.username || schoolInfo?.currentEvaluator || 'مقيّم المدرسة';
+  const roleObj = authUser?.roles?.[0];
+  const roleNameMap: Record<string, string> = {
+    admin: 'مدير النظام المركزي',
+    school_evaluator: 'مقيّم المدرسة',
+    school_principal: 'مدير المدرسة',
+    ministry_standards_manager: 'مسؤول إدارة المعايير',
+    ministry_supervisor: 'مشرف وزاري معتمد',
+  };
+  const displayRole = roleObj
+    ? (roleNameMap[roleObj.roleName] || roleObj.description || roleObj.roleName)
+    : 'مقيّم المدرسة';
+
+  const userInitials = displayName
+    .trim()
+    .split(' ')
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w: string) => w[0])
+    .join('') || 'مق';
+
+  useEffect(() => {
+    evaluatorApi.getUnreadNotificationsCount()
+      .then((count) => setUnreadNotificationsCount(count))
+      .catch(() => {});
+  }, []);
 
   const getScreenTitle = (screen: EvaluatorScreen) => {
     switch (screen) {
@@ -308,17 +339,19 @@ export const EvaluatorTopBar: React.FC<EvaluatorTopBarProps> = ({
             title="مركز التنبيهات"
           >
             <Bell size={17} />
-            <span
-              style={{
-                position: 'absolute',
-                top: '5px',
-                right: '6px',
-                width: '7px',
-                height: '7px',
-                borderRadius: '50%',
-                backgroundColor: '#EF4444',
-              }}
-            />
+            {unreadNotificationsCount > 0 && (
+              <span
+                style={{
+                  position: 'absolute',
+                  top: '5px',
+                  right: '6px',
+                  width: '7px',
+                  height: '7px',
+                  borderRadius: '50%',
+                  backgroundColor: '#EF4444',
+                }}
+              />
+            )}
           </button>
 
           {/* Change Password Button */}
@@ -391,14 +424,14 @@ export const EvaluatorTopBar: React.FC<EvaluatorTopBarProps> = ({
                 fontSize: '11px',
               }}
             >
-              عا
+              {userInitials}
             </div>
             <div className="hidden sm:block" style={{ textAlign: 'right' }}>
               <div style={{ fontSize: '11.5px', fontWeight: 700, color: '#0F172A', lineHeight: 1.2 }}>
-                عمار عمر
+                {displayName}
               </div>
               <div style={{ fontSize: '9.5px', color: '#64748B' }}>
-                مقيّم مدرسة
+                {displayRole}
               </div>
             </div>
           </div>

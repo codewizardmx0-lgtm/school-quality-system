@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
-import type { EvaluatorScreen } from '../../api/evaluationTypes';
+import React, { useState, useEffect, useCallback } from 'react';
+import type { EvaluatorScreen, EvaluatorNotificationItem } from '../../api/evaluationTypes';
+import { evaluatorApi } from '../../api/evaluatorApi';
 import {
   Bell,
   CheckCircle2,
@@ -9,75 +10,56 @@ import {
   CheckCheck,
 } from 'lucide-react';
 
-interface NotificationItem {
-  id: number;
-  type: 'cycle_launched' | 'completion_requested' | 'action_due_soon' | 'version_activated';
-  title: string;
-  message: string;
-  date: string;
-  isRead: boolean;
-  targetScreen?: EvaluatorScreen;
-}
-
 interface NotificationsCenterProps {
   onNavigate: (screen: EvaluatorScreen) => void;
 }
 
 export const NotificationsCenter: React.FC<NotificationsCenterProps> = ({ onNavigate }) => {
-  const [notifications, setNotifications] = useState<NotificationItem[]>([
-    {
-      id: 1,
-      type: 'completion_requested',
-      title: 'طلب استكمال صادر من المشرف الوزاري',
-      message: 'أصدر المشرف د. عبدالرحمن الأنسي ملاحظات تدقيق واستكمال على 3 مؤشرات لشواهد الفاقد التعليمي.',
-      date: 'منذ ساعتين',
-      isRead: false,
-      targetScreen: 'completion-request',
-    },
-    {
-      id: 2,
-      type: 'action_due_soon',
-      title: 'اقتراب موعد استحقاق إجراء تحسين',
-      message: 'إجراء "تطوير كفايات المعلمين في استخدام التكنولوجيا التفاعلية" يقترب موعد إنجازه المستهدف.',
-      date: 'أمس',
-      isRead: false,
-      targetScreen: 'improvement-plan',
-    },
-    {
-      id: 3,
-      type: 'version_activated',
-      title: 'تفعيل المعايير الوطنية المحدثة 2026',
-      message: 'تم اعتماد الإصدار المعياري الوطني NSS-2026-V1 وتعميمه على كافة مدارس الجمهورية.',
-      date: '2026-10-15',
-      isRead: true,
-      targetScreen: 'standards-tree',
-    },
-    {
-      id: 4,
-      type: 'cycle_launched',
-      title: 'إطلاق الدورة الرسمية للتقييم الذاتي 2026/2027',
-      message: 'تم تدشين دورة التقييم الذاتي واعتماد حسابات مسؤولي الجودة والتقييم بالمدارس.',
-      date: '2026-09-01',
-      isRead: true,
-      targetScreen: 'dashboard',
-    },
-  ]);
-
+  const [notifications, setNotifications] = useState<EvaluatorNotificationItem[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<'all' | 'unread'>('all');
+
+  const fetchNotifications = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const items = await evaluatorApi.getNotifications();
+      setNotifications(items);
+    } catch (err: unknown) {
+      setError((err as Error)?.message || 'فشل في تحميل الإشعارات من الخادم.');
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchNotifications();
+  }, [fetchNotifications]);
 
   const filtered = notifications.filter((n) => (filter === 'unread' ? !n.isRead : true));
 
-  const markAllAsRead = () => {
-    setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
+  const markAllAsRead = async () => {
+    try {
+      await evaluatorApi.markAllNotificationsAsRead();
+      setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
+    } catch (err) {
+      console.error('Failed to mark all as read:', err);
+    }
   };
 
-  const markSingleAsRead = (id: number) => {
-    setNotifications((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, isRead: true } : n))
-    );
+  const markSingleAsRead = async (id: number) => {
+    try {
+      await evaluatorApi.markNotificationAsRead(id);
+      setNotifications((prev) =>
+        prev.map((n) => (n.notificationId === id ? { ...n, isRead: true } : n))
+      );
+    } catch (err) {
+      console.error(`Failed to mark notification ${id} as read:`, err);
+    }
   };
 
-  const getIcon = (type: NotificationItem['type']) => {
+  const getIcon = (type: string) => {
     switch (type) {
       case 'completion_requested':
         return <AlertTriangle size={18} color="#D97706" />;
@@ -86,8 +68,25 @@ export const NotificationsCenter: React.FC<NotificationsCenterProps> = ({ onNavi
       case 'version_activated':
         return <BookOpen size={18} color="#059669" />;
       case 'cycle_launched':
+      default:
         return <CheckCircle2 size={18} color="#059669" />;
     }
+  };
+
+  const getTargetScreen = (item: EvaluatorNotificationItem): EvaluatorScreen | undefined => {
+    if (item.type === 'completion_requested' || item.relatedEntityType === 'completion_request') {
+      return 'completion-request';
+    }
+    if (item.type === 'action_due_soon' || item.relatedEntityType === 'improvement_action') {
+      return 'improvement-plan';
+    }
+    if (item.type === 'version_activated' || item.relatedEntityType === 'standard_version') {
+      return 'standards-tree';
+    }
+    if (item.type === 'cycle_launched' || item.relatedEntityType === 'cycle') {
+      return 'dashboard';
+    }
+    return undefined;
   };
 
   return (
@@ -168,6 +167,7 @@ export const NotificationsCenter: React.FC<NotificationsCenterProps> = ({ onNavi
 
           <button
             onClick={markAllAsRead}
+            disabled={notifications.length === 0}
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -179,7 +179,7 @@ export const NotificationsCenter: React.FC<NotificationsCenterProps> = ({ onNavi
               color: '#334155',
               fontSize: '12px',
               fontWeight: 600,
-              cursor: 'pointer',
+              cursor: notifications.length === 0 ? 'not-allowed' : 'pointer',
             }}
           >
             <CheckCheck size={14} />
@@ -188,100 +188,132 @@ export const NotificationsCenter: React.FC<NotificationsCenterProps> = ({ onNavi
         </div>
       </div>
 
-      {/* Notifications List */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-        {filtered.length === 0 ? (
-          <div
+      {/* Loading Skeletons */}
+      {isLoading ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          {[1, 2, 3].map((i) => (
+            <div key={i} style={{ height: '80px', borderRadius: '12px', backgroundColor: '#E2E8F0' }} className="animate-pulse" />
+          ))}
+        </div>
+      ) : error ? (
+        <div style={{ padding: '36px 20px', textAlign: 'center', backgroundColor: '#FFFFFF', borderRadius: '12px', border: '1px solid #FECACA' }}>
+          <AlertTriangle size={36} color="#DC2626" style={{ margin: '0 auto 8px' }} />
+          <div style={{ fontSize: '14px', fontWeight: 700, color: '#991B1B' }}>تعذر استرجاع الإشعارات</div>
+          <p style={{ fontSize: '12.5px', color: '#64748B', margin: '4px 0 16px' }}>{error}</p>
+          <button
+            onClick={fetchNotifications}
             style={{
-              padding: '48px 24px',
-              textAlign: 'center',
-              backgroundColor: '#FFFFFF',
-              borderRadius: '12px',
-              border: '1px solid #E2E8F0',
+              padding: '6px 14px',
+              borderRadius: '6px',
+              backgroundColor: '#059669',
+              color: '#FFFFFF',
+              fontWeight: 700,
+              fontSize: '12px',
+              border: 'none',
+              cursor: 'pointer',
             }}
           >
-            <CheckCircle2 size={36} color="#059669" style={{ margin: '0 auto 10px' }} />
-            <div style={{ fontSize: '14.5px', fontWeight: 700, color: '#0F172A' }}>
-              لا توجد تنبيهات غير مقروءة حالياً
-            </div>
-            <div style={{ fontSize: '12px', color: '#64748B', marginTop: '4px' }}>
-              كافة الإشعارات الإدارية والتنبيهات الميدانية تمت قراءتها والاطلاع عليها.
-            </div>
+            إعادة المحاولة
+          </button>
+        </div>
+      ) : filtered.length === 0 ? (
+        <div
+          style={{
+            padding: '48px 24px',
+            textAlign: 'center',
+            backgroundColor: '#FFFFFF',
+            borderRadius: '12px',
+            border: '1px solid #E2E8F0',
+          }}
+        >
+          <CheckCircle2 size={36} color="#059669" style={{ margin: '0 auto 10px' }} />
+          <div style={{ fontSize: '14.5px', fontWeight: 700, color: '#0F172A' }}>
+            {filter === 'unread' ? 'لا توجد تنبيهات غير مقروءة حالياً' : 'لا توجد أي إشعارات مسجلة لحسابك حالياً'}
           </div>
-        ) : (
-          filtered.map((item) => (
-          <div
-            key={item.id}
-            onClick={() => {
-              markSingleAsRead(item.id);
-              if (item.targetScreen) {
-                onNavigate(item.targetScreen);
-              }
-            }}
-            style={{
-              backgroundColor: item.isRead ? '#FFFFFF' : '#F0FDF4',
-              borderRadius: '12px',
-              border: item.isRead ? '1px solid #E2E8F0' : '1px solid #A7F3D0',
-              padding: '16px 20px',
-              display: 'flex',
-              alignItems: 'flex-start',
-              justifyContent: 'space-between',
-              cursor: item.targetScreen ? 'pointer' : 'default',
-              transition: 'background-color 0.15s',
-            }}
-            onMouseEnter={(e) => {
-              if (item.targetScreen) e.currentTarget.style.backgroundColor = '#F8FAFC';
-            }}
-            onMouseLeave={(e) => {
-              if (item.targetScreen) {
-                e.currentTarget.style.backgroundColor = item.isRead ? '#FFFFFF' : '#F0FDF4';
-              }
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+          <div style={{ fontSize: '12px', color: '#64748B', marginTop: '4px' }}>
+            {filter === 'unread'
+              ? 'كافة الإشعارات الإدارية والتنبيهات الميدانية تمت قراءتها والاطلاع عليها.'
+              : 'سيتم إشعارك فور حدوث أي إجراءات أو تكليفات جديدة في دورة التقييم.'}
+          </div>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          {filtered.map((item) => {
+            const targetScreen = getTargetScreen(item);
+            return (
               <div
+                key={item.notificationId}
+                onClick={() => {
+                  markSingleAsRead(item.notificationId);
+                  if (targetScreen) {
+                    onNavigate(targetScreen);
+                  }
+                }}
                 style={{
-                  width: '36px',
-                  height: '36px',
-                  borderRadius: '8px',
-                  backgroundColor: '#FFFFFF',
-                  border: '1px solid #E2E8F0',
+                  backgroundColor: item.isRead ? '#FFFFFF' : '#F0FDF4',
+                  borderRadius: '12px',
+                  border: item.isRead ? '1px solid #E2E8F0' : '1px solid #A7F3D0',
+                  padding: '16px 20px',
                   display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  marginTop: '2px',
+                  alignItems: 'flex-start',
+                  justifyContent: 'space-between',
+                  cursor: targetScreen ? 'pointer' : 'default',
+                  transition: 'background-color 0.15s',
+                }}
+                onMouseEnter={(e) => {
+                  if (targetScreen) e.currentTarget.style.backgroundColor = '#F8FAFC';
+                }}
+                onMouseLeave={(e) => {
+                  if (targetScreen) {
+                    e.currentTarget.style.backgroundColor = item.isRead ? '#FFFFFF' : '#F0FDF4';
+                  }
                 }}
               >
-                {getIcon(item.type)}
-              </div>
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <h4 style={{ fontSize: '14px', fontWeight: item.isRead ? 700 : 800, color: '#0F172A', margin: 0 }}>
-                    {item.title}
-                  </h4>
-                  {!item.isRead && (
-                    <span
-                      style={{
-                        width: '7px',
-                        height: '7px',
-                        borderRadius: '50%',
-                        backgroundColor: '#10B981',
-                      }}
-                    />
-                  )}
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+                  <div
+                    style={{
+                      width: '36px',
+                      height: '36px',
+                      borderRadius: '8px',
+                      backgroundColor: '#FFFFFF',
+                      border: '1px solid #E2E8F0',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      marginTop: '2px',
+                    }}
+                  >
+                    {getIcon(item.type)}
+                  </div>
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <h4 style={{ fontSize: '14px', fontWeight: item.isRead ? 700 : 800, color: '#0F172A', margin: 0 }}>
+                        {item.title}
+                      </h4>
+                      {!item.isRead && (
+                        <span
+                          style={{
+                            width: '7px',
+                            height: '7px',
+                            borderRadius: '50%',
+                            backgroundColor: '#10B981',
+                          }}
+                        />
+                      )}
+                    </div>
+                    <p style={{ fontSize: '12.5px', color: '#475569', margin: '4px 0 0 0', lineHeight: 1.5 }}>
+                      {item.message}
+                    </p>
+                    <div style={{ fontSize: '11px', color: '#94A3B8', marginTop: '6px' }}>
+                      {item.createdAt ? new Date(item.createdAt).toLocaleDateString('ar-YE') : 'مؤخراً'}
+                    </div>
+                  </div>
                 </div>
-                <p style={{ fontSize: '12.5px', color: '#475569', margin: '4px 0 0 0', lineHeight: 1.5 }}>
-                  {item.message}
-                </p>
-                <div style={{ fontSize: '11px', color: '#94A3B8', marginTop: '6px' }}>
-                  {item.date}
-                </div>
               </div>
-            </div>
-          </div>
-        ))
-        )}
-      </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 };

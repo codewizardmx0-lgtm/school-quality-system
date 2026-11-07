@@ -1,14 +1,62 @@
-import React from 'react';
-import { Download, ShieldCheck } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Download, ShieldCheck, Loader2 } from 'lucide-react';
+import { useAuth } from '../../../auth/AuthContext';
+import { evaluatorApi } from '../../api/evaluatorApi';
+import type { EvaluatorDashboardData } from '../../api/evaluationTypes';
 
 interface DraftReportPreviewProps {
   onExportPdf: () => void;
   isLocked?: boolean;
+  trackingCode?: string;
 }
 
 export const DraftReportPreview: React.FC<DraftReportPreviewProps> = ({
   onExportPdf,
+  trackingCode,
 }) => {
+  const { user } = useAuth();
+  const [dashboardData, setDashboardData] = useState<EvaluatorDashboardData | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+
+  useEffect(() => {
+    let isMounted = true;
+    evaluatorApi
+      .getDashboardStats()
+      .then((data) => {
+        if (isMounted) setDashboardData(data);
+      })
+      .catch((err) => {
+        console.error('Failed to load dashboard data for report preview:', err);
+      })
+      .finally(() => {
+        if (isMounted) setIsLoading(false);
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const schoolName = user?.school?.schoolName || dashboardData?.schoolInfo?.schoolName || 'مدرسة غير محددة';
+  const academicYear = dashboardData?.schoolInfo?.academicYear || '2026/2027';
+  const evaluatorName = user?.fullName || dashboardData?.schoolInfo?.currentEvaluator || 'المقيم المعتمد';
+  const finalTrackingCode = trackingCode || 'ARQ-2026-SCH-FIN';
+
+  const getStatusBadge = (percentage: number) => {
+    if (percentage === 100) {
+      return { text: 'مستوفى بالكامل', bg: '#ECFDF5', color: '#059669' };
+    }
+    if (percentage >= 70) {
+      return { text: 'متحقق بدرجة جيدة', bg: '#F0FDF4', color: '#16A34A' };
+    }
+    if (percentage >= 50) {
+      return { text: 'متحقق بدرجة متوسطة', bg: '#FEF3C7', color: '#D97706' };
+    }
+    if (percentage > 0) {
+      return { text: 'يتطلب تحسيناً', bg: '#FEE2E2', color: '#DC2626' };
+    }
+    return { text: 'لم يبدأ بعد', bg: '#F1F5F9', color: '#64748B' };
+  };
+
   return (
     <div
       style={{
@@ -92,59 +140,80 @@ export const DraftReportPreview: React.FC<DraftReportPreviewProps> = ({
       >
         <div>
           <span style={{ fontSize: '11px', color: '#64748B', display: 'block' }}>المدرسة</span>
-          <span style={{ fontSize: '13.5px', fontWeight: 800, color: '#0F172A' }}>مدرسة الأمل النموذجية الثانوية</span>
+          <span style={{ fontSize: '13.5px', fontWeight: 800, color: '#0F172A' }}>{schoolName}</span>
         </div>
         <div>
           <span style={{ fontSize: '11px', color: '#64748B', display: 'block' }}>العام الدراسي</span>
-          <span style={{ fontSize: '13.5px', fontWeight: 800, color: '#0F172A' }}>2026/2027</span>
+          <span style={{ fontSize: '13.5px', fontWeight: 800, color: '#0F172A' }}>{academicYear}</span>
         </div>
         <div>
           <span style={{ fontSize: '11px', color: '#64748B', display: 'block' }}>المقيم المعتمد</span>
-          <span style={{ fontSize: '13.5px', fontWeight: 800, color: '#0F172A' }}>عمار عمر عبدالله</span>
+          <span style={{ fontSize: '13.5px', fontWeight: 800, color: '#0F172A' }}>{evaluatorName}</span>
         </div>
         <div>
           <span style={{ fontSize: '11px', color: '#64748B', display: 'block' }}>رمز الاعتماد والتتبع</span>
-          <span style={{ fontSize: '13.5px', fontWeight: 800, color: '#059669' }}>ARQ-2026-SCH104-FIN</span>
+          <span style={{ fontSize: '13.5px', fontWeight: 800, color: '#059669' }}>{finalTrackingCode}</span>
         </div>
       </div>
 
       {/* Standards Summary Table in Report */}
       <h3 style={{ fontSize: '15px', fontWeight: 800, color: '#0F172A', marginBottom: '12px' }}>
-        خلاصة مؤشرات المعايير الوطنية السبعة
+        خلاصة مؤشرات المعايير الوطنية
       </h3>
       <div style={{ overflowX: 'auto', width: '100%', maxWidth: '100%' }}>
         <table style={{ minWidth: '600px', width: '100%', borderCollapse: 'collapse', textAlign: 'right', marginBottom: '24px' }}>
           <thead>
             <tr style={{ backgroundColor: '#F1F5F9', borderBottom: '1px solid #CBD5E1' }}>
               <th style={{ padding: '10px 12px', fontSize: '12px', fontWeight: 700 }}>المعيار الوطني</th>
-              <th style={{ padding: '10px 12px', fontSize: '12px', fontWeight: 700 }}>الوزن النسبي</th>
               <th style={{ padding: '10px 12px', fontSize: '12px', fontWeight: 700 }}>المؤشرات المنجزة</th>
-              <th style={{ padding: '10px 12px', fontSize: '12px', fontWeight: 700 }}>متوسط التقدير (0-3)</th>
+              <th style={{ padding: '10px 12px', fontSize: '12px', fontWeight: 700 }}>نسبة الاستيفاء</th>
               <th style={{ padding: '10px 12px', fontSize: '12px', fontWeight: 700 }}>مستوى التحقق</th>
             </tr>
           </thead>
           <tbody>
-            {[
-              { name: 'STD-01: القيادة والإدارة المدرسية', weight: '15%', scored: '7 / 8', avg: '2.6', status: 'متحقق بدرجة عالية' },
-              { name: 'STD-02: التعليم والتعلم وبيئة الصف', weight: '20%', scored: '8 / 10', avg: '2.1', status: 'متحقق بدرجة متوسطة' },
-              { name: 'STD-03: نواتج التعلم والتحصيل الأكاديمي', weight: '20%', scored: '6 / 8', avg: '1.9', status: 'يتطلب تحسيناً' },
-              { name: 'STD-04: البيئة المدرسية والصحة والسلامة', weight: '15%', scored: '6 / 8', avg: '2.4', status: 'متحقق بدرجة جيدة' },
-              { name: 'STD-05: رعاية الطلبة والأنشطة اللاصفية', weight: '10%', scored: '5 / 8', avg: '2.0', status: 'متحقق بدرجة متوسطة' },
-              { name: 'STD-06: المشاركة المجتمعية والشراكة الأسرية', weight: '10%', scored: '5 / 7', avg: '2.3', status: 'متحقق بدرجة جيدة' },
-              { name: 'STD-07: التطوير والتحسين المستمر', weight: '10%', scored: '5 / 7', avg: '2.2', status: 'متحقق بدرجة جيدة' },
-            ].map((row, idx) => (
-              <tr key={idx} style={{ borderBottom: '1px solid #E2E8F0', fontSize: '12.5px' }}>
-                <td style={{ padding: '10px 12px', fontWeight: 700, color: '#1E293B' }}>{row.name}</td>
-                <td style={{ padding: '10px 12px', color: '#64748B' }}>{row.weight}</td>
-                <td style={{ padding: '10px 12px', color: '#059669', fontWeight: 600 }}>{row.scored}</td>
-                <td style={{ padding: '10px 12px', fontWeight: 800 }}>{row.avg}</td>
-                <td style={{ padding: '10px 12px' }}>
-                  <span style={{ fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: '4px', backgroundColor: '#ECFDF5', color: '#059669' }}>
-                    {row.status}
-                  </span>
+            {isLoading ? (
+              <tr>
+                <td colSpan={4} style={{ padding: '24px', textAlign: 'center', color: '#64748B' }}>
+                  <Loader2 size={20} className="animate-spin" style={{ display: 'inline', marginLeft: '8px' }} />
+                  جاري تحميل بيانات المعايير...
                 </td>
               </tr>
-            ))}
+            ) : !dashboardData?.standardsProgress || dashboardData.standardsProgress.length === 0 ? (
+              <tr>
+                <td colSpan={4} style={{ padding: '24px', textAlign: 'center', color: '#64748B' }}>
+                  لا توجد معايير مسجلة في دورة التقييم الحالية.
+                </td>
+              </tr>
+            ) : (
+              dashboardData.standardsProgress.map((row) => {
+                const badge = getStatusBadge(row.percentage);
+                return (
+                  <tr key={row.standardId} style={{ borderBottom: '1px solid #E2E8F0', fontSize: '12.5px' }}>
+                    <td style={{ padding: '10px 12px', fontWeight: 700, color: '#1E293B' }}>
+                      {row.code ? `${row.code}: ` : ''}{row.title}
+                    </td>
+                    <td style={{ padding: '10px 12px', color: '#059669', fontWeight: 600 }}>
+                      {row.scoredIndicators} / {row.totalIndicators}
+                    </td>
+                    <td style={{ padding: '10px 12px', fontWeight: 800 }}>{row.percentage}%</td>
+                    <td style={{ padding: '10px 12px' }}>
+                      <span
+                        style={{
+                          fontSize: '11px',
+                          fontWeight: 700,
+                          padding: '2px 8px',
+                          borderRadius: '4px',
+                          backgroundColor: badge.bg,
+                          color: badge.color,
+                        }}
+                      >
+                        {badge.text}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })
+            )}
           </tbody>
         </table>
       </div>

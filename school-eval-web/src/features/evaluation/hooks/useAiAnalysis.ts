@@ -37,15 +37,7 @@ export function useAiAnalysis() {
     try {
       const recs = await evaluatorApi.getAiRecommendations(1);
       setRecommendations(recs);
-      setAnalysisData({
-        analysisId: 1,
-        summary: 'تحليل ذكي شامل لبيانات التقييم الذاتي لمدرسة الأمل النموذجية: يظهر الأداء قوة ملحوظة في مجالات القيادة والبيئة المدرسية (المتوسط 2.5)، مع وجود فجوات في أساليب التعلم المتمايز ونواتج قياس الفاقد التعليمي (المتوسط 1.2). ينصح بتبني ثلاث مبادرات تحسين تنفيذية عاجلة.',
-        averageScore: 2.1,
-        evaluatedEvidences: 18,
-        totalEvidences: 20,
-        suggestedInitiativesCount: 3,
-        createdAt: '2026-10-25',
-      });
+      // Analysis data will be fetched or initiated by user trigger
     } catch (err) {
       console.error('Failed to load AI recommendations:', err);
     } finally {

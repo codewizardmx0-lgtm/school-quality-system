@@ -46,6 +46,33 @@ export const HandleCompletionPage: React.FC<HandleCompletionPageProps> = ({
     );
   }
 
+  if (!completionData && !isLoading) {
+    return (
+      <div style={{ padding: '60px 24px', textAlign: 'center', backgroundColor: '#FFFFFF', borderRadius: '14px', border: '1px solid #E2E8F0', maxWidth: '800px', margin: '32px auto' }}>
+        <CheckCircle2 size={48} color="#059669" style={{ margin: '0 auto 12px' }} />
+        <h3 style={{ fontSize: '17px', fontWeight: 800, color: '#0F172A' }}>لا توجد طلبات استكمال معلقة حالياً</h3>
+        <p style={{ fontSize: '13px', color: '#64748B', maxWidth: '480px', margin: '8px auto 20px', lineHeight: 1.6 }}>
+          ملف التقييم الذاتي للمدرسة يسير وفق المسار المعتمد، ولم تصدر المراجعة الوزارية أي طلبات استكمال أو نواقص على ملف المدرسة.
+        </p>
+        <button
+          onClick={() => onNavigate('dashboard')}
+          style={{
+            padding: '10px 20px',
+            borderRadius: '8px',
+            backgroundColor: '#059669',
+            color: '#FFFFFF',
+            fontWeight: 700,
+            fontSize: '13px',
+            border: 'none',
+            cursor: 'pointer',
+          }}
+        >
+          العودة للوحة التحكم
+        </button>
+      </div>
+    );
+  }
+
   const items = completionData?.flaggedItems || [];
 
   const handleResolveClick = async (item: FlaggedCompletionItem) => {

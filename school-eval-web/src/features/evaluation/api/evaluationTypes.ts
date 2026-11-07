@@ -431,3 +431,16 @@ export interface EvidenceInventoryData {
   };
   standards: EvidenceInventoryStandard[];
 }
+
+export interface EvaluatorNotificationItem {
+  notificationId: number;
+  recipientUserId: number;
+  title: string;
+  message: string;
+  type: 'cycle_launched' | 'completion_requested' | 'action_due_soon' | 'version_activated' | string;
+  relatedEntityType?: string;
+  relatedEntityId?: number;
+  isRead: boolean;
+  readAt?: string;
+  createdAt: string;
+}

@@ -25,8 +25,32 @@ export const EvaluatorDashboard: React.FC<EvaluatorDashboardProps> = ({
   onNavigate,
   isLocked = false,
 }) => {
-  const { dashboardData, isLoading } = useEvaluatorDashboard();
+  const { dashboardData, isLoading, error, refreshDashboard } = useEvaluatorDashboard();
 
+  if (error && !dashboardData) {
+    return (
+      <div style={{ padding: '48px 24px', textAlign: 'center', backgroundColor: '#FFFFFF', borderRadius: '16px', border: '1px solid #FECACA', margin: '24px auto', maxWidth: '600px' }}>
+        <AlertTriangle size={48} color="#EF4444" style={{ margin: '0 auto 12px' }} />
+        <h3 style={{ fontSize: '16px', fontWeight: 800, color: '#991B1B' }}>تعذر تحميل بيانات لوحة التحكم</h3>
+        <p style={{ fontSize: '13px', color: '#64748B', margin: '8px 0 20px' }}>{error}</p>
+        <button
+          onClick={refreshDashboard}
+          style={{
+            padding: '10px 20px',
+            borderRadius: '8px',
+            backgroundColor: '#059669',
+            color: '#FFFFFF',
+            fontWeight: 700,
+            fontSize: '13px',
+            border: 'none',
+            cursor: 'pointer',
+          }}
+        >
+          إعادة المحاولة
+        </button>
+      </div>
+    );
+  }
   if (isLoading && !dashboardData) {
     return (
       <div style={{ padding: '24px', maxWidth: '1440px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '24px' }}>
@@ -42,13 +66,13 @@ export const EvaluatorDashboard: React.FC<EvaluatorDashboardProps> = ({
   }
 
   const kpis = dashboardData?.kpis || {
-    completionPercentage: 75,
-    totalIndicators: 56,
-    scoredIndicators: 42,
-    documentedEvidences: 38,
-    targetEvidences: 50,
-    strengthsCount: 28,
-    gapsCount: 14,
+    completionPercentage: 0,
+    totalIndicators: 0,
+    scoredIndicators: 0,
+    documentedEvidences: 0,
+    targetEvidences: 0,
+    strengthsCount: 0,
+    gapsCount: 0,
   };
 
   const school = dashboardData?.schoolInfo;
