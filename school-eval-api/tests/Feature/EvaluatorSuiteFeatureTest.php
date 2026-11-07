@@ -98,4 +98,106 @@ class EvaluatorSuiteFeatureTest extends TestCase
             ],
         ]);
     }
+
+    /**
+     * Test evaluator evidence inventory endpoint
+     */
+    public function test_evaluator_evidence_inventory_endpoint(): void
+    {
+        $user = User::where('username', 'quality_belqees')->first() ?? User::factory()->create();
+
+        $response = $this->actingAs($user, 'sanctum')
+            ->getJson('/api/v1/evaluator/evidence-inventory');
+
+        $response->assertStatus(200);
+        $response->assertJsonStructure([
+            'data' => [
+                'evaluationId',
+                'standards',
+                'summary' => [
+                    'totalIndicators',
+                    'indicatorsWithSufficientEvidence',
+                    'indicatorsMissingEvidence',
+                    'totalEvidencesUploaded',
+                    'byType',
+                    'byStatus',
+                ],
+            ],
+            'message',
+        ]);
+    }
+
+    /**
+     * Test evaluator improvement suggestions endpoint
+     */
+    public function test_evaluator_improvement_suggestions_endpoint(): void
+    {
+        $user = User::where('username', 'quality_belqees')->first() ?? User::factory()->create();
+
+        $response = $this->actingAs($user, 'sanctum')
+            ->getJson('/api/v1/evaluator/improvement-suggestions');
+
+        $response->assertStatus(200);
+        $response->assertJsonStructure([
+            'data' => [
+                'targetScore',
+                'suggestions',
+                'meta' => [
+                    'totalSuggestions',
+                ],
+            ],
+        ]);
+    }
+
+    /**
+     * Test evaluator action catalog endpoint
+     */
+    public function test_evaluator_action_catalog_endpoint(): void
+    {
+        $user = User::where('username', 'quality_belqees')->first() ?? User::factory()->create();
+
+        $response = $this->actingAs($user, 'sanctum')
+            ->getJson('/api/v1/improvement-plans/action-catalog');
+
+        $response->assertStatus(200);
+        $response->assertJsonStructure([
+            'data' => [
+                '*' => [
+                    'catalog_id',
+                    'sub_standard_code',
+                    'plan_type',
+                    'title',
+                ],
+            ],
+        ]);
+    }
+
+    /**
+     * Test evaluator export report PDF endpoint
+     */
+    public function test_evaluator_export_report_pdf_endpoint(): void
+    {
+        $user = User::where('username', 'quality_belqees')->first() ?? User::factory()->create();
+
+        $response = $this->actingAs($user, 'sanctum')
+            ->get('/api/v1/evaluator/export-report-pdf');
+
+        $response->assertStatus(200);
+        $this->assertEquals('application/pdf', $response->headers->get('content-type'));
+    }
+
+    /**
+     * Test evaluator multi-link endpoint
+     */
+    public function test_evaluator_multi_link_endpoint(): void
+    {
+        $user = User::where('username', 'quality_belqees')->first() ?? User::factory()->create();
+
+        $response = $this->actingAs($user, 'sanctum')
+            ->postJson('/api/v1/evaluator/evidence-links/multi', [
+                'targetIndicatorIds' => [1, 2],
+            ]);
+
+        $response->assertStatus(422); // document_id is required
+    }
 }

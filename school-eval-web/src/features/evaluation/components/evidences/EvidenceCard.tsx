@@ -1,11 +1,12 @@
 import React from 'react';
 import type { EvidenceItem } from '../../api/evaluationTypes';
-import { File, Download, RefreshCw, CheckCircle2, AlertCircle, Clock } from 'lucide-react';
+import { File, Download, RefreshCw, CheckCircle2, AlertCircle, Clock, Link2 } from 'lucide-react';
 
 interface EvidenceCardProps {
   evidence: EvidenceItem;
   onReplaceVersion: (docId: number) => void;
   onDownload: (evidence: EvidenceItem) => void;
+  onManageLinks?: (evidence: EvidenceItem) => void;
   readOnly?: boolean;
 }
 
@@ -13,6 +14,7 @@ export const EvidenceCard: React.FC<EvidenceCardProps> = ({
   evidence,
   onReplaceVersion,
   onDownload,
+  onManageLinks,
   readOnly = false,
 }) => {
   const isCompliant = evidence.verificationStatus === 'Compliant';
@@ -150,6 +152,29 @@ export const EvidenceCard: React.FC<EvidenceCardProps> = ({
             >
               <RefreshCw size={12} />
               استبدال
+            </button>
+          )}
+
+          {!readOnly && onManageLinks && (
+            <button
+              onClick={() => onManageLinks(evidence)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                padding: '6px 10px',
+                borderRadius: '6px',
+                backgroundColor: '#EFF6FF',
+                border: '1px solid #BFDBFE',
+                color: '#1D4ED8',
+                fontSize: '11.5px',
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+              title="إدارة علاقات الشاهد (نقل / ربط متعدد / فك ارتباط)"
+            >
+              <Link2 size={12} />
+              إدارة الشواهد
             </button>
           )}
 

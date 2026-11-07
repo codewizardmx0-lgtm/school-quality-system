@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import type { ActionStatus, CreateImprovementActionPayload } from '../../api/evaluationTypes';
-import { Target, X, Check } from 'lucide-react';
+import type { ActionStatus, CreateImprovementActionPayload, ActionCatalogItem } from '../../api/evaluationTypes';
+import { Target, X, Check, BookOpen } from 'lucide-react';
+import { ActionCatalogModal } from './ActionCatalogModal';
 
 interface AddActionModalProps {
   isOpen: boolean;
@@ -25,6 +26,14 @@ export const AddActionModal: React.FC<AddActionModalProps> = ({
   const [progressDescription, setProgressDescription] = useState('');
   const [completionPercentage, setCompletionPercentage] = useState(10);
   const [error, setError] = useState<string | null>(null);
+  const [isCatalogOpen, setIsCatalogOpen] = useState(false);
+
+  const handleSelectCatalogAction = (action: ActionCatalogItem) => {
+    setTitle(action.action_title || action.title || '');
+    if (action.description) setProgressDescription(action.description);
+    if (action.responsible_role) setLeader(action.responsible_role);
+    setIsCatalogOpen(false);
+  };
 
     const handleClose = () => {
     if (isSubmitting) return;
@@ -125,23 +134,46 @@ export const AddActionModal: React.FC<AddActionModalProps> = ({
               </p>
             </div>
           </div>
-          <button
-            onClick={handleClose}
-            style={{
-              width: '32px',
-              height: '32px',
-              borderRadius: '8px',
-              backgroundColor: '#F1F5F9',
-              border: 'none',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: '#64748B',
-              cursor: 'pointer',
-            }}
-          >
-            <X size={18} />
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <button
+              type="button"
+              onClick={() => setIsCatalogOpen(true)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '6px 12px',
+                borderRadius: '8px',
+                backgroundColor: '#EFF6FF',
+                border: '1px solid #BFDBFE',
+                color: '#1D4ED8',
+                fontSize: '12px',
+                fontWeight: 700,
+                cursor: 'pointer',
+              }}
+              title="تصفح بنك الإجراءات النموذجية المعتمدة لملء الحقول تلقائياً"
+            >
+              <BookOpen size={14} />
+              استيراد من بنك الإجراءات
+            </button>
+            <button
+              onClick={handleClose}
+              style={{
+                width: '32px',
+                height: '32px',
+                borderRadius: '8px',
+                backgroundColor: '#F1F5F9',
+                border: 'none',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#64748B',
+                cursor: 'pointer',
+              }}
+            >
+              <X size={18} />
+            </button>
+          </div>
         </div>
 
         <form onSubmit={handleSubmit} style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
@@ -348,6 +380,12 @@ export const AddActionModal: React.FC<AddActionModalProps> = ({
             </button>
           </div>
         </form>
+        {/* Action Catalog Modal */}
+        <ActionCatalogModal
+          isOpen={isCatalogOpen}
+          onClose={() => setIsCatalogOpen(false)}
+          onSelectAction={handleSelectCatalogAction}
+        />
       </div>
     </div>
   );

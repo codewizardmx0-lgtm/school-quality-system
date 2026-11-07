@@ -2,6 +2,10 @@ import { exportToExcel, formatExportFilename } from '../../../admin/utils/export
 import React, { useState } from 'react';
 import { useEvidences } from '../../hooks/useEvidences';
 import { EvidenceCard } from './EvidenceCard';
+import { LinkEvidenceModal } from './LinkEvidenceModal';
+import { EvidenceInventoryPage } from './EvidenceInventoryPage';
+import { useToast } from '../../../admin/components/common/useToast';
+import { ToastNotification } from '../../../admin/components/common/ToastNotification';
 import { UploadEvidenceModal } from './UploadEvidenceModal';
 import type { EvidenceItem, EvaluatorScreen } from '../../api/evaluationTypes';
 import {
@@ -15,6 +19,7 @@ import {
   FileText,
   Table as TableIcon,
   LayoutGrid,
+  Link2,
 } from 'lucide-react';
 
 interface EvidencesRepositoryProps {
@@ -41,6 +46,16 @@ export const EvidencesRepository: React.FC<EvidencesRepositoryProps> = ({
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [replaceDocId, setReplaceDocId] = useState<number | undefined>(undefined);
   const [viewMode, setViewMode] = useState<'grid' | 'table'>('table');
+  const [activeTab, setActiveTab] = useState<'repository' | 'inventory'>('repository');
+  const [selectedEvidenceForLinking, setSelectedEvidenceForLinking] = useState<EvidenceItem | null>(null);
+  const [isLinkModalOpen, setIsLinkModalOpen] = useState(false);
+  const { toasts, addToast, dismissToast } = useToast();
+
+  const handleOpenLinkModal = (evidence: EvidenceItem) => {
+    setSelectedEvidenceForLinking(evidence);
+    setIsLinkModalOpen(true);
+  };
+
 
   const stats = vaultStats || {
     totalEvidences: 38,
@@ -107,6 +122,66 @@ export const EvidencesRepository: React.FC<EvidencesRepositoryProps> = ({
 
   return (
     <div style={{ padding: '24px', maxWidth: '1440px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '22px' }}>
+            {/* View Switcher: Repository vs Inventory */}
+      <div
+        style={{
+          display: 'flex',
+          gap: '10px',
+          borderBottom: '2px solid #E2E8F0',
+          paddingBottom: '12px',
+        }}
+      >
+        <button
+          type="button"
+          onClick={() => setActiveTab('repository')}
+          style={{
+            padding: '8px 18px',
+            borderRadius: '8px',
+            fontSize: '13.5px',
+            fontWeight: 700,
+            cursor: 'pointer',
+            border: activeTab === 'repository' ? '2px solid #059669' : '1px solid #E2E8F0',
+            backgroundColor: activeTab === 'repository' ? '#ECFDF5' : '#FFFFFF',
+            color: activeTab === 'repository' ? '#065F46' : '#64748B',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+          }}
+        >
+          <FolderLock size={16} />
+          مستودع وخزانة الشواهد
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('inventory')}
+          style={{
+            padding: '8px 18px',
+            borderRadius: '8px',
+            fontSize: '13.5px',
+            fontWeight: 700,
+            cursor: 'pointer',
+            border: activeTab === 'inventory' ? '2px solid #2563EB' : '1px solid #E2E8F0',
+            backgroundColor: activeTab === 'inventory' ? '#EFF6FF' : '#FFFFFF',
+            color: activeTab === 'inventory' ? '#1E40AF' : '#64748B',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+          }}
+        >
+          <FileText size={16} />
+          📊 جرد وحصر الشواهد (109 مؤشرات)
+        </button>
+      </div>
+
+      {activeTab === 'inventory' ? (
+        <EvidenceInventoryPage
+          onSuccessToast={(msg) => addToast('success', msg)}
+          onErrorToast={(err) => addToast('error', err)}
+        />
+      ) : (
+        <>
+
       {/* 1. Four Vault Stat Cards */}
       <div
         style={{
@@ -555,6 +630,28 @@ export const EvidencesRepository: React.FC<EvidencesRepositoryProps> = ({
                             استبدال
                           </button>
                         )}
+                        {!readOnly && (
+                          <button
+                            onClick={() => handleOpenLinkModal(ev)}
+                            style={{
+                              padding: '5px 10px',
+                              borderRadius: '6px',
+                              backgroundColor: '#EFF6FF',
+                              border: '1px solid #BFDBFE',
+                              color: '#1D4ED8',
+                              fontSize: '11.5px',
+                              fontWeight: 700,
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                            }}
+                            title="إدارة علاقات الشاهد (نقل / ربط متعدد / فك ارتباط)"
+                          >
+                            <Link2 size={13} />
+                            إدارة الشواهد
+                          </button>
+                        )}
                         <button
                           onClick={() => handleDownloadEvidence(ev)}
                           style={{
@@ -588,10 +685,29 @@ export const EvidencesRepository: React.FC<EvidencesRepositoryProps> = ({
               onReplaceVersion={(docId) => handleOpenUpload(docId)}
               onDownload={handleDownloadEvidence}
               readOnly={readOnly}
+              onManageLinks={handleOpenLinkModal}
             />
           ))}
         </div>
       )}
+
+        </>
+      )}
+
+      {/* Link Evidence Modal */}
+      <LinkEvidenceModal
+        isOpen={isLinkModalOpen}
+        onClose={() => {
+          setIsLinkModalOpen(false);
+          setSelectedEvidenceForLinking(null);
+        }}
+        evidence={selectedEvidenceForLinking}
+        onSuccess={(msg) => addToast('success', msg)}
+        onError={(err) => addToast('error', err)}
+      />
+
+      {/* Toasts */}
+      <ToastNotification toasts={toasts} onDismiss={dismissToast} />
 
       {/* Modal for upload / replace */}
       <UploadEvidenceModal

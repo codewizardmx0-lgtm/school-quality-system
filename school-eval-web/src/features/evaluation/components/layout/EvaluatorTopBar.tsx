@@ -13,7 +13,7 @@ import {
   ChevronLeft,
 } from 'lucide-react';
 import { SYSTEM_SHORT_NAME } from '../../../../constants/systemConstants';
-import { schoolsApi } from '../../../admin/api/schoolsApi';
+import { evaluatorApi } from '../../api/evaluatorApi';
 
 interface EvaluatorTopBarProps {
   activeScreen: EvaluatorScreen;
@@ -28,6 +28,7 @@ interface EvaluatorTopBarProps {
   onToggleCollapse?: () => void;
   onOpenChangePassword?: () => void;
   onLogout?: () => void;
+  addToast?: (type: 'error' | 'success' | 'warning' | 'info', message: string, duration?: number) => void;
 }
 
 export const EvaluatorTopBar: React.FC<EvaluatorTopBarProps> = ({
@@ -41,6 +42,7 @@ export const EvaluatorTopBar: React.FC<EvaluatorTopBarProps> = ({
   onOpenMobile,
   onOpenChangePassword,
   onLogout,
+  addToast,
 }) => {
   const [isExportingPdf, setIsExportingPdf] = useState(false);
 
@@ -74,9 +76,15 @@ export const EvaluatorTopBar: React.FC<EvaluatorTopBarProps> = ({
     if (isExportingPdf) return;
     setIsExportingPdf(true);
     try {
-      await schoolsApi.downloadExecutivePdf();
-    } catch (err) {
+      await evaluatorApi.exportReportPdf();
+      if (addToast) {
+        addToast('success', 'تم تصدير وتحميل تقرير التقييم الذاتي المعتمد (PDF) بنجاح.');
+      }
+    } catch (err: any) {
       console.error('Failed to export PDF report:', err);
+      if (addToast) {
+        addToast('error', err?.response?.data?.message || err?.message || 'تعذر تصدير تقرير التقييم PDF.');
+      }
     } finally {
       setIsExportingPdf(false);
     }

@@ -546,7 +546,9 @@ class EvaluatorApiController extends Controller
             $link = EvidenceLink::where('document_version_id', $ver->id)->with('indicator.subStandard.standard')->first();
             return [
                 'id' => $ver->id,
+                'linkId' => $link?->id ?? $ver->id,
                 'documentId' => $ver->document_id,
+                'indicatorId' => $link?->indicator_id,
                 'title' => $ver->document?->title ?? $ver->file_name,
                 'fileName' => $ver->file_name,
                 'mimeType' => $ver->mime_type,
@@ -1057,6 +1059,26 @@ class EvaluatorApiController extends Controller
     }
 
     /**
+     * POST /api/v1/improvement-actions/{id}/evidences
+     * إرفاق شاهد إثبات بإجراء الخطة
+     */
+    public function attachActionEvidence(Request $request, int $id): JsonResponse
+    {
+        $action = ImprovementAction::find($id);
+        if (!$action) {
+            return ApiResponse::notFound('الإجراء المطلوب غير موجود.');
+        }
+
+        $plan = ImprovementPlan::find($action->plan_id);
+        if ($plan) {
+            $improvementPlanController = app(\App\Http\Controllers\Api\V1\ImprovementPlanController::class);
+            return $improvementPlanController->attachActionEvidence($request, $plan->plan_id, $id);
+        }
+
+        return ApiResponse::notFound('الخطة غير موجودة.');
+    }
+
+    /**
      * GET /api/v1/evaluations/current/preflight-check
      * Validate 5-point readiness criteria checklist
      */
@@ -1341,5 +1363,111 @@ class EvaluatorApiController extends Controller
             'status' => 'Resolved',
             'resubmittedAt' => now()->toIso8601String(),
         ], 'تمت إعادة الرفع النهائي للمشرف الوزاري بنجاح وتم إغلاق طلب الاستكمال');
+    }
+
+    /**
+     * GET /api/v1/evaluator/export-report-pdf
+     * تصدير تقرير التقييم الذاتي للمدرسة بصيغة PDF
+     */
+    public function exportReportPdf(Request $request)
+    {
+        $user = $request->user();
+        if ($user && !$user->hasPermission('evaluations.view') && !$user->hasPermission('reports.view') && !$user->hasRole('admin') && !$user->hasRole('evaluator') && !$user->hasRole('school_principal')) {
+            return ApiResponse::forbidden('ليس لديك صلاحية لتصدير تقرير التقييم.');
+        }
+
+        $evaluation = $this->getActiveEvaluation($request);
+        if (!$evaluation) {
+            return ApiResponse::notFound('ملف التقييم غير موجود.');
+        }
+
+        $evaluation->loadMissing(['school', 'cycle']);
+
+        $reportService = app(\App\Services\EvaluationReportService::class);
+        $pdfContent = $reportService->generateEvaluationCardPdf($evaluation, $user);
+
+        $schoolCode = $evaluation->school?->school_code ?? 'SCH';
+        $fileName = 'evaluation_report_' . $schoolCode . '_' . date('Y-m-d_H-i') . '.pdf';
+
+        return response($pdfContent, 200, [
+            'Content-Type'        => 'application/pdf',
+            'Content-Disposition' => 'attachment; filename="' . $fileName . '"',
+            'Cache-Control'       => 'private, max-age=0, must-revalidate',
+            'Pragma'              => 'public',
+        ]);
+    }
+
+    /**
+     * GET /api/v1/evaluator/evidence-inventory
+     * جرد وحصر الشواهد للمدرسة الحالية
+     */
+    public function getEvidenceInventory(Request $request): JsonResponse
+    {
+        $evaluation = $this->getActiveEvaluation($request);
+        if (!$evaluation) {
+            return ApiResponse::notFound('ملف التقييم غير موجود.');
+        }
+
+        $evidenceController = app(\App\Http\Controllers\Api\V1\EvidenceController::class);
+        return $evidenceController->inventory($request, $evaluation->evaluation_id);
+    }
+
+    /**
+     * GET /api/v1/evaluator/improvement-suggestions
+     * مقترحات التحسين الحسابية التلقائية للمدرسة الحالية
+     */
+    public function getImprovementSuggestions(Request $request): JsonResponse
+    {
+        $evaluation = $this->getActiveEvaluation($request);
+        if (!$evaluation) {
+            return ApiResponse::notFound('ملف التقييم غير موجود.');
+        }
+
+        $suggestionController = app(\App\Http\Controllers\Api\V1\ImprovementSuggestionController::class);
+        return $suggestionController->index($request, $evaluation->evaluation_id);
+    }
+
+    /**
+     * POST /api/v1/evaluator/evidence-links/multi
+     * ربط شاهد بعدة مؤشرات دفعة واحدة أو نقل شاهد
+     */
+    public function multiLinkEvidence(Request $request): JsonResponse
+    {
+        $validator = Validator::make($request->all(), [
+            'documentId' => 'nullable|integer',
+            'versionId' => 'nullable|integer',
+            'indicatorIds' => 'required|array',
+            'indicatorIds.*' => 'integer',
+            'justification' => 'nullable|string',
+        ]);
+
+        if ($validator->fails()) {
+            return ApiResponse::validationError($validator->errors()->toArray());
+        }
+
+        $evaluation = $this->getActiveEvaluation($request);
+        $documentId = $request->input('documentId');
+        $versionId = $request->input('versionId');
+        $indicatorIds = $request->input('indicatorIds');
+        $justification = $request->input('justification');
+
+        $createdLinks = [];
+        foreach ($indicatorIds as $indId) {
+            $link = EvidenceLink::firstOrCreate([
+                'evaluation_id' => $evaluation->evaluation_id,
+                'indicator_id' => $indId,
+                'document_version_id' => $versionId ?? $documentId,
+            ], [
+                'school_id' => $evaluation->school_id,
+                'justification' => $justification,
+                'status' => 'completed',
+            ]);
+            $createdLinks[] = $link->id;
+        }
+
+        return ApiResponse::success([
+            'linkedCount' => count($createdLinks),
+            'linkIds' => $createdLinks,
+        ], 'تم ربط الشاهد بالمؤشرات المحددة بنجاح');
     }
 }

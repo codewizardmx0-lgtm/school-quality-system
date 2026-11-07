@@ -135,6 +135,10 @@ Route::prefix('v1')->group(function () {
         // --------------------------------------------------------------------------
         Route::prefix('evaluator')->group(function () {
             Route::get('/dashboard-stats', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'dashboardStats'])->name('api.v1.evaluator.dashboard-stats');
+            Route::get('/export-report-pdf', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'exportReportPdf'])->name('api.v1.evaluator.export-report-pdf');
+            Route::get('/evidence-inventory', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'getEvidenceInventory'])->name('api.v1.evaluator.evidence-inventory');
+            Route::get('/improvement-suggestions', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'getImprovementSuggestions'])->name('api.v1.evaluator.improvement-suggestions');
+            Route::post('/evidence-links/multi', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'multiLinkEvidence'])->name('api.v1.evaluator.evidence-links.multi');
         });
 
         Route::get('/standard-versions/active/tree', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'activeStandardsTree'])->name('api.v1.standard-versions.active.tree');
@@ -153,6 +157,7 @@ Route::prefix('v1')->group(function () {
         Route::get('/improvement-plans/current', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'getCurrentImprovementPlan'])->name('api.v1.improvement-plans.current');
         Route::post('/improvement-actions', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'createImprovementAction'])->name('api.v1.improvement-actions.store');
         Route::put('/improvement-actions/{id}', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'updateImprovementAction'])->name('api.v1.improvement-actions.update');
+        Route::post('/improvement-actions/{id}/evidences', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'attachActionEvidence'])->name('api.v1.improvement-actions.evidences.store');
 
         Route::get('/evaluations/current/preflight-check', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'preflightCheck'])->name('api.v1.evaluations.current.preflight-check');
         Route::post('/evaluation-submissions/submit', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'submitEvaluation'])->name('api.v1.evaluation-submissions.submit');

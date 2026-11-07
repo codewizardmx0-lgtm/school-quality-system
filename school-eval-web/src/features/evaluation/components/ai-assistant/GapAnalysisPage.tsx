@@ -2,6 +2,9 @@ import React, { useState } from 'react';
 import { useAiAnalysis } from '../../hooks/useAiAnalysis';
 import { AiRecommendationCard } from './AiRecommendationCard';
 import { TransferToActionModal } from './TransferToActionModal';
+import { FormulaSuggestionsSection } from './FormulaSuggestionsSection';
+import { useToast } from '../../../admin/components/common/useToast';
+import { ToastNotification } from '../../../admin/components/common/ToastNotification';
 import type { AiInitiative, EvaluatorScreen } from '../../api/evaluationTypes';
 import {
   Sparkles,
@@ -37,6 +40,9 @@ export const GapAnalysisPage: React.FC<GapAnalysisPageProps> = ({
   } = useAiAnalysis();
 
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
+  const [activeView, setActiveView] = useState<'suggestions' | 'ai'>('suggestions');
+  const { toasts, addToast, dismissToast } = useToast();
+
 
   const handleOpenTransfer = (initiative: AiInitiative) => {
     if (readOnly) return;
@@ -59,7 +65,67 @@ export const GapAnalysisPage: React.FC<GapAnalysisPageProps> = ({
 
   return (
     <div style={{ padding: '24px', maxWidth: '1440px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '24px' }}>
-      {/* 1. Header with AI Trigger */}
+            {/* Tab Switcher: Formula Suggestions (FR-SCH-16) vs AI Qualitative Analysis */}
+      <div
+        style={{
+          display: 'flex',
+          gap: '10px',
+          borderBottom: '2px solid #e2e8f0',
+          paddingBottom: '12px',
+        }}
+      >
+        <button
+          type="button"
+          onClick={() => setActiveView('suggestions')}
+          style={{
+            padding: '8px 18px',
+            borderRadius: '8px',
+            fontSize: '13.5px',
+            fontWeight: 700,
+            cursor: 'pointer',
+            border: activeView === 'suggestions' ? '2px solid #059669' : '1px solid #e2e8f0',
+            backgroundColor: activeView === 'suggestions' ? '#ecfdf5' : '#ffffff',
+            color: activeView === 'suggestions' ? '#065f46' : '#64748b',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+          }}
+        >
+          <Target size={16} />
+          📊 المقترحات الحسابية الفورية (FR-SCH-16)
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveView('ai')}
+          style={{
+            padding: '8px 18px',
+            borderRadius: '8px',
+            fontSize: '13.5px',
+            fontWeight: 700,
+            cursor: 'pointer',
+            border: activeView === 'ai' ? '2px solid #8b5cf6' : '1px solid #e2e8f0',
+            backgroundColor: activeView === 'ai' ? '#f5f3ff' : '#ffffff',
+            color: activeView === 'ai' ? '#6d28d9' : '#64748b',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+          }}
+        >
+          <Sparkles size={16} />
+          ✨ المساعد الذكي والتحليل النوعي (AI Analysis)
+        </button>
+      </div>
+
+      {activeView === 'suggestions' ? (
+        <FormulaSuggestionsSection
+          readOnly={readOnly}
+          onNavigateToPlans={() => onNavigate('improvement-plan')}
+          onToast={(type, msg) => addToast(type, msg)}
+        />
+      ) : (
+        <>
+          {/* 1. Header with AI Trigger */}
       <div
         style={{
           background: 'linear-gradient(135deg, #064E3B 0%, #065F46 45%, #047857 100%)',
@@ -480,6 +546,11 @@ export const GapAnalysisPage: React.FC<GapAnalysisPageProps> = ({
         initiative={selectedInitiativeForTransfer}
         onConfirmTransfer={transferInitiativeToPlan}
       />
+        </>
+      )}
+
+      {/* Toasts */}
+      <ToastNotification toasts={toasts} onDismiss={dismissToast} />
     </div>
   );
 };

@@ -1,4 +1,4 @@
-import { schoolsApi } from '../../../admin/api/schoolsApi';
+import { evaluatorApi } from '../../api/evaluatorApi';
 import React, { useState } from 'react';
 import { useFinalSubmission } from '../../hooks/useFinalSubmission';
 import { DraftReportPreview } from './DraftReportPreview';
@@ -42,11 +42,18 @@ export const InternalReviewPage: React.FC<InternalReviewPageProps> = ({
   const canSubmit = preflightData?.canSubmit ?? true;
   const readiness = preflightData?.readinessPercentage ?? 100;
 
+  const [isExporting, setIsExporting] = useState(false);
+
   const handleExportPdfReport = async () => {
+    if (isExporting) return;
+    setIsExporting(true);
     try {
-      await schoolsApi.downloadExecutivePdf();
-    } catch (err) {
+      await evaluatorApi.exportReportPdf();
+    } catch (err: any) {
       console.error('Failed to export PDF report:', err);
+      alert(err?.response?.data?.message || 'تعذر تصدير إشعار الختم / تقرير التقييم PDF.');
+    } finally {
+      setIsExporting(false);
     }
   };
 

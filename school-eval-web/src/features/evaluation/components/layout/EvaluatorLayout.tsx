@@ -190,6 +190,7 @@ export const EvaluatorLayout: React.FC<EvaluatorLayoutProps> = ({
         }}
       >
         <EvaluatorTopBar
+          addToast={addToast}
           activeScreen={activeScreen}
           hasOpenCompletionRequest={hasOpenCompletionRequest}
           onOpenCompletionRequest={() => setActiveScreen('completion-request')}

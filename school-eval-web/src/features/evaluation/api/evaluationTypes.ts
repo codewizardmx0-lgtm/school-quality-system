@@ -165,6 +165,8 @@ export interface EvidenceVaultStats {
 export interface EvidenceItem {
   id: number;
   documentId: number;
+  linkId?: number;
+  indicatorId?: number;
   title: string;
   fileName: string;
   mimeType: string;
@@ -241,6 +243,7 @@ export interface ImprovementPlanAction {
   statusArabic: string;
   completionPercentage: number;
   progressDescription: string;
+  evidences?: { evidenceId: number; title: string; fileName: string }[];
 }
 
 export interface ImprovementPlanSummary {
@@ -345,3 +348,86 @@ export type EvaluatorScreen =
   | 'final-review'
   | 'completion-request'
   | 'notifications';
+
+
+export interface ActionCatalogItem {
+  catalog_id: number;
+  sub_standard_code: string;
+  plan_type: string;
+  action_title?: string;
+  title?: string;
+  description: string;
+  target_score?: number | string;
+  target_description?: string;
+  timeframe?: string;
+  duration_days?: number;
+  responsible_role?: string;
+  responsible_party?: string;
+}
+
+export interface ImprovementSuggestion {
+  resultId: number;
+  indicatorId: number;
+  indicatorCode: string;
+  indicatorName: string;
+  score: number;
+  targetScore: number;
+  gap: number;
+  suggestedPriority: PriorityLevel;
+  priorityLabel: string;
+  suggestedName: string;
+  isAdopted: boolean;
+  adoptedAreaId?: number | null;
+}
+
+export interface EvidenceInventoryIndicator {
+  indicatorId: number;
+  indicatorCode: string;
+  indicatorName: string;
+  domainName?: string;
+  mandatoryRequiredCount: number;
+  totalRequiredCount: number;
+  uploadedEvidenceCount: number;
+  validEvidenceCount: number;
+  draftEvidenceCount: number;
+  completionRate: number;
+  isSufficient: boolean;
+  status: string;
+  evidences: {
+    evidenceId: number;
+    title: string;
+    evidenceType: string;
+    status: string;
+    createdAt?: string;
+    versionsCount?: number;
+  }[];
+}
+
+export interface EvidenceInventoryStandard {
+  standardId: number;
+  standardCode: string;
+  standardName: string;
+  mandatoryRequiredCount: number;
+  uploadedEvidenceCount: number;
+  validEvidenceCount: number;
+  draftEvidenceCount: number;
+  completionRate: number;
+  indicators: EvidenceInventoryIndicator[];
+}
+
+export interface EvidenceInventoryData {
+  evaluationId: number;
+  schoolId: number;
+  schoolName?: string;
+  inventoryStatus: string;
+  overallEvidenceCompletionRate: number;
+  summary: {
+    totalIndicators: number;
+    indicatorsWithSufficientEvidence: number;
+    indicatorsMissingEvidence: number;
+    totalEvidencesUploaded: number;
+    totalValidEvidences: number;
+    totalDraftEvidences: number;
+  };
+  standards: EvidenceInventoryStandard[];
+}

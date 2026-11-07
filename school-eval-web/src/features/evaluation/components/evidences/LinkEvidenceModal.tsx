@@ -1,0 +1,612 @@
+import React, { useState, useEffect } from 'react';
+import { X, Link2, Check, AlertTriangle, ArrowRightLeft, Unlink, Search } from 'lucide-react';
+import { evaluatorApi } from '../../api/evaluatorApi';
+import type { EvidenceItem, StandardsTreeData } from '../../api/evaluationTypes';
+
+interface LinkEvidenceModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  evidence: EvidenceItem | null;
+  onSuccess: (message: string) => void;
+  onError: (message: string) => void;
+}
+
+type LinkMode = 'single' | 'multi' | 'unlink';
+
+export const LinkEvidenceModal: React.FC<LinkEvidenceModalProps> = ({
+  isOpen,
+  onClose,
+  evidence,
+  onSuccess,
+  onError,
+}) => {
+  const [mode, setMode] = useState<LinkMode>('single');
+  const [standardsTree, setStandardsTree] = useState<StandardsTreeData | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedSingleIndicatorId, setSelectedSingleIndicatorId] = useState<number | null>(null);
+  const [selectedMultiIndicatorIds, setSelectedMultiIndicatorIds] = useState<number[]>([]);
+  const [justification, setJustification] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (isOpen) {
+      evaluatorApi.getActiveStandardsTree().then((tree) => {
+        setStandardsTree(tree);
+      });
+      // Reset state
+      setMode('single');
+      setSearchTerm('');
+      setSelectedSingleIndicatorId(null);
+      setSelectedMultiIndicatorIds([]);
+      setJustification('');
+    }
+  }, [isOpen]);
+
+  if (!isOpen || !evidence) return null;
+
+  // Flatten indicators from standards tree
+  const allIndicators: { indicatorId: number; code: string; title: string; standardName: string }[] = [];
+  if (standardsTree?.standards) {
+    for (const std of standardsTree.standards) {
+      if (std.subStandards) {
+        for (const sub of std.subStandards) {
+          if (sub.indicators) {
+            for (const ind of sub.indicators) {
+              allIndicators.push({
+                indicatorId: ind.indicatorId,
+                code: ind.code,
+                title: ind.title,
+                standardName: std.title,
+              });
+            }
+          }
+        }
+      }
+    }
+  }
+
+  const filteredIndicators = allIndicators.filter(
+    (ind) =>
+      ind.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      ind.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      ind.standardName.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const handleToggleMultiIndicator = (id: number) => {
+    setSelectedMultiIndicatorIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+  };
+
+  const handleSelectAllFiltered = () => {
+    const ids = filteredIndicators.map((i) => i.indicatorId);
+    setSelectedMultiIndicatorIds((prev) => Array.from(new Set([...prev, ...ids])));
+  };
+
+  const handleClearMultiSelection = () => {
+    setSelectedMultiIndicatorIds([]);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+
+    try {
+      if (mode === 'single') {
+        if (!selectedSingleIndicatorId) {
+          onError('يرجى اختيار المؤشر المستهدف لنقل الشاهد إليه.');
+          setIsSubmitting(false);
+          return;
+        }
+
+        // Link to new indicator
+        await evaluatorApi.multiLinkEvidence({
+          documentId: evidence.documentId,
+          versionId: evidence.id,
+          indicatorIds: [selectedSingleIndicatorId],
+          justification: justification || 'نقل الشاهد لمؤشر آخر بديل',
+        });
+
+        // If linkId exists, unlink old link
+        if (evidence.linkId) {
+          await evaluatorApi.unlinkEvidence(evidence.linkId);
+        }
+
+        onSuccess(`تم نقل الشاهد "${evidence.title}" بنجاح إلى المؤشر المختار.`);
+        onClose();
+      } else if (mode === 'multi') {
+        if (selectedMultiIndicatorIds.length === 0) {
+          onError('يرجى تحديد مؤشر إضافي واحد على الأقل للربط المتعدد.');
+          setIsSubmitting(false);
+          return;
+        }
+
+        await evaluatorApi.multiLinkEvidence({
+          documentId: evidence.documentId,
+          versionId: evidence.id,
+          indicatorIds: selectedMultiIndicatorIds,
+          justification: justification || 'ربط متعدد للشاهد مع مؤشرات إضافية',
+        });
+
+        onSuccess(`تم ربط الشاهد بنجاح بـ ${selectedMultiIndicatorIds.length} مؤشر إضافي.`);
+        onClose();
+      } else if (mode === 'unlink') {
+        if (!evidence.linkId) {
+          onError('لا يوجد معرف ارتباط صالح لفك الارتباط.');
+          setIsSubmitting(false);
+          return;
+        }
+
+        await evaluatorApi.unlinkEvidence(evidence.linkId);
+        onSuccess(`تم فك ارتباط الشاهد "${evidence.title}" من هذا المؤشر مع الاحتفاظ بالملف بأرشيف المدرسة.`);
+        onClose();
+      }
+    } catch (err: unknown) {
+      const msg = (err as Error)?.message || 'فشلت عملية تحديث ارتباط الشاهد.';
+      onError(msg);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        inset: 0,
+        backgroundColor: 'rgba(15, 23, 42, 0.6)',
+        backdropFilter: 'blur(4px)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 9999,
+        padding: '16px',
+        animation: 'fadeIn 0.2s ease-out',
+      }}
+      onClick={onClose}
+    >
+      <div
+        style={{
+          backgroundColor: '#ffffff',
+          borderRadius: '14px',
+          width: '100%',
+          maxWidth: '620px',
+          maxHeight: '90vh',
+          display: 'flex',
+          flexDirection: 'column',
+          boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+          overflow: 'hidden',
+          direction: 'rtl',
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div
+          style={{
+            padding: '18px 24px',
+            borderBottom: '1px solid #e2e8f0',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            backgroundColor: '#f8fafc',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div
+              style={{
+                width: '36px',
+                height: '36px',
+                borderRadius: '8px',
+                backgroundColor: '#e0e7ff',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#4338ca',
+              }}
+            >
+              <Link2 size={20} />
+            </div>
+            <div>
+              <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 700, color: '#1e293b' }}>
+                🔗 ربط وإدارة علاقات الشاهد بالمؤشرات
+              </h3>
+              <p style={{ margin: 0, fontSize: '12px', color: '#64748b' }}>
+                نقل الشاهد، أو ربطه بعدة مؤشرات (Multi-link)، أو فك الارتباط
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: '#94a3b8',
+              cursor: 'pointer',
+              padding: '6px',
+              borderRadius: '6px',
+              display: 'flex',
+            }}
+          >
+            <X size={20} />
+          </button>
+        </div>
+
+        {/* Selected Evidence Context Bar */}
+        <div
+          style={{
+            backgroundColor: '#f1f5f9',
+            padding: '12px 24px',
+            borderBottom: '1px solid #e2e8f0',
+            fontSize: '13px',
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+            <span style={{ color: '#64748b' }}>الشاهد المختار:</span>
+            <strong style={{ color: '#1e293b' }}>{evidence.title}</strong>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <span style={{ color: '#64748b' }}>المؤشر الحالي:</span>
+            <span style={{ color: '#0369a1', fontWeight: 600 }}>
+              {evidence.indicatorCode} — {evidence.indicatorTitle}
+            </span>
+          </div>
+        </div>
+
+        {/* Mode Tabs */}
+        <div
+          style={{
+            display: 'flex',
+            padding: '8px 24px',
+            gap: '8px',
+            backgroundColor: '#ffffff',
+            borderBottom: '1px solid #e2e8f0',
+          }}
+        >
+          <button
+            type="button"
+            onClick={() => setMode('single')}
+            style={{
+              flex: 1,
+              padding: '8px 12px',
+              borderRadius: '8px',
+              fontSize: '13px',
+              fontWeight: 600,
+              cursor: 'pointer',
+              border: mode === 'single' ? '2px solid #3b82f6' : '1px solid #e2e8f0',
+              backgroundColor: mode === 'single' ? '#eff6ff' : '#ffffff',
+              color: mode === 'single' ? '#1d4ed8' : '#64748b',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '6px',
+            }}
+          >
+            <ArrowRightLeft size={15} />
+            نقل لمؤشر آخر
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setMode('multi')}
+            style={{
+              flex: 1,
+              padding: '8px 12px',
+              borderRadius: '8px',
+              fontSize: '13px',
+              fontWeight: 600,
+              cursor: 'pointer',
+              border: mode === 'multi' ? '2px solid #8b5cf6' : '1px solid #e2e8f0',
+              backgroundColor: mode === 'multi' ? '#f5f3ff' : '#ffffff',
+              color: mode === 'multi' ? '#6d28d9' : '#64748b',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '6px',
+            }}
+          >
+            <Link2 size={15} />
+            ربط متعدد (Multi-link)
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setMode('unlink')}
+            style={{
+              flex: 1,
+              padding: '8px 12px',
+              borderRadius: '8px',
+              fontSize: '13px',
+              fontWeight: 600,
+              cursor: 'pointer',
+              border: mode === 'unlink' ? '2px solid #ef4444' : '1px solid #e2e8f0',
+              backgroundColor: mode === 'unlink' ? '#fef2f2' : '#ffffff',
+              color: mode === 'unlink' ? '#b91c1c' : '#64748b',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '6px',
+            }}
+          >
+            <Unlink size={15} />
+            فك الارتباط
+          </button>
+        </div>
+
+        {/* Tab Content & Form */}
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
+          <div style={{ padding: '16px 24px', overflowY: 'auto', flex: 1 }}>
+            {mode === 'single' && (
+              <div>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#334155', marginBottom: '8px' }}>
+                  اختر المؤشر المستهدف لنقل الشاهد إليه:
+                </label>
+                <div style={{ position: 'relative', marginBottom: '10px' }}>
+                  <Search size={16} style={{ position: 'absolute', right: '12px', top: '10px', color: '#94a3b8' }} />
+                  <input
+                    type="text"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    placeholder="ابحث برمز أو اسم المؤشر أو المعيار..."
+                    style={{
+                      width: '100%',
+                      padding: '8px 36px 8px 12px',
+                      borderRadius: '8px',
+                      border: '1px solid #cbd5e1',
+                      fontSize: '13px',
+                      outline: 'none',
+                    }}
+                  />
+                </div>
+
+                <div
+                  style={{
+                    maxHeight: '220px',
+                    overflowY: 'auto',
+                    border: '1px solid #cbd5e1',
+                    borderRadius: '8px',
+                    padding: '6px',
+                    backgroundColor: '#ffffff',
+                  }}
+                >
+                  {filteredIndicators.map((ind) => (
+                    <div
+                      key={ind.indicatorId}
+                      onClick={() => setSelectedSingleIndicatorId(ind.indicatorId)}
+                      style={{
+                        padding: '8px 10px',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        marginBottom: '4px',
+                        backgroundColor: selectedSingleIndicatorId === ind.indicatorId ? '#eff6ff' : '#ffffff',
+                        border: selectedSingleIndicatorId === ind.indicatorId ? '1px solid #3b82f6' : '1px solid transparent',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                      }}
+                    >
+                      <div>
+                        <div style={{ fontWeight: 600, fontSize: '12.5px', color: '#1e293b' }}>
+                          <span style={{ color: '#2563eb', marginLeft: '6px' }}>{ind.code}</span>
+                          {ind.title}
+                        </div>
+                        <div style={{ fontSize: '11px', color: '#64748b' }}>{ind.standardName}</div>
+                      </div>
+                      {selectedSingleIndicatorId === ind.indicatorId && <Check size={16} color="#2563eb" />}
+                    </div>
+                  ))}
+                  {filteredIndicators.length === 0 && (
+                    <div style={{ textAlign: 'center', padding: '16px', color: '#94a3b8', fontSize: '13px' }}>
+                      لا توجد مؤشرات مطابقة للبحث
+                    </div>
+                  )}
+                </div>
+
+                <div style={{ marginTop: '12px' }}>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#475569', marginBottom: '4px' }}>
+                    مبررات نقل الشاهد (اختياري):
+                  </label>
+                  <textarea
+                    value={justification}
+                    onChange={(e) => setJustification(e.target.value)}
+                    rows={2}
+                    placeholder="بيان سبب إعادة تصنيف ونقل هذا الشاهد..."
+                    style={{
+                      width: '100%',
+                      padding: '8px 12px',
+                      borderRadius: '8px',
+                      border: '1px solid #cbd5e1',
+                      fontSize: '12px',
+                      outline: 'none',
+                    }}
+                  />
+                </div>
+              </div>
+            )}
+
+            {mode === 'multi' && (
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                  <label style={{ fontSize: '13px', fontWeight: 600, color: '#334155' }}>
+                    حدد المؤشرات الإضافية للربط المتعدد ({selectedMultiIndicatorIds.length} محددة):
+                  </label>
+                  <div style={{ display: 'flex', gap: '6px' }}>
+                    <button
+                      type="button"
+                      onClick={handleSelectAllFiltered}
+                      style={{ fontSize: '11px', color: '#2563eb', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}
+                    >
+                      تحديد الكل
+                    </button>
+                    <span style={{ color: '#cbd5e1' }}>|</span>
+                    <button
+                      type="button"
+                      onClick={handleClearMultiSelection}
+                      style={{ fontSize: '11px', color: '#64748b', background: 'none', border: 'none', cursor: 'pointer' }}
+                    >
+                      إلغاء التحديد
+                    </button>
+                  </div>
+                </div>
+
+                <div style={{ position: 'relative', marginBottom: '10px' }}>
+                  <Search size={16} style={{ position: 'absolute', right: '12px', top: '10px', color: '#94a3b8' }} />
+                  <input
+                    type="text"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    placeholder="ابحث لاختيار مؤشرات إضافية..."
+                    style={{
+                      width: '100%',
+                      padding: '8px 36px 8px 12px',
+                      borderRadius: '8px',
+                      border: '1px solid #cbd5e1',
+                      fontSize: '13px',
+                      outline: 'none',
+                    }}
+                  />
+                </div>
+
+                <div
+                  style={{
+                    maxHeight: '220px',
+                    overflowY: 'auto',
+                    border: '1px solid #cbd5e1',
+                    borderRadius: '8px',
+                    padding: '6px',
+                    backgroundColor: '#ffffff',
+                  }}
+                >
+                  {filteredIndicators.map((ind) => {
+                    const isChecked = selectedMultiIndicatorIds.includes(ind.indicatorId);
+                    return (
+                      <label
+                        key={ind.indicatorId}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '10px',
+                          padding: '8px 10px',
+                          borderRadius: '6px',
+                          cursor: 'pointer',
+                          marginBottom: '4px',
+                          backgroundColor: isChecked ? '#f5f3ff' : '#ffffff',
+                          border: isChecked ? '1px solid #8b5cf6' : '1px solid transparent',
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={() => handleToggleMultiIndicator(ind.indicatorId)}
+                          style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                        />
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontWeight: 600, fontSize: '12.5px', color: '#1e293b' }}>
+                            <span style={{ color: '#7c3aed', marginLeft: '6px' }}>{ind.code}</span>
+                            {ind.title}
+                          </div>
+                          <div style={{ fontSize: '11px', color: '#64748b' }}>{ind.standardName}</div>
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {mode === 'unlink' && (
+              <div
+                style={{
+                  padding: '16px',
+                  backgroundColor: '#fffbeb',
+                  borderRadius: '10px',
+                  border: '1px solid #fef3c7',
+                  display: 'flex',
+                  gap: '12px',
+                }}
+              >
+                <AlertTriangle size={24} color="#d97706" style={{ flexShrink: 0 }} />
+                <div>
+                  <h4 style={{ margin: '0 0 6px 0', fontSize: '14px', color: '#92400e', fontWeight: 700 }}>
+                    تنبيه فك ارتباط الشاهد عن المؤشر:
+                  </h4>
+                  <p style={{ margin: 0, fontSize: '12.5px', color: '#78350f', lineHeight: 1.6 }}>
+                    عند فك الارتباط، ستتم إزالة هذا الشاهد من متطلبات التقييم الخاصة بهذا المؤشر (
+                    <strong>{evidence.indicatorCode}</strong>)، مع <strong>بقاء الملف محفوظاً</strong> في خزانة مستندات المدرسة دون حذفه نهائياً.
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Footer Controls */}
+          <div
+            style={{
+              padding: '14px 24px',
+              borderTop: '1px solid #e2e8f0',
+              display: 'flex',
+              justifyContent: 'flex-end',
+              gap: '10px',
+              backgroundColor: '#f8fafc',
+            }}
+          >
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={isSubmitting}
+              style={{
+                padding: '8px 16px',
+                borderRadius: '8px',
+                border: '1px solid #cbd5e1',
+                backgroundColor: '#ffffff',
+                color: '#475569',
+                fontSize: '13px',
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              إلغاء
+            </button>
+
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              style={{
+                padding: '8px 20px',
+                borderRadius: '8px',
+                border: 'none',
+                backgroundColor: mode === 'unlink' ? '#ef4444' : mode === 'multi' ? '#7c3aed' : '#2563eb',
+                color: '#ffffff',
+                fontSize: '13px',
+                fontWeight: 700,
+                cursor: isSubmitting ? 'not-allowed' : 'pointer',
+                opacity: isSubmitting ? 0.7 : 1,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+              }}
+            >
+              {isSubmitting ? (
+                'جارِ الحفظ...'
+              ) : mode === 'single' ? (
+                <>
+                  <ArrowRightLeft size={16} />
+                  تأكيد نقل الشاهد
+                </>
+              ) : mode === 'multi' ? (
+                <>
+                  <Link2 size={16} />
+                  حفظ الربط المتعدد
+                </>
+              ) : (
+                <>
+                  <Unlink size={16} />
+                  تأكيد فك الارتباط
+                </>
+              )}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};

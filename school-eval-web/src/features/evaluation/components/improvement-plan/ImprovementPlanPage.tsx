@@ -3,6 +3,10 @@ import React, { useState } from 'react';
 import { useImprovementPlan } from '../../hooks/useImprovementPlan';
 import { AddActionModal } from './AddActionModal';
 import { ActionProgressModal } from './ActionProgressModal';
+import { AttachActionEvidenceModal } from './AttachActionEvidenceModal';
+import { useToast } from '../../../admin/components/common/useToast';
+import { ToastNotification } from '../../../admin/components/common/ToastNotification';
+import type { ImprovementPlanAction } from '../../api/evaluationTypes';
 import type { ActionStatus, EvaluatorScreen } from '../../api/evaluationTypes';
 import {
   Target,
@@ -14,6 +18,7 @@ import {
   Calendar,
   User,
   Edit2,
+  Paperclip,
 } from 'lucide-react';
 
 interface ImprovementPlanPageProps {
@@ -37,6 +42,10 @@ export const ImprovementPlanPage: React.FC<ImprovementPlanPageProps> = ({
 
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [filterStatus, setFilterStatus] = useState<string>('ALL');
+  const [selectedActionForEvidence, setSelectedActionForEvidence] = useState<ImprovementPlanAction | null>(null);
+  const [isAttachModalOpen, setIsAttachModalOpen] = useState(false);
+  const { toasts, addToast, dismissToast } = useToast();
+
 
   if (isLoading && !planData) {
     return (
@@ -399,6 +408,32 @@ export const ImprovementPlanPage: React.FC<ImprovementPlanPageProps> = ({
                   </td>
 
                   <td style={{ padding: '14px 16px', textAlign: 'center' }}>
+                    {!readOnly && (
+                      <button
+                        onClick={() => {
+                          setSelectedActionForEvidence(action);
+                          setIsAttachModalOpen(true);
+                        }}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          padding: '6px 12px',
+                          borderRadius: '6px',
+                          backgroundColor: '#EFF6FF',
+                          color: '#1D4ED8',
+                          border: '1px solid #BFDBFE',
+                          fontSize: '12px',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          marginLeft: '6px',
+                        }}
+                        title="إرفاق شاهد أو وثيقة إثبات لتنفيذ الإجراء"
+                      >
+                        <Paperclip size={13} />
+                        إرفاق شاهد
+                      </button>
+                    )}
                     <button
                       onClick={() => setEditingAction(action)}
                       style={{
@@ -444,6 +479,20 @@ export const ImprovementPlanPage: React.FC<ImprovementPlanPageProps> = ({
         onUpdateAction={updateAction}
         isSubmitting={isSubmitting}
       />
+      {/* Attach Evidence Modal */}
+      <AttachActionEvidenceModal
+        isOpen={isAttachModalOpen}
+        onClose={() => {
+          setIsAttachModalOpen(false);
+          setSelectedActionForEvidence(null);
+        }}
+        action={selectedActionForEvidence}
+        onSuccess={(msg) => addToast('success', msg)}
+        onError={(err) => addToast('error', err)}
+      />
+
+      {/* Toasts */}
+      <ToastNotification toasts={toasts} onDismiss={dismissToast} />
     </div>
   );
 };
