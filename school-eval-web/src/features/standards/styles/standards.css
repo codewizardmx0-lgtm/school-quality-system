@@ -1,0 +1,327 @@
+/**
+ * Standards & Reference Authority Feature Suite - Dedicated CSS Design System
+ * تصميم متين وثابت 100% يضمن ثبات القائمة الجانبية والشريط العلوي ودقة التنسيقات
+ * الألوان المعتمدة: Academic Amber (#D97706 / #F59E0B), Dark Slate (#0B0F19), Neutral Slate (#F8FAFC)
+ */
+
+/* 1. Root Layout Engine */
+.std-root-layout {
+  display: flex !important;
+  flex-direction: row !important;
+  width: 100vw !important;
+  max-width: 100vw !important;
+  height: 100vh !important;
+  max-height: 100vh !important;
+  overflow: hidden !important;
+  background-color: #F8FAFC !important;
+  direction: rtl !important;
+  text-align: right !important;
+  font-family: 'Cairo', 'Tajawal', system-ui, -apple-system, sans-serif !important;
+  color: #1E293B !important;
+}
+
+/* 2. Fixed Sidebar (ثابت 100% على اليمين بكامل الارتفاع) */
+.std-sidebar-fixed {
+  width: 260px !important;
+  min-width: 260px !important;
+  max-width: 260px !important;
+  height: 100vh !important;
+  max-height: 100vh !important;
+  background-color: #0B0F19 !important;
+  border-left: 1px solid #1E293B !important;
+  display: flex !important;
+  flex-direction: column !important;
+  flex-shrink: 0 !important;
+  z-index: 50 !important;
+  position: relative !important;
+  transition: width 0.25s cubic-bezier(0.16, 1, 0.3, 1), min-width 0.25s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  user-select: none !important;
+}
+
+.std-sidebar-collapsed {
+  width: 76px !important;
+  min-width: 76px !important;
+  max-width: 76px !important;
+}
+
+/* 3. Main Workspace Area (مستقل التمرير) */
+.std-main-workspace {
+  flex: 1 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  min-width: 0 !important;
+  height: 100vh !important;
+  max-height: 100vh !important;
+  overflow: hidden !important;
+  background-color: #F8FAFC !important;
+  position: relative !important;
+}
+
+/* 4. Fixed TopBar (ثابت بارتفاع 68px في أعلى منطقة العمل) */
+.std-topbar-fixed {
+  height: 68px !important;
+  min-height: 68px !important;
+  max-height: 68px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  padding: 0 28px !important;
+  background-color: #FFFFFF !important;
+  border-bottom: 1px solid #E2E8F0 !important;
+  flex-shrink: 0 !important;
+  z-index: 40 !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04) !important;
+}
+
+/* 5. Scrollable Screen Content Container */
+.std-scrollable-content {
+  flex: 1 !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  padding: 28px 36px 64px !important;
+  scroll-behavior: smooth !important;
+}
+
+/* 6. KPI Stat Cards Grid (3 أعمدة متناسقة) */
+.std-kpi-grid {
+  display: grid !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  gap: 20px !important;
+  margin-bottom: 28px !important;
+}
+
+@media (max-width: 1024px) {
+  .std-kpi-grid {
+    grid-template-columns: repeat(1, minmax(0, 1fr)) !important;
+  }
+}
+
+.std-kpi-card {
+  background-color: #FFFFFF !important;
+  border: 1px solid #E2E8F0 !important;
+  border-radius: 16px !important;
+  padding: 20px 24px !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.02) !important;
+  position: relative !important;
+  overflow: hidden !important;
+  transition: transform 0.2s ease, box-shadow 0.2s ease !important;
+}
+
+.std-kpi-card:hover {
+  transform: translateY(-2px) !important;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.06) !important;
+}
+
+.std-kpi-card-stripe {
+  position: absolute !important;
+  top: 0 !important;
+  right: 0 !important;
+  left: 0 !important;
+  height: 4px !important;
+}
+
+/* 7. Action Bar & Filter Header */
+.std-section-header {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  margin-bottom: 24px !important;
+  flex-wrap: wrap !important;
+  gap: 16px !important;
+}
+
+/* 8. Table Styling & Horizontal Containment (§4 UI_STANDARDS) */
+.std-table-card {
+  background-color: #FFFFFF !important;
+  border: 1px solid #E2E8F0 !important;
+  border-radius: 16px !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04) !important;
+  overflow: hidden !important;
+  margin-bottom: 28px !important;
+}
+
+.std-table-filter-bar {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  padding: 16px 24px !important;
+  background-color: #F8FAFC !important;
+  border-bottom: 1px solid #E2E8F0 !important;
+  flex-wrap: wrap !important;
+  gap: 12px !important;
+}
+
+.std-table-wrapper {
+  overflow-x: auto !important;
+  -webkit-overflow-scrolling: touch !important;
+  width: 100% !important;
+}
+
+.std-data-table {
+  width: 100% !important;
+  min-width: 980px !important;
+  border-collapse: collapse !important;
+  text-align: right !important;
+  font-size: 13px !important;
+}
+
+.std-data-table th {
+  background-color: #F1F5F9 !important;
+  color: #475569 !important;
+  font-weight: 700 !important;
+  padding: 14px 18px !important;
+  border-bottom: 1px solid #CBD5E1 !important;
+  white-space: nowrap !important;
+}
+
+.std-data-table td {
+  padding: 16px 18px !important;
+  border-bottom: 1px solid #E2E8F0 !important;
+  vertical-align: middle !important;
+  color: #334155 !important;
+}
+
+.std-data-table tr:hover td {
+  background-color: #F8FAFC !important;
+}
+
+/* 9. Interactive Split-View (Tree Builder Screen) */
+.std-tree-builder-split {
+  display: grid !important;
+  grid-template-columns: 420px minmax(0, 1fr) !important;
+  gap: 24px !important;
+  align-items: start !important;
+}
+
+@media (max-width: 1100px) {
+  .std-tree-builder-split {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+}
+
+/* 10. Balance Indicator & Banner (Weights Screen) */
+.std-balance-banner {
+  border-radius: 16px !important;
+  padding: 20px 24px !important;
+  margin-bottom: 24px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  flex-wrap: wrap !important;
+  gap: 16px !important;
+}
+
+.std-balance-banner-valid {
+  background-color: #ECFDF5 !important;
+  border: 1px solid #A7F3D0 !important;
+  color: #065F46 !important;
+}
+
+.std-balance-banner-invalid {
+  background-color: #FEF2F2 !important;
+  border: 1px solid #FECACA !important;
+  color: #991B1B !important;
+}
+
+/* 11. Modal Backdrop & Dialog */
+.std-modal-backdrop {
+  position: fixed !important;
+  inset: 0 !important;
+  background-color: rgba(15, 23, 42, 0.6) !important;
+  backdrop-filter: blur(4px) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  z-index: 100 !important;
+  padding: 20px !important;
+}
+
+.std-modal-dialog {
+  background-color: #FFFFFF !important;
+  border-radius: 20px !important;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2) !important;
+  width: 100% !important;
+  max-width: 600px !important;
+  overflow: hidden !important;
+  border: 1px solid #E2E8F0 !important;
+  animation: stdModalPop 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
+}
+
+@keyframes stdModalPop {
+  from { opacity: 0; transform: scale(0.96) translateY(8px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+/* 12. Pill Badges */
+.std-badge {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  padding: 4px 12px !important;
+  border-radius: 9999px !important;
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  white-space: nowrap !important;
+}
+
+.std-badge-emerald {
+  background-color: #ECFDF5 !important;
+  color: #047857 !important;
+  border: 1px solid #A7F3D0 !important;
+}
+
+.std-badge-amber {
+  background-color: #FFFBEB !important;
+  color: #B45309 !important;
+  border: 1px solid #FDE68A !important;
+}
+
+.std-badge-slate {
+  background-color: #F1F5F9 !important;
+  color: #475569 !important;
+  border: 1px solid #CBD5E1 !important;
+}
+
+/* 13. Primary & Secondary Buttons */
+.std-btn-primary {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  padding: 10px 20px !important;
+  background: linear-gradient(135deg, #D97706, #B45309) !important;
+  color: #FFFFFF !important;
+  border-radius: 12px !important;
+  font-size: 13px !important;
+  font-weight: 700 !important;
+  border: none !important;
+  cursor: pointer !important;
+  box-shadow: 0 2px 8px rgba(217, 119, 6, 0.25) !important;
+  transition: all 0.15s ease !important;
+}
+
+.std-btn-primary:hover {
+  background: linear-gradient(135deg, #B45309, #92400E) !important;
+  box-shadow: 0 4px 12px rgba(217, 119, 6, 0.35) !important;
+  transform: translateY(-1px) !important;
+}
+
+.std-btn-secondary {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  padding: 9px 18px !important;
+  background-color: #FFFFFF !important;
+  color: #475569 !important;
+  border: 1px solid #CBD5E1 !important;
+  border-radius: 12px !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  cursor: pointer !important;
+  transition: all 0.15s ease !important;
+}
+
+.std-btn-secondary:hover {
+  background-color: #F8FAFC !important;
+  border-color: #94A3B8 !important;
+  color: #1E293B !important;
+}

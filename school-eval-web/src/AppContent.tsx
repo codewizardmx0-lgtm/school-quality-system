@@ -8,6 +8,7 @@ import { AdminLayout } from './features/admin';
 import type { AdminScreen } from './features/admin';
 import { EvaluatorLayout } from './features/evaluation';
 import type { EvaluatorScreen } from './features/evaluation';
+import { StandardsLayout, type StandardsScreenKey } from './features/standards';
 import { theme } from './styles/theme';
 import { Loader2 } from 'lucide-react';
 
@@ -60,6 +61,29 @@ export const AppContent: React.FC = () => {
 
   const isAdmin = user?.roles?.some((r) => r.roleName === 'admin');
   const isSchoolUser = user?.userType === 'school' || user?.roles?.some((r) => r.roleName === 'school_evaluator' || r.roleName === 'school_principal');
+  const isStandardsManager = user?.roles?.some((r) => r.roleName === 'ministry_standards_manager') || user?.permissions?.includes('standards.manage');
+
+  // خريطة مسارات /standards/*
+  const getStandardsScreenFromPath = (path: string): StandardsScreenKey => {
+    if (path.includes('/tree') || path.includes('/standards-tree')) return 'tree';
+    if (path.includes('/weights') || path.includes('/rubrics')) return 'weights';
+    if (path.includes('/lock') || path.includes('/audit')) return 'audit-lock';
+    return 'versions';
+  };
+
+  const standardsTabMap: Record<string, StandardsScreenKey> = {
+    'standards-versions': 'versions',
+    'standards-suite': 'versions',
+    'standards-tree': 'tree',
+    'standards-weights': 'weights',
+    'standards-audit': 'audit-lock',
+  };
+
+  // 0. إذا كان المسار يبدأ بـ /standards/*
+  if (currentPath.startsWith('/standards')) {
+    const screen = getStandardsScreenFromPath(currentPath);
+    return <StandardsLayout initialScreen={screen} onLogout={logout} />;
+  }
 
   // خريطة مسارات /school/* إلى شاشات EvaluatorScreen
   const getEvaluatorScreenFromPath = (path: string): EvaluatorScreen => {
@@ -92,7 +116,18 @@ export const AppContent: React.FC = () => {
     return <EvaluatorLayout initialScreen={screen} onLogout={logout} />;
   }
 
-  // 2. إذا كان المستخدم مسؤول نظام، يتم توجيهه مباشرة إلى بوابة مسؤول النظام المركزية
+  // 2. إذا كان المستخدم مسؤول إدارة المرجعية والمعايير، يتم توجيهه مباشرة إلى جناحه المتكامل
+  if (isStandardsManager && activeTab !== 'admin-suite' && !evaluatorTabMap[activeTab]) {
+    const screen = standardsTabMap[activeTab] || 'versions';
+    return <StandardsLayout initialScreen={screen} onLogout={logout} />;
+  }
+
+  // 2.5 إذا تم اختيار أحد تبويبات المعايير صراحة
+  if (standardsTabMap[activeTab]) {
+    return <StandardsLayout initialScreen={standardsTabMap[activeTab]} onLogout={logout} />;
+  }
+
+  // 3. إذا كان المستخدم مسؤول نظام، يتم توجيهه مباشرة إلى بوابة مسؤول النظام المركزية
   if (isAdmin && activeTab !== 'evaluator-suite' && !evaluatorTabMap[activeTab]) {
     return <AdminLayout onLogout={logout} />;
   }
@@ -111,6 +146,8 @@ export const AppContent: React.FC = () => {
       />
     );
   }
+
+
 
   // 4. إذا كان المستخدم مستخدم مدرسة، يتم توجيهه إلى بوابة مستخدم التقييم المدرسي المعتمدة (ارتقاء)
   if (isSchoolUser) {

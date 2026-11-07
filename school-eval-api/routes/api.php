@@ -143,13 +143,23 @@ Route::prefix('v1')->group(function () {
             Route::get('/', [\App\Http\Controllers\Api\V1\StandardManagementController::class, 'index'])->name('api.v1.standard-versions.index');
             Route::post('/', [\App\Http\Controllers\Api\V1\StandardManagementController::class, 'store'])->name('api.v1.standard-versions.store');
             Route::get('/{id}', [\App\Http\Controllers\Api\V1\StandardVersionController::class, 'show'])->name('api.v1.standard-versions.show');
+            Route::get('/{id}/tree', [\App\Http\Controllers\Api\V1\StandardManagementController::class, 'tree'])->name('api.v1.standard-versions.tree');
             Route::put('/{id}', [\App\Http\Controllers\Api\V1\StandardManagementController::class, 'update'])->name('api.v1.standard-versions.update');
             Route::post('/{id}/clone', [\App\Http\Controllers\Api\V1\StandardManagementController::class, 'clone'])->name('api.v1.standard-versions.clone');
+            Route::get('/{id}/weights', [\App\Http\Controllers\Api\V1\StandardManagementController::class, 'getWeights'])->name('api.v1.standard-versions.weights.show');
             Route::put('/{id}/weights', [\App\Http\Controllers\Api\V1\StandardManagementController::class, 'updateWeights'])->name('api.v1.standard-versions.weights.update');
+            Route::get('/{id}/diff-log', [\App\Http\Controllers\Api\V1\StandardManagementController::class, 'diffLog'])->name('api.v1.standard-versions.diff-log');
+            Route::get('/{id}/lock-preconditions', [\App\Http\Controllers\Api\V1\StandardManagementController::class, 'lockPreconditions'])->name('api.v1.standard-versions.lock-preconditions');
+            Route::post('/{id}/lock', [\App\Http\Controllers\Api\V1\StandardManagementController::class, 'lock'])->name('api.v1.standard-versions.lock');
+            Route::get('/{id}/export-pdf', [\App\Http\Controllers\Api\V1\StandardManagementController::class, 'exportPdf'])->name('api.v1.standard-versions.export-pdf');
             Route::post('/{id}/approve', [\App\Http\Controllers\Api\V1\StandardManagementController::class, 'approve'])->name('api.v1.standard-versions.approve');
             Route::post('/{id}/archive', [\App\Http\Controllers\Api\V1\StandardManagementController::class, 'archive'])->name('api.v1.standard-versions.archive');
             Route::post('/{id}/standards', [\App\Http\Controllers\Api\V1\StandardManagementController::class, 'storeStandard'])->name('api.v1.standard-versions.standards.store');
+            Route::post('/{id}/standards/{stdId}/sub-standards', [\App\Http\Controllers\Api\V1\StandardManagementController::class, 'storeSubStandardNested'])->name('api.v1.standard-versions.standards.sub-standards.store');
         });
+
+        // سلالم التقدير اللفظي المعتمدة
+        Route::get('/score-levels', [\App\Http\Controllers\Api\V1\StandardManagementController::class, 'scoreLevels'])->name('api.v1.score-levels.index');
 
         // إدارة نصوص وأوزان المعايير والمجالات والمؤشرات ومتطلبات الشواهد في المسودة (الشريحة 7)
         Route::prefix('standards')->group(function () {
