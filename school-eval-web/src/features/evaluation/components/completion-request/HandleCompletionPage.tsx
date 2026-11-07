@@ -39,8 +39,9 @@ export const HandleCompletionPage: React.FC<HandleCompletionPageProps> = ({
 
   if (isLoading && !completionData) {
     return (
-      <div style={{ padding: '32px', textAlign: 'center', color: '#64748B' }}>
-        جاري تحميل طلب استكمال المراجعة الوزارية...
+      <div style={{ padding: '24px', maxWidth: '1440px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '22px' }}>
+        <div style={{ height: '100px', borderRadius: '16px', backgroundColor: '#E2E8F0' }} className="animate-pulse" />
+        <div style={{ height: '220px', borderRadius: '14px', backgroundColor: '#E2E8F0' }} className="animate-pulse" />
       </div>
     );
   }
@@ -194,7 +195,18 @@ export const HandleCompletionPage: React.FC<HandleCompletionPageProps> = ({
           العناصر والمؤشرات المطلوب استيفاؤها ({items.length} مؤشرات)
         </h3>
 
-        {items.map((item) => {
+        {items.length === 0 ? (
+        <div style={{ padding: '48px 24px', textAlign: 'center', backgroundColor: '#FFFFFF', borderRadius: '14px', border: '1px solid #E2E8F0' }}>
+          <CheckCircle2 size={44} color="#059669" style={{ margin: '0 auto 10px' }} />
+          <div style={{ fontSize: '15px', fontWeight: 800, color: '#0F172A', marginBottom: '6px' }}>
+            لا توجد طلبات استكمال مفتوحة حالياً
+          </div>
+          <div style={{ fontSize: '13px', color: '#64748B' }}>
+            كافة شواهد ومؤشرات التقييم مستوفاة ولم تسجل أي ملاحظات متبقية من المشرف الوزاري.
+          </div>
+        </div>
+      ) : (
+        items.map((item) => {
           const isResolved = item.status === 'Resolved';
           const file = uploadedFiles[item.itemId];
 
@@ -369,7 +381,7 @@ export const HandleCompletionPage: React.FC<HandleCompletionPageProps> = ({
               )}
             </div>
           );
-        })}
+        }))}
       </div>
 
       {/* 3. Re-submission to Ministry Section */}

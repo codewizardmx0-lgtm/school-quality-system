@@ -1,14 +1,19 @@
-import React from 'react';
+import React, { useState } from 'react';
 import type { EvaluatorSchoolInfo, EvaluatorScreen } from '../../api/evaluationTypes';
 import {
   Bell,
   Download,
   Sparkles,
   AlertTriangle,
-  User,
-  CheckCircle2,
+    CheckCircle2,
   Lock,
+  Menu,
+  KeyRound,
+  LogOut,
+  ChevronLeft,
 } from 'lucide-react';
+import { SYSTEM_SHORT_NAME } from '../../../../constants/systemConstants';
+import { schoolsApi } from '../../../admin/api/schoolsApi';
 
 interface EvaluatorTopBarProps {
   activeScreen: EvaluatorScreen;
@@ -17,6 +22,12 @@ interface EvaluatorTopBarProps {
   onOpenCompletionRequest?: () => void;
   onNavigate: (screen: EvaluatorScreen) => void;
   isLocked?: boolean;
+  isMobile?: boolean;
+  onOpenMobile?: () => void;
+  isCollapsed?: boolean;
+  onToggleCollapse?: () => void;
+  onOpenChangePassword?: () => void;
+  onLogout?: () => void;
 }
 
 export const EvaluatorTopBar: React.FC<EvaluatorTopBarProps> = ({
@@ -26,7 +37,13 @@ export const EvaluatorTopBar: React.FC<EvaluatorTopBarProps> = ({
   onOpenCompletionRequest,
   onNavigate,
   isLocked = false,
+  isMobile = false,
+  onOpenMobile,
+  onOpenChangePassword,
+  onLogout,
 }) => {
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
+
   const getScreenTitle = (screen: EvaluatorScreen) => {
     switch (screen) {
       case 'dashboard':
@@ -52,30 +69,17 @@ export const EvaluatorTopBar: React.FC<EvaluatorTopBarProps> = ({
     }
   };
 
-  // توليد ملف PDF أو تقرير معتمد مع UTF-8 BOM
-  const handleExportQuickReport = () => {
-    const reportContent = `\uFEFFتقرير التقييم الذاتي الشامل - مدرسة الأمل النموذجية الثانوية
-العام الدراسي: 2026/2027
-المقيم: عمار عمر عبدالله
-تاريخ الإصدار: ${new Date().toLocaleDateString('ar-YE')}
-الحالة: ${isLocked ? 'مرفوع ومختوم رقمياً' : 'مسودة معتمدة داخلياً'}
-
-ملخص الإنجاز:
-- نسبة اكتمال التقييم: 75%
-- عدد المؤشرات المنجزة: 42 من 56
-- إجمالي الشواهد المفهرسة: 38 مستنداً
-- نقاط القوة المعتمدة: 28 عنصراً
-- مجالات التحسين: 14 عنصراً
-`;
-    const blob = new Blob([reportContent], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `تقرير_التقييم_الذاتي_${new Date().toISOString().split('T')[0]}.txt`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+  // Real PDF Export using backend mPDF engine (§7.1 of UI_STANDARDS.md)
+  const handleExportQuickReport = async () => {
+    if (isExportingPdf) return;
+    setIsExportingPdf(true);
+    try {
+      await schoolsApi.downloadExecutivePdf();
+    } catch (err) {
+      console.error('Failed to export PDF report:', err);
+    } finally {
+      setIsExportingPdf(false);
+    }
   };
 
   const statusLabel = isLocked
@@ -101,7 +105,7 @@ export const EvaluatorTopBar: React.FC<EvaluatorTopBarProps> = ({
       style={{
         backgroundColor: '#FFFFFF',
         borderBottom: '1px solid #E2E8F0',
-        padding: '0 24px',
+        padding: '0 20px',
         position: 'sticky',
         top: 0,
         zIndex: 20,
@@ -111,127 +115,170 @@ export const EvaluatorTopBar: React.FC<EvaluatorTopBarProps> = ({
       {hasOpenCompletionRequest && (
         <div
           style={{
-            margin: '0 -24px',
+            margin: '0 -20px',
             backgroundColor: '#FEF3C7',
             borderBottom: '1px solid #FCD34D',
-            padding: '10px 24px',
+            padding: '8px 20px',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '8px',
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <AlertTriangle size={18} color="#D97706" />
-            <span style={{ fontSize: '13px', fontWeight: 700, color: '#92400E' }}>
-              طلب استكمال للمخرج من المراجعة الوزارية: يتطلب إعادة النظر في بعض الشواهد والمؤشرات المحددة.
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <AlertTriangle size={16} color="#D97706" />
+            <span style={{ fontSize: '12px', fontWeight: 700, color: '#92400E' }}>
+              طلب استكمال من المراجعة الوزارية: يتطلب مراجعة بعض الشواهد والمؤشرات المحددة.
             </span>
           </div>
           {onOpenCompletionRequest && (
             <button
               onClick={onOpenCompletionRequest}
               style={{
-                fontSize: '12px',
+                fontSize: '11.5px',
                 fontWeight: 700,
                 color: '#FFFFFF',
                 backgroundColor: '#D97706',
                 border: 'none',
-                padding: '6px 14px',
+                padding: '4px 12px',
                 borderRadius: '6px',
                 cursor: 'pointer',
               }}
             >
-              فتح طلب الاستكمال ومعالجة الملاحظات
+              معالجة الملاحظات ↗
             </button>
           )}
         </div>
       )}
 
-      {/* Main TopBar Content */}
+      {/* Main TopBar Content - Standard 68px height (UI_STANDARDS.md §3.1) */}
       <div
         style={{
-          height: '64px',
+          height: '68px',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
+          gap: '12px',
         }}
       >
-        {/* Left (RTL Start): Screen title & school details */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-          <div>
-            <h1 style={{ fontSize: '18px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
-              {getScreenTitle(activeScreen)}
-            </h1>
-            <div style={{ fontSize: '12px', color: '#64748B', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span>{schoolInfo?.schoolName || 'مدرسة الأمل النموذجية الثانوية'}</span>
-              <span>•</span>
-              <span>المقيم: {schoolInfo?.currentEvaluator || 'عمار عمر عبدالله'}</span>
-            </div>
-          </div>
+        {/* Right (RTL Start): Mobile Hamburger + Breadcrumb & Title */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
+          {/* Mobile Hamburger Drawer Button */}
+          {isMobile && onOpenMobile && (
+            <button
+              onClick={onOpenMobile}
+              title="فتح القائمة الجانبية"
+              style={{
+                background: 'transparent',
+                border: '1px solid #E2E8F0',
+                borderRadius: '8px',
+                padding: '6px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#475569',
+                cursor: 'pointer',
+              }}
+            >
+              <Menu size={20} />
+            </button>
+          )}
 
-          {/* Status Pill */}
-          <div
-            style={{
-              padding: '5px 12px',
-              borderRadius: '20px',
-              backgroundColor: statusBg,
-              color: statusColor,
-              fontSize: '12px',
-              fontWeight: 700,
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              border: `1px solid ${statusColor}33`,
-            }}
-          >
-            {isLocked ? <Lock size={13} /> : <CheckCircle2 size={13} />}
-            {statusLabel}
+          <div style={{ minWidth: 0 }}>
+            {/* Breadcrumb with SYSTEM_SHORT_NAME */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: '#94A3B8', fontWeight: 600 }}>
+              <span>{SYSTEM_SHORT_NAME}</span>
+              <ChevronLeft size={12} />
+              <span>بوابة التقييم</span>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '2px' }}>
+              <h1
+                style={{
+                  fontSize: '16px',
+                  fontWeight: 800,
+                  color: '#0F172A',
+                  margin: 0,
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                }}
+              >
+                {getScreenTitle(activeScreen)}
+              </h1>
+
+              {/* Status Pill (hide on very narrow screens) */}
+              <div
+                className="hidden sm:inline-flex"
+                style={{
+                  padding: '3px 9px',
+                  borderRadius: '14px',
+                  backgroundColor: statusBg,
+                  color: statusColor,
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  border: `1px solid ${statusColor}33`,
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {isLocked ? <Lock size={11} /> : <CheckCircle2 size={11} />}
+                <span>{statusLabel}</span>
+              </div>
+            </div>
           </div>
         </div>
 
-        {/* Right (RTL End): Actions & Shortcuts */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        {/* Left (RTL End): Actions & User Capsule */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
           {/* Quick AI Trigger */}
           <button
             onClick={() => onNavigate('ai-assistant')}
+            className="hidden md:inline-flex"
             style={{
               display: 'flex',
               alignItems: 'center',
               gap: '6px',
-              padding: '8px 14px',
+              padding: '6px 12px',
               borderRadius: '8px',
               backgroundColor: '#ECFDF5',
               color: '#059669',
               border: '1px solid #A7F3D0',
-              fontSize: '12.5px',
+              fontSize: '12px',
               fontWeight: 700,
               cursor: 'pointer',
             }}
             title="الانتقال إلى المساعد الذكي وتحليل الفجوات"
           >
-            <Sparkles size={15} />
-            المساعد الذكي (AI)
+            <Sparkles size={14} />
+            <span>المساعد الذكي</span>
           </button>
 
-          {/* Export Report */}
+          {/* Export Report (Official Real PDF) */}
           <button
             onClick={handleExportQuickReport}
+            disabled={isExportingPdf}
             style={{
               display: 'flex',
               alignItems: 'center',
-              gap: '6px',
-              padding: '8px 14px',
+              gap: '5px',
+              padding: '6px 12px',
               borderRadius: '8px',
               backgroundColor: '#F8FAFC',
               color: '#334155',
               border: '1px solid #CBD5E1',
-              fontSize: '12.5px',
+              fontSize: '12px',
               fontWeight: 600,
-              cursor: 'pointer',
+              cursor: isExportingPdf ? 'not-allowed' : 'pointer',
+              opacity: isExportingPdf ? 0.7 : 1,
             }}
-            title="تصدير تقرير التقييم الذاتي المعتمد"
+            title="تصدير تقرير التقييم الذاتي المعتمد (PDF)"
           >
-            <Download size={15} />
-            تصدير التقرير
+            <Download size={14} />
+            <span className="hidden sm:inline">{isExportingPdf ? 'جاري التحميل...' : 'تصدير التقرير (PDF)'}</span>
           </button>
 
           {/* Notifications */}
@@ -239,8 +286,8 @@ export const EvaluatorTopBar: React.FC<EvaluatorTopBarProps> = ({
             onClick={() => onNavigate('notifications')}
             style={{
               position: 'relative',
-              width: '38px',
-              height: '38px',
+              width: '36px',
+              height: '36px',
               borderRadius: '8px',
               backgroundColor: '#F8FAFC',
               border: '1px solid #E2E8F0',
@@ -252,27 +299,71 @@ export const EvaluatorTopBar: React.FC<EvaluatorTopBarProps> = ({
             }}
             title="مركز التنبيهات"
           >
-            <Bell size={18} />
+            <Bell size={17} />
             <span
               style={{
                 position: 'absolute',
-                top: '6px',
-                right: '7px',
-                width: '8px',
-                height: '8px',
+                top: '5px',
+                right: '6px',
+                width: '7px',
+                height: '7px',
                 borderRadius: '50%',
                 backgroundColor: '#EF4444',
               }}
             />
           </button>
 
-          {/* User Avatar */}
+          {/* Change Password Button */}
+          {onOpenChangePassword && (
+            <button
+              onClick={onOpenChangePassword}
+              style={{
+                width: '36px',
+                height: '36px',
+                borderRadius: '8px',
+                backgroundColor: '#F8FAFC',
+                border: '1px solid #E2E8F0',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                color: '#64748B',
+              }}
+              title="تغيير كلمة المرور"
+            >
+              <KeyRound size={16} />
+            </button>
+          )}
+
+          {/* Logout Button */}
+          {onLogout && (
+            <button
+              onClick={onLogout}
+              style={{
+                width: '36px',
+                height: '36px',
+                borderRadius: '8px',
+                backgroundColor: '#F8FAFC',
+                border: '1px solid #E2E8F0',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                color: '#EF4444',
+              }}
+              title="تسجيل الخروج"
+            >
+              <LogOut size={16} />
+            </button>
+          )}
+
+          {/* User Profile Capsule (UI_STANDARDS.md §3.2) */}
           <div
             style={{
               display: 'flex',
               alignItems: 'center',
               gap: '8px',
-              padding: '4px 10px 4px 6px',
+              padding: '3px 8px 3px 6px',
               borderRadius: '8px',
               backgroundColor: '#F1F5F9',
               border: '1px solid #E2E8F0',
@@ -288,16 +379,18 @@ export const EvaluatorTopBar: React.FC<EvaluatorTopBarProps> = ({
                 alignItems: 'center',
                 justifyContent: 'center',
                 color: '#FFFFFF',
+                fontWeight: 700,
+                fontSize: '11px',
               }}
             >
-              <User size={16} />
+              عا
             </div>
-            <div style={{ textAlign: 'right' }}>
-              <div style={{ fontSize: '12px', fontWeight: 700, color: '#0F172A', lineHeight: 1.2 }}>
+            <div className="hidden sm:block" style={{ textAlign: 'right' }}>
+              <div style={{ fontSize: '11.5px', fontWeight: 700, color: '#0F172A', lineHeight: 1.2 }}>
                 عمار عمر
               </div>
-              <div style={{ fontSize: '10px', color: '#64748B' }}>
-                مسؤول الجودة
+              <div style={{ fontSize: '9.5px', color: '#64748B' }}>
+                مقيّم مدرسة
               </div>
             </div>
           </div>

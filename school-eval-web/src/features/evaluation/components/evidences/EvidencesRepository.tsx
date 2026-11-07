@@ -1,3 +1,4 @@
+import { exportToExcel, formatExportFilename } from '../../../admin/utils/exportUtils';
 import React, { useState } from 'react';
 import { useEvidences } from '../../hooks/useEvidences';
 import { EvidenceCard } from './EvidenceCard';
@@ -87,24 +88,21 @@ export const EvidencesRepository: React.FC<EvidencesRepositoryProps> = ({
     URL.revokeObjectURL(url);
   };
 
-  const handleExportCsv = () => {
-    const header = '\uFEFFمعرف المستند,عنوان الشاهد,اسم الملف,المعيار,المؤشر,الإصدار,الحالة,الحجم,تاريخ الرفع\n';
-    const rows = filteredEvidences
-      .map(
-        (e) =>
-          `"${e.id}","${e.title}","${e.fileName}","${e.standardName}","${e.indicatorCode}","v${e.versionNumber}","${e.verificationStatusArabic}","${e.formattedSize}","${e.uploadedAt}"`
-      )
-      .join('\n');
-
-    const blob = new Blob([header + rows], { type: 'text/csv;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `فهرس_شواهد_التقييم_${new Date().toISOString().split('T')[0]}.csv`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+  const handleExportExcel = () => {
+    const headers = ['معرف المستند', 'عنوان الشاهد', 'اسم الملف', 'المعيار', 'المؤشر', 'الإصدار', 'الحالة', 'الحجم', 'تاريخ الرفع'];
+    const rows = filteredEvidences.map((e) => [
+      e.id,
+      e.title,
+      e.fileName,
+      e.standardName,
+      e.indicatorCode,
+      `v${e.versionNumber}`,
+      e.verificationStatusArabic,
+      e.formattedSize,
+      e.uploadedAt,
+    ]);
+    const filename = formatExportFilename('مستودع_الشواهد_والأدلة', 'xlsx');
+    exportToExcel(filename, 'مستودع الشواهد', headers, rows);
   };
 
   return (
@@ -394,7 +392,7 @@ export const EvidencesRepository: React.FC<EvidencesRepositoryProps> = ({
           </div>
 
           <button
-            onClick={handleExportCsv}
+            onClick={handleExportExcel}
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -410,7 +408,7 @@ export const EvidencesRepository: React.FC<EvidencesRepositoryProps> = ({
             }}
           >
             <Download size={14} />
-            تصدير CSV
+            تصدير Excel (.xlsx)
           </button>
 
           {!readOnly && (
@@ -450,7 +448,7 @@ export const EvidencesRepository: React.FC<EvidencesRepositoryProps> = ({
           }}
         >
           <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'right' }}>
+            <table style={{ minWidth: '920px', width: '100%', borderCollapse: 'collapse', textAlign: 'right' }}>
               <thead>
                 <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '2px solid #F1F5F9' }}>
                   <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: 700, color: '#475569' }}>عنوان الشاهد</th>
@@ -463,7 +461,20 @@ export const EvidencesRepository: React.FC<EvidencesRepositoryProps> = ({
                 </tr>
               </thead>
               <tbody>
-                {filteredEvidences.map((ev) => (
+              {filteredEvidences.length === 0 ? (
+                <tr>
+                  <td colSpan={7} style={{ padding: '48px 20px', textAlign: 'center', color: '#64748B' }}>
+                    <div style={{ fontSize: '15px', fontWeight: 700, color: '#0F172A', marginBottom: '6px' }}>
+                      لا توجد شواهد مطابقة لمعايير البحث والتصفية
+                    </div>
+                    <div style={{ fontSize: '12.5px' }}>
+                      يمكنك تعديل كلمات البحث أو تصفية المعايير لإظهار المزيد من الوثائق.
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                filteredEvidences.map((ev) => (
+                
                   <tr
                     key={ev.id}
                     style={{ borderBottom: '1px solid #F1F5F9', transition: 'background-color 0.15s' }}
@@ -562,8 +573,9 @@ export const EvidencesRepository: React.FC<EvidencesRepositoryProps> = ({
                       </div>
                     </td>
                   </tr>
-                ))}
-              </tbody>
+                ))
+              )}
+            </tbody>
             </table>
           </div>
         </div>

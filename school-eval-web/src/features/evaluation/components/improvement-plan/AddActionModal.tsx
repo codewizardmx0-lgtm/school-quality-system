@@ -26,6 +26,19 @@ export const AddActionModal: React.FC<AddActionModalProps> = ({
   const [completionPercentage, setCompletionPercentage] = useState(10);
   const [error, setError] = useState<string | null>(null);
 
+    const handleClose = () => {
+    if (isSubmitting) return;
+    setTitle('');
+    setLeader('');
+    setStartDate(new Date().toISOString().split('T')[0]);
+    setDueDate('2026-12-31');
+    setStatus('InProgress');
+    setProgressDescription('');
+    setCompletionPercentage(10);
+    setError(null);
+    onClose();
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -64,7 +77,7 @@ export const AddActionModal: React.FC<AddActionModalProps> = ({
         zIndex: 50,
         padding: '16px',
       }}
-      onClick={onClose}
+      onClick={handleClose}
     >
       <div
         style={{
@@ -113,7 +126,7 @@ export const AddActionModal: React.FC<AddActionModalProps> = ({
             </div>
           </div>
           <button
-            onClick={onClose}
+            onClick={handleClose}
             style={{
               width: '32px',
               height: '32px',
@@ -297,7 +310,7 @@ export const AddActionModal: React.FC<AddActionModalProps> = ({
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '10px', marginTop: '8px' }}>
             <button
               type="button"
-              onClick={onClose}
+              onClick={handleClose}
               disabled={isSubmitting}
               style={{
                 padding: '9px 18px',

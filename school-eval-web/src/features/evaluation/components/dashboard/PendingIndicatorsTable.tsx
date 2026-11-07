@@ -1,6 +1,6 @@
 import React from 'react';
 import type { PendingIndicatorItem } from '../../api/evaluationTypes';
-import { AlertCircle, ArrowLeft } from 'lucide-react';
+import { AlertCircle, ArrowLeft, CheckCircle2 } from 'lucide-react';
 
 interface PendingIndicatorsTableProps {
   indicators: PendingIndicatorItem[];
@@ -48,103 +48,123 @@ export const PendingIndicatorsTable: React.FC<PendingIndicatorsTableProps> = ({
         </div>
       </div>
 
-      <div style={{ overflowX: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'right' }}>
-          <thead>
-            <tr style={{ borderBottom: '2px solid #F1F5F9', backgroundColor: '#F8FAFC' }}>
-              <th style={{ padding: '12px 14px', fontSize: '12px', fontWeight: 700, color: '#475569' }}>
-                رمز المؤشر
-              </th>
-              <th style={{ padding: '12px 14px', fontSize: '12px', fontWeight: 700, color: '#475569' }}>
-                عنوان المؤشر المعياري
-              </th>
-              <th style={{ padding: '12px 14px', fontSize: '12px', fontWeight: 700, color: '#475569' }}>
-                المعيار الوطني
-              </th>
-              <th style={{ padding: '12px 14px', fontSize: '12px', fontWeight: 700, color: '#475569' }}>
-                الحالة والنقص
-              </th>
-              <th style={{ padding: '12px 14px', fontSize: '12px', fontWeight: 700, color: '#475569', textAlign: 'center' }}>
-                الإجراء السريع
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {indicators.map((item) => (
-              <tr
-                key={item.indicatorId}
-                style={{
-                  borderBottom: '1px solid #F1F5F9',
-                  transition: 'background-color 0.15s',
-                }}
-                onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#F8FAFC')}
-                onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
-              >
-                <td style={{ padding: '12px 14px' }}>
-                  <span
-                    style={{
-                      fontSize: '11.5px',
-                      fontWeight: 700,
-                      padding: '3px 8px',
-                      borderRadius: '4px',
-                      backgroundColor: '#ECFDF5',
-                      color: '#059669',
-                      border: '1px solid #A7F3D0',
-                    }}
-                  >
-                    {item.code}
-                  </span>
-                </td>
-                <td style={{ padding: '12px 14px', fontSize: '13px', fontWeight: 600, color: '#1E293B', maxWidth: '300px' }}>
-                  {item.name}
-                </td>
-                <td style={{ padding: '12px 14px', fontSize: '12.5px', color: '#64748B' }}>
-                  {item.standardName}
-                </td>
-                <td style={{ padding: '12px 14px' }}>
-                  <span
-                    style={{
-                      fontSize: '11.5px',
-                      fontWeight: 600,
-                      padding: '3px 10px',
-                      borderRadius: '12px',
-                      backgroundColor: '#FEF3C7',
-                      color: '#B45309',
-                      display: 'inline-block',
-                    }}
-                  >
-                    {item.status}
-                  </span>
-                </td>
-                <td style={{ padding: '12px 14px', textAlign: 'center' }}>
-                  <button
-                    onClick={() => onOpenIndicator(item.indicatorId)}
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '4px',
-                      padding: '6px 12px',
-                      borderRadius: '6px',
-                      backgroundColor: '#059669',
-                      color: '#FFFFFF',
-                      fontSize: '12px',
-                      fontWeight: 700,
-                      border: 'none',
-                      cursor: 'pointer',
-                      transition: 'background-color 0.15s',
-                    }}
-                    onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#047857')}
-                    onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#059669')}
-                  >
-                    <span>استكمال</span>
-                    <ArrowLeft size={14} />
-                  </button>
-                </td>
+      {indicators.length === 0 ? (
+        <div
+          style={{
+            padding: '36px 20px',
+            textAlign: 'center',
+            backgroundColor: '#F8FAFC',
+            borderRadius: '10px',
+            border: '1px dashed #CBD5E1',
+          }}
+        >
+          <CheckCircle2 size={36} color="#059669" style={{ margin: '0 auto 8px' }} />
+          <div style={{ fontSize: '14px', fontWeight: 700, color: '#0F172A' }}>
+            كافة مؤشرات التقييم مستوفاة بالكامل
+          </div>
+          <div style={{ fontSize: '12px', color: '#64748B', marginTop: '4px' }}>
+            لا توجد أي مؤشرات معلقة أو بحاجة لشواهد إضافية في هذه الدورة.
+          </div>
+        </div>
+      ) : (
+        <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', width: '100%', borderRadius: '8px', border: '1px solid #F1F5F9' }}>
+          <table style={{ minWidth: '850px', width: '100%', borderCollapse: 'collapse', textAlign: 'right' }}>
+            <thead>
+              <tr style={{ borderBottom: '2px solid #F1F5F9', backgroundColor: '#F8FAFC' }}>
+                <th style={{ padding: '12px 14px', fontSize: '12px', fontWeight: 700, color: '#475569' }}>
+                  رمز المؤشر
+                </th>
+                <th style={{ padding: '12px 14px', fontSize: '12px', fontWeight: 700, color: '#475569' }}>
+                  عنوان المؤشر المعياري
+                </th>
+                <th style={{ padding: '12px 14px', fontSize: '12px', fontWeight: 700, color: '#475569' }}>
+                  المعيار الوطني
+                </th>
+                <th style={{ padding: '12px 14px', fontSize: '12px', fontWeight: 700, color: '#475569' }}>
+                  الحالة والنقص
+                </th>
+                <th style={{ padding: '12px 14px', fontSize: '12px', fontWeight: 700, color: '#475569', textAlign: 'center' }}>
+                  الإجراء السريع
+                </th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {indicators.map((item) => (
+                <tr
+                  key={item.indicatorId}
+                  style={{
+                    borderBottom: '1px solid #F1F5F9',
+                    transition: 'background-color 0.15s',
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#F8FAFC')}
+                  onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                >
+                  <td style={{ padding: '12px 14px' }}>
+                    <span
+                      style={{
+                        fontSize: '11.5px',
+                        fontWeight: 700,
+                        padding: '3px 8px',
+                        borderRadius: '4px',
+                        backgroundColor: '#ECFDF5',
+                        color: '#059669',
+                        border: '1px solid #A7F3D0',
+                      }}
+                    >
+                      {item.code}
+                    </span>
+                  </td>
+                  <td style={{ padding: '12px 14px', fontSize: '13px', fontWeight: 600, color: '#1E293B', maxWidth: '300px' }}>
+                    {item.name}
+                  </td>
+                  <td style={{ padding: '12px 14px', fontSize: '12.5px', color: '#64748B' }}>
+                    {item.standardName}
+                  </td>
+                  <td style={{ padding: '12px 14px' }}>
+                    <span
+                      style={{
+                        fontSize: '11.5px',
+                        fontWeight: 600,
+                        padding: '3px 10px',
+                        borderRadius: '12px',
+                        backgroundColor: '#FEF3C7',
+                        color: '#B45309',
+                        display: 'inline-block',
+                      }}
+                    >
+                      {item.status}
+                    </span>
+                  </td>
+                  <td style={{ padding: '12px 14px', textAlign: 'center' }}>
+                    <button
+                      onClick={() => onOpenIndicator(item.indicatorId)}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        padding: '6px 12px',
+                        borderRadius: '6px',
+                        backgroundColor: '#059669',
+                        color: '#FFFFFF',
+                        fontSize: '12px',
+                        fontWeight: 700,
+                        border: 'none',
+                        cursor: 'pointer',
+                        transition: 'background-color 0.15s',
+                      }}
+                      onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#047857')}
+                      onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#059669')}
+                    >
+                      <span>استكمال</span>
+                      <ArrowLeft size={14} />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 };

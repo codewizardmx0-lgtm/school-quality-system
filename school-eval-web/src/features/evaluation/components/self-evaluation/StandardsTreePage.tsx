@@ -28,8 +28,11 @@ export const StandardsTreePage: React.FC<StandardsTreePageProps> = ({
 
   if (isLoadingTree && !treeData) {
     return (
-      <div style={{ padding: '32px', textAlign: 'center', color: '#64748B' }}>
-        جاري تحميل شجرة المعايير الوطنية...
+      <div style={{ padding: '24px', maxWidth: '1440px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+        <div style={{ height: '80px', borderRadius: '14px', backgroundColor: '#E2E8F0' }} className="animate-pulse" />
+        {[1, 2, 3, 4].map((i) => (
+          <div key={i} style={{ height: '140px', borderRadius: '12px', backgroundColor: '#E2E8F0' }} className="animate-pulse" />
+        ))}
       </div>
     );
   }
@@ -103,7 +106,17 @@ export const StandardsTreePage: React.FC<StandardsTreePageProps> = ({
 
       {/* Standards List */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-        {filteredStandards.map((std) => {
+        {filteredStandards.length === 0 ? (
+          <div style={{ padding: '48px 20px', textAlign: 'center', backgroundColor: '#FFFFFF', borderRadius: '12px', border: '1px solid #E2E8F0' }}>
+            <div style={{ fontSize: '15px', fontWeight: 700, color: '#0F172A', marginBottom: '6px' }}>
+              لا توجد معايير أو مؤشرات مطابقة لبحثك «{searchTerm}»
+            </div>
+            <div style={{ fontSize: '12.5px', color: '#64748B' }}>
+              يرجى التحقق من صياغة البحث أو مسح حقل البحث لاستعراض كافة المعايير.
+            </div>
+          </div>
+        ) : (
+          filteredStandards.map((std) => {
           const isExpanded = expandedStandards[std.standardId] ?? false;
           const totalIndsCount = std.subStandards.reduce((acc, sub) => acc + sub.indicators.length, 0);
 
@@ -270,7 +283,8 @@ export const StandardsTreePage: React.FC<StandardsTreePageProps> = ({
               )}
             </div>
           );
-        })}
+        })
+      )}
       </div>
     </div>
   );

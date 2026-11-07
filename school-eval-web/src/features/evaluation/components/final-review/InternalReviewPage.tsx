@@ -1,3 +1,4 @@
+import { schoolsApi } from '../../../admin/api/schoolsApi';
 import React, { useState } from 'react';
 import { useFinalSubmission } from '../../hooks/useFinalSubmission';
 import { DraftReportPreview } from './DraftReportPreview';
@@ -41,29 +42,12 @@ export const InternalReviewPage: React.FC<InternalReviewPageProps> = ({
   const canSubmit = preflightData?.canSubmit ?? true;
   const readiness = preflightData?.readinessPercentage ?? 100;
 
-  const handleExportTextReport = () => {
-    const reportContent = `\uFEFFتقرير التقييم الذاتي المعتمد - مدرسة الأمل النموذجية الثانوية
-العام الدراسي: 2026/2027
-المقيم: عمار عمر عبدالله
-رمز التتبع: ARQ-2026-SCH104-FIN
-البصمة الرقمية: SHA-256 Validated (e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855)
-الحالة: ${isLocked ? 'مرفوع ومقفل بالختم الرقمي' : 'مسودة معتمدة داخلياً جاهزة للإرسال'}
-
-خلاصة نتائج المعايير:
-- نسبة الاستيفاء والجاهزية: ${readiness}%
-- مؤشرات منجزة: 56 من 56
-- شواهد موثقة ومفهرسة: 38 مستنداً
-- خطة التحسين المدرسية: 6 إجراءات تنفيذية
-`;
-    const blob = new Blob([reportContent], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `تقرير_التقييم_النهائي_${new Date().toISOString().split('T')[0]}.txt`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+  const handleExportPdfReport = async () => {
+    try {
+      await schoolsApi.downloadExecutivePdf();
+    } catch (err) {
+      console.error('Failed to export PDF report:', err);
+    }
   };
 
   const handleConfirmLock = async (password: string, notes?: string) => {
@@ -103,7 +87,7 @@ export const InternalReviewPage: React.FC<InternalReviewPageProps> = ({
             </div>
           </div>
           <button
-            onClick={handleExportTextReport}
+            onClick={handleExportPdfReport}
             style={{
               padding: '8px 14px',
               borderRadius: '8px',
@@ -235,7 +219,7 @@ export const InternalReviewPage: React.FC<InternalReviewPageProps> = ({
 
       {/* 2. Draft Report Preview */}
       <DraftReportPreview
-        onExportPdf={handleExportTextReport}
+        onExportPdf={handleExportPdfReport}
         isLocked={isLocked}
       />
 

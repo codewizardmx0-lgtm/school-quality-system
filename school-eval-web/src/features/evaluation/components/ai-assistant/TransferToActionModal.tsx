@@ -24,6 +24,11 @@ export const TransferToActionModal: React.FC<TransferToActionModalProps> = ({
   );
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+    const handleClose = () => {
+    if (isSubmitting) return;
+    onClose();
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
@@ -48,7 +53,7 @@ export const TransferToActionModal: React.FC<TransferToActionModalProps> = ({
         zIndex: 50,
         padding: '16px',
       }}
-      onClick={onClose}
+      onClick={handleClose}
     >
       <div
         style={{
@@ -98,7 +103,7 @@ export const TransferToActionModal: React.FC<TransferToActionModalProps> = ({
             </div>
           </div>
           <button
-            onClick={onClose}
+            onClick={handleClose}
             style={{
               width: '32px',
               height: '32px',
@@ -208,7 +213,7 @@ export const TransferToActionModal: React.FC<TransferToActionModalProps> = ({
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '10px', marginTop: '8px' }}>
             <button
               type="button"
-              onClick={onClose}
+              onClick={handleClose}
               disabled={isSubmitting}
               style={{
                 padding: '9px 18px',

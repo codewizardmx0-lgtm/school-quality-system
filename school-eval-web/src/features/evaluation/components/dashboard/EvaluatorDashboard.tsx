@@ -29,8 +29,14 @@ export const EvaluatorDashboard: React.FC<EvaluatorDashboardProps> = ({
 
   if (isLoading && !dashboardData) {
     return (
-      <div style={{ padding: '32px', textAlign: 'center', color: '#64748B' }}>
-        جاري تحميل مؤشرات لوحة التحكم والتقييم...
+      <div style={{ padding: '24px', maxWidth: '1440px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '24px' }}>
+        <div style={{ height: '110px', borderRadius: '16px', backgroundColor: '#E2E8F0' }} className="animate-pulse" />
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} style={{ height: '120px', borderRadius: '14px', backgroundColor: '#E2E8F0' }} className="animate-pulse" />
+          ))}
+        </div>
+        <div style={{ height: '300px', borderRadius: '14px', backgroundColor: '#E2E8F0' }} className="animate-pulse" />
       </div>
     );
   }

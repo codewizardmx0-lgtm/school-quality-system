@@ -72,7 +72,7 @@ export const DraftReportPreview: React.FC<DraftReportPreviewProps> = ({
           }}
         >
           <Download size={15} />
-          تصدير التقرير (PDF/TXT)
+          تصدير التقرير الرسمي (PDF)
         </button>
       </div>
 

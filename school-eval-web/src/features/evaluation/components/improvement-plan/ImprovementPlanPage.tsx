@@ -1,3 +1,4 @@
+import { exportToExcel, formatExportFilename } from '../../../admin/utils/exportUtils';
 import React, { useState } from 'react';
 import { useImprovementPlan } from '../../hooks/useImprovementPlan';
 import { AddActionModal } from './AddActionModal';
@@ -52,23 +53,20 @@ export const ImprovementPlanPage: React.FC<ImprovementPlanPageProps> = ({
   });
 
   const handleExportPlan = () => {
-    const header = '\uFEFFرقم الإجراء,عنوان الإجراء,المعيار,المسؤول,البداية,الاستحقاق,الحالة,نسبة الإنجاز,وصف التقدم\n';
-    const rows = actions
-      .map(
-        (a) =>
-          `"${a.actionId}","${a.title}","${a.standardName}","${a.leader}","${a.startDate}","${a.dueDate}","${a.statusArabic}","${a.completionPercentage}%","${a.progressDescription}"`
-      )
-      .join('\n');
-
-    const blob = new Blob([header + rows], { type: 'text/csv;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `خطة_التحسين_المدرسي_${new Date().toISOString().split('T')[0]}.csv`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+    const headers = ['رقم الإجراء', 'عنوان الإجراء', 'المعيار', 'المسؤول', 'البداية', 'الاستحقاق', 'الحالة', 'نسبة الإنجاز', 'وصف التقدم'];
+    const rows = actions.map((a) => [
+      a.actionId,
+      a.title,
+      a.standardName,
+      a.leader,
+      a.startDate,
+      a.dueDate,
+      a.statusArabic,
+      `${a.completionPercentage}%`,
+      a.progressDescription,
+    ]);
+    const filename = formatExportFilename('خطة_التحسين_المدرسي', 'xlsx');
+    exportToExcel(filename, 'خطة التحسين', headers, rows);
   };
 
   const handleDirectStatusChange = (actionId: number, newStatus: ActionStatus) => {
@@ -294,7 +292,7 @@ export const ImprovementPlanPage: React.FC<ImprovementPlanPageProps> = ({
         </div>
 
         <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'right' }}>
+          <table style={{ minWidth: '920px', width: '100%', borderCollapse: 'collapse', textAlign: 'right' }}>
             <thead>
               <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '2px solid #F1F5F9' }}>
                 <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: 700, color: '#475569' }}>عنوان الإجراء التنفيذي</th>
@@ -306,7 +304,20 @@ export const ImprovementPlanPage: React.FC<ImprovementPlanPageProps> = ({
               </tr>
             </thead>
             <tbody>
-              {filteredActions.map((action) => (
+              {filteredActions.length === 0 ? (
+                <tr>
+                  <td colSpan={6} style={{ padding: '48px 20px', textAlign: 'center', color: '#64748B' }}>
+                    <div style={{ fontSize: '15px', fontWeight: 700, color: '#0F172A', marginBottom: '6px' }}>
+                      لا توجد إجراءات مطابقة لحالة التصفية الحالية
+                    </div>
+                    <div style={{ fontSize: '12.5px' }}>
+                      يمكنك تغيير تصفية الحالة أو النقر على «إضافة إجراء تنفيذي جديد».
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                filteredActions.map((action) => (
+              
                 <tr
                   key={action.actionId}
                   style={{ borderBottom: '1px solid #F1F5F9', transition: 'background-color 0.15s' }}
@@ -410,7 +421,8 @@ export const ImprovementPlanPage: React.FC<ImprovementPlanPageProps> = ({
                     </button>
                   </td>
                 </tr>
-              ))}
+                ))
+              )}
             </tbody>
           </table>
         </div>
