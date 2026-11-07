@@ -129,6 +129,37 @@ Route::prefix('v1')->group(function () {
             Route::get('/dashboard-stats', [\App\Http\Controllers\Api\V1\AdminController::class, 'dashboardStats'])->name('api.v1.admin.dashboard-stats');
             Route::get('/export-report-pdf', [\App\Http\Controllers\Api\V1\AdminController::class, 'exportReportPdf'])->name('api.v1.admin.export-report-pdf');
         });
+
+        // --------------------------------------------------------------------------
+        // بوابة مستخدم التقييم بالمدرسة (School Evaluator Suite - ERTEQA)
+        // --------------------------------------------------------------------------
+        Route::prefix('evaluator')->group(function () {
+            Route::get('/dashboard-stats', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'dashboardStats'])->name('api.v1.evaluator.dashboard-stats');
+        });
+
+        Route::get('/standard-versions/active/tree', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'activeStandardsTree'])->name('api.v1.standard-versions.active.tree');
+        Route::get('/evaluation-results/{indicatorId}', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'getEvaluationResult'])->name('api.v1.evaluation-results.indicator.show');
+        Route::post('/evaluation-results', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'saveEvaluationResult'])->name('api.v1.evaluation-results.store');
+
+        Route::post('/evidences/upload', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'uploadEvidence'])->name('api.v1.evidences.upload');
+        Route::get('/evidences', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'getEvidences'])->name('api.v1.evidences.index');
+
+        Route::prefix('ai')->group(function () {
+            Route::post('/analyses', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'triggerAiAnalysis'])->name('api.v1.ai.analyses.store');
+            Route::get('/analyses/{id}/recommendations', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'getAiRecommendations'])->name('api.v1.ai.analyses.recommendations');
+            Route::patch('/recommendations/{id}', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'updateAiRecommendation'])->name('api.v1.ai.recommendations.update');
+        });
+
+        Route::get('/improvement-plans/current', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'getCurrentImprovementPlan'])->name('api.v1.improvement-plans.current');
+        Route::post('/improvement-actions', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'createImprovementAction'])->name('api.v1.improvement-actions.store');
+        Route::put('/improvement-actions/{id}', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'updateImprovementAction'])->name('api.v1.improvement-actions.update');
+
+        Route::get('/evaluations/current/preflight-check', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'preflightCheck'])->name('api.v1.evaluations.current.preflight-check');
+        Route::post('/evaluation-submissions/submit', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'submitEvaluation'])->name('api.v1.evaluation-submissions.submit');
+
+        Route::get('/completion-requests/current', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'getCurrentCompletionRequest'])->name('api.v1.completion-requests.current');
+        Route::post('/completion-request-items/{id}/resolve', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'resolveCompletionRequestItem'])->name('api.v1.completion-request-items.resolve');
+        Route::post('/completion-requests/{id}/resubmit', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'resubmitCompletionRequest'])->name('api.v1.completion-requests.resubmit.evaluator');
         // الإصدارات المعيارية وإدارة معايير الاعتماد المدرسي (Standard Versions Management - الشريحة 7)
         Route::prefix('standard-versions')->group(function () {
             Route::get('/', [\App\Http\Controllers\Api\V1\StandardManagementController::class, 'index'])->name('api.v1.standard-versions.index');
