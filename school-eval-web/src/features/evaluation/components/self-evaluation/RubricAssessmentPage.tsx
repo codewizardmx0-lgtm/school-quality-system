@@ -13,6 +13,8 @@ import {
   WifiOff,
   RefreshCw,
   AlertTriangle,
+  Loader2,
+  AlertCircle,
 } from 'lucide-react';
 
 interface RubricAssessmentPageProps {
@@ -31,8 +33,9 @@ export const RubricAssessmentPage: React.FC<RubricAssessmentPageProps> = ({
     currentIndicatorInfo,
     currentResult,
     isSaving,
-    saveSuccessMessage,
+    saveStatus,
     saveRubricAssessment,
+    retryLastSave,
     goToPreviousIndicator,
     goToNextIndicator,
     hasPrevious,
@@ -44,7 +47,7 @@ export const RubricAssessmentPage: React.FC<RubricAssessmentPageProps> = ({
     syncOfflineDrafts,
     resolveConflictWithLocal,
     dismissConflict,
-  } = useSelfEvaluation(selectedIndicatorId || undefined);
+  } = useSelfEvaluation(selectedIndicatorId || undefined, isLocked);
 
   const { uploadEvidenceFile, isUploading, uploadProgress } = useEvidences();
 
@@ -333,20 +336,89 @@ export const RubricAssessmentPage: React.FC<RubricAssessmentPageProps> = ({
             </span>
           </div>
 
-          {saveSuccessMessage && (
-            <span
-              style={{
-                fontSize: '12px',
-                fontWeight: 700,
-                color: '#059669',
-                backgroundColor: '#ECFDF5',
-                padding: '4px 10px',
-                borderRadius: '6px',
-              }}
-            >
-              ✓ {saveSuccessMessage}
-            </span>
-          )}
+          {/* مؤشر حالة الحفظ التفاعلي الصريح */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            {saveStatus === 'saving' && (
+              <span
+                style={{
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  color: '#2563EB',
+                  backgroundColor: '#EFF6FF',
+                  padding: '3px 10px',
+                  borderRadius: '6px',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                }}
+              >
+                <Loader2 size={13} className="animate-spin" />
+                <span>قيد الحفظ...</span>
+              </span>
+            )}
+
+            {saveStatus === 'saved_server' && (
+              <span
+                style={{
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  color: '#059669',
+                  backgroundColor: '#ECFDF5',
+                  padding: '3px 10px',
+                  borderRadius: '6px',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                }}
+              >
+                <CheckCircle2 size={13} />
+                <span>محفوظ على الخادم</span>
+              </span>
+            )}
+
+            {saveStatus === 'saved_local' && (
+              <span
+                style={{
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  color: '#D97706',
+                  backgroundColor: '#FFFBEB',
+                  border: '1px solid #FDE68A',
+                  padding: '3px 10px',
+                  borderRadius: '6px',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                }}
+              >
+                <WifiOff size={13} />
+                <span>محفوظ محلياً (أوفلاين)</span>
+              </span>
+            )}
+
+            {saveStatus === 'error' && (
+              <button
+                type="button"
+                onClick={retryLastSave}
+                style={{
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  color: '#DC2626',
+                  backgroundColor: '#FEF2F2',
+                  border: '1px solid #FECACA',
+                  padding: '3px 10px',
+                  borderRadius: '6px',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  cursor: 'pointer',
+                }}
+              >
+                <AlertCircle size={13} />
+                <span>تعذر الحفظ (اضغط لإعادة المحاولة)</span>
+              </button>
+            )}
+          </div>
         </div>
 
         <h2 style={{ fontSize: '17px', fontWeight: 800, color: '#0F172A', margin: '4px 0 8px 0', lineHeight: 1.4 }}>

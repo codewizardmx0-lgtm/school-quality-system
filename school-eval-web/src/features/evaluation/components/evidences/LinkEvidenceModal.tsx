@@ -529,9 +529,8 @@ export const LinkEvidenceModal: React.FC<LinkEvidenceModalProps> = ({
                   <h4 style={{ margin: '0 0 6px 0', fontSize: '14px', color: '#92400e', fontWeight: 700 }}>
                     تنبيه فك ارتباط الشاهد عن المؤشر:
                   </h4>
-                  <p style={{ margin: 0, fontSize: '12.5px', color: '#78350f', lineHeight: 1.6 }}>
-                    عند فك الارتباط، ستتم إزالة هذا الشاهد من متطلبات التقييم الخاصة بهذا المؤشر (
-                    <strong>{evidence.indicatorCode}</strong>)، مع <strong>بقاء الملف محفوظاً</strong> في خزانة مستندات المدرسة دون حذفه نهائياً.
+                  <p style={{ margin: 0, fontSize: '13px', color: '#78350f', lineHeight: 1.6 }}>
+                    فك الارتباط يزيل ربط الشاهد بهذا المؤشر فقط (<strong>{evidence.indicatorCode}</strong>) ويبقى المستند محفوظاً بمستودع وثائق المدرسة دون حذفه نهائياً.
                   </p>
                 </div>
               </div>

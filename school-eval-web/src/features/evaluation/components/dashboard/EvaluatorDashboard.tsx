@@ -79,12 +79,13 @@ export const EvaluatorDashboard: React.FC<EvaluatorDashboardProps> = ({
 
   const school = dashboardData?.schoolInfo;
 
-  // تجهيز بيانات الرسوم البيانية التفاعلية (FE-GAP-04)
-  const l3 = Math.round(kpis.strengthsCount * 0.6);
-  const l2 = kpis.strengthsCount - l3;
-  const l1 = Math.round(kpis.gapsCount * 0.7);
-  const l0 = kpis.gapsCount - l1;
-  const unscored = Math.max(0, kpis.totalIndicators - kpis.scoredIndicators);
+  // تجهيز بيانات الرسوم البيانية التفاعلية بالاعتماد المباشر على التوزيع الفعلي من الـ API (FE-GAP-04)
+  const dist = kpis.scoreDistribution;
+  const l3 = dist ? dist.level3 : Math.round(kpis.strengthsCount * 0.6);
+  const l2 = dist ? dist.level2 : kpis.strengthsCount - l3;
+  const l1 = dist ? dist.level1 : Math.round(kpis.gapsCount * 0.7);
+  const l0 = dist ? dist.level0 : kpis.gapsCount - l1;
+  const unscored = dist ? dist.unscored : Math.max(0, kpis.totalIndicators - kpis.scoredIndicators);
 
   const donutSegments = [
     {
@@ -291,7 +292,7 @@ export const EvaluatorDashboard: React.FC<EvaluatorDashboardProps> = ({
       >
         {/* Card 1: نسبة إنجاز التقييم الذاتي */}
         <div
-          onClick={() => onNavigate('rubric-assessment')}
+          onClick={() => onNavigate('rubric-assessment', kpis.firstUnscoredIndicatorId || undefined)}
           style={{
             backgroundColor: '#FFFFFF',
             borderRadius: '14px',

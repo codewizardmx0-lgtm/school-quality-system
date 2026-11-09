@@ -33,6 +33,14 @@ export interface EvaluatorKpis {
   targetEvidences: number;
   strengthsCount: number;
   gapsCount: number;
+  scoreDistribution?: {
+    level3: number;
+    level2: number;
+    level1: number;
+    level0: number;
+    unscored: number;
+  };
+  firstUnscoredIndicatorId?: number | null;
 }
 
 export interface CycleStep {

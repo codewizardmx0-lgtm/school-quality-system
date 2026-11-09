@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { UploadCloud, X, AlertCircle, FileCheck, Trash2 } from 'lucide-react';
 import { theme } from '../../../../styles/theme';
 
@@ -13,7 +13,7 @@ interface UploadEvidenceModalProps {
 }
 
 const ALLOWED_EXTENSIONS = ['.pdf', '.png', '.jpg', '.jpeg', '.docx', '.xlsx'];
-const MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024; // 25 MB
+const MAX_FILE_SIZE_BYTES = 20 * 1024 * 1024; // 20 MB الموحد نظامياً
 
 export const UploadEvidenceModal: React.FC<UploadEvidenceModalProps> = ({
   isOpen,
@@ -31,7 +31,21 @@ export const UploadEvidenceModal: React.FC<UploadEvidenceModalProps> = ({
   const [notes, setNotes] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState<boolean>(false);
+  const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // توليد رابط معاينة محلية آمنة للصور فقط (PNG / JPG)
+  useEffect(() => {
+    if (file && (file.type.startsWith('image/') || /\.(png|jpe?g)$/i.test(file.name))) {
+      const url = URL.createObjectURL(file);
+      setImagePreviewUrl(url);
+      return () => {
+        URL.revokeObjectURL(url);
+      };
+    } else {
+      setImagePreviewUrl(null);
+    }
+  }, [file]);
 
   const isReplacing = !!documentIdToReplace;
 
@@ -42,6 +56,7 @@ export const UploadEvidenceModal: React.FC<UploadEvidenceModalProps> = ({
     setNotes('');
     setError(null);
     setIsDragging(false);
+    setImagePreviewUrl(null);
     onClose();
   };
 
@@ -50,7 +65,7 @@ export const UploadEvidenceModal: React.FC<UploadEvidenceModalProps> = ({
 
     // التحقق من الحجم
     if (selected.size > MAX_FILE_SIZE_BYTES) {
-      setError(`حجم الملف (${(selected.size / (1024 * 1024)).toFixed(2)} ميجابايت) يتجاوز الحد الأقصى المسموح به (25 ميجابايت).`);
+      setError(`حجم الملف (${(selected.size / (1024 * 1024)).toFixed(2)} ميجابايت) يتجاوز الحد الأقصى المسموح به (20 ميجابايت).`);
       return false;
     }
 
@@ -295,20 +310,34 @@ export const UploadEvidenceModal: React.FC<UploadEvidenceModalProps> = ({
               {file ? (
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 8px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '12px', textAlign: 'right' }}>
-                    <div
-                      style={{
-                        width: '40px',
-                        height: '40px',
-                        borderRadius: theme.radii.md,
-                        backgroundColor: theme.colors.primary[100],
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        color: theme.colors.primary[700],
-                      }}
-                    >
-                      <FileCheck size={22} />
-                    </div>
+                    {imagePreviewUrl ? (
+                      <img
+                        src={imagePreviewUrl}
+                        alt="معاينة الشاهد"
+                        style={{
+                          width: '44px',
+                          height: '44px',
+                          borderRadius: theme.radii.md,
+                          objectFit: 'cover',
+                          border: `1px solid ${theme.colors.primary[200]}`,
+                        }}
+                      />
+                    ) : (
+                      <div
+                        style={{
+                          width: '40px',
+                          height: '40px',
+                          borderRadius: theme.radii.md,
+                          backgroundColor: theme.colors.primary[100],
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: theme.colors.primary[700],
+                        }}
+                      >
+                        <FileCheck size={22} />
+                      </div>
+                    )}
                     <div>
                       <div style={{ fontSize: '13px', fontWeight: theme.typography.fontWeights.bold, color: theme.colors.primary[900] }}>
                         {file.name}
@@ -362,7 +391,7 @@ export const UploadEvidenceModal: React.FC<UploadEvidenceModalProps> = ({
                     {isDragging ? 'أفلت الملف هنا للإيداع المباشر' : 'اسحب وأفلت ملف الشاهد هنا، أو اضغط للتصفح'}
                   </div>
                   <div style={{ fontSize: '11px', color: theme.colors.neutral[500], marginTop: '4px' }}>
-                    الصيغ المدعومة: PDF, PNG, JPG, Word (docx), Excel (xlsx) — الحجم الأقصى 25 ميجابايت
+                    الصيغ المدعومة: PDF, PNG, JPG, Word (docx), Excel (xlsx) — الحجم الأقصى 20 ميجابايت
                   </div>
                 </div>
               )}

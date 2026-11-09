@@ -69,7 +69,10 @@ export const evaluatorApi = {
    * 5. POST /api/v1/evidences/upload
    * Upload evidence file with optional indicator or action linking
    */
-  async uploadEvidence(payload: UploadEvidencePayload): Promise<{
+  async uploadEvidence(
+    payload: UploadEvidencePayload,
+    onProgress?: (percent: number) => void
+  ): Promise<{
     documentId: number;
     versionId: number;
     versionNumber: number;
@@ -106,6 +109,12 @@ export const evaluatorApi = {
     }>('/evidences/upload', formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
+      },
+      onUploadProgress: (progressEvent) => {
+        if (progressEvent.total && onProgress) {
+          const percent = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+          onProgress(percent);
+        }
       },
     });
 

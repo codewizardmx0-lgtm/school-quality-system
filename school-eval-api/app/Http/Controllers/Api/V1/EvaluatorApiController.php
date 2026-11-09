@@ -109,6 +109,13 @@ class EvaluatorApiController extends Controller
         $strengthsCount = $results->filter(fn($r) => $r->score !== null && $r->score >= 2)->count();
         $gapsCount = $results->filter(fn($r) => $r->score !== null && $r->score < 2)->count();
 
+        // التوزيع الحقيقي الدقيق لمستويات الأداء الرباعية (0 - 3)
+        $level3Count = $results->filter(fn($r) => (int)$r->score === 3)->count();
+        $level2Count = $results->filter(fn($r) => (int)$r->score === 2)->count();
+        $level1Count = $results->filter(fn($r) => (int)$r->score === 1)->count();
+        $level0Count = $results->filter(fn($r) => (int)$r->score === 0)->count();
+        $unscoredCount = max(0, $totalIndicators - $scoredCount);
+
         // مسار دورة التقييم ومراجعة المخرج
         $cycleSteps = [
             ['id' => 1, 'label' => 'إطلاق الدورة', 'status' => 'completed', 'date' => '2026-09-01'],
@@ -180,6 +187,14 @@ class EvaluatorApiController extends Controller
                 'targetEvidences' => $targetEvidencesCount,
                 'strengthsCount' => $strengthsCount,
                 'gapsCount' => $gapsCount,
+                'scoreDistribution' => [
+                    'level3' => $level3Count,
+                    'level2' => $level2Count,
+                    'level1' => $level1Count,
+                    'level0' => $level0Count,
+                    'unscored' => $unscoredCount,
+                ],
+                'firstUnscoredIndicatorId' => $unscoredIndicators->first()?->indicator_id ?? null,
             ],
             'cycleSteps' => $cycleSteps,
             'standardsProgress' => $standardsProgress,
@@ -418,7 +433,7 @@ class EvaluatorApiController extends Controller
     public function uploadEvidence(Request $request): JsonResponse
     {
         $validator = Validator::make($request->all(), [
-            'file' => 'required|file|max:25600|mimes:pdf,png,jpg,jpeg,docx,xlsx',
+            'file' => 'required|file|max:20480|mimes:pdf,png,jpg,jpeg,docx,xlsx',
             'title' => 'nullable|string|max:255',
             'indicatorId' => 'nullable|integer',
             'actionId' => 'nullable|integer',
@@ -426,7 +441,7 @@ class EvaluatorApiController extends Controller
             'documentId' => 'nullable|integer', // إذا كان استبدالاً لنسخة سابقة
         ], [
             'file.required' => 'الملف مطلوب.',
-            'file.max' => 'حجم الملف يتجاوز الحد الأقصى المسموح (25 ميجابايت).',
+            'file.max' => 'حجم الملف يتجاوز الحد الأقصى المسموح (20 ميجابايت).',
             'file.mimes' => 'نوع الملف غير مسموح. الأنواع المسموحة: pdf, png, jpg, jpeg, docx, xlsx.',
         ]);
 

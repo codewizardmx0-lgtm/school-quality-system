@@ -393,8 +393,8 @@ export const EvidenceInventoryPage: React.FC<EvidenceInventoryPageProps> = ({
 
               {/* Indicators Table / Accordion Body */}
               {isExpanded && (
-                <div style={{ padding: '8px 16px', overflowX: 'auto' }}>
-                  <table style={{ width: '100%', minWidth: '700px', borderCollapse: 'collapse', fontSize: '13px' }}>
+                <div style={{ padding: '8px 16px', overflowX: 'auto', WebkitOverflowScrolling: 'touch', width: '100%' }}>
+                  <table style={{ width: '100%', minWidth: '750px', borderCollapse: 'collapse', fontSize: '13px' }}>
                     <thead>
                       <tr style={{ borderBottom: '1px solid #e2e8f0', color: '#64748b', textAlign: 'right' }}>
                         <th style={{ padding: '10px 8px', width: '90px' }}>الرمز</th>

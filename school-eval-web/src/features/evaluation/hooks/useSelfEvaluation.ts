@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { evaluatorApi } from '../api/evaluatorApi';
+import { useAuth } from '../../auth/AuthContext';
 import type {
   StandardsTreeData,
   StandardNode,
@@ -8,7 +9,7 @@ import type {
   SaveEvaluationResultPayload,
 } from '../api/evaluationTypes';
 
-const OFFLINE_DRAFTS_STORAGE_KEY = 'school_eval_offline_drafts_v1';
+export type SaveStatus = 'idle' | 'saving' | 'saved_server' | 'saved_local' | 'error';
 
 interface OfflineDraft {
   indicatorId: number;
@@ -16,7 +17,16 @@ interface OfflineDraft {
   cachedAt: string;
 }
 
-export function useSelfEvaluation(initialIndicatorId?: number) {
+export function useSelfEvaluation(initialIndicatorId?: number, isLocked: boolean = false) {
+  const { user } = useAuth();
+  const userId = user?.userId ?? 'guest';
+  const schoolId = user?.schoolId ?? 'default';
+
+  // عزل مفتاح التخزين المحلي حسب المستخدم والمدرسة (FE-GAP-05 / U-35 Security Isolation)
+  const storageKey = useMemo(() => {
+    return `school_eval_drafts_u${userId}_s${schoolId}_v1`;
+  }, [userId, schoolId]);
+
   const [treeData, setTreeData] = useState<StandardsTreeData | null>(null);
   const [selectedStandardId, setSelectedStandardId] = useState<number | null>(null);
   const [selectedIndicatorId, setSelectedIndicatorId] = useState<number | null>(initialIndicatorId ?? null);
@@ -24,7 +34,9 @@ export function useSelfEvaluation(initialIndicatorId?: number) {
   const [isLoadingTree, setIsLoadingTree] = useState<boolean>(true);
   const [isLoadingResult, setIsLoadingResult] = useState<boolean>(false);
   const [isSaving, setIsSaving] = useState<boolean>(false);
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
   const [saveSuccessMessage, setSaveSuccessMessage] = useState<string | null>(null);
+  const [lastFailedPayload, setLastFailedPayload] = useState<Omit<SaveEvaluationResultPayload, 'indicatorId'> | null>(null);
 
   // حالة الاتصال بالشبكة والمزامنة التلقائية (FE-GAP-05 / U-35)
   const [isOffline, setIsOffline] = useState<boolean>(
@@ -34,16 +46,16 @@ export function useSelfEvaluation(initialIndicatorId?: number) {
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [conflictWarning, setConflictWarning] = useState<string | null>(null);
 
-  // قراءة المسودات غير المزامنة من التخزين المحلي
+  // قراءة المسودات غير المزامنة من التخزين المحلي المعزول
   const getStoredDrafts = useCallback((): Record<number, OfflineDraft> => {
     if (typeof window === 'undefined') return {};
     try {
-      const raw = localStorage.getItem(OFFLINE_DRAFTS_STORAGE_KEY);
+      const raw = localStorage.getItem(storageKey);
       return raw ? JSON.parse(raw) : {};
     } catch {
       return {};
     }
-  }, []);
+  }, [storageKey]);
 
   // تحديث عداد المسودات المحلية
   const refreshDraftsCount = useCallback(() => {
@@ -54,7 +66,7 @@ export function useSelfEvaluation(initialIndicatorId?: number) {
   // حفظ مسودة محلية في وضع عدم الاتصال
   const saveDraftLocally = useCallback(
     (indicatorId: number, payload: Omit<SaveEvaluationResultPayload, 'indicatorId'>) => {
-      if (typeof window === 'undefined') return;
+      if (typeof window === 'undefined' || isLocked) return;
       try {
         const drafts = getStoredDrafts();
         drafts[indicatorId] = {
@@ -62,13 +74,13 @@ export function useSelfEvaluation(initialIndicatorId?: number) {
           payload,
           cachedAt: new Date().toISOString(),
         };
-        localStorage.setItem(OFFLINE_DRAFTS_STORAGE_KEY, JSON.stringify(drafts));
+        localStorage.setItem(storageKey, JSON.stringify(drafts));
         refreshDraftsCount();
       } catch (e) {
         console.error('Failed to store draft locally:', e);
       }
     },
-    [getStoredDrafts, refreshDraftsCount]
+    [getStoredDrafts, refreshDraftsCount, storageKey, isLocked]
   );
 
   // إزالة مسودة معينة بعد المزامنة
@@ -78,18 +90,24 @@ export function useSelfEvaluation(initialIndicatorId?: number) {
       try {
         const drafts = getStoredDrafts();
         delete drafts[indicatorId];
-        localStorage.setItem(OFFLINE_DRAFTS_STORAGE_KEY, JSON.stringify(drafts));
+        localStorage.setItem(storageKey, JSON.stringify(drafts));
         refreshDraftsCount();
       } catch (e) {
         console.error('Failed to remove draft locally:', e);
       }
     },
-    [getStoredDrafts, refreshDraftsCount]
+    [getStoredDrafts, refreshDraftsCount, storageKey]
   );
 
-  // مزامنة المسودات المحفوظة محلياً مع معالجة التعارض (Conflict Resolution)
+  // مزامنة المسودات المحفوظة محلياً مع فحص حالة القفل ومعالجة التعارض
   const syncOfflineDrafts = useCallback(
     async (forceOverrideConflict = false) => {
+      // إذا كان التقييم مقفلاً برمجياً، نمنع المزامنة حمايةً لسلامة السجل النهائي
+      if (isLocked) {
+        console.warn('Evaluation is locked. Syncing offline drafts is blocked.');
+        return;
+      }
+
       const drafts = getStoredDrafts();
       const draftIds = Object.keys(drafts).map(Number);
       if (draftIds.length === 0) return;
@@ -111,14 +129,13 @@ export function useSelfEvaluation(initialIndicatorId?: number) {
                 serverResult?.updatedAt &&
                 new Date(serverResult.updatedAt).getTime() > new Date(draft.cachedAt).getTime()
               ) {
-                // الخادم يحتوي على تعديل أحدث من المسودة المحلية!
                 setConflictWarning(
-                  `تنبيه تعارض في المؤشر [${id}]: تم تعديل التقييم على الخادم بتاريخ أحدث. يمكنك فرض اعتماد تعديلك المحلي (آخر تعديل يفوز) أو استعادة بيانات الخادم.`
+                  `تنبيه تعارض في المؤشر [${id}]: تم تعديل التقييم على الخادم بتاريخ أحدث من مسودتك المحلية. يمكنك فرض نسختك أو التراجع.`
                 );
                 continue;
               }
             } catch {
-              // في حال تعذر جلب النتيجة للمقارنة، نستمر في محاولة الحفظ
+              // تعذر الجلب، نستمر في محاولة الحفظ
             }
           }
 
@@ -133,6 +150,7 @@ export function useSelfEvaluation(initialIndicatorId?: number) {
         }
 
         if (syncedCount > 0) {
+          setSaveStatus('saved_server');
           setSaveSuccessMessage(`تمت مزامنة ${syncedCount} من التقييمات المحفوظة محلياً مع الخادم بنجاح!`);
           setTimeout(() => setSaveSuccessMessage(null), 4000);
         }
@@ -143,7 +161,7 @@ export function useSelfEvaluation(initialIndicatorId?: number) {
         refreshDraftsCount();
       }
     },
-    [getStoredDrafts, removeLocalDraft, refreshDraftsCount]
+    [getStoredDrafts, removeLocalDraft, refreshDraftsCount, isLocked]
   );
 
   // الاستماع لأحداث الاتصال بالإنترنت
@@ -152,8 +170,10 @@ export function useSelfEvaluation(initialIndicatorId?: number) {
 
     const handleOnline = () => {
       setIsOffline(false);
-      // مزامنة تلقائية عند استعادة الاتصال
-      syncOfflineDrafts();
+      // مزامنة تلقائية عند استعادة الاتصال ما لم يكن مقفلاً
+      if (!isLocked) {
+        syncOfflineDrafts();
+      }
     };
 
     const handleOffline = () => {
@@ -167,7 +187,7 @@ export function useSelfEvaluation(initialIndicatorId?: number) {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
-  }, [refreshDraftsCount, syncOfflineDrafts]);
+  }, [refreshDraftsCount, syncOfflineDrafts, isLocked]);
 
   // تحميل شجرة المعايير
   const loadTree = useCallback(async () => {
@@ -232,6 +252,7 @@ export function useSelfEvaluation(initialIndicatorId?: number) {
           evidenceLinks: [],
           updatedAt: stored.cachedAt,
         });
+        setSaveStatus('saved_local');
         return;
       }
 
@@ -239,6 +260,7 @@ export function useSelfEvaluation(initialIndicatorId?: number) {
       try {
         const res = await evaluatorApi.getEvaluationResult(indicatorId);
         setCurrentResult(res);
+        setSaveStatus('saved_server');
       } catch (err) {
         console.error(`Failed to load indicator result for ${indicatorId}:`, err);
       } finally {
@@ -254,15 +276,23 @@ export function useSelfEvaluation(initialIndicatorId?: number) {
     }
   }, [selectedIndicatorId, loadIndicatorResult]);
 
-  // حفظ التقييم الذاتي مع دعم الحفظ دون اتصال والمزامنة التفاؤلية
+  // حفظ التقييم الذاتي مع دعم الحفظ دون اتصال، ومؤشر الحالة الصريح، وقفل التقييم
   const saveRubricAssessment = useCallback(
     async (payload: Omit<SaveEvaluationResultPayload, 'indicatorId'>) => {
       if (!selectedIndicatorId) return;
 
-      setIsSaving(true);
-      setSaveSuccessMessage(null);
+      // منع التعديل إذا كان التقييم مقفلاً
+      if (isLocked) {
+        console.warn('Evaluation is locked in read-only mode.');
+        return;
+      }
 
-      // 1. تحديث الحالة التفاؤلية فوراً
+      setIsSaving(true);
+      setSaveStatus('saving');
+      setSaveSuccessMessage(null);
+      setLastFailedPayload(null);
+
+      // 1. تحديث الحالة التفاؤلية فوراً في واجهة المستخدم
       setCurrentResult((prev) => {
         if (!prev) {
           return {
@@ -293,6 +323,7 @@ export function useSelfEvaluation(initialIndicatorId?: number) {
       if (typeof navigator !== 'undefined' && !navigator.onLine) {
         saveDraftLocally(selectedIndicatorId, payload);
         setIsSaving(false);
+        setSaveStatus('saved_local');
         setSaveSuccessMessage('تم الحفظ محلياً — وضع عدم الاتصال');
         setTimeout(() => setSaveSuccessMessage(null), 3000);
         return;
@@ -305,22 +336,30 @@ export function useSelfEvaluation(initialIndicatorId?: number) {
           ...payload,
         });
         setCurrentResult(saved);
-        // في حال كانت هناك مسودة محلية مخزنة، نحذفها
         removeLocalDraft(selectedIndicatorId);
+        setSaveStatus('saved_server');
         setSaveSuccessMessage('تم الحفظ بنجاح على الخادم');
         setTimeout(() => setSaveSuccessMessage(null), 3000);
       } catch (err) {
         console.warn('Network error while saving. Storing draft locally:', err);
-        // في حال فشل الشبكة أو الخطأ المؤقت، نخزن المسودة محلياً
         saveDraftLocally(selectedIndicatorId, payload);
-        setSaveSuccessMessage('تم الحفظ في الذاكرة المحلية (سيتم المزامنة عند استقرار الاتصال)');
+        setSaveStatus('saved_local');
+        setLastFailedPayload(payload);
+        setSaveSuccessMessage('تم الحفظ محلياً (سيتم المزامنة عند استقرار الاتصال)');
         setTimeout(() => setSaveSuccessMessage(null), 3500);
       } finally {
         setIsSaving(false);
       }
     },
-    [selectedIndicatorId, saveDraftLocally, removeLocalDraft]
+    [selectedIndicatorId, isLocked, saveDraftLocally, removeLocalDraft]
   );
+
+  // إعادة المحاولة عند الفشل
+  const retryLastSave = useCallback(() => {
+    if (lastFailedPayload) {
+      saveRubricAssessment(lastFailedPayload);
+    }
+  }, [lastFailedPayload, saveRubricAssessment]);
 
   // التنقل للمؤشر السابق
   const goToPreviousIndicator = useCallback(() => {
@@ -368,8 +407,10 @@ export function useSelfEvaluation(initialIndicatorId?: number) {
     isLoadingTree,
     isLoadingResult,
     isSaving,
+    saveStatus,
     saveSuccessMessage,
     saveRubricAssessment,
+    retryLastSave,
     goToPreviousIndicator,
     goToNextIndicator,
     hasPrevious,

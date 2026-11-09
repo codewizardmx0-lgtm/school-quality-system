@@ -39,11 +39,11 @@ export function useEvidences(initialStandardId?: number) {
   // رفع شاهد جديد أو استبدال بنسخة جديدة مع شريط التقدم
   const uploadEvidenceFile = useCallback(
     async (payload: UploadEvidencePayload) => {
-      // التحقق من الحجم
-      const maxSizeBytes = 25 * 1024 * 1024;
+      // التحقق من الحجم (20 ميجابايت الموحد مع الباك إند)
+      const maxSizeBytes = 20 * 1024 * 1024;
       if (payload.file.size > maxSizeBytes) {
-        setUploadError('حجم الملف يتجاوز الحد الأقصى المسموح (25 ميجابايت).');
-        throw new Error('حجم الملف يتجاوز الحد الأقصى المسموح (25 ميجابايت).');
+        setUploadError('حجم الملف يتجاوز الحد الأقصى المسموح (20 ميجابايت).');
+        throw new Error('حجم الملف يتجاوز الحد الأقصى المسموح (20 ميجابايت).');
       }
 
       // التحقق من نوع الملف
@@ -63,23 +63,13 @@ export function useEvidences(initialStandardId?: number) {
       }
 
       setIsUploading(true);
-      setUploadProgress(10);
+      setUploadProgress(0);
       setUploadError(null);
 
-      // محاكاة تقدم الرفع الميداني السلس
-      const progressTimer = setInterval(() => {
-        setUploadProgress((prev) => {
-          if (prev >= 85) {
-            clearInterval(progressTimer);
-            return 85;
-          }
-          return prev + 25;
-        });
-      }, 150);
-
       try {
-        const result = await evaluatorApi.uploadEvidence(payload);
-        clearInterval(progressTimer);
+        const result = await evaluatorApi.uploadEvidence(payload, (percent) => {
+          setUploadProgress(percent);
+        });
         setUploadProgress(100);
 
         // إضافة الشاهد تفاؤلياً للمستودع
@@ -126,7 +116,6 @@ export function useEvidences(initialStandardId?: number) {
 
         return result;
       } catch (err: unknown) {
-        clearInterval(progressTimer);
         const msg = (err as Error)?.message || 'فشل في رفع الشاهد.';
         setUploadError(msg);
         throw err;
