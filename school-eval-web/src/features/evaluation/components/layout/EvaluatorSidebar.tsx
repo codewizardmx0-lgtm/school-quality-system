@@ -3,7 +3,6 @@ import type { EvaluatorScreen } from '../../api/evaluationTypes';
 import {
   LayoutDashboard,
   ClipboardList,
-  SlidersHorizontal,
   FolderLock,
   Sparkles,
   Target,
@@ -65,13 +64,8 @@ export const EvaluatorSidebar: React.FC<EvaluatorSidebarProps> = ({
     },
     {
       id: 'standards-tree',
-      label: 'شجرة المعايير',
+      label: 'دليل وتقييم المعايير الوطنية',
       icon: <ClipboardList size={19} />,
-    },
-    {
-      id: 'rubric-assessment',
-      label: isPrincipal ? 'استعراض الرصد' : 'استمارة الرصد',
-      icon: <SlidersHorizontal size={19} />,
       badge: isPrincipal ? 'للاطلاع' : isLocked ? 'مقفل' : undefined,
       badgeColor: isPrincipal ? '#64748B' : '#EF4444',
     },
@@ -293,7 +287,9 @@ export const EvaluatorSidebar: React.FC<EvaluatorSidebarProps> = ({
           }}
         >
           {navItems.map((item) => {
-            const isActive = activeScreen === item.id;
+            const isActive = item.id === 'standards-tree'
+              ? (activeScreen === 'standards-tree' || activeScreen === 'rubric-assessment')
+              : activeScreen === item.id;
             return (
               <button
                 key={item.id}

@@ -39,10 +39,10 @@ export const StandardsProgressBar: React.FC<StandardsProgressBarProps> = ({
           </div>
           <div>
             <h3 style={{ fontSize: '15px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
-              نسبة اكتمال إدخال المعايير الوطنية (7 معايير)
+              نسبة اكتمال إدخال ورصد المؤشرات (7 معايير - من 100%)
             </h3>
             <p style={{ fontSize: '12px', color: '#64748B', margin: '2px 0 0 0' }}>
-              متابعة مستوى استيفاء مؤشرات الأداء السبعة المعتمدة في الإطار الوطني
+              متابعة مدى اكتمال إدخال ورصد مؤشرات الأداء الـ 109 وشواهدها في كل مجال
             </p>
           </div>
         </div>

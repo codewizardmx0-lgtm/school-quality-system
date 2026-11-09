@@ -1,11 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import type { EvaluatorSchoolInfo, EvaluatorScreen } from '../../api/evaluationTypes';
 import {
   Bell,
-  Download,
-  Sparkles,
-  AlertTriangle,
-    CheckCircle2,
+  CheckCircle2,
   Lock,
   Menu,
   KeyRound,
@@ -15,7 +12,6 @@ import {
 import { SYSTEM_SHORT_NAME } from '../../../../constants/systemConstants';
 import { evaluatorApi } from '../../api/evaluatorApi';
 import { useAuth } from '../../../auth/AuthContext';
-import { useEffect } from 'react';
 
 interface EvaluatorTopBarProps {
   activeScreen: EvaluatorScreen;
@@ -38,7 +34,7 @@ export const EvaluatorTopBar: React.FC<EvaluatorTopBarProps> = ({
   activeScreen,
   schoolInfo,
   hasOpenCompletionRequest = false,
-  onOpenCompletionRequest,
+  onOpenCompletionRequest: _onOpenCompletionRequest,
   onNavigate,
   isLocked = false,
   isMobile = false,
@@ -46,9 +42,8 @@ export const EvaluatorTopBar: React.FC<EvaluatorTopBarProps> = ({
   onOpenChangePassword,
   onOpenProfile,
   onLogout,
-  addToast,
+  addToast: _addToast,
 }) => {
-  const [isExportingPdf, setIsExportingPdf] = useState(false);
   const [unreadNotificationsCount, setUnreadNotificationsCount] = useState<number>(0);
 
   const { user: authUser } = useAuth();
@@ -104,25 +99,6 @@ export const EvaluatorTopBar: React.FC<EvaluatorTopBarProps> = ({
     }
   };
 
-  // Real PDF Export using backend mPDF engine (§7.1 of UI_STANDARDS.md)
-  const handleExportQuickReport = async () => {
-    if (isExportingPdf) return;
-    setIsExportingPdf(true);
-    try {
-      await evaluatorApi.exportReportPdf();
-      if (addToast) {
-        addToast('success', 'تم تصدير وتحميل تقرير التقييم الذاتي المعتمد (PDF) بنجاح.');
-      }
-    } catch (err: any) {
-      console.error('Failed to export PDF report:', err);
-      if (addToast) {
-        addToast('error', err?.response?.data?.message || err?.message || 'تعذر تصدير تقرير التقييم PDF.');
-      }
-    } finally {
-      setIsExportingPdf(false);
-    }
-  };
-
   const statusLabel = isLocked
     ? 'مرفوع ومقفل (للقراءة فقط)'
     : hasOpenCompletionRequest
@@ -152,47 +128,6 @@ export const EvaluatorTopBar: React.FC<EvaluatorTopBarProps> = ({
         zIndex: 20,
       }}
     >
-      {/* Top Banner Notice if Supervisor Requested Completion */}
-      {hasOpenCompletionRequest && (
-        <div
-          style={{
-            margin: '0 -20px',
-            backgroundColor: '#FEF3C7',
-            borderBottom: '1px solid #FCD34D',
-            padding: '8px 20px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            flexWrap: 'wrap',
-            gap: '8px',
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <AlertTriangle size={16} color="#D97706" />
-            <span style={{ fontSize: '12px', fontWeight: 700, color: '#92400E' }}>
-              طلب استكمال من المراجعة الوزارية: يتطلب مراجعة بعض الشواهد والمؤشرات المحددة.
-            </span>
-          </div>
-          {onOpenCompletionRequest && (
-            <button
-              onClick={onOpenCompletionRequest}
-              style={{
-                fontSize: '11.5px',
-                fontWeight: 700,
-                color: '#FFFFFF',
-                backgroundColor: '#D97706',
-                border: 'none',
-                padding: '4px 12px',
-                borderRadius: '6px',
-                cursor: 'pointer',
-              }}
-            >
-              معالجة الملاحظات ↗
-            </button>
-          )}
-        </div>
-      )}
-
       {/* Main TopBar Content - Standard 68px height (UI_STANDARDS.md §3.1) */}
       <div
         style={{
@@ -275,53 +210,6 @@ export const EvaluatorTopBar: React.FC<EvaluatorTopBarProps> = ({
 
         {/* Left (RTL End): Actions & User Capsule */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
-          {/* Quick AI Trigger */}
-          <button
-            onClick={() => onNavigate('ai-assistant')}
-            className="hidden md:inline-flex"
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '6px 12px',
-              borderRadius: '8px',
-              backgroundColor: '#ECFDF5',
-              color: '#059669',
-              border: '1px solid #A7F3D0',
-              fontSize: '12px',
-              fontWeight: 700,
-              cursor: 'pointer',
-            }}
-            title="الانتقال إلى المساعد الذكي وتحليل الفجوات"
-          >
-            <Sparkles size={14} />
-            <span>المساعد الذكي</span>
-          </button>
-
-          {/* Export Report (Official Real PDF) */}
-          <button
-            onClick={handleExportQuickReport}
-            disabled={isExportingPdf}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '5px',
-              padding: '6px 12px',
-              borderRadius: '8px',
-              backgroundColor: '#F8FAFC',
-              color: '#334155',
-              border: '1px solid #CBD5E1',
-              fontSize: '12px',
-              fontWeight: 600,
-              cursor: isExportingPdf ? 'not-allowed' : 'pointer',
-              opacity: isExportingPdf ? 0.7 : 1,
-            }}
-            title="تصدير تقرير التقييم الذاتي المعتمد (PDF)"
-          >
-            <Download size={14} />
-            <span className="hidden sm:inline">{isExportingPdf ? 'جاري التحميل...' : 'تصدير التقرير (PDF)'}</span>
-          </button>
-
           {/* Notifications */}
           <button
             onClick={() => onNavigate('notifications')}

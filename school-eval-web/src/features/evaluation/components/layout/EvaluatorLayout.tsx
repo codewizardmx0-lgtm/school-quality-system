@@ -2,8 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { EvaluatorSidebar } from './EvaluatorSidebar';
 import { EvaluatorTopBar } from './EvaluatorTopBar';
 import { EvaluatorDashboard } from '../dashboard/EvaluatorDashboard';
-import { StandardsTreePage } from '../self-evaluation/StandardsTreePage';
-import { RubricAssessmentPage } from '../self-evaluation/RubricAssessmentPage';
+import { UnifiedStandardsAssessmentPage } from '../self-evaluation/UnifiedStandardsAssessmentPage';
 import { EvidencesRepository } from '../evidences/EvidencesRepository';
 import { GapAnalysisPage } from '../ai-assistant/GapAnalysisPage';
 import { ImprovementPlanPage } from '../improvement-plan/ImprovementPlanPage';
@@ -16,7 +15,7 @@ import { useAuth } from '../../../auth/AuthContext';
 import { ToastNotification } from '../../../admin/components/common/ToastNotification';
 import { useToast } from '../../../admin/components/common/useToast';
 import type { EvaluatorScreen } from '../../api/evaluationTypes';
-import { ShieldAlert } from 'lucide-react';
+import { ShieldAlert, AlertTriangle, ArrowLeft } from 'lucide-react';
 
 interface EvaluatorLayoutProps {
   initialScreen?: EvaluatorScreen;
@@ -92,18 +91,24 @@ export const EvaluatorLayout: React.FC<EvaluatorLayoutProps> = ({
         );
       case 'standards-tree':
         return (
-          <StandardsTreePage
+          <UnifiedStandardsAssessmentPage
+            initialTab="tree"
+            selectedIndicatorId={selectedIndicatorId}
             onSelectIndicator={(id) => {
               setSelectedIndicatorId(id);
-              setActiveScreen('rubric-assessment');
             }}
             onNavigate={handleNavigate}
+            isLocked={effectiveReadOnly}
           />
         );
       case 'rubric-assessment':
         return (
-          <RubricAssessmentPage
+          <UnifiedStandardsAssessmentPage
+            initialTab="rubric"
             selectedIndicatorId={selectedIndicatorId}
+            onSelectIndicator={(id) => {
+              setSelectedIndicatorId(id);
+            }}
             onNavigate={handleNavigate}
             isLocked={effectiveReadOnly}
           />
@@ -166,10 +171,10 @@ export const EvaluatorLayout: React.FC<EvaluatorLayoutProps> = ({
     <div
       style={{
         display: 'flex',
-        minHeight: '100vh',
+        height: '100vh',
         width: '100%',
         maxWidth: '100%',
-        overflowX: 'hidden',
+        overflow: 'hidden',
         direction: 'rtl',
         fontFamily: "'Cairo', 'Tajawal', system-ui, -apple-system, sans-serif",
         backgroundColor: '#F8FAFC',
@@ -195,12 +200,13 @@ export const EvaluatorLayout: React.FC<EvaluatorLayoutProps> = ({
       <div
         style={{
           flex: 1,
+          height: '100vh',
           display: 'flex',
           flexDirection: 'column',
           minWidth: 0,
           marginRight: contentMarginRight,
           transition: 'margin-right 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
-          overflowX: 'hidden',
+          overflow: 'hidden',
         }}
       >
         <EvaluatorTopBar
@@ -220,6 +226,53 @@ export const EvaluatorLayout: React.FC<EvaluatorLayoutProps> = ({
         />
 
         <main style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', minWidth: 0 }}>
+          {/* Distinct Banner for Ministerial Supervisor Completion Request */}
+          {hasOpenCompletionRequest && (
+            <div
+              style={{
+                backgroundColor: '#FEF2F2',
+                borderBottom: '1px solid #FCA5A5',
+                padding: '12px 24px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: '12px',
+                color: '#991B1B',
+                fontSize: '13px',
+                fontWeight: 700,
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <AlertTriangle size={19} color="#DC2626" style={{ flexShrink: 0 }} />
+                <span>
+                  يوجد طلب استكمال شواهد وملاحظات وارد من المشرف الوزاري بحاجة إلى معالجتك واستيفاء الشواهد المطلوبة.
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setActiveScreen('completion-request')}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  backgroundColor: '#DC2626',
+                  color: '#FFFFFF',
+                  border: 'none',
+                  borderRadius: '6px',
+                  padding: '6px 14px',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                <span>معالجة طلب الاستكمال</span>
+                <ArrowLeft size={14} />
+              </button>
+            </div>
+          )}
+
           {/* Prominent Banner for School Principal View & Internal Review Mode */}
           {isPrincipal && (
             <div

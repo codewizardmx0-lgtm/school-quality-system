@@ -3,6 +3,7 @@ import { useSelfEvaluation } from '../../hooks/useSelfEvaluation';
 import { EvidenceUploader } from './EvidenceUploader';
 import { EvaluatorJustification } from './EvaluatorJustification';
 import { useEvidences } from '../../hooks/useEvidences';
+import { evaluatorApi } from '../../api/evaluatorApi';
 import type { EvaluatorScreen } from '../../api/evaluationTypes';
 import {
   CheckCircle2,
@@ -73,36 +74,36 @@ export const RubricAssessmentPage: React.FC<RubricAssessmentPageProps> = ({
   const indicator = currentIndicatorInfo?.indicator;
   const standard = currentIndicatorInfo?.standard;
 
-  // Rubric levels specification
+  // Rubric levels specification (Official National Standards Nomenclature)
   const rubricLevels = [
     {
       level: 0,
-      title: 'غير متحقق',
-      description: 'لم تنفذ المدرسة أياً من متطلبات التقييم ولا تتوفر أدلة أو ممارسات ميدانية موثقة.',
+      title: 'المستوى 0: غير متوفر',
+      description: 'عدم قيام المدرسة بالأداءات المطلوبة منها وبحاجة لمراجعة أدائها وتصحيح أخطائها.',
       badgeColor: '#EF4444',
       badgeBg: '#FEF2F2',
       borderActive: '#DC2626',
     },
     {
       level: 1,
-      title: 'متحقق بدرجة ضعيفة',
-      description: 'أداءات متفرقة وتحتاج استكمالاً وتفتقر للمنهجية النظامية أو الشواهد الداعمة.',
+      title: 'المستوى 1: متحقق بدرجة ضعيفة',
+      description: 'أداءات كتابية أو متحققة أحياناً وتفتقر للمنهجية وبحاجة لمجهود واستكمال الشواهد.',
       badgeColor: '#F59E0B',
       badgeBg: '#FFFBEB',
       borderActive: '#D97706',
     },
     {
       level: 2,
-      title: 'متحقق بدرجة متوسطة',
-      description: 'متحقق بفاعلية متوسطة مع وجود خطة تحسين معتمدة ومتابعة دورية للتنفيذ.',
-      badgeColor: '#10B981',
-      badgeBg: '#ECFDF5',
-      borderActive: '#059669',
+      title: 'المستوى 2: متحقق بدرجة متوسطة',
+      description: 'أداءات متحققة بصورة متوسطة الفاعلية مع وجود مجال للتحسين وخطط للتطوير.',
+      badgeColor: '#2563EB',
+      badgeBg: '#EFF6FF',
+      borderActive: '#1D4ED8',
     },
     {
       level: 3,
-      title: 'متحقق كلياً ومستمر',
-      description: 'المستوى المطلوب متحقق باستمرار بجودة عالية مع تقارير دورية ونتائج استثنائية.',
+      title: 'المستوى 3: متحقق',
+      description: 'وصول المؤسسة للمستوى المطلوب تحقيقه وبشكل مستمر مع متابعة دورية وخطط تحسين.',
       badgeColor: '#059669',
       badgeBg: '#D1FAE5',
       borderActive: '#047857',
@@ -172,6 +173,16 @@ export const RubricAssessmentPage: React.FC<RubricAssessmentPageProps> = ({
       notes,
       documentId,
     });
+    if (activeId) {
+      setSelectedIndicatorId(activeId);
+    }
+  };
+
+  const handleUnlinkEvidence = async (linkId: number) => {
+    await evaluatorApi.unlinkEvidence(linkId);
+    if (activeId) {
+      setSelectedIndicatorId(activeId);
+    }
   };
 
   return (
@@ -581,7 +592,9 @@ export const RubricAssessmentPage: React.FC<RubricAssessmentPageProps> = ({
         <EvidenceUploader
           indicatorId={indicator?.indicatorId}
           evidenceLinks={currentResult?.evidenceLinks || []}
+          evidenceRequirements={currentResult?.evidenceRequirements || indicator?.evidenceRequirements || []}
           onUploadFile={handleUploadIndicatorEvidence}
+          onUnlinkEvidence={handleUnlinkEvidence}
           isUploading={isUploading}
           uploadProgress={uploadProgress}
           readOnly={isLocked}
@@ -659,9 +672,10 @@ export const RubricAssessmentPage: React.FC<RubricAssessmentPageProps> = ({
                 fontSize: '13px',
                 cursor: selectedScore !== null ? 'pointer' : 'not-allowed',
               }}
+              title="حفظ التقدير والملاحظات مع البقاء في هذا المؤشر"
             >
               <Save size={16} />
-              <span>حفظ كمسودة</span>
+              <span>حفظ التعديلات الحالية</span>
             </button>
           )}
 
@@ -682,8 +696,9 @@ export const RubricAssessmentPage: React.FC<RubricAssessmentPageProps> = ({
               cursor: hasNext ? 'pointer' : 'not-allowed',
               boxShadow: '0 2px 8px rgba(5, 150, 105, 0.25)',
             }}
+            title="حفظ التقدير والانتقال المباشر للمؤشر التالي"
           >
-            <span>{isLocked ? 'المؤشر التالي' : 'حفظ ومتابعة للمؤشر التالي'}</span>
+            <span>{isLocked ? 'المؤشر التالي' : 'حفظ والانتقال للمؤشر التالي'}</span>
             <ArrowLeft size={16} />
           </button>
         </div>

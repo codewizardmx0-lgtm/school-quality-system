@@ -17,15 +17,88 @@ interface OfflineDraft {
   cachedAt: string;
 }
 
-export function useSelfEvaluation(initialIndicatorId?: number, isLocked: boolean = false) {
+export function useSelfEvaluation(
+  initialIndicatorId?: number,
+  isLocked: boolean = false,
+  evaluationId?: number | null
+) {
   const { user } = useAuth();
   const userId = user?.userId ?? 'guest';
   const schoolId = user?.schoolId ?? 'default';
+  const effectiveEvalId = evaluationId ?? 1;
 
-  // عزل مفتاح التخزين المحلي حسب المستخدم والمدرسة (FE-GAP-05 / U-35 Security Isolation)
+  // عزل مفتاح التخزين المحلي حسب المستخدم والمدرسة ودورة التقييم (FE-GAP-05 / Note 1 & Note 4)
   const storageKey = useMemo(() => {
-    return `school_eval_drafts_u${userId}_s${schoolId}_v1`;
-  }, [userId, schoolId]);
+    return `school_eval_drafts_u${userId}_s${schoolId}_e${effectiveEvalId}_v1`;
+  }, [userId, schoolId, effectiveEvalId]);
+
+  // فحص المسودات المحفوظة محلياً لمدرسة أو دورة أخرى للمستخدم الحالي (Note 4)
+  const [otherSchoolDraftsCount, setOtherSchoolDraftsCount] = useState<number>(0);
+  const [hasDismissedOtherSchoolDrafts, setHasDismissedOtherSchoolDrafts] = useState<boolean>(false);
+
+  const checkOtherSchoolDrafts = useCallback(() => {
+    if (typeof window === 'undefined') return 0;
+    let count = 0;
+    const prefix = `school_eval_drafts_u${userId}_`;
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith(prefix) && key !== storageKey) {
+        try {
+          const val = JSON.parse(localStorage.getItem(key) || '{}');
+          count += Object.keys(val).length;
+        } catch {
+          // ignore
+        }
+      }
+    }
+    return count;
+  }, [userId, storageKey]);
+
+  useEffect(() => {
+    const count = checkOtherSchoolDrafts();
+    setOtherSchoolDraftsCount(count);
+  }, [checkOtherSchoolDrafts]);
+
+  const dismissOtherSchoolDrafts = useCallback(() => {
+    setHasDismissedOtherSchoolDrafts(true);
+  }, []);
+
+  const syncOtherSchoolDrafts = useCallback(async () => {
+    if (typeof window === 'undefined') return;
+    setIsSyncing(true);
+    try {
+      const prefix = `school_eval_drafts_u${userId}_`;
+      const keysToSync: string[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith(prefix) && key !== storageKey) {
+          keysToSync.push(key);
+        }
+      }
+
+      for (const k of keysToSync) {
+        try {
+          const drafts: Record<number, OfflineDraft> = JSON.parse(localStorage.getItem(k) || '{}');
+          for (const indId of Object.keys(drafts).map(Number)) {
+            const d = drafts[indId];
+            if (d?.payload) {
+              await evaluatorApi.saveEvaluationResult({
+                indicatorId: indId,
+                ...d.payload,
+              });
+            }
+          }
+          localStorage.removeItem(k);
+        } catch (e) {
+          console.error('Error syncing old school key:', k, e);
+        }
+      }
+      setOtherSchoolDraftsCount(0);
+      setHasDismissedOtherSchoolDrafts(true);
+    } finally {
+      setIsSyncing(false);
+    }
+  }, [userId, storageKey]);
 
   const [treeData, setTreeData] = useState<StandardsTreeData | null>(null);
   const [selectedStandardId, setSelectedStandardId] = useState<number | null>(null);
@@ -424,5 +497,10 @@ export function useSelfEvaluation(initialIndicatorId?: number, isLocked: boolean
     syncOfflineDrafts,
     resolveConflictWithLocal: () => syncOfflineDrafts(true),
     dismissConflict: () => setConflictWarning(null),
+    // Cross-school draft isolation & alert
+    hasOtherSchoolDrafts: otherSchoolDraftsCount > 0 && !hasDismissedOtherSchoolDrafts,
+    otherSchoolDraftsCount,
+    dismissOtherSchoolDrafts,
+    syncOtherSchoolDrafts,
   };
 }

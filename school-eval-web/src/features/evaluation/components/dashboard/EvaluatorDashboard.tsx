@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useEvaluatorDashboard } from '../../hooks/useEvaluatorDashboard';
 import { CycleProgressTracker } from './CycleProgressTracker';
 import { StandardsProgressBar } from './StandardsProgressBar';
@@ -16,7 +16,11 @@ import {
   Calendar,
   UserCheck,
   ShieldAlert,
+  Info,
+  Download,
+  RefreshCw,
 } from 'lucide-react';
+import { evaluatorApi } from '../../api/evaluatorApi';
 
 interface EvaluatorDashboardProps {
   onNavigate: (screen: EvaluatorScreen, param?: number) => void;
@@ -28,6 +32,21 @@ export const EvaluatorDashboard: React.FC<EvaluatorDashboardProps> = ({
   isLocked = false,
 }) => {
   const { dashboardData, isLoading, error, refreshDashboard } = useEvaluatorDashboard();
+  const [selectedStandardIds, setSelectedStandardIds] = useState<number[]>([]);
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
+
+  const handleExportPdf = async () => {
+    if (isExportingPdf) return;
+    setIsExportingPdf(true);
+    try {
+      await evaluatorApi.exportReportPdf();
+    } catch (err: any) {
+      console.error('Failed to export PDF:', err);
+      alert(err?.response?.data?.message || 'تعذر تصدير تقرير التقييم PDF.');
+    } finally {
+      setIsExportingPdf(false);
+    }
+  };
 
   if (error && !dashboardData) {
     return (
@@ -79,58 +98,103 @@ export const EvaluatorDashboard: React.FC<EvaluatorDashboardProps> = ({
 
   const school = dashboardData?.schoolInfo;
 
-  // تجهيز بيانات الرسوم البيانية التفاعلية بالاعتماد المباشر على التوزيع الفعلي من الـ API (FE-GAP-04)
-  const dist = kpis.scoreDistribution;
-  const l3 = dist ? dist.level3 : Math.round(kpis.strengthsCount * 0.6);
-  const l2 = dist ? dist.level2 : kpis.strengthsCount - l3;
-  const l1 = dist ? dist.level1 : Math.round(kpis.gapsCount * 0.7);
-  const l0 = dist ? dist.level0 : kpis.gapsCount - l1;
-  const unscored = dist ? dist.unscored : Math.max(0, kpis.totalIndicators - kpis.scoredIndicators);
+  // إدارة تصفية الرسوم البيانية حسب المجالات المعيارية
+  const standardsList = dashboardData?.standardsProgress || [];
+  const isFilteringStandards = selectedStandardIds.length > 0;
+  const filteredStandards = isFilteringStandards
+    ? standardsList.filter((s) => selectedStandardIds.includes(s.standardId))
+    : standardsList;
+
+  let l3 = 0;
+  let l2 = 0;
+  let l1 = 0;
+  let l0 = 0;
+  let unscored = 0;
+  let totalIndsInSelection = 0;
+
+  if (isFilteringStandards) {
+    filteredStandards.forEach((std) => {
+      totalIndsInSelection += std.totalIndicators;
+      if (std.scoreDistribution) {
+        l3 += std.scoreDistribution.level3;
+        l2 += std.scoreDistribution.level2;
+        l1 += std.scoreDistribution.level1;
+        l0 += std.scoreDistribution.level0;
+        unscored += std.scoreDistribution.unscored;
+      } else {
+        l3 += Math.round(std.scoredIndicators * 0.5);
+        l2 += Math.round(std.scoredIndicators * 0.3);
+        l1 += Math.round(std.scoredIndicators * 0.15);
+        l0 += std.scoredIndicators - (l3 + l2 + l1);
+        unscored += Math.max(0, std.totalIndicators - std.scoredIndicators);
+      }
+    });
+  } else {
+    const dist = kpis.scoreDistribution;
+    l3 = dist ? dist.level3 : Math.round(kpis.strengthsCount * 0.6);
+    l2 = dist ? dist.level2 : kpis.strengthsCount - l3;
+    l1 = dist ? dist.level1 : Math.round(kpis.gapsCount * 0.7);
+    l0 = dist ? dist.level0 : kpis.gapsCount - l1;
+    unscored = dist ? dist.unscored : Math.max(0, kpis.totalIndicators - kpis.scoredIndicators);
+    totalIndsInSelection = kpis.totalIndicators || 109;
+  }
+
+  const toggleStandardSelection = (id: number) => {
+    setSelectedStandardIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+  };
+
+  const clearStandardSelection = () => {
+    setSelectedStandardIds([]);
+  };
 
   const donutSegments = [
     {
       id: 'level-3',
-      label: 'متحقق كلياً (3)',
+      label: 'المستوى 3: متحقق',
       value: l3,
-      color: '#059669',
-      description: 'أداء متميز ومستوفٍ لجميع اشتراطات المعيار',
+      color: '#10B981',
+      description: 'وصول المؤسسة للمستوى المطلوب تحقيقه وبشكل مستمر مع خطط لتحسين الجودة ومتابعتها',
     },
     {
       id: 'level-2',
-      label: 'متحقق جزئياً (2)',
+      label: 'المستوى 2: متحقق بدرجة متوسطة',
       value: l2,
-      color: '#0D9488',
-      description: 'أداء جيد مع استيفاء غالب الشواهد',
+      color: '#3B82F6',
+      description: 'أداءات متحققة بصورة متوسطة الفاعلية مع وجود مجال للتحسين وخطط للتطوير',
     },
     {
       id: 'level-1',
-      label: 'غير متحقق (1)',
+      label: 'المستوى 1: متحقق بدرجة ضعيفة',
       value: l1,
-      color: '#D97706',
-      description: 'يحتاج لتحسين وتدخل في الخطة المدرسية',
+      color: '#F59E0B',
+      description: 'أداءات كتابية أو متحققة أحياناً وتفتقر للمنهجية وبحاجة لمجهود واستكمال الشواهد',
     },
     {
       id: 'level-0',
-      label: 'غير متوفر (0)',
+      label: 'المستوى 0: غير متوفر',
       value: l0,
-      color: '#E11D48',
-      description: 'فجوة حرجة غائبة عن التوثيق المدرسي',
+      color: '#EF4444',
+      description: 'عدم قيام المدرسة بالأداءات المطلوبة منها وبحاجة لمراجعة أدائها وتصحيح أخطائها',
     },
     {
       id: 'unscored',
-      label: 'قيد الرصد',
+      label: 'قيد الرصد والتقييم',
       value: unscored,
       color: '#94A3B8',
-      description: 'مؤشرات لم يتم الانتهاء من تقييمها بعد',
+      description: 'مؤشرات لم يتم الانتهاء من رصد تقديراتها بعد',
     },
   ];
 
   const barItems = (dashboardData?.standardsProgress || []).map((std) => ({
     id: std.standardId,
     label: std.title,
-    value: std.percentage,
+    value: std.averageScore !== undefined ? std.averageScore : (std.percentage ? Number((std.percentage * 0.03).toFixed(2)) : 0),
     scored: std.scoredIndicators,
     total: std.totalIndicators,
+    averageScore: std.averageScore ?? 0,
+    completionPercentage: std.percentage,
   }));
 
   return (
@@ -198,8 +262,33 @@ export const EvaluatorDashboard: React.FC<EvaluatorDashboardProps> = ({
           </div>
         </div>
 
-        {/* Quick Launch Button */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        {/* Quick Launch & PDF Export Buttons */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            onClick={handleExportPdf}
+            disabled={isExportingPdf}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '10px 16px',
+              borderRadius: '10px',
+              backgroundColor: 'rgba(255, 255, 255, 0.16)',
+              color: '#FFFFFF',
+              fontWeight: 700,
+              fontSize: '13px',
+              border: '1px solid rgba(255, 255, 255, 0.3)',
+              cursor: 'pointer',
+              backdropFilter: 'blur(8px)',
+              transition: 'background-color 0.15s ease',
+            }}
+            title="تصدير تقرير التقييم الذاتي المعتمد بصيغة PDF"
+          >
+            {isExportingPdf ? <RefreshCw size={15} className="animate-spin" /> : <Download size={15} />}
+            <span>{isExportingPdf ? 'جارٍ التصدير...' : 'تصدير تقرير التقييم (PDF)'}</span>
+          </button>
+
           <button
             onClick={() => onNavigate('rubric-assessment')}
             style={{
@@ -290,7 +379,7 @@ export const EvaluatorDashboard: React.FC<EvaluatorDashboardProps> = ({
           gap: '18px',
         }}
       >
-        {/* Card 1: نسبة إنجاز التقييم الذاتي */}
+        {/* Card 1: نسبة اكتمال رصد المؤشرات */}
         <div
           onClick={() => onNavigate('rubric-assessment', kpis.firstUnscoredIndicatorId || undefined)}
           style={{
@@ -313,7 +402,7 @@ export const EvaluatorDashboard: React.FC<EvaluatorDashboardProps> = ({
         >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <span style={{ fontSize: '13px', fontWeight: 700, color: '#64748B' }}>
-              نسبة إنجاز التقييم الذاتي
+              نسبة اكتمال رصد المؤشرات
             </span>
             <div
               style={{
@@ -336,8 +425,12 @@ export const EvaluatorDashboard: React.FC<EvaluatorDashboardProps> = ({
               {kpis.completionPercentage}%
             </span>
             <span style={{ fontSize: '13px', color: '#059669', fontWeight: 700 }}>
-              (تم إدخال {kpis.scoredIndicators} من أصل {kpis.totalIndicators} مؤشراً)
+              (تم رصد {kpis.scoredIndicators} من {kpis.totalIndicators || 109} مؤشراً)
             </span>
+          </div>
+
+          <div style={{ fontSize: '11.5px', color: '#64748B', marginTop: '6px' }}>
+            مؤشرات تم رصدها بغض النظر عن مستوى الأداء أو التقدير
           </div>
 
           {/* Progress bar inside card */}
@@ -347,7 +440,7 @@ export const EvaluatorDashboard: React.FC<EvaluatorDashboardProps> = ({
               backgroundColor: '#F1F5F9',
               borderRadius: '4px',
               overflow: 'hidden',
-              marginTop: '14px',
+              marginTop: '10px',
             }}
           >
             <div
@@ -416,7 +509,7 @@ export const EvaluatorDashboard: React.FC<EvaluatorDashboardProps> = ({
           </div>
         </div>
 
-        {/* Card 3: نقاط القوة المحددة (2-3) */}
+        {/* Card 3: نقاط القوة المحددة (المستويات 2 و 3) */}
         <div
           onClick={() => onNavigate('ai-assistant')}
           style={{
@@ -439,7 +532,7 @@ export const EvaluatorDashboard: React.FC<EvaluatorDashboardProps> = ({
         >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <span style={{ fontSize: '13px', fontWeight: 700, color: '#64748B' }}>
-              نقاط القوة المحددة (2-3)
+              نقاط القوة المحددة (المستويات 2-3)
             </span>
             <div
               style={{
@@ -462,7 +555,7 @@ export const EvaluatorDashboard: React.FC<EvaluatorDashboardProps> = ({
               {kpis.strengthsCount}
             </span>
             <span style={{ fontSize: '13px', color: '#64748B', fontWeight: 600 }}>
-              عنصراً (تقدير متوسط أو متحقق كلياً)
+              عنصراً (أداء فاعل أو متحقق كلياً)
             </span>
           </div>
 
@@ -471,7 +564,7 @@ export const EvaluatorDashboard: React.FC<EvaluatorDashboardProps> = ({
           </div>
         </div>
 
-        {/* Card 4: فرص التحسين والفجوات (0-1) */}
+        {/* Card 4: فرص التحسين والفجوات (المستويات 0 و 1) */}
         <div
           onClick={() => onNavigate('improvement-plan')}
           style={{
@@ -494,7 +587,7 @@ export const EvaluatorDashboard: React.FC<EvaluatorDashboardProps> = ({
         >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <span style={{ fontSize: '13px', fontWeight: 700, color: '#64748B' }}>
-              فرص التحسين والفجوات (0-1)
+              فرص التحسين والفجوات (المستويات 0-1)
             </span>
             <div
               style={{
@@ -530,48 +623,188 @@ export const EvaluatorDashboard: React.FC<EvaluatorDashboardProps> = ({
       {/* 4. Core Widget: مسار دورة التقييم الحالية */}
       <CycleProgressTracker steps={dashboardData?.cycleSteps || []} />
 
-      {/* 5. الرسوم البيانية التفاعلية للمقيم ومقارنة الأداء (FE-GAP-04) */}
+      {/* 5. المستوى الأول: توزيع مستويات أداء المؤشرات (0 - 3) مع تصفية متعددة ودليل المستويات */}
+      <div
+        style={{
+          backgroundColor: '#FFFFFF',
+          borderRadius: '16px',
+          padding: '24px',
+          border: '1px solid #E2E8F0',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '20px',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
+          <div>
+            <h3 style={{ fontSize: '16px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
+              توزيع مستويات أداء المؤشرات (سلم التقييم الرباعي 0 - 3)
+            </h3>
+            <p style={{ fontSize: '12.5px', color: '#64748B', margin: '4px 0 0 0' }}>
+              تصنيف المؤشرات المرصودة وفق درجات سلم التقييم المعتمد، مع إمكانية التصفية بحسب المجالات المعيارية
+            </p>
+          </div>
+
+          {/* Standards Multi-Select Filter Pills */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              onClick={clearStandardSelection}
+              style={{
+                padding: '6px 14px',
+                borderRadius: '20px',
+                fontSize: '12px',
+                fontWeight: 700,
+                border: '1px solid',
+                borderColor: !isFilteringStandards ? '#059669' : '#CBD5E1',
+                backgroundColor: !isFilteringStandards ? '#ECFDF5' : '#FFFFFF',
+                color: !isFilteringStandards ? '#065F46' : '#64748B',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease',
+              }}
+            >
+              جميع المجالات (7)
+            </button>
+            {standardsList.map((std) => {
+              const isSelected = selectedStandardIds.includes(std.standardId);
+              return (
+                <button
+                  key={std.standardId}
+                  type="button"
+                  onClick={() => toggleStandardSelection(std.standardId)}
+                  style={{
+                    padding: '6px 12px',
+                    borderRadius: '20px',
+                    fontSize: '12px',
+                    fontWeight: 700,
+                    border: '1px solid',
+                    borderColor: isSelected ? '#059669' : '#CBD5E1',
+                    backgroundColor: isSelected ? '#ECFDF5' : '#FFFFFF',
+                    color: isSelected ? '#065F46' : '#64748B',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease',
+                  }}
+                  title={std.title}
+                >
+                  {std.code} - {std.title.split(' ')[0]}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Donut Chart and Level Legend Grid */}
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
+            gap: '24px',
+            alignItems: 'center',
+          }}
+        >
+          <InteractiveDonutChart
+            title=""
+            subtitle=""
+            segments={donutSegments}
+            centerLabel={isFilteringStandards ? 'المجالات المحددة' : 'إجمالي المؤشرات'}
+            centerValue={totalIndsInSelection}
+          />
+
+          {/* 4 Performance Level Description Cards */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', fontWeight: 800, color: '#334155', marginBottom: '4px' }}>
+              <Info size={16} color="#059669" />
+              <span>دليل مستويات الأداء المعتمدة في الإطار الوطني:</span>
+            </div>
+
+            {/* Level 3 */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', borderRadius: '10px', backgroundColor: '#ECFDF5', border: '1px solid #A7F3D0' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <span style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: '#10B981' }} />
+                <div>
+                  <div style={{ fontSize: '12.5px', fontWeight: 800, color: '#065F46' }}>المستوى 3: متحقق</div>
+                  <div style={{ fontSize: '11px', color: '#047857' }}>وصول المؤسسة للمستوى المطلوب تحقيقه وبشكل مستمر مع خطط للتحسين</div>
+                </div>
+              </div>
+              <span style={{ fontSize: '14px', fontWeight: 900, color: '#065F46' }}>{l3}</span>
+            </div>
+
+            {/* Level 2 */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', borderRadius: '10px', backgroundColor: '#EFF6FF', border: '1px solid #BFDBFE' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <span style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: '#3B82F6' }} />
+                <div>
+                  <div style={{ fontSize: '12.5px', fontWeight: 800, color: '#1E40AF' }}>المستوى 2: متحقق بدرجة متوسطة</div>
+                  <div style={{ fontSize: '11px', color: '#1D4ED8' }}>أداءات متحققة بصورة متوسطة الفاعلية مع وجود مجال للتحسين وخطط للتطوير</div>
+                </div>
+              </div>
+              <span style={{ fontSize: '14px', fontWeight: 900, color: '#1E40AF' }}>{l2}</span>
+            </div>
+
+            {/* Level 1 */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', borderRadius: '10px', backgroundColor: '#FFFBEB', border: '1px solid #FDE68A' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <span style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: '#F59E0B' }} />
+                <div>
+                  <div style={{ fontSize: '12.5px', fontWeight: 800, color: '#92400E' }}>المستوى 1: متحقق بدرجة ضعيفة</div>
+                  <div style={{ fontSize: '11px', color: '#B45309' }}>أداءات كتابية أو متحققة أحياناً وتفتقر للمنهجية وبحاجة لمجهود واستكمال الشواهد</div>
+                </div>
+              </div>
+              <span style={{ fontSize: '14px', fontWeight: 900, color: '#92400E' }}>{l1}</span>
+            </div>
+
+            {/* Level 0 */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', borderRadius: '10px', backgroundColor: '#FEF2F2', border: '1px solid #FECACA' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <span style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: '#EF4444' }} />
+                <div>
+                  <div style={{ fontSize: '12.5px', fontWeight: 800, color: '#991B1B' }}>المستوى 0: غير متوفر</div>
+                  <div style={{ fontSize: '11px', color: '#B91C1C' }}>عدم قيام المدرسة بالأداءات المطلوبة منها وبحاجة لمراجعة أدائها وتصحيح أخطائها</div>
+                </div>
+              </div>
+              <span style={{ fontSize: '14px', fontWeight: 900, color: '#991B1B' }}>{l0}</span>
+            </div>
+
+            {unscored > 0 && (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 14px', borderRadius: '10px', backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <span style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: '#94A3B8' }} />
+                  <span style={{ fontSize: '12px', fontWeight: 700, color: '#64748B' }}>قيد الرصد والتقييم</span>
+                </div>
+                <span style={{ fontSize: '13px', fontWeight: 800, color: '#64748B' }}>{unscored}</span>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* 6. المستوى الثاني: مقارنة المجالات المعيارية السبعة + نسبة اكتمال المعايير السبعة جنباً إلى جنب */}
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))',
           gap: '24px',
         }}
       >
-        <InteractiveDonutChart
-          title="توزيع مستويات أداء المؤشرات (0 - 3)"
-          subtitle="تصنيف المؤشرات المرصودة وفق درجات سلم التقييم الرباعي المعتمد"
-          segments={donutSegments}
-          centerLabel="إجمالي المؤشرات"
-          centerValue={kpis.totalIndicators}
-        />
-
         <InteractiveBarChart
-          title="مقارنة استيفاء المجالات المعيارية السبعة"
-          subtitle="مقارنة معدلات الإنجاز ومستوى التحقق عبر مجالات الأداء المدرسي (اضغط للتفاصيل)"
+          title="مقارنة متوسط جودة الأداء الميداني للمجالات السبعة (من 3.00 نقاط)"
+          subtitle="يقيس جودة الأداء الفعلي للمدرسة وفق سلم التقييم لتمييز مجالات التميز عن مجالات التطوير (اضغط للتفاصيل)"
           items={barItems}
           onSelectItem={(id) => onNavigate('standards-tree', Number(id))}
         />
-      </div>
 
-      {/* 5. Two Columns: نسبة اكتمال المعايير السبعة + عناصر بحاجة للاستكمال */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
-          gap: '24px',
-        }}
-      >
         <StandardsProgressBar
           standards={dashboardData?.standardsProgress || []}
           onSelectStandard={(id) => onNavigate('standards-tree', id)}
         />
-
-        <PendingIndicatorsTable
-          indicators={dashboardData?.pendingIndicators || []}
-          onOpenIndicator={(id) => onNavigate('rubric-assessment', id)}
-        />
       </div>
+
+      {/* 7. المستوى الثالث: جدول عناصر التقييم بحاجة لاستيفاء التقديرات أو الشواهد (كامل العرض) */}
+      <PendingIndicatorsTable
+        indicators={dashboardData?.pendingIndicators || []}
+        onOpenIndicator={(id) => onNavigate('rubric-assessment', id)}
+      />
     </div>
   );
 };

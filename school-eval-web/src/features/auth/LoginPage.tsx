@@ -34,6 +34,22 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onNavigateToReset }) => {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
 
+  // استجابة العرض على الهواتف والشاشات الصغيرة (Samsung / Mobile Responsive)
+  const [isMobile, setIsMobile] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      return window.innerWidth < 1024;
+    }
+    return false;
+  });
+
+  React.useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 1024);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     clearAuthError();
@@ -72,6 +88,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onNavigateToReset }) => {
     <div
       style={{
         display: 'flex',
+        flexDirection: isMobile ? 'column' : 'row',
         minHeight: '100vh',
         width: '100%',
         maxWidth: '100%',
@@ -86,36 +103,81 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onNavigateToReset }) => {
           ========================================================================= */}
       <div
         style={{
-          flex: '1 1 50%',
+          flex: isMobile ? '1 1 100%' : '1 1 50%',
+          width: '100%',
           display: 'flex',
           flexDirection: 'column',
           justifyContent: 'center',
           alignItems: 'center',
-          padding: '40px 24px',
+          padding: isMobile ? '32px 16px' : '40px 24px',
           backgroundColor: theme.colors.neutral.white,
           boxShadow: '0 0 30px rgba(0, 0, 0, 0.03)',
           zIndex: 10,
         }}
       >
         <div style={{ width: '100%', maxWidth: '440px' }}>
-          {/* الشعار وعنوان الترحيب */}
+          {/* الشعار المعتمد وعنوان المنصة البارز */}
           <div style={{ marginBottom: '28px', textAlign: 'right' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '16px' }}>
+              <div
+                style={{
+                  width: '54px',
+                  height: '54px',
+                  borderRadius: '14px',
+                  background: 'linear-gradient(135deg, #ECFDF5 0%, #D1FAE5 100%)',
+                  border: '1.5px solid #10B981',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  boxShadow: '0 4px 12px rgba(16, 185, 129, 0.15)',
+                  flexShrink: 0,
+                }}
+              >
+                {/* موضع اللوجو الرسمي لمنصة ارتقاء */}
+                <Building2 size={32} color="#059669" />
+              </div>
+              <div>
+                <h1
+                  style={{
+                    fontSize: '28px',
+                    fontWeight: 900,
+                    color: '#0F172A',
+                    letterSpacing: '-0.5px',
+                    margin: 0,
+                    lineHeight: 1.2,
+                  }}
+                >
+                  منصة ارتقاء
+                </h1>
+                <div
+                  style={{
+                    fontSize: '12.5px',
+                    color: '#059669',
+                    fontWeight: 700,
+                    marginTop: '2px',
+                  }}
+                >
+                  نظام التقييم الذاتي والتحسين والاعتماد المدرسي
+                </div>
+              </div>
+            </div>
+
             <div
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: '8px',
-                padding: '6px 12px',
+                padding: '4px 10px',
                 backgroundColor: theme.colors.primary[50],
                 border: `1px solid ${theme.colors.primary[200]}`,
                 borderRadius: theme.radii.full,
-                marginBottom: '16px',
+                marginBottom: '12px',
               }}
             >
-              <ShieldCheck size={16} color={theme.colors.primary[600]} />
+              <ShieldCheck size={14} color={theme.colors.primary[600]} />
               <span
                 style={{
-                  fontSize: theme.typography.fontSizes.xs,
+                  fontSize: '11px',
                   fontWeight: theme.typography.fontWeights.bold,
                   color: theme.colors.primary[700],
                 }}
@@ -124,25 +186,24 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onNavigateToReset }) => {
               </span>
             </div>
 
-            <h1
+            <h2
               style={{
-                fontSize: theme.typography.fontSizes['3xl'],
-                fontWeight: theme.typography.fontWeights.extrabold,
-                color: theme.colors.neutral[900],
-                lineHeight: theme.typography.lineHeights.tight,
-                margin: '0 0 8px 0',
+                fontSize: '18px',
+                fontWeight: 800,
+                color: theme.colors.neutral[800],
+                margin: '0 0 4px 0',
               }}
             >
               تسجيل الدخول الموحد
-            </h1>
+            </h2>
             <p
               style={{
-                fontSize: theme.typography.fontSizes.sm,
+                fontSize: theme.typography.fontSizes.xs,
                 color: theme.colors.neutral[500],
                 margin: 0,
               }}
             >
-              {SYSTEM_FULL_NAME} — يرجى إدخال بيانات حسابك
+              يرجى إدخال بيانات الاعتماد المعتمدة للمتابعة
             </p>
           </div>
 
@@ -442,7 +503,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onNavigateToReset }) => {
         style={{
           flex: '1 1 50%',
           background: theme.colors.gradients.darkBanner,
-          display: 'flex',
+          display: isMobile ? 'none' : 'flex',
           flexDirection: 'column',
           justifyContent: 'space-between',
           padding: '48px 56px',

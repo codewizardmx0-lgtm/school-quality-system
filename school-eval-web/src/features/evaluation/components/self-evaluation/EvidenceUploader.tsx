@@ -1,11 +1,13 @@
 import React, { useState, useRef } from 'react';
-import type { LinkedEvidenceBrief } from '../../api/evaluationTypes';
-import { UploadCloud, File, RefreshCw, AlertCircle } from 'lucide-react';
+import type { LinkedEvidenceBrief, EvidenceRequirementItem } from '../../api/evaluationTypes';
+import { UploadCloud, File, RefreshCw, AlertCircle, Trash2, FileCheck } from 'lucide-react';
 
 interface EvidenceUploaderProps {
   indicatorId?: number;
   evidenceLinks: LinkedEvidenceBrief[];
+  evidenceRequirements?: EvidenceRequirementItem[];
   onUploadFile: (file: File, notes?: string, documentId?: number) => Promise<unknown>;
+  onUnlinkEvidence?: (linkId: number) => Promise<void>;
   isUploading?: boolean;
   uploadProgress?: number;
   readOnly?: boolean;
@@ -13,7 +15,9 @@ interface EvidenceUploaderProps {
 
 export const EvidenceUploader: React.FC<EvidenceUploaderProps> = ({
   evidenceLinks,
+  evidenceRequirements = [],
   onUploadFile,
+  onUnlinkEvidence,
   isUploading = false,
   uploadProgress = 0,
   readOnly = false,
@@ -21,6 +25,7 @@ export const EvidenceUploader: React.FC<EvidenceUploaderProps> = ({
   const [isDragOver, setIsDragOver] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [replaceDocId, setReplaceDocId] = useState<number | undefined>(undefined);
+  const [unlinkingId, setUnlinkingId] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -38,30 +43,50 @@ export const EvidenceUploader: React.FC<EvidenceUploaderProps> = ({
     if (readOnly) return;
 
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      await processFile(e.dataTransfer.files[0]);
+      await processFiles(Array.from(e.dataTransfer.files));
     }
   };
 
   const handleFileInputChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
-      await processFile(e.target.files[0]);
+      await processFiles(Array.from(e.target.files));
       e.target.value = '';
     }
   };
 
-  const processFile = async (file: File) => {
+  const processFiles = async (files: File[]) => {
     setErrorMessage(null);
     const maxSizeBytes = 25 * 1024 * 1024; // 25MB
-    if (file.size > maxSizeBytes) {
-      setErrorMessage('حجم الملف يتجاوز الحد الأقصى المسموح به (25 ميجابايت).');
-      return;
+
+    for (const file of files) {
+      if (file.size > maxSizeBytes) {
+        setErrorMessage(`الملف «${file.name}» يتجاوز الحد الأقصى المسموح به (25 ميجابايت).`);
+        return;
+      }
     }
 
     try {
-      await onUploadFile(file, 'تم الرفع من شاشة رصد المؤشر', replaceDocId);
+      for (const file of files) {
+        await onUploadFile(file, 'تم الرفع من استمارة رصد المؤشر', replaceDocId);
+      }
       setReplaceDocId(undefined);
     } catch (err: unknown) {
-      setErrorMessage((err as Error)?.message || 'فشل في رفع الملف.');
+      setErrorMessage((err as Error)?.message || 'فشل في رفع ملف الشاهد.');
+    }
+  };
+
+  const handleUnlink = async (linkId: number) => {
+    if (readOnly || !onUnlinkEvidence) return;
+    if (!window.confirm('هل أنت متأكد من فك ارتباط هذا الشاهد بالمؤشر؟ لن يتم حذف الملف الأصلي من المستودع.')) {
+      return;
+    }
+    setUnlinkingId(linkId);
+    try {
+      await onUnlinkEvidence(linkId);
+    } catch (err: any) {
+      setErrorMessage(err?.response?.data?.message || 'تعذر فك ارتباط الشاهد.');
+    } finally {
+      setUnlinkingId(null);
     }
   };
 
@@ -72,22 +97,93 @@ export const EvidenceUploader: React.FC<EvidenceUploaderProps> = ({
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+      {/* 1. Official Evidence Requirements specific to this Indicator (FR-SCH-12 / Prototype feature) */}
+      <div style={{ backgroundColor: '#F8FAFC', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '16px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
+          <FileCheck size={18} color="#059669" />
+          <h4 style={{ fontSize: '13.5px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
+            متطلبات الشواهد والأدلة الرسمية المقررة لهذا المؤشر (الإطار الوطني):
+          </h4>
+        </div>
+
+        {evidenceRequirements && evidenceRequirements.length > 0 ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {evidenceRequirements.map((req) => (
+              <div
+                key={req.id}
+                style={{
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: '10px',
+                  padding: '8px 12px',
+                  borderRadius: '6px',
+                  backgroundColor: '#FFFFFF',
+                  border: '1px solid #CBD5E1',
+                }}
+              >
+                <span
+                  style={{
+                    fontSize: '10.5px',
+                    fontWeight: 800,
+                    padding: '2px 8px',
+                    borderRadius: '4px',
+                    backgroundColor: req.required ? '#FEF2F2' : '#EFF6FF',
+                    color: req.required ? '#DC2626' : '#2563EB',
+                    border: `1px solid ${req.required ? '#FECACA' : '#BFDBFE'}`,
+                    whiteSpace: 'nowrap',
+                    marginTop: '2px',
+                  }}
+                >
+                  {req.required ? 'إلزامي' : 'استرشادي'}
+                </span>
+                <div>
+                  <div style={{ fontSize: '12.5px', fontWeight: 700, color: '#1E293B' }}>
+                    {req.title}
+                  </div>
+                  {req.description && (
+                    <div style={{ fontSize: '11.5px', color: '#64748B', marginTop: '2px' }}>
+                      {req.description}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div style={{ fontSize: '12px', color: '#64748B' }}>
+            يمكن إرفاق وثائق، خطط تشغيلية، محاضر اجتماعات، تقارير، أو صور ميدانية معتمدة تثبت استيفاء أداء المؤشر.
+          </div>
+        )}
+      </div>
+
+      {/* 2. Upload and Drop Zone */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <label style={{ fontSize: '13px', fontWeight: 800, color: '#1E293B' }}>
-          الشواهد والأدلة الميدانية الداعمة للرصد (PDF, PNG, JPG, Word, Excel - بحد أقصى 25MB)
+          الشواهد المرفقة والمربوطة بالمؤشر حالياً (PDF, PNG, JPG, Word, Excel - بحد أقصى 25MB):
         </label>
-        <span style={{ fontSize: '12px', color: '#64748B' }}>
-          {evidenceLinks.length} مستندات مرفقة
+        <span
+          style={{
+            fontSize: '12px',
+            fontWeight: 700,
+            padding: '3px 10px',
+            borderRadius: '12px',
+            backgroundColor: evidenceLinks.length > 0 ? '#ECFDF5' : '#FEF2F2',
+            color: evidenceLinks.length > 0 ? '#059669' : '#DC2626',
+            border: `1px solid ${evidenceLinks.length > 0 ? '#A7F3D0' : '#FECACA'}`,
+          }}
+        >
+          {evidenceLinks.length} {evidenceLinks.length === 1 ? 'شاهد مربوط' : 'شواهد مربوطة'}
         </span>
       </div>
 
-      {/* Hidden File Input */}
+      {/* Hidden File Input supporting multiple files */}
       <input
         type="file"
         ref={fileInputRef}
         onChange={handleFileInputChange}
         accept=".pdf,.png,.jpg,.jpeg,.docx,.xlsx"
+        multiple
         style={{ display: 'none' }}
       />
 
@@ -101,7 +197,7 @@ export const EvidenceUploader: React.FC<EvidenceUploaderProps> = ({
           style={{
             border: `2px dashed ${isDragOver ? '#059669' : '#CBD5E1'}`,
             borderRadius: '12px',
-            padding: '24px',
+            padding: '22px',
             textAlign: 'center',
             backgroundColor: isDragOver ? '#ECFDF5' : '#F8FAFC',
             cursor: 'pointer',
@@ -110,25 +206,25 @@ export const EvidenceUploader: React.FC<EvidenceUploaderProps> = ({
         >
           <div
             style={{
-              width: '46px',
-              height: '46px',
+              width: '44px',
+              height: '44px',
               borderRadius: '50%',
               backgroundColor: '#ECFDF5',
               color: '#059669',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              margin: '0 auto 10px',
+              margin: '0 auto 8px',
             }}
           >
-            <UploadCloud size={24} />
+            <UploadCloud size={22} />
           </div>
 
           <div style={{ fontSize: '13.5px', fontWeight: 700, color: '#1E293B' }}>
-            اسحب وأفلت ملف الشاهد هنا، أو اضغط للاستعراض
+            اسحب وأفلت ملفات الشواهد هنا، أو اضغط للاستعراض واختيار ملف أو أكثر
           </div>
           <div style={{ fontSize: '11.5px', color: '#64748B', marginTop: '4px' }}>
-            يتم تسجيل الإصدار تلقائياً (الإصدار 1، 2...) دون حذف النسخ السابقة
+            يمكنك رفع شواهد متعددة لنفس المؤشر، ويتم تتبع الإصدارات تلقائياً
           </div>
 
           {/* Upload Progress Bar */}
@@ -166,7 +262,7 @@ export const EvidenceUploader: React.FC<EvidenceUploaderProps> = ({
         </div>
       )}
 
-      {/* Attached Evidences List */}
+      {/* Attached Evidences List with Unlink & Replace actions */}
       {evidenceLinks.length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
           {evidenceLinks.map((link) => (
@@ -180,6 +276,7 @@ export const EvidenceUploader: React.FC<EvidenceUploaderProps> = ({
                 borderRadius: '8px',
                 backgroundColor: '#FFFFFF',
                 border: '1px solid #E2E8F0',
+                transition: 'background-color 0.15s',
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -193,15 +290,16 @@ export const EvidenceUploader: React.FC<EvidenceUploaderProps> = ({
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
+                    flexShrink: 0,
                   }}
                 >
                   <File size={16} />
                 </div>
                 <div>
-                  <div style={{ fontSize: '12.5px', fontWeight: 700, color: '#1E293B' }}>
+                  <div style={{ fontSize: '13px', fontWeight: 700, color: '#1E293B' }}>
                     {link.title}
                   </div>
-                  <div style={{ fontSize: '11px', color: '#64748B', display: 'flex', gap: '8px' }}>
+                  <div style={{ fontSize: '11px', color: '#64748B', display: 'flex', gap: '8px', marginTop: '2px' }}>
                     <span>{link.fileName}</span>
                     <span>•</span>
                     <span style={{ color: '#059669', fontWeight: 600 }}>الإصدار v{link.versionNumber}</span>
@@ -212,6 +310,7 @@ export const EvidenceUploader: React.FC<EvidenceUploaderProps> = ({
               {!readOnly && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <button
+                    type="button"
                     onClick={() => triggerSelectFile(link.documentId)}
                     style={{
                       display: 'flex',
@@ -226,10 +325,33 @@ export const EvidenceUploader: React.FC<EvidenceUploaderProps> = ({
                       border: 'none',
                       cursor: 'pointer',
                     }}
-                    title="رفع نسخة بديلة دون حذف النسخ السابقة"
+                    title="رفع نسخة أحدث لهذا الشاهد"
                   >
                     <RefreshCw size={12} />
-                    استبدال بنسخة أحدث
+                    <span>تحديث النسخة</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={unlinkingId === link.linkId}
+                    onClick={() => handleUnlink(link.linkId)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      padding: '5px 10px',
+                      borderRadius: '6px',
+                      backgroundColor: '#FEF2F2',
+                      color: '#DC2626',
+                      fontSize: '11.5px',
+                      fontWeight: 700,
+                      border: '1px solid #FECACA',
+                      cursor: 'pointer',
+                    }}
+                    title="فك ارتباط هذا الشاهد بالمؤشر"
+                  >
+                    <Trash2 size={12} />
+                    <span>{unlinkingId === link.linkId ? 'جارٍ الفك...' : 'فك الارتباط'}</span>
                   </button>
                 </div>
               )}

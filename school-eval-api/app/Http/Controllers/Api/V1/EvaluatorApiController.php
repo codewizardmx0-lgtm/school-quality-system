@@ -116,12 +116,44 @@ class EvaluatorApiController extends Controller
         $level0Count = $results->filter(fn($r) => (int)$r->score === 0)->count();
         $unscoredCount = max(0, $totalIndicators - $scoredCount);
 
-        // مسار دورة التقييم ومراجعة المخرج
+        // مسار دورة التقييم المعتمد نظامياً وفق SRS والفصل الرابع (بدون مسمى المكتب المعتمد)
+        $isAllScored = ($scoredCount >= $totalIndicators && $totalIndicators > 0);
         $cycleSteps = [
-            ['id' => 1, 'label' => 'إطلاق الدورة', 'status' => 'completed', 'date' => '2026-09-01'],
-            ['id' => 2, 'label' => 'الإدخال والتوثيق', 'status' => 'current', 'date' => 'قيد الإنجاز'],
-            ['id' => 3, 'label' => 'الرفع والمراجعة', 'status' => 'pending', 'date' => 'بانتظار الإرسال'],
-            ['id' => 4, 'label' => 'مكتمل ومعتمد', 'status' => 'pending', 'date' => 'النتيجة النهائية'],
+            [
+                'id' => 1,
+                'label' => 'إطلاق الدورة',
+                'status' => 'completed',
+                'date' => '2026-09-01',
+                'description' => 'فتح دورة التقييم الذاتي وتعميم المعايير الوطنية المعتمدة.',
+            ],
+            [
+                'id' => 2,
+                'label' => 'التقييم الذاتي وتوثيق الشواهد',
+                'status' => $isAllScored ? 'completed' : 'current',
+                'date' => $isAllScored ? 'مستوفى بالكامل' : 'قيد الإنجاز',
+                'description' => 'رصد درجات المؤشرات وفق مقياس التقدير الرباعي وإيداع أدلة التحقق.',
+            ],
+            [
+                'id' => 3,
+                'label' => 'المراجعة الداخلية والاعتماد المدرسي',
+                'status' => $isAllScored ? 'current' : 'pending',
+                'date' => $isAllScored ? 'بانتظار اعتماد المدير' : 'مرحلة لاحقة',
+                'description' => 'مراجعة مدير المدرسة لملف التقييم وتدوين الملاحظات قبل الإرسال الرسمي.',
+            ],
+            [
+                'id' => 4,
+                'label' => 'المراجعة والتدقيق الإشرافي',
+                'status' => 'pending',
+                'date' => 'بانتظار الرفع للوزارة',
+                'description' => 'فحص المشرف الوزاري للنتائج والشواهد وإصدار طلب استكمال إن لزم.',
+            ],
+            [
+                'id' => 5,
+                'label' => 'الاعتماد النهائي وإصدار التقرير',
+                'status' => 'pending',
+                'date' => 'النتيجة الرسمية',
+                'description' => 'اعتماد تقرير الجودة والاعتماد الأكاديمي الشامل وخطة التحسين.',
+            ],
         ];
 
         // نسبة اكتمال إدخال المعايير الوطنية (7 معايير)
@@ -131,8 +163,11 @@ class EvaluatorApiController extends Controller
         foreach ($standards as $std) {
             $indIds = $std->subStandards->flatMap(fn($sub) => $sub->indicators)->pluck('indicator_id');
             $stdTotal = max(1, $indIds->count());
-            $stdScored = $results->whereIn('indicator_id', $indIds)->where('score', '!==', null)->count();
+            $stdResults = $results->whereIn('indicator_id', $indIds);
+            $stdScoredResults = $stdResults->whereNotNull('score');
+            $stdScored = $stdScoredResults->count();
             $pct = round(($stdScored / $stdTotal) * 100);
+            $avgScore = $stdScored > 0 ? round($stdScoredResults->avg('score'), 2) : 0.0;
             $standardsProgress[] = [
                 'standardId' => $std->standard_id,
                 'code' => $std->code,
@@ -140,23 +175,55 @@ class EvaluatorApiController extends Controller
                 'totalIndicators' => $stdTotal,
                 'scoredIndicators' => $stdScored,
                 'percentage' => $pct,
+                'averageScore' => $avgScore,
+                'scoreDistribution' => [
+                    'level3' => $stdResults->where('score', 3)->count(),
+                    'level2' => $stdResults->where('score', 2)->count(),
+                    'level1' => $stdResults->where('score', 1)->count(),
+                    'level0' => $stdResults->where('score', 0)->count(),
+                    'unscored' => max(0, $stdTotal - $stdScored),
+                ],
             ];
         }
 
-        // عناصر تقييم بحاجة لاستكمال التوثيق أو التقديرات (Unscored Indicators)
+        // عناصر تقييم بحاجة لاستيفاء التقديرات أو الشواهد (حساب دقيق بدون قيد limit(10))
         $scoredIndicatorIds = $results->whereNotNull('score')->pluck('indicator_id')->toArray();
-        $unscoredIndicators = Indicator::whereNotIn('indicator_id', $scoredIndicatorIds)
-            ->with('subStandard.standard')
-            ->limit(10)
-            ->get();
 
-        $pendingIndicators = $unscoredIndicators->map(fn($ind) => [
-            'indicatorId' => $ind->indicator_id,
-            'code' => $ind->code,
-            'name' => $ind->name,
-            'standardName' => $ind->subStandard?->standard?->name ?? 'المعايير الوطنية',
-            'status' => 'تقدير غير مدخل',
-        ])->values()->all();
+        $evidenceCountsByIndicator = EvidenceLink::where('school_id', $school?->school_id)
+            ->where('evaluation_id', $evaluation->evaluation_id)
+            ->selectRaw('indicator_id, count(*) as count')
+            ->groupBy('indicator_id')
+            ->pluck('count', 'indicator_id')
+            ->toArray();
+
+        $allIndicatorsList = Indicator::with('subStandard.standard')->orderBy('indicator_id')->get();
+        $pendingIndicators = [];
+
+        foreach ($allIndicatorsList as $ind) {
+            $hasScore = in_array($ind->indicator_id, $scoredIndicatorIds);
+            $evCount = $evidenceCountsByIndicator[$ind->indicator_id] ?? 0;
+            $hasEvidence = $evCount > 0;
+
+            if (!$hasScore || !$hasEvidence) {
+                $statusText = !$hasScore
+                    ? (!$hasEvidence ? 'تقدير وشواهد غير مكتملة' : 'تقدير غير مدخل')
+                    : 'شواهد ناقصة';
+
+                $pendingIndicators[] = [
+                    'indicatorId' => $ind->indicator_id,
+                    'code' => $ind->code,
+                    'name' => $ind->name,
+                    'standardName' => $ind->subStandard?->standard?->name ?? 'المعايير الوطنية',
+                    'scoreStatus' => $hasScore ? 'scored' : 'unscored',
+                    'scoreStatusArabic' => $hasScore ? 'مدخل' : 'غير مدخل',
+                    'evidenceStatus' => $hasEvidence ? 'sufficient' : 'missing',
+                    'evidenceStatusArabic' => $hasEvidence ? "مستوفٍ ({$evCount})" : 'ناقص (0)',
+                    'evidenceCount' => $evCount,
+                    'score' => $hasScore ? $results->firstWhere('indicator_id', $ind->indicator_id)?->score : null,
+                    'status' => $statusText,
+                ];
+            }
+        }
 
         // التحقق من وجود طلب استكمال مفتوح
         $completionRequest = CompletionRequest::where('status', 'Open')
@@ -194,7 +261,7 @@ class EvaluatorApiController extends Controller
                     'level0' => $level0Count,
                     'unscored' => $unscoredCount,
                 ],
-                'firstUnscoredIndicatorId' => $unscoredIndicators->first()?->indicator_id ?? null,
+                'firstUnscoredIndicatorId' => $allIndicatorsList->first(fn($ind) => !in_array($ind->indicator_id, $scoredIndicatorIds))?->indicator_id ?? null,
             ],
             'cycleSteps' => $cycleSteps,
             'standardsProgress' => $standardsProgress,
@@ -226,6 +293,17 @@ class EvaluatorApiController extends Controller
             ]);
         }
 
+        $user = $request->user();
+        $school = $user?->school ?? School::first();
+        $evaluation = Evaluation::where('school_id', $school?->school_id)->orderBy('evaluation_id', 'desc')->first();
+        $results = $evaluation ? EvaluationResult::where('evaluation_id', $evaluation->evaluation_id)->get() : collect();
+        $evidenceCounts = $evaluation ? EvidenceLink::where('school_id', $school?->school_id)
+            ->where('evaluation_id', $evaluation->evaluation_id)
+            ->selectRaw('indicator_id, count(*) as count')
+            ->groupBy('indicator_id')
+            ->pluck('count', 'indicator_id')
+            ->toArray() : [];
+
         $standards = Standard::where('version_id', $version->version_id)
             ->with([
                 'subStandards.indicators.scoreDescriptors',
@@ -235,25 +313,55 @@ class EvaluatorApiController extends Controller
             ->orderBy('code')
             ->get();
 
-        $tree = $standards->map(function ($std) {
+        $tree = $standards->map(function ($std) use ($results, $evidenceCounts) {
+            $indIds = $std->subStandards->flatMap(fn($sub) => $sub->indicators)->pluck('indicator_id');
+            $stdResults = $results->whereIn('indicator_id', $indIds);
+            $totalInds = max(1, $indIds->count());
+            $scoredCount = $stdResults->whereNotNull('score')->count();
+            $unenteredCount = max(0, $totalInds - $scoredCount);
+            $l3 = $stdResults->where('score', 3)->count();
+            $l2 = $stdResults->where('score', 2)->count();
+            $l1 = $stdResults->where('score', 1)->count();
+            $l0 = $stdResults->where('score', 0)->count();
+
+            $stdTotalEvidences = 0;
+            foreach ($indIds as $iid) {
+                $stdTotalEvidences += $evidenceCounts[$iid] ?? 0;
+            }
+
             return [
                 'standardId' => $std->standard_id,
                 'code' => $std->code,
                 'title' => $std->name,
                 'description' => $std->description ?? '',
                 'weight' => $std->weight ?? 15,
-                'subStandards' => $std->subStandards->map(function ($sub) {
+                'stats' => [
+                    'totalIndicators' => $totalInds,
+                    'scoredIndicators' => $scoredCount,
+                    'unenteredIndicators' => $unenteredCount,
+                    'level3Count' => $l3,
+                    'level2Count' => $l2,
+                    'level1Count' => $l1,
+                    'level0Count' => $l0,
+                    'totalEvidences' => $stdTotalEvidences,
+                ],
+                'subStandards' => $std->subStandards->map(function ($sub) use ($results, $evidenceCounts) {
                     return [
                         'subStandardId' => $sub->sub_standard_id,
                         'code' => $sub->code,
                         'title' => $sub->name,
-                        'indicators' => $sub->indicators->map(function ($ind) {
+                        'indicators' => $sub->indicators->map(function ($ind) use ($results, $evidenceCounts) {
+                            $res = $results->firstWhere('indicator_id', $ind->indicator_id);
+                            $evCount = $evidenceCounts[$ind->indicator_id] ?? 0;
+
                             return [
                                 'indicatorId' => $ind->indicator_id,
                                 'code' => $ind->code,
                                 'title' => $ind->name,
                                 'description' => $ind->description ?? '',
                                 'weight' => $ind->weight ?? 1,
+                                'score' => $res?->score,
+                                'evidenceCount' => $evCount,
                                 'descriptors' => $ind->scoreDescriptors->map(fn($d) => [
                                     'descriptorId' => $d->descriptor_id ?? $d->id,
                                     'level' => $d->level ?? $d->score_level,
@@ -263,6 +371,12 @@ class EvaluatorApiController extends Controller
                                 'verificationMethods' => $ind->verificationMethods->map(fn($vm) => [
                                     'id' => $vm->id ?? $vm->method_id,
                                     'name' => $vm->name ?? $vm->method_name ?? 'فحص الوثائق والسجلات',
+                                ]),
+                                'evidenceRequirements' => $ind->evidenceRequirements->map(fn($er) => [
+                                    'id' => $er->requirement_id,
+                                    'title' => $er->title,
+                                    'description' => $er->description ?? '',
+                                    'required' => (bool)$er->required,
                                 ]),
                             ];
                         }),
@@ -299,14 +413,22 @@ class EvaluatorApiController extends Controller
             ->map(function ($link) {
                 return [
                     'linkId' => $link->id,
-                    'documentId' => $link->documentVersion?->document_id,
+                    'documentId' => $link->documentVersion?->school_document_id ?? $link->documentVersion?->document?->id,
                     'title' => $link->documentVersion?->document?->title ?? 'مستند شاهد',
                     'fileName' => $link->documentVersion?->file_name ?? 'document.pdf',
                     'fileSize' => $link->documentVersion?->file_size ?? 1024000,
-                    'versionNumber' => $link->documentVersion?->version_number ?? 1,
+                    'versionNumber' => $link->documentVersion?->version_no ?? 1,
                     'status' => $link->status ?? 'completed',
                 ];
             });
+
+        $indicator = Indicator::with('evidenceRequirements')->find($indicatorId);
+        $reqs = $indicator?->evidenceRequirements->map(fn($er) => [
+            'id' => $er->requirement_id,
+            'title' => $er->title,
+            'description' => $er->description ?? '',
+            'required' => (bool)$er->required,
+        ]) ?? collect();
 
         if (!$result) {
             return ApiResponse::success([
@@ -319,6 +441,7 @@ class EvaluatorApiController extends Controller
                 'justification' => '',
                 'verificationMethods' => [],
                 'evidenceLinks' => $evidenceLinks,
+                'evidenceRequirements' => $reqs,
             ]);
         }
 
@@ -334,6 +457,7 @@ class EvaluatorApiController extends Controller
             'justification' => $justificationNote ? $justificationNote->content : ($result->textual_result ?? ''),
             'verificationMethods' => $result->verificationMethods->pluck('verification_tool_id')->toArray(),
             'evidenceLinks' => $evidenceLinks,
+            'evidenceRequirements' => $reqs,
             'updatedAt' => $result->updated_at?->toIso8601String(),
         ]);
     }
@@ -467,30 +591,34 @@ class EvaluatorApiController extends Controller
         // تحديد المستند الأم
         $docId = $request->input('documentId');
         if ($docId) {
-            $document = SchoolDocument::where('school_id', $schoolId)->where('document_id', $docId)->first();
+            $document = SchoolDocument::where('school_id', $schoolId)->where('id', $docId)->first();
         } else {
             $title = $request->input('title') ?: pathinfo($originalName, PATHINFO_FILENAME);
             $document = SchoolDocument::create([
                 'school_id' => $schoolId,
                 'title' => $title,
+                'document_type' => 'evidence',
                 'created_by_user_id' => $user?->user_id ?? 1,
             ]);
         }
 
-        // حساب رقم الإصدار التالي
-        $latestVersion = DocumentVersion::where('document_id', $document->document_id)
-            ->max('version_number') ?? 0;
+        // حساب رقم الإصدار التالي في جدول document_versions
+        $latestVersion = DocumentVersion::where('school_document_id', $document->id)
+            ->max('version_no') ?? 0;
         $newVersionNumber = $latestVersion + 1;
 
+        // وسم النسخ السابقة كغير حالية
+        DocumentVersion::where('school_document_id', $document->id)->update(['is_current' => false]);
+
         $docVersion = DocumentVersion::create([
-            'document_id' => $document->document_id,
-            'version_number' => $newVersionNumber,
+            'school_id' => $schoolId,
+            'school_document_id' => $document->id,
+            'version_no' => $newVersionNumber,
+            'is_current' => true,
             'storage_uri' => $storedPath,
             'file_name' => $originalName,
             'mime_type' => $mimeType,
             'file_size' => $fileSize,
-            'uploaded_by_user_id' => $user?->user_id ?? 1,
-            'change_summary' => $request->input('notes', $newVersionNumber > 1 ? 'تحديث المستند وإرفاق نسخة جديدة' : 'رفع المستند لأول مرة'),
         ]);
 
         // ربط الشاهد بالمؤشر إذا تم تمرير indicatorId
@@ -549,28 +677,28 @@ class EvaluatorApiController extends Controller
             return [
                 'id' => $ver->id,
                 'linkId' => $link?->id ?? $ver->id,
-                'documentId' => $ver->document_id,
+                'documentId' => $ver->school_document_id,
                 'indicatorId' => $link?->indicator_id,
                 'title' => $ver->document?->title ?? $ver->file_name,
                 'fileName' => $ver->file_name,
                 'mimeType' => $ver->mime_type,
                 'fileSize' => $ver->file_size,
                 'formattedSize' => round($ver->file_size / (1024 * 1024), 2) . ' MB',
-                'versionNumber' => $ver->version_number,
+                'versionNumber' => $ver->version_no,
                 'standardCode' => $link?->indicator?->subStandard?->standard?->code ?? 'STD-01',
                 'standardName' => $link?->indicator?->subStandard?->standard?->name ?? 'معيار عام',
                 'indicatorCode' => $link?->indicator?->code ?? 'IND-GEN',
                 'indicatorTitle' => $link?->indicator?->name ?? 'شاهد موثق',
                 'uploadedAt' => $ver->created_at?->toDateString() ?? '2026-10-15',
                 'uploadedBy' => $ver->uploader?->full_name ?? 'مسؤول الجودة',
-                'verificationStatus' => $ver->version_number > 2 ? 'NeedsReplacement' : 'Compliant',
-                'verificationStatusArabic' => $ver->version_number > 2 ? 'يتطلب استبدال' : 'مطابق ومعتمد داخلياً',
+                'verificationStatus' => $ver->version_no > 2 ? 'NeedsReplacement' : 'Compliant',
+                'verificationStatusArabic' => $ver->version_no > 2 ? 'يتطلب استبدال' : 'مطابق ومعتمد داخلياً',
             ];
         });
 
         $totalDocs = $versions->count();
-        $compliantDocs = $versions->where('version_number', '<=', 2)->count();
-        $needsReplacementDocs = $versions->where('version_number', '>', 2)->count();
+        $compliantDocs = $versions->where('version_no', '<=', 2)->count();
+        $needsReplacementDocs = $versions->where('version_no', '>', 2)->count();
         $storageUsedMb = round($versions->sum('file_size') / (1024 * 1024), 2);
         $storageLimitMb = 500.0;
 

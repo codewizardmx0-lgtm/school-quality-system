@@ -48,6 +48,7 @@ export interface CycleStep {
   label: string;
   status: 'completed' | 'current' | 'pending';
   date: string;
+  description?: string;
 }
 
 export interface StandardProgressItem {
@@ -57,6 +58,14 @@ export interface StandardProgressItem {
   totalIndicators: number;
   scoredIndicators: number;
   percentage: number;
+  averageScore?: number;
+  scoreDistribution?: {
+    level3: number;
+    level2: number;
+    level1: number;
+    level0: number;
+    unscored: number;
+  };
 }
 
 export interface PendingIndicatorItem {
@@ -65,6 +74,12 @@ export interface PendingIndicatorItem {
   name: string;
   standardName: string;
   status: string;
+  scoreStatus?: 'scored' | 'unscored';
+  scoreStatusArabic?: string;
+  evidenceStatus?: 'sufficient' | 'missing';
+  evidenceStatusArabic?: string;
+  evidenceCount?: number;
+  score?: number | null;
 }
 
 export interface CompletionAlert {
@@ -96,14 +111,24 @@ export interface VerificationMethod {
   description?: string;
 }
 
+export interface EvidenceRequirementItem {
+  id: number;
+  title: string;
+  description?: string;
+  required: boolean;
+}
+
 export interface IndicatorNode {
   indicatorId: number;
   code: string;
   title: string;
   description: string;
   weight: number;
+  score?: number | null;
+  evidenceCount?: number;
   descriptors: ScoreDescriptor[];
   verificationMethods: VerificationMethod[];
+  evidenceRequirements?: EvidenceRequirementItem[];
 }
 
 export interface SubStandardNode {
@@ -113,12 +138,24 @@ export interface SubStandardNode {
   indicators: IndicatorNode[];
 }
 
+export interface StandardStats {
+  totalIndicators: number;
+  scoredIndicators: number;
+  unenteredIndicators: number;
+  level3Count: number;
+  level2Count: number;
+  level1Count: number;
+  level0Count: number;
+  totalEvidences: number;
+}
+
 export interface StandardNode {
   standardId: number;
   code: string;
   title: string;
   description: string;
   weight: number;
+  stats?: StandardStats;
   subStandards: SubStandardNode[];
 }
 
@@ -149,6 +186,7 @@ export interface EvaluationResultData {
   justification: string;
   verificationMethods: number[];
   evidenceLinks: LinkedEvidenceBrief[];
+  evidenceRequirements?: EvidenceRequirementItem[];
   updatedAt?: string;
 }
 

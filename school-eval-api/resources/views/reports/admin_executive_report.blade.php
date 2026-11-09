@@ -5,7 +5,7 @@
     <title>التقرير التنفيذي الشامل - منصة ارتقاء للتقييم الذاتي والتحسين المدرسي</title>
     <style>
         @page {
-            margin-top: 46mm;
+            margin-top: 54mm;
             margin-bottom: 20mm;
             margin-left: 12mm;
             margin-right: 12mm;

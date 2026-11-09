@@ -69,17 +69,18 @@ class DemoEvaluationSeeder extends Seeder
 
         // تصفير أي شواهد أو نتائج أو خطط لمدرسة بلقيس لضمان Empty State نظيف 100%
         EvidenceLink::where('school_id', $schoolBelqees->school_id)->delete();
+        $belqeesPlans = ImprovementPlan::where('school_id', $schoolBelqees->school_id)->get();
+        foreach ($belqeesPlans as $p) {
+            ImprovementAction::where('plan_id', $p->plan_id)->delete();
+            $areaIds = PlanImprovementArea::where('plan_id', $p->plan_id)->pluck('area_id');
+            PlanImprovementArea::where('plan_id', $p->plan_id)->delete();
+            ImprovementArea::whereIn('area_id', $areaIds)->delete();
+            $p->delete();
+        }
         EvaluationResult::where('evaluation_id', $evalBelqees->evaluation_id)->delete();
         $belqeesDocIds = SchoolDocument::where('school_id', $schoolBelqees->school_id)->pluck('id');
         DocumentVersion::whereIn('school_document_id', $belqeesDocIds)->delete();
         SchoolDocument::where('school_id', $schoolBelqees->school_id)->delete();
-
-        $belqeesPlans = ImprovementPlan::where('school_id', $schoolBelqees->school_id)->get();
-        foreach ($belqeesPlans as $p) {
-            ImprovementAction::where('plan_id', $p->plan_id)->delete();
-            PlanImprovementArea::where('plan_id', $p->plan_id)->delete();
-            $p->delete();
-        }
 
         // =========================================================================
         // 2. مدرسة الفاروق الأساسية للبنين — تعز (بيانات كاملة وجاهزة للاختبار)
@@ -95,39 +96,44 @@ class DemoEvaluationSeeder extends Seeder
             ]
         );
 
-        // تنظيف قديم لمدرسة الفاروق لإعادة البناء المنضبط
+        // تنظيف قديم لمدرسة الفاروق لإعادة البناء المنضبط وفق ترتيب المفاتيح الأجنبية
         EvidenceLink::where('school_id', $schoolFarouq->school_id)->delete();
+        $farouqPlans = ImprovementPlan::where('school_id', $schoolFarouq->school_id)->get();
+        foreach ($farouqPlans as $p) {
+            ImprovementAction::where('plan_id', $p->plan_id)->delete();
+            $areaIds = PlanImprovementArea::where('plan_id', $p->plan_id)->pluck('area_id');
+            PlanImprovementArea::where('plan_id', $p->plan_id)->delete();
+            ImprovementArea::whereIn('area_id', $areaIds)->delete();
+            $p->delete();
+        }
         EvaluationResult::where('evaluation_id', $evalFarouq->evaluation_id)->delete();
         $farouqDocIds = SchoolDocument::where('school_id', $schoolFarouq->school_id)->pluck('id');
         DocumentVersion::whereIn('school_document_id', $farouqDocIds)->delete();
         SchoolDocument::where('school_id', $schoolFarouq->school_id)->delete();
 
-        $farouqPlans = ImprovementPlan::where('school_id', $schoolFarouq->school_id)->get();
-        foreach ($farouqPlans as $p) {
-            ImprovementAction::where('plan_id', $p->plan_id)->delete();
-            PlanImprovementArea::where('plan_id', $p->plan_id)->delete();
-            $p->delete();
-        }
-
-        // أ. رصد 42 مؤشراً بدرجات متنوعة (20 بدرجة 3، 14 بدرجة 2، 5 بدرجة 1، 3 بدرجة 0)
+        // أ. رصد كافة المؤشرات الـ 109 بدرجات متنوعة (62 بدرجة 3، 32 بدرجة 2، 10 بدرجة 1، 5 بدرجة 0)
         $allIndicators = Indicator::orderBy('indicator_id')->get();
-        $targetScores = array_merge(
-            array_fill(0, 20, 3), // 20 مؤشراً بدرجة 3
-            array_fill(0, 14, 2), // 14 مؤشراً بدرجة 2
-            array_fill(0, 5, 1),  // 5 مؤشرات بدرجة 1
-            array_fill(0, 3, 0)   // 3 مؤشرات بدرجة 0
-        );
 
         $lowScoreResults = [];
         $ratedResults = [];
 
-        foreach ($targetScores as $idx => $score) {
-            if (!isset($allIndicators[$idx])) break;
-            $ind = $allIndicators[$idx];
+        foreach ($allIndicators as $idx => $ind) {
+            // توزيع واقعي ومدروس للمستويات الأربعة عبر كافة المجالات السبعة
+            if ($idx % 22 === 0) {
+                $score = 0; // 5 مؤشرات غير مفعلة / فجوة حرجة
+            } elseif ($idx % 10 === 0) {
+                $score = 1; // 10 مؤشرات بمستوى محدود
+            } elseif ($idx % 3 === 0) {
+                $score = 2; // 32 مؤشراً بمستوى كافٍ
+            } else {
+                $score = 3; // 62 مؤشراً بمستوى متقدم
+            }
 
             $descriptor = IndicatorScoreDescriptor::where('indicator_id', $ind->indicator_id)
                 ->where('score_level_id', $score + 1)
-                ->first();
+                ->first()
+                ?? IndicatorScoreDescriptor::where('indicator_id', $ind->indicator_id)->first()
+                ?? IndicatorScoreDescriptor::first();
 
             $justification = match ($score) {
                 3 => "تم استيفاء متطلبات المؤشر ({$ind->code}) بالكامل وتوثيقها بملفات الجودة والمحاضر الرسمية لعام 2026.",
@@ -139,7 +145,7 @@ class DemoEvaluationSeeder extends Seeder
             $res = EvaluationResult::create([
                 'evaluation_id'       => $evalFarouq->evaluation_id,
                 'indicator_id'        => $ind->indicator_id,
-                'score_descriptor_id' => $descriptor?->descriptor_id ?? 1,
+                'score_descriptor_id' => $descriptor->descriptor_id,
                 'standard_version_id' => $cycle->version_id,
                 'evaluator_user_id'   => $evaluatorFarouq->user_id,
                 'score'               => $score,
@@ -153,7 +159,7 @@ class DemoEvaluationSeeder extends Seeder
             }
         }
 
-        // ب. إنشاء 8 وثائق مدرسية في school_documents و document_versions
+        // ب. إنشاء 20 وثيقة مدرسية معتمدة تغطي كافة المجالات المعيارية
         $documentTemplates = [
             [
                 'title' => 'الخطة الاستراتيجية والتشغيلية السنوية لمدرسة الفاروق (2026/2027)',
@@ -203,6 +209,78 @@ class DemoEvaluationSeeder extends Seeder
                 'desc'  => 'كشف الإيرادات والمصروفات المخصصة لتحسين البيئة المدرسية وصيانة المرافق.',
                 'file'  => 'farouq_financial_summary_2026.pdf',
             ],
+            [
+                'title' => 'دليل الإرشاد التربوي والنفسي ورعاية الفئات الخاصة',
+                'type'  => 'policy',
+                'desc'  => 'برامج الدعم النفسي والاجتماعي ومتابعة الحالات السلوكية وصعوبات التعلم.',
+                'file'  => 'farouq_counseling_and_special_needs_guide.pdf',
+            ],
+            [
+                'title' => 'الخطة العلاجية والبرامج الإثرائية لتحسين التحصيل العلمي',
+                'type'  => 'plan',
+                'desc'  => 'كشوفات نتائج الاختبارات التشخيصية وخطط تحسين مستويات الطلبة الضعاف.',
+                'file'  => 'farouq_remedial_and_enrichment_plans.pdf',
+            ],
+            [
+                'title' => 'تقرير التدقيق الداخلي ومطابقة معايير الجودة والاعتماد',
+                'type'  => 'report',
+                'desc'  => 'محضر اجتماع لجنة التقييم الذاتي واعتماد حزم الشواهد المرفوعة.',
+                'file'  => 'farouq_internal_quality_audit_2026.pdf',
+            ],
+            [
+                'title' => 'سجل الدورات التدريبية والتطوير المهني للكوادر التعليمية',
+                'type'  => 'record',
+                'desc'  => 'بيانات الورش التدريبية المنفذة في استراتيجيات التدريس الحديثة والإدارة الصفية.',
+                'file'  => 'farouq_staff_professional_development.pdf',
+            ],
+            [
+                'title' => 'دليل وسياسات إدارة البيئة المدرسية والمرافق الصحية',
+                'type'  => 'policy',
+                'desc'  => 'تعليمات النظافة العامة ومتابعة المقصف المدرسي وجودة مياه الشرب.',
+                'file'  => 'farouq_hygiene_and_facilities_policy.pdf',
+            ],
+            [
+                'title' => 'تقرير تحليل نتائج الاختبارات الدورية والنهائية ونسب النجاح',
+                'type'  => 'report',
+                'desc'  => 'مقارنة مستويات التحصيل بين المراحل الدراسية ومؤشرات تقدم الطلبة.',
+                'file'  => 'farouq_academic_performance_analysis.pdf',
+            ],
+            [
+                'title' => 'ميثاق الشراكة المجتمعية وبرامج التعاون مع أولياء الأمور',
+                'type'  => 'policy',
+                'desc'  => 'وثيقة اتفاقيات التعاون مع المجتمع المحلي والمؤسسات الداعمة للمدرسة.',
+                'file'  => 'farouq_community_partnership_charter.pdf',
+            ],
+            [
+                'title' => 'سجلات حضور وغياب الطلبة والكوادر الإدارية والتعليمية',
+                'type'  => 'record',
+                'desc'  => 'بيانات الانضباط المدرسي ونسب الالتزام بالدوام الرسمي لعام 2026.',
+                'file'  => 'farouq_attendance_and_punctuality_log.pdf',
+            ],
+            [
+                'title' => 'محاضر تسليم واستلام المقررات المدرسية والوسائل التعليمية',
+                'type'  => 'minutes',
+                'desc'  => 'كشوفات توزيع الكتب المدرسية والوسائل الإيضاحية على الفصول.',
+                'file'  => 'farouq_textbook_and_media_inventory.pdf',
+            ],
+            [
+                'title' => 'خطة وبرامج الرعاية الصحية المدرسية والإسعافات الأولية',
+                'type'  => 'plan',
+                'desc'  => 'تجهيزات العيادة المدرسية وجداول الفحص الدوري ومتابعة السجلات الصحية.',
+                'file'  => 'farouq_school_health_program_2026.pdf',
+            ],
+            [
+                'title' => 'سجل برامج الموهوبين والابتكارات والمسابقات العلمية',
+                'type'  => 'record',
+                'desc'  => 'قوائم الطلاب الموهوبين والمشاريع العلمية المشاركة في معارض المديرية.',
+                'file'  => 'farouq_gifted_students_portfolio.pdf',
+            ],
+            [
+                'title' => 'دليل إجراءات الشكاوى والمقترحات وصندوق الملاحظات',
+                'type'  => 'policy',
+                'desc'  => 'آلية استقبال ومعالجة شكاوى أولياء الأمور والطلبة وضمان سرية المتابعة.',
+                'file'  => 'farouq_grievance_and_feedback_mechanism.pdf',
+            ],
         ];
 
         $createdVersions = [];
@@ -229,21 +307,47 @@ class DemoEvaluationSeeder extends Seeder
             $createdVersions[] = $ver;
         }
 
-        // ج. إنشاء 18 رابط شاهد تقييمي في evidence_links
-        $linkCount = min(18, count($ratedResults));
-        for ($i = 0; $i < $linkCount; $i++) {
+        // ج. ربط كافة المؤشرات الـ 109 بوثائق شواهد كافية ومستوفاة (متوسط 2-3 شواهد لكل مؤشر بإجمالي 250+ شاهد)
+        for ($i = 0; $i < count($ratedResults); $i++) {
             $item = $ratedResults[$i];
-            $ver = $createdVersions[$i % count($createdVersions)];
+            $ver1 = $createdVersions[$i % count($createdVersions)];
+            $ver2 = $createdVersions[($i + 7) % count($createdVersions)];
 
+            // الشاهد الأساسي الأول
             EvidenceLink::create([
                 'evaluation_id'        => $evalFarouq->evaluation_id,
                 'indicator_id'         => $item['indicator']->indicator_id,
-                'document_version_id'  => $ver->id,
+                'document_version_id'  => $ver1->id,
                 'school_id'            => $schoolFarouq->school_id,
                 'evaluation_result_id' => $item['result']->result_id,
-                'justification'        => "تم استيفاء وتوثيق الشاهد عبر الوثيقة الرسمية ({$ver->file_name}) المعتمدة لعام 2026.",
-                'status'               => ($i % 3 === 0) ? 'draft' : 'completed',
+                'justification'        => "شاهد إثبات أساسي مستوفٍ عبر الوثيقة الرسمية ({$ver1->file_name}) لعام 2026.",
+                'status'               => 'completed',
             ]);
+
+            // الشاهد الداعم الثاني لجميع المؤشرات
+            EvidenceLink::create([
+                'evaluation_id'        => $evalFarouq->evaluation_id,
+                'indicator_id'         => $item['indicator']->indicator_id,
+                'document_version_id'  => $ver2->id,
+                'school_id'            => $schoolFarouq->school_id,
+                'evaluation_result_id' => $item['result']->result_id,
+                'justification'        => "وثيقة داعمة ومحضر متابعة ميداني إضافي عبر ({$ver2->file_name}).",
+                'status'               => 'completed',
+            ]);
+
+            // الشاهد الثالث للمؤشرات ذات الأداء المتقدم (المستوى 2 والمستوى 3)
+            if ($item['score'] >= 2) {
+                $ver3 = $createdVersions[($i + 13) % count($createdVersions)];
+                EvidenceLink::create([
+                    'evaluation_id'        => $evalFarouq->evaluation_id,
+                    'indicator_id'         => $item['indicator']->indicator_id,
+                    'document_version_id'  => $ver3->id,
+                    'school_id'            => $schoolFarouq->school_id,
+                    'evaluation_result_id' => $item['result']->result_id,
+                    'justification'        => "تقرير جودة دوري وإحصائيات داعمة للتحقق المستمر ({$ver3->file_name}).",
+                    'status'               => 'completed',
+                ]);
+            }
         }
 
         // د. خطة تحسين سنوية منشأة
