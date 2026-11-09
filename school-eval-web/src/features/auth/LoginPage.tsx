@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from './AuthContext';
+import { ForgotPasswordModal } from './ForgotPasswordModal';
 import { theme } from '../../styles/theme';
 import { SYSTEM_FULL_NAME, SYSTEM_TAGLINE, SYSTEM_DESCRIPTION } from '../../constants/systemConstants';
 import {
@@ -17,7 +18,12 @@ import {
   Loader2,
 } from 'lucide-react';
 
-export const LoginPage: React.FC = () => {
+interface LoginPageProps {
+  onNavigateToReset?: (email?: string, token?: string) => void;
+}
+
+export const LoginPage: React.FC<LoginPageProps> = ({ onNavigateToReset }) => {
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
   const { login, authError, clearAuthError } = useAuth();
   
   const [username, setUsername] = useState('');
@@ -256,7 +262,7 @@ export const LoginPage: React.FC = () => {
                 </label>
                 <button
                   type="button"
-                  onClick={() => alert('لإعادة تعيين كلمة المرور يرجى مراجعة مسؤول النظام.')}
+                  onClick={() => setShowForgotPassword(true)}
                   style={{
                     fontSize: theme.typography.fontSizes.xs,
                     color: theme.colors.primary[600],
@@ -732,6 +738,14 @@ export const LoginPage: React.FC = () => {
           </div>
         </div>
       </div>
+      <ForgotPasswordModal
+        isOpen={showForgotPassword}
+        onClose={() => setShowForgotPassword(false)}
+        onNavigateToReset={(email, token) => {
+          setShowForgotPassword(false);
+          onNavigateToReset?.(email, token);
+        }}
+      />
     </div>
   );
 };

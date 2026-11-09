@@ -1259,6 +1259,7 @@ class EvidenceOrganizationFeatureTest extends TestCase
         // اختيار مؤشر إلزامي أول: وضع شاهد Draft فقط
         $mandatoryInd1 = IndicatorEvidenceRequirement::where('required', true)->value('indicator_id');
         $this->assertNotNull($mandatoryInd1);
+        $desc1 = IndicatorScoreDescriptor::where('indicator_id', $mandatoryInd1)->value('descriptor_id') ?? IndicatorScoreDescriptor::value('descriptor_id');
         $res1 = EvaluationResult::firstOrCreate(
             [
                 'evaluation_id' => $this->evaluationBelqees->evaluation_id,
@@ -1267,7 +1268,7 @@ class EvidenceOrganizationFeatureTest extends TestCase
             [
                 'standard_version_id' => $this->standardVersion->version_id,
                 'evaluator_user_id'   => $this->evaluatorBelqees->user_id,
-                'score_descriptor_id' => 1,
+                'score_descriptor_id' => $desc1,
                 'score'               => 0,
                 'completion_status'   => 'Pending',
             ]
@@ -1305,6 +1306,7 @@ class EvidenceOrganizationFeatureTest extends TestCase
             ->value('indicator_id');
         $this->assertNotNull($mandatoryInd2);
 
+        $desc2 = IndicatorScoreDescriptor::where('indicator_id', $mandatoryInd2)->value('descriptor_id') ?? IndicatorScoreDescriptor::value('descriptor_id');
         $res2 = EvaluationResult::firstOrCreate(
             [
                 'evaluation_id' => $this->evaluationBelqees->evaluation_id,
@@ -1313,7 +1315,7 @@ class EvidenceOrganizationFeatureTest extends TestCase
             [
                 'standard_version_id' => $this->standardVersion->version_id,
                 'evaluator_user_id'   => $this->evaluatorBelqees->user_id,
-                'score_descriptor_id' => 1,
+                'score_descriptor_id' => $desc2,
                 'score'               => 0,
                 'completion_status'   => 'Pending',
             ]

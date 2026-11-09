@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
-import { UploadCloud, X, AlertCircle } from 'lucide-react';
+import { UploadCloud, X, AlertCircle, FileCheck, Trash2 } from 'lucide-react';
+import { theme } from '../../../../styles/theme';
 
 interface UploadEvidenceModalProps {
   isOpen: boolean;
@@ -10,6 +11,9 @@ interface UploadEvidenceModalProps {
   isUploading?: boolean;
   uploadProgress?: number;
 }
+
+const ALLOWED_EXTENSIONS = ['.pdf', '.png', '.jpg', '.jpeg', '.docx', '.xlsx'];
+const MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024; // 25 MB
 
 export const UploadEvidenceModal: React.FC<UploadEvidenceModalProps> = ({
   isOpen,
@@ -26,26 +30,82 @@ export const UploadEvidenceModal: React.FC<UploadEvidenceModalProps> = ({
   const [title, setTitle] = useState<string>(initialTitle);
   const [notes, setNotes] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
+  const [isDragging, setIsDragging] = useState<boolean>(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-    const handleClose = () => {
+  const isReplacing = !!documentIdToReplace;
+
+  const handleClose = () => {
     if (isUploading) return;
     setFile(null);
     setTitle(initialTitle);
     setNotes('');
     setError(null);
+    setIsDragging(false);
     onClose();
   };
 
-  const isReplacing = !!documentIdToReplace;
+  const validateAndSetFile = (selected: File) => {
+    setError(null);
+
+    // التحقق من الحجم
+    if (selected.size > MAX_FILE_SIZE_BYTES) {
+      setError(`حجم الملف (${(selected.size / (1024 * 1024)).toFixed(2)} ميجابايت) يتجاوز الحد الأقصى المسموح به (25 ميجابايت).`);
+      return false;
+    }
+
+    // التحقق من الامتداد
+    const fileName = selected.name.toLowerCase();
+    const hasValidExt = ALLOWED_EXTENSIONS.some((ext) => fileName.endsWith(ext));
+    if (!hasValidExt) {
+      setError('نوع الملف غير مدعوم. الصيغ المعتمدة: PDF, PNG, JPG, JPEG, Word (docx), Excel (xlsx).');
+      return false;
+    }
+
+    setFile(selected);
+    if (!title && !isReplacing) {
+      setTitle(selected.name.replace(/\.[^/.]+$/, ''));
+    }
+    return true;
+  };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
-      const selected = e.target.files[0];
-      setFile(selected);
-      if (!title && !isReplacing) {
-        setTitle(selected.name.replace(/\.[^/.]+$/, ''));
-      }
+      validateAndSetFile(e.target.files[0]);
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!isUploading) {
+      setIsDragging(true);
+    }
+  };
+
+  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+
+    if (isUploading) return;
+
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      validateAndSetFile(e.dataTransfer.files[0]);
+    }
+  };
+
+  const handleRemoveFile = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setFile(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
     }
   };
 
@@ -54,12 +114,11 @@ export const UploadEvidenceModal: React.FC<UploadEvidenceModalProps> = ({
     setError(null);
 
     if (!file) {
-      setError('يرجى اختيار ملف الشاهد للرفع.');
+      setError('يرجى اختيار أو سحب ملف الشاهد للرفع.');
       return;
     }
 
-    const maxSizeBytes = 25 * 1024 * 1024;
-    if (file.size > maxSizeBytes) {
+    if (file.size > MAX_FILE_SIZE_BYTES) {
       setError('حجم الملف يتجاوز الحد الأقصى المسموح به (25 ميجابايت).');
       return;
     }
@@ -71,7 +130,7 @@ export const UploadEvidenceModal: React.FC<UploadEvidenceModalProps> = ({
         notes,
         documentId: documentIdToReplace,
       });
-      onClose();
+      handleClose();
     } catch (err: unknown) {
       setError((err as Error)?.message || 'فشل في رفع الملف.');
     }
@@ -79,6 +138,8 @@ export const UploadEvidenceModal: React.FC<UploadEvidenceModalProps> = ({
 
   return (
     <div
+      role="dialog"
+      aria-modal="true"
       style={{
         position: 'fixed',
         inset: 0,
@@ -89,16 +150,18 @@ export const UploadEvidenceModal: React.FC<UploadEvidenceModalProps> = ({
         justifyContent: 'center',
         zIndex: 50,
         padding: '16px',
+        direction: 'rtl',
+        fontFamily: theme.typography.fontFamily.sans,
       }}
       onClick={handleClose}
     >
       <div
         style={{
           backgroundColor: '#FFFFFF',
-          borderRadius: '16px',
+          borderRadius: theme.radii.xl,
           width: '100%',
-          maxWidth: '520px',
-          boxShadow: '0 20px 40px rgba(0,0,0,0.2)',
+          maxWidth: '540px',
+          boxShadow: theme.shadows.xl,
           overflow: 'hidden',
           display: 'flex',
           flexDirection: 'column',
@@ -109,17 +172,18 @@ export const UploadEvidenceModal: React.FC<UploadEvidenceModalProps> = ({
         <div
           style={{
             padding: '20px 24px',
-            borderBottom: '1px solid #E2E8F0',
+            borderBottom: `1px solid ${theme.colors.neutral[200]}`,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
+            backgroundColor: theme.colors.neutral[50],
           }}
         >
           <div>
-            <h3 style={{ fontSize: '16px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
+            <h3 style={{ fontSize: '16px', fontWeight: theme.typography.fontWeights.bold, color: theme.colors.neutral[900], margin: 0 }}>
               {isReplacing ? 'استبدال الشاهد بنسخة أحدث (إصدار جديد)' : 'إيداع وتوثيق شاهد جديد في المستودع'}
             </h3>
-            <p style={{ fontSize: '12px', color: '#64748B', margin: '3px 0 0 0' }}>
+            <p style={{ fontSize: '12px', color: theme.colors.neutral[500], margin: '4px 0 0 0' }}>
               {isReplacing
                 ? 'يتم حفظ النسخة السابقة في الأرشيف وتوليد إصدار جديد برقم تسلسلي'
                 : 'رفع المستند وفهرسته مع تحديد بيانات التحقق'}
@@ -127,16 +191,17 @@ export const UploadEvidenceModal: React.FC<UploadEvidenceModalProps> = ({
           </div>
           <button
             onClick={handleClose}
+            aria-label="إغلاق"
             style={{
               width: '32px',
               height: '32px',
-              borderRadius: '8px',
-              backgroundColor: '#F1F5F9',
+              borderRadius: theme.radii.md,
+              backgroundColor: theme.colors.neutral[200],
               border: 'none',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              color: '#64748B',
+              color: theme.colors.neutral[600],
               cursor: 'pointer',
             }}
           >
@@ -145,30 +210,31 @@ export const UploadEvidenceModal: React.FC<UploadEvidenceModalProps> = ({
         </div>
 
         {/* Form Body */}
-        <form onSubmit={handleSubmit} style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        <form onSubmit={handleSubmit} style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '18px' }}>
           {error && (
             <div
+              role="alert"
               style={{
-                padding: '10px 14px',
-                borderRadius: '8px',
-                backgroundColor: '#FEF2F2',
-                border: '1px solid #FECACA',
-                color: '#DC2626',
-                fontSize: '12.5px',
+                padding: '12px 14px',
+                borderRadius: theme.radii.md,
+                backgroundColor: theme.colors.status.danger.bg,
+                border: `1px solid ${theme.colors.status.danger.border}`,
+                color: theme.colors.status.danger.text,
+                fontSize: theme.typography.fontSizes.xs,
                 display: 'flex',
                 alignItems: 'center',
                 gap: '8px',
               }}
             >
-              <AlertCircle size={16} />
+              <AlertCircle size={16} style={{ flexShrink: 0 }} />
               <span>{error}</span>
             </div>
           )}
 
           {/* Title */}
           <div>
-            <label style={{ fontSize: '13px', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '6px' }}>
-              عنوان المستند / الشاهد
+            <label style={{ fontSize: '13px', fontWeight: theme.typography.fontWeights.semibold, color: theme.colors.neutral[700], display: 'block', marginBottom: '6px' }}>
+              عنوان المستند / الشاهد <span style={{ color: theme.colors.status.danger.text }}>*</span>
             </label>
             <input
               type="text"
@@ -178,9 +244,9 @@ export const UploadEvidenceModal: React.FC<UploadEvidenceModalProps> = ({
               style={{
                 width: '100%',
                 padding: '10px 14px',
-                borderRadius: '8px',
-                border: '1px solid #CBD5E1',
-                fontSize: '13px',
+                borderRadius: theme.radii.md,
+                border: `1px solid ${theme.colors.neutral[300]}`,
+                fontSize: theme.typography.fontSizes.sm,
                 outline: 'none',
                 boxSizing: 'border-box',
               }}
@@ -196,44 +262,116 @@ export const UploadEvidenceModal: React.FC<UploadEvidenceModalProps> = ({
             style={{ display: 'none' }}
           />
 
-          {/* File Picker Box */}
-          <div
-            onClick={() => fileInputRef.current?.click()}
-            style={{
-              border: '2px dashed #CBD5E1',
-              borderRadius: '12px',
-              padding: '20px',
-              textAlign: 'center',
-              backgroundColor: '#F8FAFC',
-              cursor: 'pointer',
-              transition: 'background-color 0.15s',
-            }}
-          >
-            <UploadCloud size={32} color="#059669" style={{ margin: '0 auto 8px' }} />
-            {file ? (
-              <div>
-                <div style={{ fontSize: '13px', fontWeight: 700, color: '#059669' }}>
-                  {file.name}
+          {/* Drag & Drop Zone */}
+          <div>
+            <label style={{ fontSize: '13px', fontWeight: theme.typography.fontWeights.semibold, color: theme.colors.neutral[700], display: 'block', marginBottom: '6px' }}>
+              ملف الشاهد المعتمد
+            </label>
+            <div
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+              onClick={() => {
+                if (!file) fileInputRef.current?.click();
+              }}
+              style={{
+                border: isDragging
+                  ? `2px dashed ${theme.colors.primary[500]}`
+                  : file
+                  ? `2px solid ${theme.colors.primary[300]}`
+                  : `2px dashed ${theme.colors.neutral[300]}`,
+                borderRadius: theme.radii.lg,
+                padding: '24px 16px',
+                textAlign: 'center',
+                backgroundColor: isDragging
+                  ? theme.colors.primary[50]
+                  : file
+                  ? theme.colors.primary[50]
+                  : theme.colors.neutral[50],
+                cursor: file ? 'default' : 'pointer',
+                transition: 'all 0.2s ease',
+              }}
+            >
+              {file ? (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', textAlign: 'right' }}>
+                    <div
+                      style={{
+                        width: '40px',
+                        height: '40px',
+                        borderRadius: theme.radii.md,
+                        backgroundColor: theme.colors.primary[100],
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: theme.colors.primary[700],
+                      }}
+                    >
+                      <FileCheck size={22} />
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '13px', fontWeight: theme.typography.fontWeights.bold, color: theme.colors.primary[900] }}>
+                        {file.name}
+                      </div>
+                      <div style={{ fontSize: '11px', color: theme.colors.neutral[500], marginTop: '2px' }}>
+                        {(file.size / (1024 * 1024)).toFixed(2)} MB • جاهز للرفع والاعتماد
+                      </div>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleRemoveFile}
+                    title="إزالة الملف واختيار غيره"
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: theme.colors.status.danger.text,
+                      cursor: 'pointer',
+                      padding: '8px',
+                      borderRadius: theme.radii.md,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                    onMouseOver={(e) => (e.currentTarget.style.backgroundColor = theme.colors.status.danger.bg)}
+                    onMouseOut={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                  >
+                    <Trash2 size={18} />
+                  </button>
                 </div>
-                <div style={{ fontSize: '11.5px', color: '#64748B', marginTop: '2px' }}>
-                  {(file.size / (1024 * 1024)).toFixed(2)} MB • جاهز للرفع
+              ) : (
+                <div>
+                  <div
+                    style={{
+                      width: '48px',
+                      height: '48px',
+                      borderRadius: '50%',
+                      backgroundColor: isDragging ? theme.colors.primary[100] : theme.colors.neutral[200],
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      margin: '0 auto 10px',
+                      color: isDragging ? theme.colors.primary[700] : theme.colors.neutral[600],
+                      transition: 'background-color 0.2s',
+                    }}
+                  >
+                    <UploadCloud size={26} />
+                  </div>
+                  <div style={{ fontSize: '13.5px', fontWeight: theme.typography.fontWeights.bold, color: theme.colors.neutral[800] }}>
+                    {isDragging ? 'أفلت الملف هنا للإيداع المباشر' : 'اسحب وأفلت ملف الشاهد هنا، أو اضغط للتصفح'}
+                  </div>
+                  <div style={{ fontSize: '11px', color: theme.colors.neutral[500], marginTop: '4px' }}>
+                    الصيغ المدعومة: PDF, PNG, JPG, Word (docx), Excel (xlsx) — الحجم الأقصى 25 ميجابايت
+                  </div>
                 </div>
-              </div>
-            ) : (
-              <div>
-                <div style={{ fontSize: '13px', fontWeight: 700, color: '#1E293B' }}>
-                  اضغط لاختيار ملف الشاهد من جهازك
-                </div>
-                <div style={{ fontSize: '11px', color: '#64748B', marginTop: '3px' }}>
-                  الصيغ المسموحة: PDF, PNG, JPG, Word, Excel (حد أقصى 25MB)
-                </div>
-              </div>
-            )}
+              )}
+            </div>
           </div>
 
           {/* Change notes */}
           <div>
-            <label style={{ fontSize: '13px', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '6px' }}>
+            <label style={{ fontSize: '13px', fontWeight: theme.typography.fontWeights.semibold, color: theme.colors.neutral[700], display: 'block', marginBottom: '6px' }}>
               ملاحظات التوثيق والتعديل
             </label>
             <textarea
@@ -244,9 +382,9 @@ export const UploadEvidenceModal: React.FC<UploadEvidenceModalProps> = ({
               style={{
                 width: '100%',
                 padding: '10px 14px',
-                borderRadius: '8px',
-                border: '1px solid #CBD5E1',
-                fontSize: '13px',
+                borderRadius: theme.radii.md,
+                border: `1px solid ${theme.colors.neutral[300]}`,
+                fontSize: theme.typography.fontSizes.sm,
                 outline: 'none',
                 resize: 'none',
                 boxSizing: 'border-box',
@@ -258,12 +396,12 @@ export const UploadEvidenceModal: React.FC<UploadEvidenceModalProps> = ({
           {/* Progress Bar during upload */}
           {isUploading && (
             <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: '#059669', marginBottom: '4px', fontWeight: 700 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: theme.colors.primary[700], marginBottom: '4px', fontWeight: theme.typography.fontWeights.bold }}>
                 <span>جاري رفع وتوثيق الشاهد...</span>
                 <span>{uploadProgress}%</span>
               </div>
-              <div style={{ height: '6px', backgroundColor: '#E2E8F0', borderRadius: '4px', overflow: 'hidden' }}>
-                <div style={{ height: '100%', width: `${uploadProgress}%`, backgroundColor: '#059669', transition: 'width 0.2s' }} />
+              <div style={{ height: '6px', backgroundColor: theme.colors.neutral[200], borderRadius: '4px', overflow: 'hidden' }}>
+                <div style={{ height: '100%', width: `${uploadProgress}%`, backgroundColor: theme.colors.primary[600], transition: 'width 0.2s' }} />
               </div>
             </div>
           )}
@@ -276,30 +414,38 @@ export const UploadEvidenceModal: React.FC<UploadEvidenceModalProps> = ({
               disabled={isUploading}
               style={{
                 padding: '9px 18px',
-                borderRadius: '8px',
-                backgroundColor: '#F1F5F9',
-                color: '#475569',
-                fontSize: '13px',
-                fontWeight: 600,
+                borderRadius: theme.radii.md,
+                backgroundColor: theme.colors.neutral[100],
+                color: theme.colors.neutral[700],
+                fontSize: theme.typography.fontSizes.sm,
+                fontWeight: theme.typography.fontWeights.medium,
                 border: 'none',
-                cursor: 'pointer',
+                cursor: isUploading ? 'not-allowed' : 'pointer',
               }}
             >
               إلغاء
             </button>
             <button
               type="submit"
-              disabled={isUploading}
+              disabled={isUploading || !file}
               style={{
                 padding: '9px 22px',
-                borderRadius: '8px',
-                backgroundColor: '#059669',
-                color: '#FFFFFF',
-                fontSize: '13px',
-                fontWeight: 700,
+                borderRadius: theme.radii.md,
+                backgroundColor: theme.colors.primary[600],
+                color: theme.colors.neutral.white,
+                fontSize: theme.typography.fontSizes.sm,
+                fontWeight: theme.typography.fontWeights.semibold,
                 border: 'none',
-                cursor: 'pointer',
-                boxShadow: '0 2px 6px rgba(5, 150, 105, 0.25)',
+                cursor: isUploading || !file ? 'not-allowed' : 'pointer',
+                opacity: isUploading || !file ? 0.6 : 1,
+                boxShadow: theme.shadows.sm,
+                transition: 'background-color 0.15s ease',
+              }}
+              onMouseOver={(e) => {
+                if (!isUploading && file) e.currentTarget.style.backgroundColor = theme.colors.primary[700];
+              }}
+              onMouseOut={(e) => {
+                if (!isUploading && file) e.currentTarget.style.backgroundColor = theme.colors.primary[600];
               }}
             >
               {isUploading ? 'جاري الرفع...' : isReplacing ? 'اعتماد النسخة الجديدة' : 'إيداع الشاهد'}

@@ -10,6 +10,9 @@ import {
   Lock,
   ArrowRight,
   ArrowLeft,
+  WifiOff,
+  RefreshCw,
+  AlertTriangle,
 } from 'lucide-react';
 
 interface RubricAssessmentPageProps {
@@ -34,6 +37,13 @@ export const RubricAssessmentPage: React.FC<RubricAssessmentPageProps> = ({
     goToNextIndicator,
     hasPrevious,
     hasNext,
+    isOffline,
+    pendingOfflineCount,
+    isSyncing,
+    conflictWarning,
+    syncOfflineDrafts,
+    resolveConflictWithLocal,
+    dismissConflict,
   } = useSelfEvaluation(selectedIndicatorId || undefined);
 
   const { uploadEvidenceFile, isUploading, uploadProgress } = useEvidences();
@@ -181,6 +191,115 @@ export const RubricAssessmentPage: React.FC<RubricAssessmentPageProps> = ({
         >
           <Lock size={18} />
           <span>تم إقفال ملف التقييم بالختم الرقمي النهائي. شاشة الرصد في وضع القراءة فقط.</span>
+        </div>
+      )}
+
+      {/* Offline Alert & Pending Sync Banner (FE-GAP-05 / U-35) */}
+      {(isOffline || pendingOfflineCount > 0) && (
+        <div
+          role="status"
+          style={{
+            backgroundColor: '#FFFBEB',
+            border: '1px solid #FDE68A',
+            borderRadius: '10px',
+            padding: '12px 18px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '12px',
+            color: '#92400E',
+            fontSize: '13px',
+            fontWeight: 600,
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <WifiOff size={18} color="#D97706" />
+            <span>
+              {isOffline
+                ? 'وضع عدم الاتصال — المسودة والتعديلات تُحفظ محلياً تلقائياً.'
+                : `توجد ${pendingOfflineCount} تقييمات محفوظة محلياً بانتظار المزامنة مع الخادم.`}
+            </span>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => syncOfflineDrafts()}
+            disabled={isSyncing}
+            style={{
+              padding: '6px 14px',
+              borderRadius: '8px',
+              backgroundColor: '#D97706',
+              color: '#FFFFFF',
+              border: 'none',
+              fontSize: '12px',
+              fontWeight: 700,
+              cursor: isSyncing ? 'not-allowed' : 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+            }}
+          >
+            <RefreshCw size={14} className={isSyncing ? 'animate-spin' : ''} />
+            <span>{isSyncing ? 'جاري المزامنة...' : 'مزامنة الآن'}</span>
+          </button>
+        </div>
+      )}
+
+      {/* Conflict Warning Banner (FE-GAP-05 Simple Conflict Resolution) */}
+      {conflictWarning && (
+        <div
+          role="alert"
+          style={{
+            backgroundColor: '#FEF2F2',
+            border: '1px solid #FECACA',
+            borderRadius: '10px',
+            padding: '14px 18px',
+            color: '#991B1B',
+            fontSize: '13px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '10px',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', fontWeight: 700 }}>
+            <AlertTriangle size={18} color="#DC2626" style={{ flexShrink: 0, marginTop: '2px' }} />
+            <span>{conflictWarning}</span>
+          </div>
+          <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+            <button
+              type="button"
+              onClick={dismissConflict}
+              style={{
+                padding: '6px 12px',
+                borderRadius: '6px',
+                border: '1px solid #CBD5E1',
+                backgroundColor: '#FFFFFF',
+                color: '#475569',
+                fontSize: '12px',
+                cursor: 'pointer',
+                fontWeight: 600,
+              }}
+            >
+              إلغاء والتراجع
+            </button>
+            <button
+              type="button"
+              onClick={resolveConflictWithLocal}
+              style={{
+                padding: '6px 14px',
+                borderRadius: '6px',
+                border: 'none',
+                backgroundColor: '#DC2626',
+                color: '#FFFFFF',
+                fontSize: '12px',
+                cursor: 'pointer',
+                fontWeight: 700,
+              }}
+            >
+              اعتماد نسختي المحلية (آخر تعديل يفوز)
+            </button>
+          </div>
         </div>
       )}
 

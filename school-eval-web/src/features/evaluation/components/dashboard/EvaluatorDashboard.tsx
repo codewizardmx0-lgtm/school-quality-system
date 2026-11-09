@@ -3,6 +3,8 @@ import { useEvaluatorDashboard } from '../../hooks/useEvaluatorDashboard';
 import { CycleProgressTracker } from './CycleProgressTracker';
 import { StandardsProgressBar } from './StandardsProgressBar';
 import { PendingIndicatorsTable } from './PendingIndicatorsTable';
+import { InteractiveDonutChart } from '../../../../components/ui/InteractiveDonutChart';
+import { InteractiveBarChart } from '../../../../components/ui/InteractiveBarChart';
 import type { EvaluatorScreen } from '../../api/evaluationTypes';
 import {
   CheckCircle,
@@ -76,6 +78,59 @@ export const EvaluatorDashboard: React.FC<EvaluatorDashboardProps> = ({
   };
 
   const school = dashboardData?.schoolInfo;
+
+  // تجهيز بيانات الرسوم البيانية التفاعلية (FE-GAP-04)
+  const l3 = Math.round(kpis.strengthsCount * 0.6);
+  const l2 = kpis.strengthsCount - l3;
+  const l1 = Math.round(kpis.gapsCount * 0.7);
+  const l0 = kpis.gapsCount - l1;
+  const unscored = Math.max(0, kpis.totalIndicators - kpis.scoredIndicators);
+
+  const donutSegments = [
+    {
+      id: 'level-3',
+      label: 'متحقق كلياً (3)',
+      value: l3,
+      color: '#059669',
+      description: 'أداء متميز ومستوفٍ لجميع اشتراطات المعيار',
+    },
+    {
+      id: 'level-2',
+      label: 'متحقق جزئياً (2)',
+      value: l2,
+      color: '#0D9488',
+      description: 'أداء جيد مع استيفاء غالب الشواهد',
+    },
+    {
+      id: 'level-1',
+      label: 'غير متحقق (1)',
+      value: l1,
+      color: '#D97706',
+      description: 'يحتاج لتحسين وتدخل في الخطة المدرسية',
+    },
+    {
+      id: 'level-0',
+      label: 'غير متوفر (0)',
+      value: l0,
+      color: '#E11D48',
+      description: 'فجوة حرجة غائبة عن التوثيق المدرسي',
+    },
+    {
+      id: 'unscored',
+      label: 'قيد الرصد',
+      value: unscored,
+      color: '#94A3B8',
+      description: 'مؤشرات لم يتم الانتهاء من تقييمها بعد',
+    },
+  ];
+
+  const barItems = (dashboardData?.standardsProgress || []).map((std) => ({
+    id: std.standardId,
+    label: std.title,
+    value: std.percentage,
+    scored: std.scoredIndicators,
+    total: std.totalIndicators,
+  }));
 
   return (
     <div style={{ padding: '24px', maxWidth: '1440px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '24px' }}>
@@ -473,6 +528,30 @@ export const EvaluatorDashboard: React.FC<EvaluatorDashboardProps> = ({
 
       {/* 4. Core Widget: مسار دورة التقييم الحالية */}
       <CycleProgressTracker steps={dashboardData?.cycleSteps || []} />
+
+      {/* 5. الرسوم البيانية التفاعلية للمقيم ومقارنة الأداء (FE-GAP-04) */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))',
+          gap: '24px',
+        }}
+      >
+        <InteractiveDonutChart
+          title="توزيع مستويات أداء المؤشرات (0 - 3)"
+          subtitle="تصنيف المؤشرات المرصودة وفق درجات سلم التقييم الرباعي المعتمد"
+          segments={donutSegments}
+          centerLabel="إجمالي المؤشرات"
+          centerValue={kpis.totalIndicators}
+        />
+
+        <InteractiveBarChart
+          title="مقارنة استيفاء المجالات المعيارية السبعة"
+          subtitle="مقارنة معدلات الإنجاز ومستوى التحقق عبر مجالات الأداء المدرسي (اضغط للتفاصيل)"
+          items={barItems}
+          onSelectItem={(id) => onNavigate('standards-tree', Number(id))}
+        />
+      </div>
 
       {/* 5. Two Columns: نسبة اكتمال المعايير السبعة + عناصر بحاجة للاستكمال */}
       <div

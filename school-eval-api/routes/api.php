@@ -117,6 +117,7 @@ Route::prefix('v1')->group(function () {
             Route::get('/', [\App\Http\Controllers\Api\V1\AdminController::class, 'backups'])->name('api.v1.backups.index');
             Route::post('/', [\App\Http\Controllers\Api\V1\AdminController::class, 'triggerBackup'])->name('api.v1.backups.trigger');
             Route::post('/{id}/verify', [\App\Http\Controllers\Api\V1\AdminController::class, 'verifyBackup'])->name('api.v1.backups.verify');
+            Route::get('/{id}/download', [\App\Http\Controllers\Api\V1\AdminController::class, 'downloadBackup'])->name('api.v1.backups.download');
         });
 
         Route::prefix('system-settings')->group(function () {

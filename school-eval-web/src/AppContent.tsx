@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from './features/auth/AuthContext';
 import { LoginPage } from './features/auth/LoginPage';
+import { ResetPasswordPage } from './features/auth/ResetPasswordPage';
 import { Sidebar } from './components/Sidebar';
 import { TopNavbar } from './components/TopNavbar';
 import { DashboardPage } from './components/DashboardPage';
@@ -73,7 +74,29 @@ export const AppContent: React.FC = () => {
   }
 
   if (!isAuthenticated) {
-    return <LoginPage />;
+    if (currentPath === '/reset-password' || currentPath.startsWith('/reset-password')) {
+      return (
+        <ResetPasswordPage
+          onNavigateToLogin={() => {
+            window.history.pushState({}, '', '/');
+            setCurrentPath('/');
+          }}
+        />
+      );
+    }
+    return (
+      <LoginPage
+        onNavigateToReset={(email, token) => {
+          const params = new URLSearchParams();
+          if (email) params.set('email', email);
+          if (token) params.set('token', token);
+          const qs = params.toString();
+          const targetUrl = `/reset-password${qs ? `?${qs}` : ''}`;
+          window.history.pushState({}, '', targetUrl);
+          setCurrentPath('/reset-password');
+        }}
+      />
+    );
   }
 
   const isAdmin = user?.roles?.some((r) => r.roleName === 'admin' || r.roleName === 'مسؤول النظام');
