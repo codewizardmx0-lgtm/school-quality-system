@@ -272,6 +272,52 @@ export const evaluatorApi = {
   },
 
   /**
+   * 18.b Export Detailed Dossier Report PDF (Batch 5 - FE-GAP-08 / BE-GAP-07 / U-44)
+   */
+  async exportDetailedReportPdf(): Promise<void> {
+    const response = await apiClient.get('/evaluator/export-detailed-pdf', {
+      responseType: 'blob',
+    });
+
+    const blob = new Blob([response as unknown as BlobPart], { type: 'application/pdf' });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    const now = new Date();
+    const dateStr = now.toISOString().split('T')[0];
+    const timeStr = `${String(now.getHours()).padStart(2, '0')}-${String(now.getMinutes()).padStart(2, '0')}`;
+    link.download = `استمارة_التقرير_المفصلة_للتقييم_${dateStr}_${timeStr}.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+  },
+
+  /**
+   * 18.c Export Detailed Matrix Excel Workbook (Batch 5 - FE-GAP-08 / BE-GAP-07 / U-44)
+   */
+  async exportDetailedReportExcel(): Promise<void> {
+    const response = await apiClient.get('/evaluator/export-detailed-excel', {
+      responseType: 'blob',
+    });
+
+    const blob = new Blob([response as unknown as BlobPart], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    const now = new Date();
+    const dateStr = now.toISOString().split('T')[0];
+    const timeStr = `${String(now.getHours()).padStart(2, '0')}-${String(now.getMinutes()).padStart(2, '0')}`;
+    link.download = `مصفوفة_التقييم_الشاملة_${dateStr}_${timeStr}.xlsx`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+  },
+
+  /**
    * 19. GET /api/v1/evaluator/evidence-inventory
    * Fetch 109 indicators evidence inventory and sufficiency stats
    */

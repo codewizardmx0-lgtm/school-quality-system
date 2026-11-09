@@ -160,4 +160,233 @@ class EvaluationReportService
             'description' => 'المدرسة تواجه فجوات جوهرية في المعايير وتستلزم تدخلاً تطويرياً عاجلاً.',
         ];
     }
+
+    /**
+     * توليد محتوى PDF لاستمارة التقرير المفصلة لتقويم المدرسة (Detailed Dossier) - الحزمة 5 / FE-GAP-08 / BE-GAP-07 / U-44.
+     *
+     * @param Evaluation $evaluation
+     * @param User|null $requester
+     * @return string بايتات ملف الـ PDF
+     */
+    public function generateDetailedDossierPdf(Evaluation $evaluation, ?User $requester = null): string
+    {
+        // 1. حساب النتائج الموزونة والتقييم النوعي
+        $results = $this->analyticsService->calculateAssessmentResults($evaluation);
+        $finalScore = (float) ($results['final_score'] ?? 0.0);
+        $rating = $this->resolveRatingTier($finalScore);
+
+        // 2. تحميل النتائج المسجلة في هذا التقييم
+        $allResults = \App\Models\EvaluationResult::where('evaluation_id', $evaluation->evaluation_id)
+            ->get()
+            ->keyBy('indicator_id');
+
+        // 3. بناء إحصائيات توزيع المستويات الأربعة
+        $scoreDistribution = [
+            3 => 0,
+            2 => 0,
+            1 => 0,
+            0 => 0,
+        ];
+        $totalEarnedPoints = 0.0;
+        $scoredCount = 0;
+
+        foreach ($allResults as $res) {
+            if ($res->score !== null && in_array((int)$res->score, [0, 1, 2, 3], true)) {
+                $scoreDistribution[(int)$res->score]++;
+                $totalEarnedPoints += (float)$res->score;
+                $scoredCount++;
+            }
+        }
+
+        // 4. استرجاع الشجرة المعيارية الكاملة والمؤشرات الـ 109 وشواهدها
+        $versionId = $evaluation->cycle?->version_id;
+        $standards = \App\Models\Standard::query()
+            ->when($versionId, fn($q) => $q->where('version_id', $versionId))
+            ->with([
+                'subStandards.indicators.verificationTools',
+                'subStandards.indicators.evidenceLinks' => fn($q) => $q->where('evaluation_id', $evaluation->evaluation_id)->with('documentVersion.document'),
+            ])
+            ->orderBy('standard_id')
+            ->get();
+
+        $totalIndicatorsCount = 0;
+        $totalEvidenceCount = 0;
+        $standardsTree = [];
+        $standardsSummary = [];
+
+        foreach ($standards as $std) {
+            $stdIndicatorsCount = 0;
+            $stdScoredCount = 0;
+            $stdPoints = 0.0;
+            $stdEvidenceCount = 0;
+            $subStandardsData = [];
+
+            foreach ($std->subStandards as $sub) {
+                $indicatorsData = [];
+
+                foreach ($sub->indicators as $ind) {
+                    $totalIndicatorsCount++;
+                    $stdIndicatorsCount++;
+
+                    $result = $allResults->get($ind->indicator_id);
+                    $score = $result ? ($result->score !== null ? (int)$result->score : null) : null;
+                    if ($score !== null) {
+                        $stdScoredCount++;
+                        $stdPoints += $score;
+                    }
+
+                    $evidenceLinks = $ind->evidenceLinks ?? collect();
+                    $evidenceCount = $evidenceLinks->count();
+                    $totalEvidenceCount += $evidenceCount;
+                    $stdEvidenceCount += $evidenceCount;
+
+                    $evidenceTitles = $evidenceLinks->map(function ($link) {
+                        return $link->documentVersion?->document?->title
+                            ?? $link->documentVersion?->file_name
+                            ?? 'مستند بدون اسم';
+                    })->filter()->values()->all();
+
+                    $tools = $ind->verificationTools->pluck('tool_name_ar')->filter()->values()->all();
+
+                    $indicatorsData[] = [
+                        'indicator_id'        => $ind->indicator_id,
+                        'indicator_code'      => $ind->indicator_code,
+                        'indicator_name'      => $ind->indicator_name,
+                        'verification_tools'  => $tools,
+                        'score'               => $score,
+                        'evidence_count'      => $evidenceCount,
+                        'evidence_titles'     => $evidenceTitles,
+                        'notes'               => $result?->textual_result,
+                    ];
+                }
+
+                $subStandardsData[] = [
+                    'sub_standard_id'   => $sub->sub_standard_id,
+                    'sub_standard_code' => $sub->sub_standard_code,
+                    'sub_standard_name' => $sub->sub_standard_name,
+                    'indicators'        => $indicatorsData,
+                ];
+            }
+
+            $stdAvg = $stdScoredCount > 0 ? round($stdPoints / $stdScoredCount, 2) : 0.0;
+            $stdComp = $stdIndicatorsCount > 0 ? round(($stdScoredCount / $stdIndicatorsCount) * 100, 1) : 0.0;
+            $stdWeight = (float) $std->weight;
+            $weightedContrib = ($stdAvg / 3.0) * $stdWeight;
+
+            $standardsSummary[] = [
+                'standard_id'           => $std->standard_id,
+                'standard_code'         => $std->standard_code,
+                'standard_name'         => $std->standard_name,
+                'weight'                => $stdWeight,
+                'average_score'         => $stdAvg,
+                'completion_rate'       => $stdComp,
+                'weighted_contribution' => round($weightedContrib, 1),
+                'evidence_count'        => $stdEvidenceCount,
+            ];
+
+            $standardsTree[] = [
+                'standard_id'   => $std->standard_id,
+                'standard_code' => $std->standard_code,
+                'standard_name' => $std->standard_name,
+                'weight'        => $stdWeight,
+                'sub_standards' => $subStandardsData,
+            ];
+        }
+
+        $completionRate = $totalIndicatorsCount > 0 ? round(($scoredCount / $totalIndicatorsCount) * 100, 1) : 0.0;
+        $avgScoreOutOf3 = $scoredCount > 0 ? round($totalEarnedPoints / $scoredCount, 2) : 0.0;
+
+        $school = $evaluation->school;
+
+        $viewData = [
+            'system_name'            => config('reports.system_name', 'نظام إدارة الجودة والتقويم والاعتماد المدرسي - منصة ارتقاء'),
+            'school'                 => [
+                'school_id'            => $school->school_id,
+                'school_code'          => $school->school_code,
+                'school_name'          => $school->school_name,
+                'governorate'          => $school->governorate ?? 'أمانة العاصمة',
+                'educational_district' => $school->educational_district ?? 'معين',
+                'educational_stage'    => $school->educational_stage ?? 'أساسي وثانوي',
+                'school_type'          => $school->school_type === 'private' ? 'أهلي' : 'حكومي',
+            ],
+            'evaluation'             => [
+                'evaluation_id' => $evaluation->evaluation_id,
+                'status'        => $evaluation->status,
+                'created_at'    => $evaluation->created_at,
+            ],
+            'cycle'                  => [
+                'cycle_name'    => $evaluation->cycle?->cycle_name ?? 'الدورة الوطنية للتقويم المدرسي',
+                'academic_year' => $evaluation->cycle?->academic_year ?? '2025/2026',
+            ],
+            'final_score'            => $finalScore,
+            'rating'                 => $rating,
+            'completion_rate'        => $completionRate,
+            'scored_indicators_count'=> $scoredCount,
+            'total_indicators_count' => $totalIndicatorsCount,
+            'total_evidence_count'   => $totalEvidenceCount,
+            'average_score_out_of_3' => $avgScoreOutOf3,
+            'scoreDistribution'      => $scoreDistribution,
+            'standards_summary'      => $standardsSummary,
+            'standards_tree'         => $standardsTree,
+            'report_date'            => Carbon::now()->format('Y-m-d H:i'),
+        ];
+
+        $html = View::make('reports.detailed_dossier_report', $viewData)->render();
+
+        // 5. تهيئة mPDF
+        $defaultConfig = (new ConfigVariables())->getDefaults();
+        $fontDirs = $defaultConfig['fontDir'];
+        $defaultFontConfig = (new FontVariables())->getDefaults();
+        $fontData = $defaultFontConfig['fontdata'];
+
+        $customFontsDir = resource_path('fonts');
+        $hasAmiri = file_exists($customFontsDir . '/Amiri-Regular.ttf');
+
+        $tempDir = storage_path('app/temp-mpdf');
+        if (!is_dir($tempDir)) {
+            mkdir($tempDir, 0755, true);
+        }
+
+        $mpdfConfig = [
+            'mode'             => 'utf-8',
+            'format'           => 'A4',
+            'orientation'      => 'P',
+            'margin_left'      => 10,
+            'margin_right'     => 10,
+            'margin_top'       => 38,
+            'margin_bottom'    => 18,
+            'margin_header'    => 8,
+            'margin_footer'    => 8,
+            'autoScriptToLang' => true,
+            'autoArabic'       => true,
+            'autoLangToFont'   => true,
+            'default_font'     => $hasAmiri ? 'amiri' : 'dejavusans',
+            'tempDir'          => $tempDir,
+        ];
+
+        if ($hasAmiri) {
+            $mpdfConfig['fontDir'] = array_merge($fontDirs, [$customFontsDir]);
+            $mpdfConfig['fontdata'] = $fontData + [
+                'amiri' => [
+                    'R' => 'Amiri-Regular.ttf',
+                    'B' => 'Amiri-Bold.ttf',
+                ],
+            ];
+        }
+
+        $mpdf = new Mpdf($mpdfConfig);
+        $mpdf->SetDirectionality('rtl');
+        $mpdf->SetTitle('استمارة التقرير المفصلة - ' . $school->school_name);
+        $mpdf->SetAuthor(config('reports.system_name'));
+
+        if ($evaluation->status !== 'Completed') {
+            $mpdf->SetWatermarkText('مسودة تقييم غير مكتملة');
+            $mpdf->showWatermarkText = true;
+            $mpdf->watermarkTextAlpha = 0.08;
+        }
+
+        $mpdf->WriteHTML($html);
+
+        return $mpdf->Output('', 'S');
+    }
 }

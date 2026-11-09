@@ -1390,6 +1390,65 @@ class EvaluatorApiController extends Controller
     }
 
     /**
+     * GET /api/v1/evaluator/export-detailed-pdf
+     * تصدير استمارة التقرير المفصلة لتقويم المدرسة (Detailed Dossier) بصيغة PDF - الحزمة 5 / FE-GAP-08 / BE-GAP-07 / U-44
+     */
+    public function exportDetailedReportPdf(Request $request)
+    {
+        $user = $request->user();
+        if ($user && !$user->hasPermission('evaluations.view') && !$user->hasPermission('reports.view') && !$user->hasRole('admin') && !$user->hasRole('school_evaluator') && !$user->hasRole('school_principal')) {
+            return ApiResponse::forbidden('ليس لديك صلاحية لتصدير استمارة التقرير المفصلة.');
+        }
+
+        $evaluation = $this->getActiveEvaluation($request);
+        if (!$evaluation) {
+            return ApiResponse::notFound('ملف التقييم غير موجود.');
+        }
+
+        $evaluation->loadMissing(['school', 'cycle']);
+
+        $reportService = app(\App\Services\EvaluationReportService::class);
+        $pdfContent = $reportService->generateDetailedDossierPdf($evaluation, $user);
+
+        $schoolCode = $evaluation->school?->school_code ?? 'SCH';
+        $fileName = 'detailed_dossier_' . $schoolCode . '_' . date('Y-m-d_H-i') . '.pdf';
+
+        return response($pdfContent, 200, [
+            'Content-Type'        => 'application/pdf',
+            'Content-Disposition' => 'attachment; filename="' . $fileName . '"',
+            'Cache-Control'       => 'private, max-age=0, must-revalidate',
+            'Pragma'              => 'public',
+        ]);
+    }
+
+    /**
+     * GET /api/v1/evaluator/export-detailed-excel
+     * تصدير مصفوفة التقييم الشاملة بتنسيق Excel (XLSX) - الحزمة 5 / FE-GAP-08 / BE-GAP-07 / U-44
+     */
+    public function exportDetailedReportExcel(Request $request)
+    {
+        $user = $request->user();
+        if ($user && !$user->hasPermission('evaluations.view') && !$user->hasPermission('reports.view') && !$user->hasRole('admin') && !$user->hasRole('school_evaluator') && !$user->hasRole('school_principal')) {
+            return ApiResponse::forbidden('ليس لديك صلاحية لتصدير مصفوفة التقييم.');
+        }
+
+        $evaluation = $this->getActiveEvaluation($request);
+        if (!$evaluation) {
+            return ApiResponse::notFound('ملف التقييم غير موجود.');
+        }
+
+        $evaluation->loadMissing(['school', 'cycle']);
+
+        $schoolCode = $evaluation->school?->school_code ?? 'SCH';
+        $fileName = 'evaluation_matrix_' . $schoolCode . '_' . date('Y-m-d_H-i') . '.xlsx';
+
+        return \Maatwebsite\Excel\Facades\Excel::download(
+            new \App\Exports\EvaluationWorkbookExport($evaluation, $user),
+            $fileName
+        );
+    }
+
+    /**
      * GET /api/v1/evaluator/evidence-inventory
      * جرد وحصر الشواهد للمدرسة الحالية
      */

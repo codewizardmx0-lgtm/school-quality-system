@@ -138,6 +138,8 @@ Route::prefix('v1')->group(function () {
         Route::prefix('evaluator')->group(function () {
             Route::get('/dashboard-stats', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'dashboardStats'])->name('api.v1.evaluator.dashboard-stats');
             Route::get('/export-report-pdf', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'exportReportPdf'])->name('api.v1.evaluator.export-report-pdf');
+            Route::get('/export-detailed-pdf', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'exportDetailedReportPdf'])->name('api.v1.evaluator.export-detailed-pdf');
+            Route::get('/export-detailed-excel', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'exportDetailedReportExcel'])->name('api.v1.evaluator.export-detailed-excel');
             Route::get('/evidence-inventory', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'getEvidenceInventory'])->name('api.v1.evaluator.evidence-inventory');
             Route::get('/improvement-suggestions', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'getImprovementSuggestions'])->name('api.v1.evaluator.improvement-suggestions');
             Route::post('/evidence-links/multi', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'multiLinkEvidence'])->name('api.v1.evaluator.evidence-links.multi');

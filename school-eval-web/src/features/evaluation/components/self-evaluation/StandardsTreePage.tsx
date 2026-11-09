@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import * as XLSX from 'xlsx';
 import { useSelfEvaluation } from '../../hooks/useSelfEvaluation';
 import type { EvaluatorScreen } from '../../api/evaluationTypes';
 import {
@@ -10,6 +9,7 @@ import {
   ArrowLeft,
   FileSpreadsheet,
 } from 'lucide-react';
+import { DetailedReportExportModal } from '../reports/DetailedReportExportModal';
 
 interface StandardsTreePageProps {
   onSelectIndicator: (indicatorId: number) => void;
@@ -23,42 +23,10 @@ export const StandardsTreePage: React.FC<StandardsTreePageProps> = ({
   const { treeData, isLoadingTree } = useSelfEvaluation();
   const [searchTerm, setSearchTerm] = useState('');
   const [expandedStandards, setExpandedStandards] = useState<Record<number, boolean>>({ 1: true, 2: true });
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
 
   const toggleStandard = (id: number) => {
     setExpandedStandards((prev) => ({ ...prev, [id]: !prev[id] }));
-  };
-
-  const handleExportExcel = () => {
-    if (!treeData || !treeData.standards) return;
-
-    const rows: any[] = [];
-    treeData.standards.forEach((std) => {
-      std.subStandards.forEach((sub) => {
-        sub.indicators.forEach((ind) => {
-          rows.push({
-            'رمز المعيار': std.code,
-            'المعيار الوطني': std.title,
-            'الوزن النسبي للمعيار': `${std.weight}%`,
-            'رمز المعيار الفرعي': sub.code,
-            'المعيار الفرعي': sub.title,
-            'رمز المؤشر': ind.code,
-            'عنوان المؤشر': ind.title,
-            'وصف المؤشر واشتراطاته': ind.description,
-            'التقدير المرصود': ind.score !== null && ind.score !== undefined ? `المستوى ${ind.score}` : 'غير مدخل',
-            'عدد الشواهد المرفقة': ind.evidenceCount ?? 0,
-          });
-        });
-      });
-    });
-
-    const worksheet = XLSX.utils.json_to_sheet(rows);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'المعايير والمؤشرات');
-
-    // RTL direction on worksheet
-    worksheet['!dir'] = 'rtl';
-
-    XLSX.writeFile(workbook, `دليل_المعايير_الوطنية_والتقييم_${new Date().toISOString().slice(0, 10)}.xlsx`);
   };
 
   if (isLoadingTree && !treeData) {
@@ -122,7 +90,7 @@ export const StandardsTreePage: React.FC<StandardsTreePageProps> = ({
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
           <button
             type="button"
-            onClick={handleExportExcel}
+            onClick={() => setIsExportModalOpen(true)}
             style={{
               display: 'inline-flex',
               alignItems: 'center',
@@ -137,9 +105,10 @@ export const StandardsTreePage: React.FC<StandardsTreePageProps> = ({
               cursor: 'pointer',
               boxShadow: '0 2px 4px rgba(16, 185, 129, 0.2)',
             }}
+            title="معاينة وتصدير استمارة التقرير المفصلة أو مصفوفة المعايير (PDF / Excel)"
           >
             <FileSpreadsheet size={16} />
-            <span>تصدير المعايير (Excel)</span>
+            <span>استمارة التقرير والمصفوفة (PDF / Excel)</span>
           </button>
 
           <div style={{ position: 'relative', width: '280px' }}>
@@ -553,6 +522,12 @@ export const StandardsTreePage: React.FC<StandardsTreePageProps> = ({
           })
         )}
       </div>
+
+      {/* نافذة معاينة وتصدير استمارة التقرير المفصلة الشاملة (الحزمة 5 - FE-GAP-08 / BE-GAP-07 / U-44) */}
+      <DetailedReportExportModal
+        isOpen={isExportModalOpen}
+        onClose={() => setIsExportModalOpen(false)}
+      />
     </div>
   );
 };

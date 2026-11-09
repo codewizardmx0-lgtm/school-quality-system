@@ -19,8 +19,10 @@ import {
   Info,
   Download,
   RefreshCw,
+  FileSpreadsheet,
 } from 'lucide-react';
 import { evaluatorApi } from '../../api/evaluatorApi';
+import { DetailedReportExportModal } from '../reports/DetailedReportExportModal';
 
 interface EvaluatorDashboardProps {
   onNavigate: (screen: EvaluatorScreen, param?: number) => void;
@@ -34,6 +36,7 @@ export const EvaluatorDashboard: React.FC<EvaluatorDashboardProps> = ({
   const { dashboardData, isLoading, error, refreshDashboard } = useEvaluatorDashboard();
   const [selectedStandardIds, setSelectedStandardIds] = useState<number[]>([]);
   const [isExportingPdf, setIsExportingPdf] = useState(false);
+  const [isDetailedModalOpen, setIsDetailedModalOpen] = useState(false);
 
   const handleExportPdf = async () => {
     if (isExportingPdf) return;
@@ -286,7 +289,31 @@ export const EvaluatorDashboard: React.FC<EvaluatorDashboardProps> = ({
             title="تصدير تقرير التقييم الذاتي المعتمد بصيغة PDF"
           >
             {isExportingPdf ? <RefreshCw size={15} className="animate-spin" /> : <Download size={15} />}
-            <span>{isExportingPdf ? 'جارٍ التصدير...' : 'تصدير تقرير التقييم (PDF)'}</span>
+            <span>{isExportingPdf ? 'جارٍ التصدير...' : 'التقرير التنفيذي (PDF)'}</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setIsDetailedModalOpen(true)}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '10px 16px',
+              borderRadius: '10px',
+              backgroundColor: 'rgba(255, 255, 255, 0.22)',
+              color: '#FFFFFF',
+              fontWeight: 700,
+              fontSize: '13px',
+              border: '1px solid rgba(255, 255, 255, 0.35)',
+              cursor: 'pointer',
+              backdropFilter: 'blur(8px)',
+              transition: 'background-color 0.15s ease',
+            }}
+            title="معاينة وتصدير استمارة التقرير المفصلة لتقويم المدرسة ومصفوفة الـ 109 مؤشرات"
+          >
+            <FileSpreadsheet size={15} />
+            <span>استمارة التقرير المفصلة (PDF / Excel)</span>
           </button>
 
           <button
@@ -804,6 +831,20 @@ export const EvaluatorDashboard: React.FC<EvaluatorDashboardProps> = ({
       <PendingIndicatorsTable
         indicators={dashboardData?.pendingIndicators || []}
         onOpenIndicator={(id) => onNavigate('rubric-assessment', id)}
+      />
+
+      {/* نافذة معاينة وتصدير استمارة التقرير المفصلة الشاملة (الحزمة 5 - FE-GAP-08 / BE-GAP-07 / U-44) */}
+      <DetailedReportExportModal
+        isOpen={isDetailedModalOpen}
+        onClose={() => setIsDetailedModalOpen(false)}
+        stats={dashboardData?.kpis ? {
+          completionRate: dashboardData.kpis.completionPercentage,
+          scoredIndicatorsCount: dashboardData.kpis.scoredIndicators,
+          totalIndicatorsCount: dashboardData.kpis.totalIndicators,
+          totalEvidencesCount: dashboardData.kpis.documentedEvidences,
+        } : null}
+        schoolName={school?.schoolName}
+        schoolCode={school?.schoolId ? String(school.schoolId) : 'SCH-001'}
       />
     </div>
   );
