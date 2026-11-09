@@ -114,6 +114,31 @@ Route::prefix('v1')->group(function () {
             Route::get('/dashboard-stats', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'dashboardStats'])->name('api.v1.evaluator.dashboard-stats');
         });
 
+        // --------------------------------------------------------------------------
+        // بوابة المشرف الوزاري والربط البرمجي الكامل (Ministry Supervisor Suite)
+        // --------------------------------------------------------------------------
+        Route::prefix('supervision')->group(function () {
+            Route::get('/dashboard', [\App\Http\Controllers\Api\V1\SupervisionController::class, 'dashboard'])->name('api.v1.supervision.dashboard');
+            Route::get('/reports/analytics', [\App\Http\Controllers\Api\V1\SupervisionController::class, 'centralAnalytics'])->name('api.v1.supervision.reports.analytics');
+            Route::get('/reports/analytics/pdf', [\App\Http\Controllers\Api\V1\SupervisionController::class, 'exportAnalyticsPdf'])->name('api.v1.supervision.reports.analytics.pdf');
+        });
+
+        Route::get('/standard-versions/active', [\App\Http\Controllers\Api\V1\SupervisionController::class, 'activeStandardVersion'])->name('api.v1.standard-versions.active');
+
+        Route::prefix('evaluation-submissions')->group(function () {
+            Route::get('/{id}/review', [\App\Http\Controllers\Api\V1\SupervisionController::class, 'reviewSubmission'])->name('api.v1.evaluation-submissions.review');
+            Route::post('/{id}/approve', [\App\Http\Controllers\Api\V1\SupervisionController::class, 'approveSubmission'])->name('api.v1.evaluation-submissions.approve');
+            Route::post('/{id}/completion-requests', [\App\Http\Controllers\Api\V1\SupervisionController::class, 'createCompletionRequest'])->name('api.v1.evaluation-submissions.completion-requests');
+        });
+
+        Route::prefix('schools/{id}')->group(function () {
+            Route::get('/tracking-log', [\App\Http\Controllers\Api\V1\SupervisionController::class, 'schoolTrackingLog'])->name('api.v1.schools.tracking-log');
+            Route::post('/supervisor-notes', [\App\Http\Controllers\Api\V1\SupervisionController::class, 'addSupervisorMemo'])->name('api.v1.schools.supervisor-notes');
+            Route::get('/historical-comparison', [\App\Http\Controllers\Api\V1\SupervisionController::class, 'historicalComparison'])->name('api.v1.schools.historical-comparison');
+            Route::get('/tracking-log/pdf', [\App\Http\Controllers\Api\V1\SupervisionController::class, 'exportTrackingLogPdf'])->name('api.v1.schools.tracking-log.pdf');
+            Route::get('/historical-comparison/pdf', [\App\Http\Controllers\Api\V1\SupervisionController::class, 'exportHistoricalComparisonPdf'])->name('api.v1.schools.historical-comparison.pdf');
+        });
+
         Route::get('/standard-versions/active/tree', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'activeStandardsTree'])->name('api.v1.standard-versions.active.tree');
         Route::get('/evaluation-results/{indicatorId}', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'getEvaluationResult'])->name('api.v1.evaluation-results.indicator.show');
         Route::post('/evaluation-results', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'saveEvaluationResult'])->name('api.v1.evaluation-results.store');

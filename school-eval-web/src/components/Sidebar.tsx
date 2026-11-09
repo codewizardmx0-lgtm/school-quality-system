@@ -49,6 +49,9 @@ export const Sidebar: React.FC<{ activeTab: string; onSelectTab: (tab: string) =
     if (primaryRole === 'admin' || perms.includes('users.manage')) {
       items.push({ id: 'admin-suite', label: 'بوابة مسؤول النظام المركزية', icon: <ShieldCheck size={18} /> });
     }
+    if (primaryRole === 'ministry_supervisor' || user?.roles?.some((r) => r.roleName === 'ministry_supervisor') || perms.includes('submissions.review') || perms.includes('supervision.view')) {
+      items.push({ id: 'supervision-suite', label: 'بوابة المشرف الوزاري', icon: <UserCheck size={18} /> });
+    }
     if (perms.includes('standards.manage')) {
       items.push(
         { id: 'standards-versions', label: 'إصدارات المعايير', icon: <BookOpen size={18} /> },

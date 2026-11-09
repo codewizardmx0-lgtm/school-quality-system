@@ -9,6 +9,7 @@ import type { AdminScreen } from './features/admin';
 import { EvaluatorLayout } from './features/evaluation';
 import type { EvaluatorScreen } from './features/evaluation';
 import { StandardsLayout, type StandardsScreenKey } from './features/standards';
+import { SupervisionLayout, type SupervisionScreenKey } from './features/supervision';
 import { theme } from './styles/theme';
 import { Loader2 } from 'lucide-react';
 
@@ -62,6 +63,45 @@ export const AppContent: React.FC = () => {
   const isAdmin = user?.roles?.some((r) => r.roleName === 'admin');
   const isSchoolUser = user?.userType === 'school' || user?.roles?.some((r) => r.roleName === 'school_evaluator' || r.roleName === 'school_principal');
   const isStandardsManager = user?.roles?.some((r) => r.roleName === 'ministry_standards_manager') || user?.permissions?.includes('standards.manage');
+  const isMinistrySupervisor =
+    user?.roles?.some((r) => r.roleName === 'ministry_supervisor') ||
+    user?.permissions?.includes('supervision.view') ||
+    user?.permissions?.includes('supervision.review') ||
+    user?.permissions?.includes('submissions.review');
+
+  // خريطة مسارات /supervision/*
+  const getSupervisionScreenFromPath = (path: string): SupervisionScreenKey => {
+    if (path.includes('/cycles/new') || path.includes('/cycles-new')) return 'cycles-new';
+    if (path.includes('/submissions') || path.includes('/review')) return 'submissions';
+    if (path.includes('/completion-requests') || path.includes('/completion')) return 'completion-requests';
+    if (path.includes('/tracking-log') || path.includes('/tracking')) return 'tracking-log';
+    if (path.includes('/historical')) return 'historical';
+    if (path.includes('/reports')) return 'reports';
+    return 'dashboard';
+  };
+
+  const supervisionTabMap: Record<string, SupervisionScreenKey> = {
+    'supervision-suite': 'dashboard',
+    'supervision-dashboard': 'dashboard',
+    'supervision-cycles': 'cycles-new',
+    'supervision-submissions': 'submissions',
+    'supervision-completion': 'completion-requests',
+    'supervision-tracking': 'tracking-log',
+    'supervision-reports': 'reports',
+    'supervision-historical': 'historical',
+    'submissions': 'submissions',
+  };
+
+  // 0. إذا كان المسار يبدأ بـ /supervision/*
+  if (currentPath.startsWith('/supervision')) {
+    const screen = getSupervisionScreenFromPath(currentPath);
+    return <SupervisionLayout initialScreen={screen} onLogout={logout} />;
+  }
+
+  // 0.5 إذا تم اختيار أحد تبويبات الإشراف الوزاري صراحة
+  if (supervisionTabMap[activeTab]) {
+    return <SupervisionLayout initialScreen={supervisionTabMap[activeTab]} onLogout={logout} />;
+  }
 
   // خريطة مسارات /standards/*
   const getStandardsScreenFromPath = (path: string): StandardsScreenKey => {
@@ -158,6 +198,11 @@ export const AppContent: React.FC = () => {
   // 5. إذا كان التبويب يخص شاشات التقييم الذاتي
   if (evaluatorTabMap[activeTab]) {
     return <EvaluatorLayout initialScreen={evaluatorTabMap[activeTab]} onLogout={logout} />;
+  }
+
+  // 5.5 إذا كان المستخدم مشرفاً وزارياً، يتم توجيهه إلى بوابة الإشراف والمتابعة الوزارية
+  if (isMinistrySupervisor && activeTab !== 'admin-suite' && !evaluatorTabMap[activeTab] && !standardsTabMap[activeTab]) {
+    return <SupervisionLayout initialScreen="dashboard" onLogout={logout} />;
   }
 
   // اختيار المحتوى بحسب التبويب النشط ودور المستخدم
