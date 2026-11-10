@@ -162,13 +162,12 @@ class EvaluationReportService
     }
 
     /**
-     * توليد محتوى PDF لاستمارة التقرير المفصلة لتقويم المدرسة (Detailed Dossier) - الحزمة 5 / FE-GAP-08 / BE-GAP-07 / U-44.
+     * تجهيز مصفوفة بيانات استمارة التقرير المفصلة (Detailed Dossier).
      *
      * @param Evaluation $evaluation
-     * @param User|null $requester
-     * @return string بايتات ملف الـ PDF
+     * @return array<string, mixed>
      */
-    public function generateDetailedDossierPdf(Evaluation $evaluation, ?User $requester = null): string
+    public function buildDetailedDossierViewData(Evaluation $evaluation): array
     {
         // 1. حساب النتائج الموزونة والتقييم النوعي
         $results = $this->analyticsService->calculateAssessmentResults($evaluation);
@@ -246,12 +245,12 @@ class EvaluationReportService
                             ?? 'مستند بدون اسم';
                     })->filter()->values()->all();
 
-                    $tools = $ind->verificationTools->pluck('tool_name_ar')->filter()->values()->all();
+                    $tools = $ind->verificationTools->pluck('name')->filter()->values()->all();
 
                     $indicatorsData[] = [
                         'indicator_id'        => $ind->indicator_id,
-                        'indicator_code'      => $ind->indicator_code,
-                        'indicator_name'      => $ind->indicator_name,
+                        'indicator_code'      => $ind->code,
+                        'indicator_name'      => $ind->name,
                         'verification_tools'  => $tools,
                         'score'               => $score,
                         'evidence_count'      => $evidenceCount,
@@ -262,8 +261,8 @@ class EvaluationReportService
 
                 $subStandardsData[] = [
                     'sub_standard_id'   => $sub->sub_standard_id,
-                    'sub_standard_code' => $sub->sub_standard_code,
-                    'sub_standard_name' => $sub->sub_standard_name,
+                    'sub_standard_code' => $sub->code,
+                    'sub_standard_name' => $sub->name,
                     'indicators'        => $indicatorsData,
                 ];
             }
@@ -275,8 +274,8 @@ class EvaluationReportService
 
             $standardsSummary[] = [
                 'standard_id'           => $std->standard_id,
-                'standard_code'         => $std->standard_code,
-                'standard_name'         => $std->standard_name,
+                'standard_code'         => $std->code,
+                'standard_name'         => $std->name,
                 'weight'                => $stdWeight,
                 'average_score'         => $stdAvg,
                 'completion_rate'       => $stdComp,
@@ -286,8 +285,8 @@ class EvaluationReportService
 
             $standardsTree[] = [
                 'standard_id'   => $std->standard_id,
-                'standard_code' => $std->standard_code,
-                'standard_name' => $std->standard_name,
+                'standard_code' => $std->code,
+                'standard_name' => $std->name,
                 'weight'        => $stdWeight,
                 'sub_standards' => $subStandardsData,
             ];
@@ -298,11 +297,14 @@ class EvaluationReportService
 
         $school = $evaluation->school;
 
-        $viewData = [
+        $uniqueDocumentsCount = \App\Models\SchoolDocument::where('school_id', $evaluation->school_id)->count();
+        $requirementsTarget = \App\Models\IndicatorEvidenceRequirement::count() ?: 278;
+
+        return [
             'system_name'            => config('reports.system_name', 'نظام إدارة الجودة والتقويم والاعتماد المدرسي - منصة ارتقاء'),
             'school'                 => [
                 'school_id'            => $school->school_id,
-                'school_code'          => $school->school_code,
+                'school_code'          => $school->school_code ?? ('SCH-' . $school->school_id),
                 'school_name'          => $school->school_name,
                 'governorate'          => $school->governorate ?? 'أمانة العاصمة',
                 'educational_district' => $school->educational_district ?? 'معين',
@@ -315,8 +317,8 @@ class EvaluationReportService
                 'created_at'    => $evaluation->created_at,
             ],
             'cycle'                  => [
-                'cycle_name'    => $evaluation->cycle?->cycle_name ?? 'الدورة الوطنية للتقويم المدرسي',
-                'academic_year' => $evaluation->cycle?->academic_year ?? '2025/2026',
+                'cycle_name'    => $evaluation->cycle?->name ?? 'الدورة الوطنية للتقويم المدرسي',
+                'academic_year' => $evaluation->cycle?->academic_year ?? '2026/2027',
             ],
             'final_score'            => $finalScore,
             'rating'                 => $rating,
@@ -324,12 +326,27 @@ class EvaluationReportService
             'scored_indicators_count'=> $scoredCount,
             'total_indicators_count' => $totalIndicatorsCount,
             'total_evidence_count'   => $totalEvidenceCount,
+            'unique_documents_count' => $uniqueDocumentsCount,
+            'requirements_target'    => $requirementsTarget,
             'average_score_out_of_3' => $avgScoreOutOf3,
             'scoreDistribution'      => $scoreDistribution,
             'standards_summary'      => $standardsSummary,
             'standards_tree'         => $standardsTree,
             'report_date'            => Carbon::now()->format('Y-m-d H:i'),
         ];
+    }
+
+    /**
+     * توليد محتوى PDF لاستمارة التقرير المفصلة لتقويم المدرسة (Detailed Dossier) - الحزمة 5 / FE-GAP-08 / BE-GAP-07 / U-44.
+     *
+     * @param Evaluation $evaluation
+     * @param User|null $requester
+     * @return string بايتات ملف الـ PDF
+     */
+    public function generateDetailedDossierPdf(Evaluation $evaluation, ?User $requester = null): string
+    {
+        $viewData = $this->buildDetailedDossierViewData($evaluation);
+        $school = $evaluation->school;
 
         $html = View::make('reports.detailed_dossier_report', $viewData)->render();
 
@@ -353,7 +370,7 @@ class EvaluationReportService
             'orientation'      => 'P',
             'margin_left'      => 10,
             'margin_right'     => 10,
-            'margin_top'       => 38,
+            'margin_top'       => 48,
             'margin_bottom'    => 18,
             'margin_header'    => 8,
             'margin_footer'    => 8,

@@ -2,14 +2,62 @@
 
 namespace Tests\Feature;
 
+use App\Models\Evaluation;
 use App\Models\User;
+use App\Services\EvaluationReportService;
+use Illuminate\Support\Facades\View;
 use Tests\TestCase;
 
 /**
- * اختبارات الحزمة 5: استمارة التقرير المفصلة الشاملة (Detailed Dossier) بتنسيق PDF و Excel (FE-GAP-08 / BE-GAP-07 / U-44)
+ * اختبارات الحزمة 5 والحزمة أ: استمارة التقرير المفصلة الشاملة (Detailed Dossier) وتصحيح طلب الاستكمال (FE-GAP-08 / BE-GAP-07 / U-44)
  */
 class Batch5DetailedReportExportTest extends TestCase
 {
+    /**
+     * التحقق من امتلاء كافة رموز وأسماء المعايير والمؤشرات وأدوات التحقق في بيانات وقالب التقرير المفصل
+     */
+    public function test_detailed_dossier_contains_populated_standards_and_indicators(): void
+    {
+        $evaluator = User::where('username', 'quality_farouq')->firstOrFail();
+        $evaluation = Evaluation::where('school_id', $evaluator->school_id)->firstOrFail();
+        $evaluation->loadMissing(['school', 'cycle']);
+
+        /** @var EvaluationReportService $service */
+        $service = app(EvaluationReportService::class);
+        $viewData = $service->buildDetailedDossierViewData($evaluation);
+
+        $this->assertCount(7, $viewData['standards_summary']);
+        $this->assertEquals(109, $viewData['total_indicators_count']);
+        $this->assertGreaterThanOrEqual(200, $viewData['total_evidence_count']);
+
+        foreach ($viewData['standards_summary'] as $std) {
+            $this->assertNotEmpty($std['standard_code']);
+            $this->assertNotEmpty($std['standard_name']);
+        }
+
+        $firstInd = $viewData['standards_tree'][0]['sub_standards'][0]['indicators'][0];
+        $this->assertNotEmpty($firstInd['indicator_code']);
+        $this->assertNotEmpty($firstInd['indicator_name']);
+
+        $renderedHtml = View::make('reports.detailed_dossier_report', $viewData)->render();
+        $this->assertStringContainsString($firstInd['indicator_code'], $renderedHtml);
+        $this->assertStringContainsString($firstInd['indicator_name'], $renderedHtml);
+        $this->assertStringContainsString($viewData['standards_summary'][0]['standard_name'], $renderedHtml);
+    }
+
+    /**
+     * التحقق من عدم ظهور تنبيه طلب الاستكمال عند عدم وجود طلب مفتوح للمدرسة الحالية
+     */
+    public function test_completion_alert_is_null_when_no_open_request_exists_for_evaluation(): void
+    {
+        $evaluator = User::where('username', 'quality_farouq')->firstOrFail();
+
+        $response = $this->actingAs($evaluator, 'sanctum')
+            ->getJson('/api/v1/evaluator/dashboard-stats');
+
+        $response->assertStatus(200);
+        $this->assertNull($response->json('data.completionAlert'));
+    }
     /**
      * التحقق من تصدير استمارة التقرير المفصلة الشاملة PDF لمقيم المدرسة
      */

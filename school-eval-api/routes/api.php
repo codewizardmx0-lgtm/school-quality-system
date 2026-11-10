@@ -143,6 +143,8 @@ Route::prefix('v1')->group(function () {
             Route::get('/evidence-inventory', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'getEvidenceInventory'])->name('api.v1.evaluator.evidence-inventory');
             Route::get('/improvement-suggestions', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'getImprovementSuggestions'])->name('api.v1.evaluator.improvement-suggestions');
             Route::post('/evidence-links/multi', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'multiLinkEvidence'])->name('api.v1.evaluator.evidence-links.multi');
+            Route::post('/indicators/{indicatorId}/reset', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'resetIndicator'])->name('api.v1.evaluator.indicators.reset');
+            Route::post('/standards/{standardId}/reset', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'resetStandard'])->name('api.v1.evaluator.standards.reset');
         });
 
         Route::get('/standard-versions/active/tree', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'activeStandardsTree'])->name('api.v1.standard-versions.active.tree');

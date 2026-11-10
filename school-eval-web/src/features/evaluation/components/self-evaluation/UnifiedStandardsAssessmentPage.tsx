@@ -39,7 +39,7 @@ export const UnifiedStandardsAssessmentPage: React.FC<UnifiedStandardsAssessment
     isSyncing,
   } = useSelfEvaluation(currentIndicatorId ?? undefined, isLocked);
 
-  const { dashboardData } = useEvaluatorDashboard();
+  const { dashboardData, refreshDashboard } = useEvaluatorDashboard();
 
   useEffect(() => {
     if (selectedIndicatorId !== undefined && selectedIndicatorId !== null) {
@@ -239,6 +239,8 @@ export const UnifiedStandardsAssessmentPage: React.FC<UnifiedStandardsAssessment
           <StandardsTreePage
             onSelectIndicator={handleIndicatorSelect}
             onNavigate={onNavigate}
+            isLocked={isLocked}
+            onResetSuccess={refreshDashboard}
           />
         )}
 
@@ -247,6 +249,7 @@ export const UnifiedStandardsAssessmentPage: React.FC<UnifiedStandardsAssessment
             selectedIndicatorId={currentIndicatorId}
             onNavigate={onNavigate}
             isLocked={isLocked}
+            onResetSuccess={refreshDashboard}
           />
         )}
 

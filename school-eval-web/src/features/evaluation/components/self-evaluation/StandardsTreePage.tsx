@@ -8,22 +8,34 @@ import {
   Search,
   ArrowLeft,
   FileSpreadsheet,
+  RotateCcw,
 } from 'lucide-react';
 import { DetailedReportExportModal } from '../reports/DetailedReportExportModal';
+import { SafeResetConfirmModal } from './SafeResetConfirmModal';
 
 interface StandardsTreePageProps {
   onSelectIndicator: (indicatorId: number) => void;
   onNavigate: (screen: EvaluatorScreen, param?: number) => void;
+  isLocked?: boolean;
+  onResetSuccess?: () => void;
 }
 
 export const StandardsTreePage: React.FC<StandardsTreePageProps> = ({
   onSelectIndicator,
   onNavigate,
+  isLocked = false,
+  onResetSuccess,
 }) => {
-  const { treeData, isLoadingTree } = useSelfEvaluation();
+  const { treeData, isLoadingTree, resetStandardAssessment } = useSelfEvaluation(undefined, isLocked);
   const [searchTerm, setSearchTerm] = useState('');
   const [expandedStandards, setExpandedStandards] = useState<Record<number, boolean>>({ 1: true, 2: true });
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [standardToReset, setStandardToReset] = useState<{
+    standardId: number;
+    title: string;
+    affectedCount: number;
+    hasLinkedEvidences: boolean;
+  } | null>(null);
 
   const toggleStandard = (id: number) => {
     setExpandedStandards((prev) => ({ ...prev, [id]: !prev[id] }));
@@ -361,6 +373,38 @@ export const StandardsTreePage: React.FC<StandardsTreePageProps> = ({
                       </span>
                     )}
 
+                    {!isLocked && (stats.scoredIndicators > 0 || stats.totalEvidences > 0) && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setStandardToReset({
+                            standardId: std.standardId,
+                            title: `${std.code} - ${std.title}`,
+                            affectedCount: totalIndsCount,
+                            hasLinkedEvidences: stats.totalEvidences > 0,
+                          });
+                        }}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          padding: '4px 10px',
+                          borderRadius: '7px',
+                          backgroundColor: '#FEF2F2',
+                          color: '#DC2626',
+                          border: '1px solid #FECACA',
+                          fontSize: '11.5px',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                        }}
+                        title="تصفير كافة تقديرات هذا المعيار وإعادته لقائمة الاستيفاء"
+                      >
+                        <RotateCcw size={13} />
+                        <span>تصفير المعيار</span>
+                      </button>
+                    )}
+
                     {isExpanded ? <ChevronUp size={18} color="#64748B" /> : <ChevronDown size={18} color="#64748B" />}
                   </div>
                 </div>
@@ -527,6 +571,21 @@ export const StandardsTreePage: React.FC<StandardsTreePageProps> = ({
       <DetailedReportExportModal
         isOpen={isExportModalOpen}
         onClose={() => setIsExportModalOpen(false)}
+      />
+
+      {/* نافذة تأكيد التصفير الآمن لمعيار كامل مع Double Confirm (الملاحظة 11) */}
+      <SafeResetConfirmModal
+        isOpen={Boolean(standardToReset)}
+        mode="standard"
+        targetTitle={standardToReset?.title || ''}
+        affectedCount={standardToReset?.affectedCount || 0}
+        hasLinkedEvidences={Boolean(standardToReset?.hasLinkedEvidences)}
+        onClose={() => setStandardToReset(null)}
+        onConfirm={async (unlinkEvidences) => {
+          if (!standardToReset) return;
+          await resetStandardAssessment(standardToReset.standardId, unlinkEvidences);
+          onResetSuccess?.();
+        }}
       />
     </div>
   );

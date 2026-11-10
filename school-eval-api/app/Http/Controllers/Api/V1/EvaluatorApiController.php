@@ -94,26 +94,25 @@ class EvaluatorApiController extends Controller
         }
 
         $results = EvaluationResult::where('evaluation_id', $evaluation->evaluation_id)->get();
-        $scoredCount = $results->where('score', '!=', null)->count();
-        if ($scoredCount === 0 && $results->count() > 0) {
-            $scoredCount = $results->count();
-        }
+        $scoredResults = $results->filter(fn($r) => $r->score !== null && $r->completion_status !== 'Pending');
+        $scoredCount = $scoredResults->count();
 
         $completionPercentage = $totalIndicators > 0 ? round(($scoredCount / $totalIndicators) * 100) : 0;
 
-        // عدد الشواهد الحقيقية
+        // إحصاءات تغطية الشواهد ومتطلبات المعايير والملفات الفيزيائية الفعلية (الملاحظة 3)
         $evidencesCount = EvidenceLink::where('evaluation_id', $evaluation->evaluation_id)->count();
-        $targetEvidencesCount = $totalIndicators > 0 ? $totalIndicators : 109;
+        $targetEvidencesCount = \App\Models\IndicatorEvidenceRequirement::count() ?: 278;
+        $uniqueDocumentsCount = SchoolDocument::where('school_id', $evaluation->school_id)->count();
 
-        // نقاط القوة (تقدير 2-3) وفرص التحسين (0-1)
-        $strengthsCount = $results->filter(fn($r) => $r->score !== null && $r->score >= 2)->count();
-        $gapsCount = $results->filter(fn($r) => $r->score !== null && $r->score < 2)->count();
+        // نقاط القوة (تقدير 2-3) وفرص التحسين (0-1) بناءً على النتائج الحقيقية المرصودة
+        $strengthsCount = $scoredResults->filter(fn($r) => (int)$r->score >= 2)->count();
+        $gapsCount = $scoredResults->filter(fn($r) => (int)$r->score < 2)->count();
 
         // التوزيع الحقيقي الدقيق لمستويات الأداء الرباعية (0 - 3)
-        $level3Count = $results->filter(fn($r) => (int)$r->score === 3)->count();
-        $level2Count = $results->filter(fn($r) => (int)$r->score === 2)->count();
-        $level1Count = $results->filter(fn($r) => (int)$r->score === 1)->count();
-        $level0Count = $results->filter(fn($r) => (int)$r->score === 0)->count();
+        $level3Count = $scoredResults->filter(fn($r) => (int)$r->score === 3)->count();
+        $level2Count = $scoredResults->filter(fn($r) => (int)$r->score === 2)->count();
+        $level1Count = $scoredResults->filter(fn($r) => (int)$r->score === 1)->count();
+        $level0Count = $scoredResults->filter(fn($r) => (int)$r->score === 0)->count();
         $unscoredCount = max(0, $totalIndicators - $scoredCount);
 
         // مسار دورة التقييم المعتمد نظامياً وفق SRS والفصل الرابع (بدون مسمى المكتب المعتمد)
@@ -164,7 +163,7 @@ class EvaluatorApiController extends Controller
             $indIds = $std->subStandards->flatMap(fn($sub) => $sub->indicators)->pluck('indicator_id');
             $stdTotal = max(1, $indIds->count());
             $stdResults = $results->whereIn('indicator_id', $indIds);
-            $stdScoredResults = $stdResults->whereNotNull('score');
+            $stdScoredResults = $stdResults->filter(fn($r) => $r->score !== null && $r->completion_status !== 'Pending');
             $stdScored = $stdScoredResults->count();
             $pct = round(($stdScored / $stdTotal) * 100);
             $avgScore = $stdScored > 0 ? round($stdScoredResults->avg('score'), 2) : 0.0;
@@ -177,17 +176,17 @@ class EvaluatorApiController extends Controller
                 'percentage' => $pct,
                 'averageScore' => $avgScore,
                 'scoreDistribution' => [
-                    'level3' => $stdResults->where('score', 3)->count(),
-                    'level2' => $stdResults->where('score', 2)->count(),
-                    'level1' => $stdResults->where('score', 1)->count(),
-                    'level0' => $stdResults->where('score', 0)->count(),
+                    'level3' => $stdScoredResults->where('score', 3)->count(),
+                    'level2' => $stdScoredResults->where('score', 2)->count(),
+                    'level1' => $stdScoredResults->where('score', 1)->count(),
+                    'level0' => $stdScoredResults->where('score', 0)->count(),
                     'unscored' => max(0, $stdTotal - $stdScored),
                 ],
             ];
         }
 
         // عناصر تقييم بحاجة لاستيفاء التقديرات أو الشواهد (حساب دقيق بدون قيد limit(10))
-        $scoredIndicatorIds = $results->whereNotNull('score')->pluck('indicator_id')->toArray();
+        $scoredIndicatorIds = $scoredResults->pluck('indicator_id')->toArray();
 
         $evidenceCountsByIndicator = EvidenceLink::where('school_id', $school?->school_id)
             ->where('evaluation_id', $evaluation->evaluation_id)
@@ -225,8 +224,11 @@ class EvaluatorApiController extends Controller
             }
         }
 
-        // التحقق من وجود طلب استكمال مفتوح
+        // التحقق من وجود طلب استكمال مفتوح خاص بهذا التقييم والمدرسة حصراً
         $completionRequest = CompletionRequest::where('status', 'Open')
+            ->whereHas('submission.report', function ($query) use ($evaluation) {
+                $query->where('evaluation_id', $evaluation->evaluation_id);
+            })
             ->orderBy('request_id', 'desc')
             ->first();
 
@@ -239,12 +241,12 @@ class EvaluatorApiController extends Controller
         return ApiResponse::success([
             'schoolInfo' => [
                 'schoolId' => $school?->school_id ?? 1,
-                'schoolName' => $school?->school_name ?? 'مدرسة الأمل النموذجية الثانوية',
+                'schoolName' => $school?->school_name ?? 'المدرسة المعتمدة',
                 'status' => $submissionStatus,
                 'statusArabic' => $submissionStatus === 'NeedsCompletion' ? 'طلب استكمال من المشرف' : ($submissionStatus === 'Submitted' ? 'تم الرفع (للقراءة فقط)' : 'مسودة قيد الإدخال'),
-                'currentEvaluator' => $user?->full_name ?? 'عمار عمر عبدالله',
-                'academicYear' => '2026/2027',
-                'cycleName' => 'دورة التقييم الذاتي المعتمدة 2026',
+                'currentEvaluator' => $user?->full_name ?? 'مقيم المدرسة',
+                'academicYear' => $evaluation->cycle?->academic_year ?? '2026/2027',
+                'cycleName' => $evaluation->cycle?->name ?? 'دورة التقييم الذاتي المعتمدة 2026',
             ],
             'kpis' => [
                 'completionPercentage' => $completionPercentage,
@@ -252,6 +254,7 @@ class EvaluatorApiController extends Controller
                 'scoredIndicators' => $scoredCount,
                 'documentedEvidences' => $evidencesCount,
                 'targetEvidences' => $targetEvidencesCount,
+                'uniqueDocumentsCount' => $uniqueDocumentsCount,
                 'strengthsCount' => $strengthsCount,
                 'gapsCount' => $gapsCount,
                 'scoreDistribution' => [
@@ -269,8 +272,8 @@ class EvaluatorApiController extends Controller
             'completionAlert' => $completionRequest ? [
                 'requestId' => $completionRequest->request_id,
                 'message' => 'طلب استكمال للمخرج من المراجعة الوزارية: يرجى استيفاء المؤشرات والشواهد المطلوبة قبل انتهاء المهلة.',
-                'deadline' => $completionRequest->completion_deadline?->toDateString() ?? '2026-11-15',
-                'itemsCount' => CompletionRequestItem::where('request_id', $completionRequest->request_id)->where('status', 'Pending')->count() ?: 3,
+                'deadline' => $completionRequest->completion_deadline?->toDateString() ?? now()->addDays(7)->toDateString(),
+                'itemsCount' => CompletionRequestItem::where('request_id', $completionRequest->request_id)->whereIn('status', ['Pending', 'pending'])->count(),
             ] : null,
         ]);
     }
@@ -717,119 +720,146 @@ class EvaluatorApiController extends Controller
 
     /**
      * POST /api/v1/ai/analyses
-     * Trigger automated gap analysis on scores
+     * Trigger automated dynamic gap analysis based on actual school scores (No external API)
      */
     public function triggerAiAnalysis(Request $request): JsonResponse
     {
         $user = $request->user();
         $evaluation = $this->getActiveEvaluation($request);
+        $evaluation->loadMissing(['school']);
+        $schoolName = $evaluation->school?->school_name ?? 'المدرسة';
+
+        $results = EvaluationResult::with(['indicator.subStandard.standard'])
+            ->where('evaluation_id', $evaluation->evaluation_id)
+            ->whereNotNull('score')
+            ->where('completion_status', '!=', 'Pending')
+            ->get();
+
+        $totalScored = $results->count();
+        $overallAvg = $totalScored > 0 ? round($results->avg('score'), 2) : 0.0;
+        $strengthResults = $results->filter(fn($r) => (int)$r->score >= 2)->sortByDesc('score')->values();
+        $gapResults = $results->filter(fn($r) => (int)$r->score < 2)->sortBy('score')->values();
+
+        $evidencesCount = EvidenceLink::where('evaluation_id', $evaluation->evaluation_id)->count();
+        $requirementsTarget = \App\Models\IndicatorEvidenceRequirement::count() ?: 278;
+
+        if ($totalScored === 0) {
+            $summary = "تحليل بيانات التقييم الذاتي لـ ({$schoolName}): لا توجد مؤشرات مرصودة حتى الآن. يرجى البدء برصد التقديرات وإيداع الشواهد لاستخلاص نقاط القوة وفرص التحسين الفعلية.";
+        } else {
+            $strengthsCount = $strengthResults->count();
+            $gapsCount = $gapResults->count();
+            $summary = "تحليل بيانات التقييم الذاتي لـ ({$schoolName}): تم فحص {$totalScored} مؤشراً مرصوداً بمتوسط أداء عام {$overallAvg} من 3.00 نقاط. أظهرت النتائج توفر {$strengthsCount} نقطة قوة (المستوى 2 و 3)، مقابل {$gapsCount} فرصة تحسين وفجوة ميدانية (المستوى 0 و 1) تستلزم المعالجة في خطة التحسين المدرسي.";
+        }
 
         $analysis = AiAnalysis::create([
             'evaluation_id' => $evaluation->evaluation_id,
             'requested_by_user_id' => $user?->user_id ?? 1,
             'analysis_date' => now(),
             'input_scope' => 'results_and_notes',
-            'summary' => 'تحليل ذكي شامل لبيانات التقييم الذاتي لمدرسة الأمل النموذجية: يظهر الأداء قوة ملحوظة في مجالات القيادة والبيئة المدرسية (المتوسط 2.5)، مع وجود فجوات في أساليب التعلم المتمايز ونواتج قياس الفاقد التعليمي (المتوسط 1.2). ينصح بتبني ثلاث مبادرات تحسين تنفيذية عاجلة.',
+            'summary' => $summary,
             'status' => 'Completed',
         ]);
 
-        // توليد التوصيات ونقاط القوة والضعف (مطابق لقواعد BR-AI-01 و BR-AI-02)
-        $recommendations = [
-            [
+        $recommendations = [];
+
+        // أ. استخلاص أبرز نقاط القوة الحقيقية حسب المعايير من قاعدة البيانات (>= 2)
+        $strengthsByStd = $strengthResults->groupBy(fn($r) => $r->indicator?->subStandard?->standard?->standard_id ?? 0);
+        $topStandards = $strengthsByStd->sortByDesc(fn($group) => $group->count())->take(3);
+
+        foreach ($topStandards as $group) {
+            $first = $group->first();
+            $std = $first->indicator?->subStandard?->standard;
+            $stdName = $std?->name ?? 'المعيار الوطني';
+            $stdAvg = round($group->avg('score'), 2);
+            $count = $group->count();
+
+            $recommendations[] = [
                 'analysis_id' => $analysis->analysis_id,
                 'type' => 'strength',
-                'title' => 'فاعلية الحوكمة المدرسية وتوثيق أدلة القيادة',
-                'description' => 'حققت المدرسة مؤشرات متقدمة (المستوى 3) في انتظام اجتماعات مجلس المدرسة وتوزيع المهام الإدارية ولجان الجودة.',
-                'priority' => 'High',
+                'title' => "تفوق الأداء في مجال: {$stdName}",
+                'description' => "حقق المجال {$count} مؤشراً بمستويات متقدمة (2 و 3) وبمتوسط جودة بلغ {$stdAvg} من 3.00 نقاط وفق المرصود الفعلي في {$schoolName}.",
+                'priority' => $stdAvg >= 2.5 ? 'High' : 'Medium',
                 'status' => 'Accepted',
-            ],
-            [
-                'analysis_id' => $analysis->analysis_id,
-                'type' => 'strength',
-                'title' => 'بيئة مدرسية آمنة ومحفزة تلتزم بمتطلبات السلامة',
-                'description' => 'اكتمال خطط الطوارئ ومخارج النجاة ونظافة المرافق الصحية بنسبة مطابقة 90%.',
-                'priority' => 'Medium',
-                'status' => 'Accepted',
-            ],
-            [
+            ];
+        }
+
+        // ب. استخلاص فرص التحسين الحقيقية من المؤشرات المتدنية (0 و 1)
+        foreach ($gapResults->take(5) as $gapRes) {
+            $ind = $gapRes->indicator;
+            $indCode = $ind?->code ?? ('IND-' . $gapRes->indicator_id);
+            $indName = $ind?->name ?? 'مؤشر أداء مدرسي';
+            $scoreVal = (int) $gapRes->score;
+            $levelLabel = $scoreVal === 0 ? 'المستوى 0: غير متوفر' : 'المستوى 1: متحقق بدرجة ضعيفة';
+
+            $recommendations[] = [
                 'analysis_id' => $analysis->analysis_id,
                 'type' => 'improvement',
-                'title' => 'فجوة في تطبيق وتوثيق استراتيجيات التعلم المتمايز',
-                'description' => 'أظهرت بطاقات الملاحظة الصفية حاجة 40% من الكادر التعليمي لتدريب تخصصي على تصميم مهام صفية متمايزة تلبي الفروق الفردية.',
-                'priority' => 'High',
+                'title' => "فرصة تحسين ({$indCode}): {$indName}",
+                'description' => "تم رصد المؤشر بتقدير ({$levelLabel}) في ملف المدرسة الفعلي، مما يتطلب استيفاء الممارسات والشواهد الداعمة لرفعه إلى المستوى المستهدف.",
+                'priority' => $scoreVal === 0 ? 'High' : 'Medium',
                 'status' => 'PendingReview',
-            ],
-            [
-                'analysis_id' => $analysis->analysis_id,
-                'type' => 'improvement',
-                'title' => 'ضعف انتظام قياس وتشخيص الفاقد التعليمي بعد الامتحانات',
-                'description' => 'المؤشر IND-03-02 مقدر بدرجة (1) لعدم وجود سجلات تحليل إحصائية دقيقة لنتائج الاختبارات التشخيصية لصفوف المرحلة الأساسية.',
-                'priority' => 'High',
-                'status' => 'PendingReview',
-            ],
-            [
+            ];
+
+            $recommendations[] = [
                 'analysis_id' => $analysis->analysis_id,
                 'type' => 'draft',
-                'title' => 'مبادرة برنامج التمكين المهني لاستراتيجيات التدريس الحديثة',
-                'description' => 'ورش تدريبية أسبوعية وتطبيق دروس مصغرة لرفع كفاءة 25 معلماً في التعلم النشط وبنوك الأسئلة المتمايزة.',
-                'priority' => 'High',
+                'title' => "مبادرة تطويرية للمؤشر ({$indCode}): تعزيز وتحسين {$indName}",
+                'description' => "برنامج عمل تنفيذي لمعالجة الفجوة المرصودة في ({$indName}) والانتقال من ({$levelLabel}) إلى مستوى متحقق بالكامل مع توثيق الشواهد الداعمة.",
+                'priority' => $scoreVal === 0 ? 'High' : 'Medium',
                 'status' => 'PendingReview',
-            ],
-            [
-                'analysis_id' => $analysis->analysis_id,
-                'type' => 'draft',
-                'title' => 'مبادرة بنك الخطط العلاجية لمعالجة الفاقد في القراءة والحساب',
-                'description' => 'بناء منصة متابعة فردية لحصص التقوية وتطبيق استبانات تقويم دورية لرصد تقدم الطلبة ذوي التحصيل المتدني.',
-                'priority' => 'High',
-                'status' => 'PendingReview',
-            ],
-            [
-                'analysis_id' => $analysis->analysis_id,
-                'type' => 'draft',
-                'title' => 'مبادرة تعزيز المشاركة المجتمعية عبر المنصات الرقمية',
-                'description' => 'إطلاق استبانات رأي إلكترونية دورية لأولياء الأمور وتنظيم لقاء فصلي مفتوح لمناقشة نتائج التقييم الذاتي.',
-                'priority' => 'Medium',
-                'status' => 'PendingReview',
-            ],
-        ];
+            ];
+        }
 
         foreach ($recommendations as $rec) {
             AiRecommendation::create($rec);
         }
 
+        $initiativesCount = collect($recommendations)->whereIn('type', ['recommendation', 'draft'])->count();
+
         return ApiResponse::created([
             'analysisId' => $analysis->analysis_id,
             'summary' => $analysis->summary,
-            'averageScore' => 2.1,
-            'evaluatedEvidences' => 18,
-            'totalEvidences' => 20,
-            'suggestedInitiativesCount' => 3,
+            'averageScore' => $overallAvg,
+            'evaluatedEvidences' => $evidencesCount,
+            'totalEvidences' => $requirementsTarget,
+            'suggestedInitiativesCount' => $initiativesCount,
             'createdAt' => $analysis->created_at?->toIso8601String(),
-        ], 'تم إجراء التحليل الذكي وتحديد فرص التحسين والمبادرات بنجاح');
+        ], 'تم استخلاص نقاط القوة وفرص التحسين الفعلية لبيانات المدرسة بنجاح');
     }
 
     /**
      * GET /api/v1/ai/analyses/{id}/recommendations
-     * Retrieve identified strengths and initiatives
+     * Retrieve identified strengths and initiatives dynamically scoped to active evaluation
      */
     public function getAiRecommendations(Request $request, int $id): JsonResponse
     {
-        $recommendations = AiRecommendation::where('analysis_id', $id)
-            ->orderBy('recommendation_id', 'asc')
-            ->get();
+        $evaluation = $this->getActiveEvaluation($request);
 
-        if ($recommendations->isEmpty()) {
+        $analysis = $id > 0
+            ? AiAnalysis::where('analysis_id', $id)
+                ->where('evaluation_id', $evaluation->evaluation_id)
+                ->first()
+            : AiAnalysis::where('evaluation_id', $evaluation->evaluation_id)
+                ->orderBy('analysis_id', 'desc')
+                ->first();
+
+        if (!$analysis) {
             return ApiResponse::success([
-                'analysisId' => $id,
-                'summary' => 'لا توجد توصيات صادرة لهذا التحليل حتى الآن.',
+                'analysisId' => 0,
+                'summary' => 'لم يتم إجراء تحليل آلي لبيانات المدرسة الحالية بعد. اضغط على «تشغيل التحليل» لاستخلاص نقاط القوة وفرص التحسين الفعلية.',
                 'strengths' => [],
                 'improvements' => [],
                 'initiatives' => [],
             ]);
         }
 
+        $recommendations = AiRecommendation::where('analysis_id', $analysis->analysis_id)
+            ->orderBy('recommendation_id', 'asc')
+            ->get();
+
         return ApiResponse::success([
-            'analysisId' => $id,
+            'analysisId' => $analysis->analysis_id,
+            'summary' => $analysis->summary,
             'strengths' => $recommendations->where('type', 'strength')->values()->map(fn($r) => [
                 'id' => $r->recommendation_id,
                 'title' => $r->title,
@@ -1272,6 +1302,9 @@ class EvaluatorApiController extends Controller
         $evaluation = $this->getActiveEvaluation($request);
 
         $completionRequest = CompletionRequest::where('status', 'Open')
+            ->whereHas('submission.report', function ($query) use ($evaluation) {
+                $query->where('evaluation_id', $evaluation->evaluation_id);
+            })
             ->orderBy('request_id', 'desc')
             ->with(['items'])
             ->first();
@@ -1525,5 +1558,140 @@ class EvaluatorApiController extends Controller
             'linkedCount' => count($createdLinks),
             'linkIds' => $createdLinks,
         ], 'تم ربط الشاهد بالمؤشرات المحددة بنجاح');
+    }
+
+    /**
+     * تنفيذ التصفير الآمن لنتائج مجموعة من المؤشرات داخل معاملة ذرية مع حماية المفاتيح الأجنبية (الملاحظتان 7 و 11).
+     *
+     * @param Evaluation $evaluation
+     * @param array<int, int> $indicatorIds
+     * @param bool $unlinkEvidences
+     * @return array{resetResultsCount: int, unlinkedEvidencesCount: int}
+     */
+    protected function performIndicatorsReset(Evaluation $evaluation, array $indicatorIds, bool $unlinkEvidences): array
+    {
+        return DB::transaction(function () use ($evaluation, $indicatorIds, $unlinkEvidences) {
+            $results = EvaluationResult::where('evaluation_id', $evaluation->evaluation_id)
+                ->whereIn('indicator_id', $indicatorIds)
+                ->get();
+
+            $resultIds = $results->pluck('result_id')->all();
+            $resetResultsCount = count($resultIds);
+
+            if ($resetResultsCount > 0) {
+                // حفظ قيد chk_improvement_areas_source بضمان تعبئة indicator_id قبل تصفير result_id
+                foreach ($results as $res) {
+                    \App\Models\ImprovementArea::where('result_id', $res->result_id)
+                        ->update([
+                            'indicator_id' => DB::raw("COALESCE(indicator_id, {$res->indicator_id})"),
+                            'result_id'    => null,
+                        ]);
+                }
+
+                // فك ربط evaluation_result_id في روابط الشواهد للحفاظ على تكامل المرجع
+                EvidenceLink::where('evaluation_id', $evaluation->evaluation_id)
+                    ->whereIn('evaluation_result_id', $resultIds)
+                    ->update(['evaluation_result_id' => null]);
+
+                EvaluationResultVerificationMethod::whereIn('evaluation_result_id', $resultIds)->delete();
+                Note::whereIn('result_id', $resultIds)->delete();
+                EvaluationResult::whereIn('result_id', $resultIds)->delete();
+            }
+
+            $unlinkedEvidencesCount = 0;
+            if ($unlinkEvidences) {
+                // فك الارتباط فقط دون حذف الملفات الفيزيائية أو وثائق المدرسة من المستودع
+                $unlinkedEvidencesCount = EvidenceLink::where('evaluation_id', $evaluation->evaluation_id)
+                    ->whereIn('indicator_id', $indicatorIds)
+                    ->delete();
+            }
+
+            return [
+                'resetResultsCount' => $resetResultsCount,
+                'unlinkedEvidencesCount' => $unlinkedEvidencesCount,
+            ];
+        });
+    }
+
+    /**
+     * POST /api/v1/evaluator/indicators/{indicatorId}/reset
+     * تصفير رصد مؤشر واحد بأمان مع إمكانية فك ارتباط شواهده اختيارياً (الملاحظة 7).
+     */
+    public function resetIndicator(Request $request, int $indicatorId): JsonResponse
+    {
+        $user = $request->user();
+        if ($user && !$user->hasPermission('evaluations.edit') && !$user->hasRole('school_evaluator')) {
+            return ApiResponse::forbidden('ليس لديك صلاحية تصفير المؤشرات. هذه الصلاحية محصورة بمقيم المدرسة.');
+        }
+
+        $indicator = Indicator::find($indicatorId);
+        if (!$indicator) {
+            return ApiResponse::notFound('المؤشر المطلوب غير موجود.');
+        }
+
+        $evaluation = $this->getActiveEvaluation($request);
+        $lockStatus = \App\Services\EvaluationLockChecker::checkEvaluationGeneralStatus($evaluation);
+        if (!$lockStatus['allowed']) {
+            return ApiResponse::error($lockStatus['reason'] ?? 'التقييم مقفل ولا يمكن تصفيره.', 422);
+        }
+
+        $unlinkEvidences = filter_var($request->input('unlinkEvidences', false), FILTER_VALIDATE_BOOLEAN);
+        $summary = $this->performIndicatorsReset($evaluation, [$indicatorId], $unlinkEvidences);
+
+        return ApiResponse::success([
+            'indicatorId' => $indicatorId,
+            'resetResultsCount' => $summary['resetResultsCount'],
+            'unlinkedEvidencesCount' => $summary['unlinkedEvidencesCount'],
+        ], 'تم تصفير رصد المؤشر بنجاح وإعادته إلى قائمة العناصر بانتظار الاستيفاء.');
+    }
+
+    /**
+     * POST /api/v1/evaluator/standards/{standardId}/reset
+     * تصفير رصد كافة مؤشرات معيار وطني كامل بأمان مع خيار فك ارتباط الشواهد (الملاحظة 11).
+     */
+    public function resetStandard(Request $request, int $standardId): JsonResponse
+    {
+        $user = $request->user();
+        if ($user && !$user->hasPermission('evaluations.edit') && !$user->hasRole('school_evaluator')) {
+            return ApiResponse::forbidden('ليس لديك صلاحية تصفير المعايير. هذه الصلاحية محصورة بمقيم المدرسة.');
+        }
+
+        $standard = Standard::with('subStandards.indicators')->find($standardId);
+        if (!$standard) {
+            return ApiResponse::notFound('المعيار المطلوب غير موجود.');
+        }
+
+        $evaluation = $this->getActiveEvaluation($request);
+        $lockStatus = \App\Services\EvaluationLockChecker::checkEvaluationGeneralStatus($evaluation);
+        if (!$lockStatus['allowed']) {
+            return ApiResponse::error($lockStatus['reason'] ?? 'التقييم مقفل ولا يمكن تصفير المعايير.', 422);
+        }
+
+        $indicatorIds = $standard->subStandards
+            ->flatMap(fn($sub) => $sub->indicators)
+            ->pluck('indicator_id')
+            ->unique()
+            ->values()
+            ->all();
+
+        if (empty($indicatorIds)) {
+            return ApiResponse::success([
+                'standardId' => $standardId,
+                'affectedIndicatorsCount' => 0,
+                'resetResultsCount' => 0,
+                'unlinkedEvidencesCount' => 0,
+            ], 'لا توجد مؤشرات ضمن هذا المعيار.');
+        }
+
+        $unlinkEvidences = filter_var($request->input('unlinkEvidences', false), FILTER_VALIDATE_BOOLEAN);
+        $summary = $this->performIndicatorsReset($evaluation, $indicatorIds, $unlinkEvidences);
+
+        return ApiResponse::success([
+            'standardId' => $standardId,
+            'standardName' => $standard->name,
+            'affectedIndicatorsCount' => count($indicatorIds),
+            'resetResultsCount' => $summary['resetResultsCount'],
+            'unlinkedEvidencesCount' => $summary['unlinkedEvidencesCount'],
+        ], "تم تصفير المعيار ({$standard->name}) بنجاح وإعادة مؤشراته لقائمة الاستيفاء.");
     }
 }

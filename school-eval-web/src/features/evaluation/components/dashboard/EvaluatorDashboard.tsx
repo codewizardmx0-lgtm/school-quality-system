@@ -504,7 +504,7 @@ export const EvaluatorDashboard: React.FC<EvaluatorDashboardProps> = ({
         >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <span style={{ fontSize: '13px', fontWeight: 700, color: '#64748B' }}>
-              الشواهد والمرفقات الموثقة
+              تغطية الشواهد الموثقة
             </span>
             <div
               style={{
@@ -527,12 +527,12 @@ export const EvaluatorDashboard: React.FC<EvaluatorDashboardProps> = ({
               {kpis.documentedEvidences}
             </span>
             <span style={{ fontSize: '13px', color: '#64748B', fontWeight: 600 }}>
-              / {kpis.targetEvidences} مستند وثائقي وصورة ميدانية
+              تغطية ربط / {kpis.targetEvidences} متطلباً معيارياً
             </span>
           </div>
 
-          <div style={{ fontSize: '12px', color: '#10B981', marginTop: '10px', fontWeight: 600 }}>
-            مفهرسة ومربوطة بالمؤشرات المعيارية
+          <div style={{ fontSize: '12px', color: '#059669', marginTop: '10px', fontWeight: 600 }}>
+            مغطاة عبر {kpis.uniqueDocumentsCount ?? 0} وثيقة وملفاً فعلياً في مستودع المدرسة
           </div>
         </div>
 
@@ -818,6 +818,7 @@ export const EvaluatorDashboard: React.FC<EvaluatorDashboardProps> = ({
           title="مقارنة متوسط جودة الأداء الميداني للمجالات السبعة (من 3.00 نقاط)"
           subtitle="يقيس جودة الأداء الفعلي للمدرسة وفق سلم التقييم لتمييز مجالات التميز عن مجالات التطوير (اضغط للتفاصيل)"
           items={barItems}
+          maxScore={3}
           onSelectItem={(id) => onNavigate('standards-tree', Number(id))}
         />
 

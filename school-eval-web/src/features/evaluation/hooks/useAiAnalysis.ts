@@ -31,13 +31,12 @@ export function useAiAnalysis() {
     }
   }, []);
 
-  // جلب التوصيات المبدئية عند التحميل
+  // جلب التوصيات المبدئية عند التحميل (آخر تحليل خاص بملف تقييم المدرسة الحالية)
   const loadInitialRecommendations = useCallback(async () => {
     setIsLoadingRecs(true);
     try {
-      const recs = await evaluatorApi.getAiRecommendations(1);
+      const recs = await evaluatorApi.getAiRecommendations(0);
       setRecommendations(recs);
-      // Analysis data will be fetched or initiated by user trigger
     } catch (err) {
       console.error('Failed to load AI recommendations:', err);
     } finally {

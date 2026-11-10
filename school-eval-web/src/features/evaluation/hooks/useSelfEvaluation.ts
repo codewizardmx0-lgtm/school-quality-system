@@ -468,6 +468,64 @@ export function useSelfEvaluation(
     return index < allIndicators.length - 1;
   }, [selectedIndicatorId, allIndicators]);
 
+  // تصفير رصد مؤشر واحد بأمان مع مزامنة الشجرة والمسودات المحلية (الملاحظة 7)
+  const resetIndicatorAssessment = useCallback(
+    async (indicatorId: number, unlinkEvidences: boolean = false) => {
+      if (isLocked) return;
+      await evaluatorApi.resetIndicator(indicatorId, unlinkEvidences);
+      if (typeof window !== 'undefined') {
+        const drafts = getStoredDrafts();
+        if (drafts[indicatorId]) {
+          delete drafts[indicatorId];
+          localStorage.setItem(storageKey, JSON.stringify(drafts));
+          refreshDraftsCount();
+        }
+      }
+      await loadTree();
+      if (selectedIndicatorId === indicatorId) {
+        await loadIndicatorResult(indicatorId);
+      }
+      setSaveStatus('idle');
+      setSaveSuccessMessage('تم تصفير رصد المؤشر بنجاح وإعادته لقائمة الاستيفاء.');
+    },
+    [isLocked, getStoredDrafts, storageKey, refreshDraftsCount, loadTree, selectedIndicatorId, loadIndicatorResult]
+  );
+
+  // تصفير معيار كامل بأمان مع مزامنة الشجرة والمسودات المحلية (الملاحظة 11)
+  const resetStandardAssessment = useCallback(
+    async (standardId: number, unlinkEvidences: boolean = false) => {
+      if (isLocked) return;
+      await evaluatorApi.resetStandard(standardId, unlinkEvidences);
+      if (typeof window !== 'undefined' && treeData) {
+        const targetStd = treeData.standards.find((s) => s.standardId === standardId);
+        if (targetStd) {
+          const indIds = new Set(
+            targetStd.subStandards.flatMap((sub) => sub.indicators.map((i) => i.indicatorId))
+          );
+          const drafts = getStoredDrafts();
+          let changed = false;
+          indIds.forEach((id) => {
+            if (drafts[id]) {
+              delete drafts[id];
+              changed = true;
+            }
+          });
+          if (changed) {
+            localStorage.setItem(storageKey, JSON.stringify(drafts));
+            refreshDraftsCount();
+          }
+          if (selectedIndicatorId && indIds.has(selectedIndicatorId)) {
+            await loadIndicatorResult(selectedIndicatorId);
+          }
+        }
+      }
+      await loadTree();
+      setSaveStatus('idle');
+      setSaveSuccessMessage('تم تصفير المعيار بنجاح وإعادة مؤشراته لقائمة الاستيفاء.');
+    },
+    [isLocked, treeData, getStoredDrafts, storageKey, refreshDraftsCount, selectedIndicatorId, loadIndicatorResult, loadTree]
+  );
+
   return {
     treeData,
     allIndicators,
@@ -483,6 +541,8 @@ export function useSelfEvaluation(
     saveStatus,
     saveSuccessMessage,
     saveRubricAssessment,
+    resetIndicatorAssessment,
+    resetStandardAssessment,
     retryLastSave,
     goToPreviousIndicator,
     goToNextIndicator,

@@ -353,6 +353,38 @@ export const evaluatorApi = {
   },
 
   /**
+   * 21.b POST /api/v1/evaluator/indicators/{indicatorId}/reset
+   * Safely reset a single indicator score/evaluation result (and optionally unlink evidences)
+   */
+  async resetIndicator(
+    indicatorId: number,
+    unlinkEvidences: boolean = false
+  ): Promise<{ indicatorId: number; resetResultsCount: number; unlinkedEvidencesCount: number }> {
+    const response = await post<{ indicatorId: number; resetResultsCount: number; unlinkedEvidencesCount: number }>(
+      `/evaluator/indicators/${indicatorId}/reset`,
+      { unlinkEvidences }
+    );
+    return response.data!;
+  },
+
+  /**
+   * 21.c POST /api/v1/evaluator/standards/{standardId}/reset
+   * Safely reset all indicators in a standard (and optionally unlink evidences)
+   */
+  async resetStandard(
+    standardId: number,
+    unlinkEvidences: boolean = false
+  ): Promise<{ standardId: number; affectedIndicatorsCount: number; resetResultsCount: number; unlinkedEvidencesCount: number }> {
+    const response = await post<{
+      standardId: number;
+      affectedIndicatorsCount: number;
+      resetResultsCount: number;
+      unlinkedEvidencesCount: number;
+    }>(`/evaluator/standards/${standardId}/reset`, { unlinkEvidences });
+    return response.data!;
+  },
+
+  /**
    * 22. GET /api/v1/improvement-plans/action-catalog
    * Retrieve standard action templates for improvement plans
    */

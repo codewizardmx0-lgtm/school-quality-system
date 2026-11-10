@@ -14,7 +14,8 @@ import { ProfileModal } from '../../../auth/ProfileModal';
 import { useAuth } from '../../../auth/AuthContext';
 import { ToastNotification } from '../../../admin/components/common/ToastNotification';
 import { useToast } from '../../../admin/components/common/useToast';
-import type { EvaluatorScreen } from '../../api/evaluationTypes';
+import type { EvaluatorScreen, EvaluatorSchoolInfo } from '../../api/evaluationTypes';
+import { evaluatorApi } from '../../api/evaluatorApi';
 import { ShieldAlert, AlertTriangle, ArrowLeft } from 'lucide-react';
 
 interface EvaluatorLayoutProps {
@@ -30,7 +31,9 @@ export const EvaluatorLayout: React.FC<EvaluatorLayoutProps> = ({
   const [activeScreen, setActiveScreen] = useState<EvaluatorScreen>(initialScreen);
   const [selectedIndicatorId, setSelectedIndicatorId] = useState<number | null>(null);
   const [isLocked, setIsLocked] = useState<boolean>(false);
-  const [hasOpenCompletionRequest, setHasOpenCompletionRequest] = useState<boolean>(true);
+  const [hasOpenCompletionRequest, setHasOpenCompletionRequest] = useState<boolean>(false);
+  const [schoolInfo, setSchoolInfo] = useState<EvaluatorSchoolInfo | null>(null);
+  const [notifRefreshKey, setNotifRefreshKey] = useState<number>(0);
   const [isChangePasswordOpen, setIsChangePasswordOpen] = useState<boolean>(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState<boolean>(false);
   const { toasts, addToast, dismissToast } = useToast();
@@ -63,6 +66,24 @@ export const EvaluatorLayout: React.FC<EvaluatorLayoutProps> = ({
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  // مزامنة حالة طلب الاستكمال وقفل التقييم من قاعدة البيانات الفعلية
+  useEffect(() => {
+    let mounted = true;
+    evaluatorApi.getDashboardStats()
+      .then((data) => {
+        if (!mounted || !data) return;
+        setHasOpenCompletionRequest(Boolean(data.completionAlert));
+        if (data.schoolInfo) {
+          setSchoolInfo(data.schoolInfo);
+          setIsLocked(data.schoolInfo.status === 'Submitted' || data.schoolInfo.status === 'Completed');
+        }
+      })
+      .catch(() => {});
+    return () => {
+      mounted = false;
+    };
+  }, [user?.userId]);
 
   const handleNavigate = (screen: EvaluatorScreen, param?: number) => {
     if (param !== undefined) {
@@ -153,6 +174,7 @@ export const EvaluatorLayout: React.FC<EvaluatorLayoutProps> = ({
         return (
           <NotificationsCenter
             onNavigate={handleNavigate}
+            onNotificationsChanged={() => setNotifRefreshKey((k) => k + 1)}
           />
         );
       default:
@@ -212,6 +234,7 @@ export const EvaluatorLayout: React.FC<EvaluatorLayoutProps> = ({
         <EvaluatorTopBar
           addToast={addToast}
           activeScreen={activeScreen}
+          schoolInfo={schoolInfo}
           hasOpenCompletionRequest={hasOpenCompletionRequest}
           onOpenCompletionRequest={() => setActiveScreen('completion-request')}
           onNavigate={handleNavigate}
@@ -223,6 +246,7 @@ export const EvaluatorLayout: React.FC<EvaluatorLayoutProps> = ({
           onOpenChangePassword={() => setIsChangePasswordOpen(true)}
           onOpenProfile={() => setIsProfileModalOpen(true)}
           onLogout={onLogout}
+          notifRefreshKey={notifRefreshKey}
         />
 
         <main style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', minWidth: 0 }}>

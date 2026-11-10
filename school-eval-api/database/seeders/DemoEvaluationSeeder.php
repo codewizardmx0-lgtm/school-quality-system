@@ -444,21 +444,35 @@ class DemoEvaluationSeeder extends Seeder
             ]);
         }
 
-        // ز. إشعارات حقيقية للمستخدمين
+        // ز. إشعارات حقيقية للمستخدمين متوافقة مع الحالة الفعلية دون تكرار (الملاحظة 2)
+        Notification::whereIn('recipient_user_id', [$evaluatorFarouq->user_id, $principalFarouq->user_id])
+            ->where('related_entity_id', $evalFarouq->evaluation_id)
+            ->delete();
+
         $notificationData = [
             [
                 'user'  => $evaluatorFarouq,
-                'title' => 'بدء دورة التقييم الذاتي للعام 2026/2027',
-                'msg'   => 'تم فتح دورة التقييم رسمياً من قبل الإشراف الوزاري. يرجى استكمال رصد المؤشرات المتبقية وإيداع الشواهد.',
-                'type'  => 'cycle_opened',
-                'read'  => false,
+                'title' => 'انطلاق دورة التقييم الذاتي للعام 2026/2027',
+                'msg'   => 'تم تفعيل الإصدار المعياري المعتمد (109 مؤشرات) وفتح ملف التقييم الذاتي لمدرسة الفاروق.',
+                'type'  => 'cycle_launched',
+                'read'  => true,
+                'entity'=> 'cycle',
             ],
             [
                 'user'  => $evaluatorFarouq,
-                'title' => 'تنبيه: مؤشرات معيار البيئة المدرسية بحاجة لشواهد إضافية',
-                'msg'   => 'لوحظ وجود 3 مؤشرات في معيار البيئة والسلامة بانتظار رفع محاضر الفحص الدوري.',
-                'type'  => 'evidence_needed',
+                'title' => 'اكتمال رصد جميع المؤشرات الوطنية وتغطية الشواهد (109/109)',
+                'msg'   => 'تم رصد كافة مؤشرات الأداء الـ 109 وربطها بالشواهد الموثقة في المستودع بنجاح؛ يمكنك مراجعة الختم الرقمي وخطة التحسين.',
+                'type'  => 'version_activated',
                 'read'  => false,
+                'entity'=> 'standard_version',
+            ],
+            [
+                'user'  => $evaluatorFarouq,
+                'title' => 'متابعة جدول تنفيذ إجراءات خطة التحسين المدرسي',
+                'msg'   => 'تم رصد 15 مؤشراً من المستويين (0 و 1) وإدراج خطة التحسين بإجراءاتها الخمسة، يرجى متابعة نسب الإنجاز.',
+                'type'  => 'action_due_soon',
+                'read'  => false,
+                'entity'=> 'improvement_action',
             ],
             [
                 'user'  => $principalFarouq,
@@ -466,27 +480,29 @@ class DemoEvaluationSeeder extends Seeder
                 'msg'   => 'أنهى مقيم الجودة إعداد مسودة خطة التحسين ومصفوفة الإجراءات الخمسة، بانتظار مراجعة الإدارة واعتماد الملاحظات.',
                 'type'  => 'plan_ready',
                 'read'  => true,
+                'entity'=> 'improvement_action',
             ],
             [
                 'user'  => $principalFarouq,
-                'title' => 'تقرير المراجعة الداخلية السنوي جاهز للمعاينة',
-                'msg'   => 'يمكنك الاطلاع على مسودة تقرير التقييم الذاتي من تبويب المراجعة الداخلية وتدوين ملاحظات مدير المدرسة.',
+                'title' => 'ملف التقييم الذاتي جاهز للمراجعة الداخلية والاعتماد',
+                'msg'   => 'يمكنك استعراض النتائج الكاملة (109/109) من تبويب المراجعة والاعتماد وتدوين ملاحظات مدير المدرسة.',
                 'type'  => 'report_review',
                 'read'  => false,
+                'entity'=> 'Evaluation',
             ],
         ];
 
-        foreach ($notificationData as $n) {
+        foreach ($notificationData as $idx => $n) {
             Notification::create([
                 'recipient_user_id'   => $n['user']->user_id,
                 'title'               => $n['title'],
                 'message'             => $n['msg'],
                 'type'                => $n['type'],
-                'related_entity_type' => 'Evaluation',
+                'related_entity_type' => $n['entity'],
                 'related_entity_id'   => $evalFarouq->evaluation_id,
                 'is_read'             => $n['read'],
-                'read_at'             => $n['read'] ? now() : null,
-                'created_at'          => now()->subHours(rand(1, 24)),
+                'read_at'             => $n['read'] ? now()->subHours(2) : null,
+                'created_at'          => now()->subHours(($idx + 1) * 3),
             ]);
         }
     }

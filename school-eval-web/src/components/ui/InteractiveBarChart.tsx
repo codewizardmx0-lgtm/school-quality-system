@@ -140,7 +140,9 @@ export const InteractiveBarChart: React.FC<InteractiveBarChartProps> = ({
                       color: barColor,
                     }}
                   >
-                    {percentage}%
+                    {maxScore === 3
+                      ? `${Number(item.value).toFixed(2)} / 3.00 (${percentage}%)`
+                      : `${percentage}%`}
                   </span>
                 </div>
               </div>

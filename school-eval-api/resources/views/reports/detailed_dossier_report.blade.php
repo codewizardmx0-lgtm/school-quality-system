@@ -5,7 +5,7 @@
     <title>استمارة التقرير المفصلة لتقويم المدرسة - {{ $school['school_name'] }}</title>
     <style>
         @page {
-            margin-top: 38mm;
+            margin-top: 48mm;
             margin-bottom: 18mm;
             margin-left: 10mm;
             margin-right: 10mm;
@@ -18,408 +18,405 @@
             text-align: right;
             color: #1e293b;
             font-size: 9pt;
-            line-height: 1.4;
-        }
-
-        /* رأس الصفحة المكرر */
-        .page-header-wrap {
-            width: 100%;
-            border-bottom: 2px solid #0f766e;
-            padding-bottom: 6px;
-            margin-bottom: 10px;
-        }
-        .header-col-right {
-            width: 32%;
-            text-align: right;
-            font-size: 8.5pt;
-            color: #475569;
-            line-height: 1.3;
-        }
-        .header-col-center {
-            width: 36%;
-            text-align: center;
-        }
-        .header-col-center h1 {
-            color: #0f766e;
-            font-size: 13pt;
+            line-height: 1.45;
             margin: 0;
             padding: 0;
-            font-weight: bold;
         }
-        .header-col-center h2 {
-            color: #334155;
-            font-size: 9.5pt;
-            margin: 2px 0 0 0;
-            font-weight: normal;
+
+        /* جداول عامة متوافقة مع mPDF */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            page-break-inside: auto;
         }
-        .header-col-left {
-            width: 32%;
-            text-align: left;
-            font-size: 8.5pt;
-            color: #475569;
-            line-height: 1.3;
+        thead {
+            display: table-header-group;
+        }
+        tr {
+            page-break-inside: avoid;
+            page-break-after: auto;
+        }
+
+        /* الترويسة الثابتة */
+        .header-table {
+            width: 100%;
+            border-bottom: 2px solid #0f766e;
+            margin-bottom: 4px;
+        }
+        .header-table td {
+            border: none;
+            vertical-align: middle;
+            padding: 4px 2px 8px 2px;
         }
 
         /* ذيل الصفحة */
-        .page-footer-wrap {
+        .footer-table {
             width: 100%;
             border-top: 1px solid #cbd5e1;
+        }
+        .footer-table td {
+            border: none;
             padding-top: 5px;
             font-size: 8pt;
             color: #64748b;
         }
 
-        /* الجداول العامة */
-        table {
-            width: 100%;
-            border-collapse: collapse;
+        /* عناوين الأقسام */
+        .section-title-box {
+            background-color: #f1f5f9;
+            border-right: 4px solid #0f766e;
+            padding: 6px 10px;
+            margin-top: 12px;
+            margin-bottom: 8px;
+            font-weight: bold;
+            font-size: 10pt;
+            color: #0f766e;
+            page-break-after: avoid;
         }
-        .table-custom {
-            margin-bottom: 12px;
+
+        /* ترويسات المعايير داخل الشجرة */
+        .standard-banner-table {
+            width: 100%;
+            margin-top: 12px;
+            margin-bottom: 4px;
+            page-break-after: avoid;
+        }
+        .standard-banner-td {
+            background-color: #e6fffa;
+            border: 1px solid #5eead4;
+            color: #115e59;
+            padding: 6px 10px;
+            font-weight: bold;
+            font-size: 9.5pt;
+        }
+        .substandard-banner-td {
+            background-color: #f8fafc;
+            border: 1px solid #cbd5e1;
+            border-right: 4px solid #475569;
+            color: #334155;
+            padding: 4px 8px;
+            font-weight: bold;
+            font-size: 8.5pt;
+        }
+
+        /* الجداول البيانية */
+        .data-table {
+            width: 100%;
+            margin-bottom: 10px;
             border: 1px solid #cbd5e1;
         }
-        .table-custom th {
+        .data-table th {
             background-color: #0f766e;
             color: #ffffff;
             font-weight: bold;
-            padding: 5px 6px;
+            padding: 6px 5px;
             font-size: 8.5pt;
-            border: 1px solid #0f766e;
+            border: 1px solid #0d9488;
             text-align: center;
         }
-        .table-custom td {
+        .data-table td {
             padding: 5px 6px;
             font-size: 8.5pt;
-            border: 1px solid #e2e8f0;
-            vertical-align: middle;
+            border: 1px solid #cbd5e1;
+            vertical-align: top;
+            word-wrap: break-word;
         }
-        .table-zebra tr:nth-child(even) {
+        .zebra-even {
+            background-color: #ffffff;
+        }
+        .zebra-odd {
             background-color: #f8fafc;
         }
 
-        /* الأقسام والعناوين */
-        .section-header {
-            background-color: #f1f5f9;
-            border-right: 4px solid #0f766e;
-            padding: 4px 8px;
-            margin: 10px 0 6px 0;
-            font-weight: bold;
-            font-size: 9.5pt;
-            color: #0f766e;
+        /* خلايا بطاقات الأداء */
+        .kpi-table {
+            width: 100%;
+            margin-bottom: 10px;
+            border-spacing: 6px;
+            border-collapse: separate;
         }
-        .standard-banner {
-            background-color: #e6fffa;
-            border: 1px solid #99f6e4;
-            color: #115e59;
-            padding: 6px 10px;
-            margin: 12px 0 6px 0;
-            font-weight: bold;
-            font-size: 9.5pt;
-            border-radius: 4px;
-        }
-        .substandard-title {
-            background-color: #f8fafc;
-            color: #334155;
-            padding: 4px 8px;
-            margin: 6px 0 4px 0;
-            font-weight: bold;
-            font-size: 8.5pt;
-            border-right: 3px solid #64748b;
-        }
-
-        /* بطاقات الإحصاء الموجزة */
-        .stat-card {
+        .kpi-cell {
+            width: 25%;
             background-color: #f8fafc;
             border: 1px solid #cbd5e1;
-            padding: 6px 8px;
+            padding: 8px 6px;
             text-align: center;
-            border-radius: 4px;
+            vertical-align: middle;
         }
-        .stat-val {
+        .kpi-label {
+            font-size: 8pt;
+            color: #475569;
+            font-weight: bold;
+        }
+        .kpi-value {
             font-size: 13pt;
             font-weight: bold;
             color: #0f766e;
-            margin: 2px 0;
+            padding: 3px 0;
         }
-        .stat-lbl {
+        .kpi-sub {
             font-size: 7.5pt;
             color: #64748b;
         }
 
-        /* شارات المستويات الرسمية */
-        .badge-level {
-            display: inline-block;
-            padding: 2px 6px;
-            border-radius: 3px;
-            font-weight: bold;
-            font-size: 7.5pt;
-            text-align: center;
-        }
-        .lvl-3 { background-color: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
-        .lvl-2 { background-color: #e0f2fe; color: #075985; border: 1px solid #bae6fd; }
-        .lvl-1 { background-color: #ffedd5; color: #9a3412; border: 1px solid #fed7aa; }
-        .lvl-0 { background-color: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; }
-        .lvl-none { background-color: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
+        /* ألوان المستويات النصية الآمنة في mPDF */
+        .lvl-3 { color: #166534; font-weight: bold; background-color: #f0fdf4; }
+        .lvl-2 { color: #075985; font-weight: bold; background-color: #f0f9ff; }
+        .lvl-1 { color: #9a3412; font-weight: bold; background-color: #fff7ed; }
+        .lvl-0 { color: #475569; font-weight: bold; background-color: #f1f5f9; }
+        .lvl-none { color: #991b1b; font-weight: bold; background-color: #fef2f2; }
 
-        /* الشواهد وأدوات التحقق */
-        .evidence-pill {
-            font-size: 7.5pt;
-            color: #0369a1;
-            background-color: #f0f9ff;
-            border: 1px solid #bae6fd;
-            padding: 1px 4px;
-            border-radius: 2px;
-            margin-bottom: 2px;
-            display: inline-block;
+        /* التوقيعات */
+        .sig-table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 6px;
+            margin-top: 8px;
         }
-
-        /* صندوق التوقيعات */
-        .sig-box {
-            border: 1px dashed #cbd5e1;
+        .sig-cell {
+            width: 33.3%;
+            border: 1px solid #cbd5e1;
             background-color: #f8fafc;
-            padding: 8px;
+            padding: 10px 8px;
             text-align: center;
-            min-height: 60px;
+            vertical-align: top;
+            font-size: 8.5pt;
+            line-height: 1.7;
         }
     </style>
 </head>
 <body>
 
-    <!-- الترويسة الثابتة لكل الصفحات -->
+    <!-- الترويسة الثابتة لجميع الصفحات -->
     <htmlpageheader name="pageHeader">
-        <div class="page-header-wrap">
-            <table style="width: 100%;">
-                <tr>
-                    <td class="header-col-right">
-                        <strong>الجمهورية اليمنية</strong><br>
-                        وزارة التربية والتعليم والبحث العلمي<br>
-                        قطاع المناهج والتوجيه - الإدارة العامة للاعتماد
-                    </td>
-                    <td class="header-col-center">
-                        <h1>استمارة التقرير المفصلة للتقييم الذاتي</h1>
-                        <h2>ملف الاعتماد المدرسي الشامل (Detailed Dossier)</h2>
-                    </td>
-                    <td class="header-col-left">
-                        <strong>المدرسة:</strong> {{ $school['school_name'] }}<br>
-                        <strong>الرمز:</strong> {{ $school['school_code'] }} | <strong>العام:</strong> {{ $cycle['academic_year'] }}<br>
-                        <strong>التاريخ:</strong> {{ $report_date }}
-                    </td>
-                </tr>
-            </table>
-        </div>
+        <table class="header-table">
+            <tr>
+                <td style="width: 31%; text-align: right; font-size: 8pt; color: #475569; line-height: 1.4;">
+                    <strong>الجمهورية اليمنية</strong><br>
+                    وزارة التربية والتعليم والبحث العلمي<br>
+                    الإدارة العامة للجودة والاعتماد المدرسي
+                </td>
+                <td style="width: 38%; text-align: center;">
+                    <div style="color: #0f766e; font-size: 12.5pt; font-weight: bold;">استمارة التقرير المفصلة للتقييم الذاتي</div>
+                    <div style="color: #334155; font-size: 8.5pt;">ملف الاعتماد المدرسي الشامل (Detailed Dossier)</div>
+                </td>
+                <td style="width: 31%; text-align: left; font-size: 8pt; color: #475569; line-height: 1.4;">
+                    <strong>المدرسة:</strong> {{ $school['school_name'] }}<br>
+                    <strong>الرمز:</strong> {{ $school['school_code'] }} | <strong>العام:</strong> {{ $cycle['academic_year'] }}<br>
+                    <strong>تاريخ الإصدار:</strong> {{ $report_date }}
+                </td>
+            </tr>
+        </table>
     </htmlpageheader>
 
     <!-- ذيل الصفحة الثابت -->
     <htmlpagefooter name="pageFooter">
-        <div class="page-footer-wrap">
-            <table style="width: 100%;">
-                <tr>
-                    <td style="width: 50%; text-align: right;">
-                        {{ $system_name }} | استمارة التقييم والاعتماد الرسمية
-                    </td>
-                    <td style="width: 50%; text-align: left;">
-                        صفحة {PAGENO} من {nbpg}
-                    </td>
-                </tr>
-            </table>
-        </div>
+        <table class="footer-table">
+            <tr>
+                <td style="width: 65%; text-align: right;">
+                    {{ $system_name }} — وثيقة تقييم واعتماد رسمية
+                </td>
+                <td style="width: 35%; text-align: left;">
+                    صفحة {PAGENO} من {nbpg}
+                </td>
+            </tr>
+        </table>
     </htmlpagefooter>
 
-    <!-- 1. هوية المدرسة واللقطة الإحصائية -->
-    <div class="section-header">أولاً: بيانات المدرسة وسياق دورة التقييم</div>
-    <table class="table-custom" style="margin-bottom: 8px;">
+    <!-- أولاً: بيانات المدرسة وسياق الدورة -->
+    <div class="section-title-box">أولاً: بيانات المدرسة وسياق دورة التقييم</div>
+    <table class="data-table">
         <tr>
-            <td style="width: 15%; background-color: #f8fafc; font-weight: bold;">اسم المدرسة</td>
-            <td style="width: 35%; font-weight: bold; color: #0f766e;">{{ $school['school_name'] }}</td>
-            <td style="width: 15%; background-color: #f8fafc; font-weight: bold;">المحافظة / المديرية</td>
-            <td style="width: 35%;">{{ $school['governorate'] }} - {{ $school['educational_district'] }}</td>
+            <td style="width: 16%; background-color: #f1f5f9; font-weight: bold;">اسم المدرسة</td>
+            <td style="width: 34%; font-weight: bold; color: #0f766e;">{{ $school['school_name'] }}</td>
+            <td style="width: 16%; background-color: #f1f5f9; font-weight: bold;">المحافظة / المديرية</td>
+            <td style="width: 34%;">{{ $school['governorate'] }} - {{ $school['educational_district'] }}</td>
         </tr>
         <tr>
-            <td style="background-color: #f8fafc; font-weight: bold;">رمز المدرسة</td>
-            <td><code>{{ $school['school_code'] }}</code></td>
-            <td style="background-color: #f8fafc; font-weight: bold;">المرحلة ونوع التعليم</td>
-            <td>{{ $school['educational_stage'] }} ({{ $school['school_type'] ?? 'حكومي' }})</td>
+            <td style="background-color: #f1f5f9; font-weight: bold;">رمز المدرسة</td>
+            <td style="font-family: monospace;">{{ $school['school_code'] }}</td>
+            <td style="background-color: #f1f5f9; font-weight: bold;">المرحلة ونوع التعليم</td>
+            <td>{{ $school['educational_stage'] }} ({{ $school['school_type'] }})</td>
         </tr>
         <tr>
-            <td style="background-color: #f8fafc; font-weight: bold;">دورة التقييم</td>
-            <td>{{ $cycle['cycle_name'] ?? 'الدورة الوطنية للتقييم الذاتي' }} ({{ $cycle['academic_year'] }})</td>
-            <td style="background-color: #f8fafc; font-weight: bold;">حالة التقييم</td>
+            <td style="background-color: #f1f5f9; font-weight: bold;">دورة التقييم</td>
+            <td>{{ $cycle['cycle_name'] }} ({{ $cycle['academic_year'] }})</td>
+            <td style="background-color: #f1f5f9; font-weight: bold;">حالة الملف</td>
             <td>
                 @if(($evaluation['status'] ?? '') === 'Completed')
-                    <span style="color: #166534; font-weight: bold;">مكتمل ومقفل رسمياً</span>
+                    <strong style="color: #166534;">مكتمل ومقفل رسمياً</strong>
                 @else
-                    <span style="color: #9a3412; font-weight: bold;">قيد الرصد والتوثيق الميداني</span>
+                    <strong style="color: #9a3412;">قيد الرصد والتوثيق الميداني</strong>
                 @endif
             </td>
         </tr>
     </table>
 
-    <!-- 2. بطاقات الأداء وتوزيع المستويات -->
-    <table style="width: 100%; margin-bottom: 12px;">
+    <!-- ثانياً: مؤشرات الأداء الإجمالية وتوزيع المستويات -->
+    <table class="kpi-table">
         <tr>
-            <td style="width: 25%; padding-left: 4px;">
-                <div class="stat-card">
-                    <div class="stat-lbl">النتيجة الإجمالية الموزونة</div>
-                    <div class="stat-val">{{ number_format($final_score, 1) }}%</div>
-                    <div class="stat-lbl" style="font-weight: bold; color: {{ $rating['color'] ?? '#0f766e' }};">
-                        {{ $rating['label'] ?? 'مكتمل' }}
-                    </div>
+            <td class="kpi-cell">
+                <div class="kpi-label">النتيجة الموزونة الإجمالية</div>
+                <div class="kpi-value">{{ number_format($final_score, 1) }}%</div>
+                <div class="kpi-sub" style="font-weight: bold; color: {{ $rating['color'] ?? '#0f766e' }};">
+                    {{ $rating['label'] ?? 'مكتمل' }}
                 </div>
             </td>
-            <td style="width: 25%; padding: 0 4px;">
-                <div class="stat-card">
-                    <div class="stat-lbl">نسبة رصد المؤشرات</div>
-                    <div class="stat-val" style="color: #0369a1;">{{ number_format($completion_rate, 1) }}%</div>
-                    <div class="stat-lbl">({{ $scored_indicators_count }} من أصل {{ $total_indicators_count }})</div>
-                </div>
+            <td class="kpi-cell">
+                <div class="kpi-label">نسبة اكتمال رصد المؤشرات</div>
+                <div class="kpi-value" style="color: #0369a1;">{{ number_format($completion_rate, 1) }}%</div>
+                <div class="kpi-sub">{{ $scored_indicators_count }} من أصل {{ $total_indicators_count }} مؤشر</div>
             </td>
-            <td style="width: 25%; padding: 0 4px;">
-                <div class="stat-card">
-                    <div class="stat-lbl">إجمالي الشواهد المودعة</div>
-                    <div class="stat-val" style="color: #0f766e;">{{ $total_evidence_count }}</div>
-                    <div class="stat-lbl">وثيقة ورابط مرجعي</div>
-                </div>
+            <td class="kpi-cell">
+                <div class="kpi-label">تغطية الشواهد الموثقة</div>
+                <div class="kpi-value" style="color: #0f766e;">{{ $total_evidence_count }} / {{ $requirements_target }}</div>
+                <div class="kpi-sub">تغطية ربط ({{ $unique_documents_count }} ملفاً فعلياً)</div>
             </td>
-            <td style="width: 25%; padding-right: 4px;">
-                <div class="stat-card">
-                    <div class="stat-lbl">متوسط جودة الأداء الميداني</div>
-                    <div class="stat-val" style="color: #7c3aed;">{{ number_format($average_score_out_of_3, 2) }} / 3.00</div>
-                    <div class="stat-lbl">نقاط الجودة المعيارية</div>
-                </div>
+            <td class="kpi-cell">
+                <div class="kpi-label">متوسط جودة الأداء الميداني</div>
+                <div class="kpi-value" style="color: #6d28d9;">{{ number_format($average_score_out_of_3, 2) }} / 3.00</div>
+                <div class="kpi-sub">متوسط الدرجات المعياري</div>
             </td>
         </tr>
     </table>
 
-    <!-- توزيع المستويات الأربعة -->
-    <table class="table-custom" style="margin-bottom: 14px;">
+    <table class="data-table">
         <thead>
             <tr>
                 <th style="width: 25%; background-color: #166534;">المستوى 3: متحقق</th>
                 <th style="width: 25%; background-color: #0369a1;">المستوى 2: متحقق بدرجة متوسطة</th>
-                <th style="width: 25%; background-color: #ea580c;">المستوى 1: متحقق بدرجة ضعيفة</th>
-                <th style="width: 25%; background-color: #64748b;">المستوى 0: غير متوفر</th>
+                <th style="width: 25%; background-color: #c2410c;">المستوى 1: متحقق بدرجة ضعيفة</th>
+                <th style="width: 25%; background-color: #475569;">المستوى 0: غير متوفر</th>
             </tr>
         </thead>
         <tbody>
-            <tr style="text-align: center; font-weight: bold; font-size: 10pt;">
-                <td style="color: #166534; background-color: #f0fdf4;">
+            <tr>
+                <td class="lvl-3" style="text-align: center; font-size: 9.5pt;">
                     {{ $scoreDistribution[3] ?? 0 }} مؤشر ({{ $total_indicators_count > 0 ? round((($scoreDistribution[3] ?? 0) / $total_indicators_count) * 100, 1) : 0 }}%)
                 </td>
-                <td style="color: #0369a1; background-color: #f0f9ff;">
+                <td class="lvl-2" style="text-align: center; font-size: 9.5pt;">
                     {{ $scoreDistribution[2] ?? 0 }} مؤشر ({{ $total_indicators_count > 0 ? round((($scoreDistribution[2] ?? 0) / $total_indicators_count) * 100, 1) : 0 }}%)
                 </td>
-                <td style="color: #ea580c; background-color: #fff7ed;">
+                <td class="lvl-1" style="text-align: center; font-size: 9.5pt;">
                     {{ $scoreDistribution[1] ?? 0 }} مؤشر ({{ $total_indicators_count > 0 ? round((($scoreDistribution[1] ?? 0) / $total_indicators_count) * 100, 1) : 0 }}%)
                 </td>
-                <td style="color: #475569; background-color: #f8fafc;">
+                <td class="lvl-0" style="text-align: center; font-size: 9.5pt;">
                     {{ $scoreDistribution[0] ?? 0 }} مؤشر ({{ $total_indicators_count > 0 ? round((($scoreDistribution[0] ?? 0) / $total_indicators_count) * 100, 1) : 0 }}%)
                 </td>
             </tr>
         </tbody>
     </table>
 
-    <!-- 3. جدول المجالات المعيارية السبعة -->
-    <div class="section-header">ثانياً: مقارنة استيفاء وجودة المجالات المعيارية السبعة (الأوزان ونسب الإنجاز)</div>
-    <table class="table-custom table-zebra" style="margin-bottom: 16px;">
+    <!-- ثالثاً: جدول المجالات المعيارية السبعة -->
+    <div class="section-title-box">ثانياً: مقارنة متوسط جودة الأداء ونسبة الإنجاز للمجالات السبعة</div>
+    <table class="data-table">
         <thead>
             <tr>
-                <th style="width: 6%;">#</th>
+                <th style="width: 8%;">الرمز</th>
                 <th style="width: 34%; text-align: right;">المجال المعياري الرئيسي</th>
-                <th style="width: 12%;">الوزن النسبي</th>
-                <th style="width: 14%;">متوسط الجودة (من 3)</th>
-                <th style="width: 12%;">نسبة الإدخال</th>
-                <th style="width: 11%;">المساهمة الموزونة</th>
-                <th style="width: 11%;">الشواهد</th>
+                <th style="width: 11%;">الوزن</th>
+                <th style="width: 15%;">متوسط الجودة</th>
+                <th style="width: 11%;">نسبة الإدخال</th>
+                <th style="width: 11%;">المساهمة</th>
+                <th style="width: 10%;">التغطيات</th>
             </tr>
         </thead>
         <tbody>
             @foreach($standards_summary as $index => $std)
-                <tr>
-                    <td style="text-align: center; font-weight: bold;">{{ $index + 1 }}</td>
-                    <td style="font-weight: bold; color: #1e293b;">{{ $std['standard_name'] }}</td>
+                <tr class="{{ $index % 2 === 0 ? 'zebra-even' : 'zebra-odd' }}">
+                    <td style="text-align: center; font-weight: bold;">{{ $std['standard_code'] }}</td>
+                    <td style="font-weight: bold; color: #0f172a;">{{ $std['standard_name'] }}</td>
                     <td style="text-align: center;">{{ $std['weight'] }}%</td>
                     <td style="text-align: center; font-weight: bold; color: #0f766e;">
                         {{ number_format($std['average_score'] ?? 0, 2) }} / 3.00
                     </td>
-                    <td style="text-align: center;">
-                        {{ number_format($std['completion_rate'] ?? 0, 1) }}%
-                    </td>
+                    <td style="text-align: center;">{{ number_format($std['completion_rate'] ?? 0, 1) }}%</td>
                     <td style="text-align: center; font-weight: bold; color: #115e59;">
                         {{ number_format($std['weighted_contribution'] ?? 0, 1) }}%
                     </td>
-                    <td style="text-align: center;">
-                        {{ $std['evidence_count'] ?? 0 }}
-                    </td>
+                    <td style="text-align: center;">{{ $std['evidence_count'] ?? 0 }}</td>
                 </tr>
             @endforeach
         </tbody>
     </table>
 
-    <!-- 4. سجل رصد المؤشرات الـ 109 بالتفصيل -->
-    <div class="section-header">ثالثاً: مصفوفة المؤشرات الوطنية الـ 109 الشاملة وأدلة الإثبات المودعة</div>
+    <!-- رابعاً: مصفوفة المؤشرات الـ 109 الشاملة -->
+    <div class="section-title-box">ثالثاً: مصفوفة المؤشرات الوطنية الـ 109 الشاملة وأدلة الإثبات المودعة</div>
 
     @foreach($standards_tree as $std)
-        <div class="standard-banner">
-            {{ $std['standard_code'] }} - {{ $std['standard_name'] }} (الوزن: {{ $std['weight'] }}%)
-        </div>
+        <table class="standard-banner-table">
+            <tr>
+                <td class="standard-banner-td">
+                    {{ $std['standard_code'] }} — {{ $std['standard_name'] }} (الوزن النسبي: {{ $std['weight'] }}%)
+                </td>
+            </tr>
+        </table>
 
         @foreach($std['sub_standards'] as $sub)
-            <div class="substandard-title">
-                {{ $sub['sub_standard_code'] }} - {{ $sub['sub_standard_name'] }}
-            </div>
-
-            <table class="table-custom table-zebra" style="margin-bottom: 10px;">
+            <table class="data-table">
                 <thead>
                     <tr>
-                        <th style="width: 9%;">رمز المؤشر</th>
-                        <th style="width: 37%; text-align: right;">نص المؤشر الوطني</th>
-                        <th style="width: 14%;">أداة التحقق</th>
+                        <td colspan="5" class="substandard-banner-td">
+                            المعيار الفرعي {{ $sub['sub_standard_code'] }}: {{ $sub['sub_standard_name'] }}
+                        </td>
+                    </tr>
+                    <tr>
+                        <th style="width: 9%;">الرمز</th>
+                        <th style="width: 34%; text-align: right;">نص المؤشر الوطني</th>
+                        <th style="width: 15%;">أداة التحقق</th>
                         <th style="width: 16%;">المستوى المرصود</th>
-                        <th style="width: 24%; text-align: right;">الشواهد المرفقة وملاحظات الرصد</th>
+                        <th style="width: 26%; text-align: right;">الشواهد المربوطة وملاحظات الرصد</th>
                     </tr>
                 </thead>
                 <tbody>
-                    @foreach($sub['indicators'] as $ind)
-                        <tr>
-                            <td style="text-align: center; font-family: monospace; font-weight: bold; font-size: 8pt;">
+                    @foreach($sub['indicators'] as $idx => $ind)
+                        @php
+                            $lvlClass = match($ind['score']) {
+                                3 => 'lvl-3',
+                                2 => 'lvl-2',
+                                1 => 'lvl-1',
+                                0 => 'lvl-0',
+                                default => 'lvl-none',
+                            };
+                            $lvlText = match($ind['score']) {
+                                3 => 'المستوى 3: متحقق',
+                                2 => 'المستوى 2: بدرجة متوسطة',
+                                1 => 'المستوى 1: بدرجة ضعيفة',
+                                0 => 'المستوى 0: غير متوفر',
+                                default => 'لم يرصد بعد',
+                            };
+                        @endphp
+                        <tr class="{{ $idx % 2 === 0 ? 'zebra-even' : 'zebra-odd' }}">
+                            <td style="text-align: center; font-family: monospace; font-weight: bold;">
                                 {{ $ind['indicator_code'] }}
                             </td>
                             <td>
                                 {{ $ind['indicator_name'] }}
                             </td>
-                            <td style="text-align: center; font-size: 7.5pt; color: #475569;">
-                                {{ implode('، ', $ind['verification_tools']) ?: 'فحص سجلات وملاحظة' }}
+                            <td style="text-align: center; font-size: 8pt; color: #334155;">
+                                {{ !empty($ind['verification_tools']) ? implode('، ', $ind['verification_tools']) : 'فحص السجلات والملاحظة' }}
                             </td>
-                            <td style="text-align: center;">
-                                @if($ind['score'] === 3)
-                                    <span class="badge-level lvl-3">المستوى 3: متحقق</span>
-                                @elseif($ind['score'] === 2)
-                                    <span class="badge-level lvl-2">المستوى 2: بدرجة متوسطة</span>
-                                @elseif($ind['score'] === 1)
-                                    <span class="badge-level lvl-1">المستوى 1: بدرجة ضعيفة</span>
-                                @elseif($ind['score'] === 0)
-                                    <span class="badge-level lvl-0">المستوى 0: غير متوفر</span>
-                                @else
-                                    <span class="badge-level lvl-none">لم يرصد بعد</span>
-                                @endif
+                            <td class="{{ $lvlClass }}" style="text-align: center; font-size: 8pt;">
+                                {{ $lvlText }}
                             </td>
-                            <td>
+                            <td style="font-size: 7.5pt; line-height: 1.4;">
                                 @if(!empty($ind['evidence_titles']))
-                                    <div style="margin-bottom: 2px;">
-                                        @foreach(array_slice($ind['evidence_titles'], 0, 3) as $evTitle)
-                                            <span class="evidence-pill">📄 {{ $evTitle }}</span>
-                                        @endforeach
-                                        @if(count($ind['evidence_titles']) > 3)
-                                            <span style="font-size: 7pt; color: #64748b;">+{{ count($ind['evidence_titles']) - 3 }} شواهد أخرى</span>
-                                        @endif
+                                    <div style="color: #0369a1; font-weight: bold;">
+                                        عدد الشواهد المرفقة: {{ count($ind['evidence_titles']) }}
                                     </div>
+                                    @foreach(array_slice($ind['evidence_titles'], 0, 3) as $evTitle)
+                                        <div style="color: #1e293b;">- {{ \Illuminate\Support\Str::limit($evTitle, 48) }}</div>
+                                    @endforeach
+                                    @if(count($ind['evidence_titles']) > 3)
+                                        <div style="color: #64748b;">(+{{ count($ind['evidence_titles']) - 3 }} شواهد إضافية)</div>
+                                    @endif
                                 @else
-                                    <span style="font-size: 7.5pt; color: #94a3b8;">لا توجد شواهد مرفقة</span>
+                                    <div style="color: #94a3b8;">لا توجد شواهد مرفقة</div>
                                 @endif
 
                                 @if(!empty($ind['notes']))
-                                    <div style="font-size: 7pt; color: #64748b; margin-top: 2px; border-top: 1px dotted #e2e8f0; padding-top: 2px;">
-                                        <strong>ملاحظة:</strong> {{ \Illuminate\Support\Str::limit($ind['notes'], 80) }}
+                                    <div style="color: #475569; margin-top: 3px; border-top: 1px solid #e2e8f0; padding-top: 2px;">
+                                        <strong>ملاحظة:</strong> {{ \Illuminate\Support\Str::limit($ind['notes'], 85) }}
                                     </div>
                                 @endif
                             </td>
@@ -430,34 +427,28 @@
         @endforeach
     @endforeach
 
-    <!-- 5. التوقيعات والاعتماد الرسمي -->
-    <div style="page-break-inside: avoid; margin-top: 14px;">
-        <div class="section-header">رابعاً: توثيق واعتماد لجنة الجودة والتقويم والاعتماد المدرسي</div>
-        <table style="width: 100%; margin-top: 8px;">
+    <!-- خامساً: التوقيعات والاعتماد الرسمي -->
+    <div style="page-break-inside: avoid; margin-top: 12px;">
+        <div class="section-title-box">رابعاً: توثيق واعتماد لجنة الجودة والتقويم والاعتماد المدرسي</div>
+        <table class="sig-table">
             <tr>
-                <td style="width: 32%; padding-left: 5px;">
-                    <div class="sig-box">
-                        <strong style="color: #0f766e;">إعداد ومطابقة: مقيم المدرسة</strong><br>
-                        <span style="font-size: 8pt; color: #475569;">الاسم: .......................................</span><br>
-                        <span style="font-size: 8pt; color: #475569;">التوقيع: ....................................</span><br>
-                        <span style="font-size: 7.5pt; color: #94a3b8;">التاريخ: {{ $report_date }}</span>
-                    </div>
+                <td class="sig-cell">
+                    <strong style="color: #0f766e;">إعداد ومطابقة: مقيم المدرسة</strong><br>
+                    الاسم: ________________________<br>
+                    التوقيع: ______________________<br>
+                    <span style="font-size: 7.5pt; color: #64748b;">التاريخ: {{ $report_date }}</span>
                 </td>
-                <td style="width: 32%; padding: 0 5px;">
-                    <div class="sig-box">
-                        <strong style="color: #0369a1;">مراجعة واعتماد: مدير المدرسة</strong><br>
-                        <span style="font-size: 8pt; color: #475569;">الاسم: .......................................</span><br>
-                        <span style="font-size: 8pt; color: #475569;">الختم والتوقيع: ..........................</span><br>
-                        <span style="font-size: 7.5pt; color: #94a3b8;">التاريخ: ..... / ..... / 2026م</span>
-                    </div>
+                <td class="sig-cell">
+                    <strong style="color: #0369a1;">مراجعة واعتماد: مدير المدرسة</strong><br>
+                    الاسم: ________________________<br>
+                    الختم والتوقيع: ________________<br>
+                    <span style="font-size: 7.5pt; color: #64748b;">التاريخ: ____ / ____ / 2026م</span>
                 </td>
-                <td style="width: 32%; padding-right: 5px;">
-                    <div class="sig-box">
-                        <strong style="color: #115e59;">تدقيق وتوثيق: المشرف الوزاري</strong><br>
-                        <span style="font-size: 8pt; color: #475569;">الاسم: .......................................</span><br>
-                        <span style="font-size: 8pt; color: #475569;">رقم الاعتماد: ...........................</span><br>
-                        <span style="font-size: 7.5pt; color: #94a3b8;">التاريخ: ..... / ..... / 2026م</span>
-                    </div>
+                <td class="sig-cell">
+                    <strong style="color: #115e59;">تدقيق وتوثيق: المشرف الوزاري</strong><br>
+                    الاسم: ________________________<br>
+                    رقم الاعتماد: _________________<br>
+                    <span style="font-size: 7.5pt; color: #64748b;">التاريخ: ____ / ____ / 2026م</span>
                 </td>
             </tr>
         </table>

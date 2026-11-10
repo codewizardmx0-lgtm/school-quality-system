@@ -27,6 +27,7 @@ interface EvaluatorTopBarProps {
   onOpenChangePassword?: () => void;
   onOpenProfile?: () => void;
   onLogout?: () => void;
+  notifRefreshKey?: number;
   addToast?: (type: 'error' | 'success' | 'warning' | 'info', message: string, duration?: number) => void;
 }
 
@@ -42,6 +43,7 @@ export const EvaluatorTopBar: React.FC<EvaluatorTopBarProps> = ({
   onOpenChangePassword,
   onOpenProfile,
   onLogout,
+  notifRefreshKey = 0,
   addToast: _addToast,
 }) => {
   const [unreadNotificationsCount, setUnreadNotificationsCount] = useState<number>(0);
@@ -72,7 +74,7 @@ export const EvaluatorTopBar: React.FC<EvaluatorTopBarProps> = ({
     evaluatorApi.getUnreadNotificationsCount()
       .then((count) => setUnreadNotificationsCount(count))
       .catch(() => {});
-  }, []);
+  }, [notifRefreshKey]);
 
   const getScreenTitle = (screen: EvaluatorScreen) => {
     switch (screen) {

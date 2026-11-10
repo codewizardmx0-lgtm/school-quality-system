@@ -16,17 +16,21 @@ import {
   AlertTriangle,
   Loader2,
   AlertCircle,
+  RotateCcw,
 } from 'lucide-react';
+import { SafeResetConfirmModal } from './SafeResetConfirmModal';
 
 interface RubricAssessmentPageProps {
   selectedIndicatorId?: number | null;
   onNavigate?: (screen: EvaluatorScreen, param?: number) => void;
   isLocked?: boolean;
+  onResetSuccess?: () => void;
 }
 
 export const RubricAssessmentPage: React.FC<RubricAssessmentPageProps> = ({
   selectedIndicatorId,
   isLocked = false,
+  onResetSuccess,
 }) => {
   const {
     selectedIndicatorId: activeId,
@@ -36,6 +40,7 @@ export const RubricAssessmentPage: React.FC<RubricAssessmentPageProps> = ({
     isSaving,
     saveStatus,
     saveRubricAssessment,
+    resetIndicatorAssessment,
     retryLastSave,
     goToPreviousIndicator,
     goToNextIndicator,
@@ -56,6 +61,12 @@ export const RubricAssessmentPage: React.FC<RubricAssessmentPageProps> = ({
   const [selectedScore, setSelectedScore] = useState<number | null>(null);
   const [justification, setJustification] = useState<string>('');
   const [selectedVerificationMethods, setSelectedVerificationMethods] = useState<number[]>([]);
+  const [isResetModalOpen, setIsResetModalOpen] = useState<boolean>(false);
+
+  const hasIndicatorData =
+    selectedScore !== null ||
+    (currentResult?.score !== null && currentResult?.score !== undefined) ||
+    (currentResult?.evidenceLinks?.length ?? 0) > 0;
 
   useEffect(() => {
     if (selectedIndicatorId && selectedIndicatorId !== activeId) {
@@ -654,7 +665,32 @@ export const RubricAssessmentPage: React.FC<RubricAssessmentPageProps> = ({
           <span>المؤشر السابق</span>
         </button>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+          {!isLocked && hasIndicatorData && (
+            <button
+              type="button"
+              onClick={() => setIsResetModalOpen(true)}
+              disabled={isSaving}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '10px 16px',
+                borderRadius: '8px',
+                backgroundColor: '#FEF2F2',
+                color: '#DC2626',
+                border: '1px solid #FECACA',
+                fontWeight: 700,
+                fontSize: '13px',
+                cursor: isSaving ? 'not-allowed' : 'pointer',
+              }}
+              title="تصفير رصد هذا المؤشر وإعادته إلى قائمة العناصر غير المرصودة"
+            >
+              <RotateCcw size={15} />
+              <span>تصفير المؤشر</span>
+            </button>
+          )}
+
           {!isLocked && (
             <button
               onClick={handleSaveDraft}
@@ -703,6 +739,24 @@ export const RubricAssessmentPage: React.FC<RubricAssessmentPageProps> = ({
           </button>
         </div>
       </div>
+
+      {/* نافذة تأكيد التصفير الآمن للمؤشر (الملاحظة 7) */}
+      <SafeResetConfirmModal
+        isOpen={isResetModalOpen}
+        mode="indicator"
+        targetTitle={`${indicator?.code || ''} - ${indicator?.title || 'المؤشر المحدد'}`}
+        affectedCount={1}
+        hasLinkedEvidences={(currentResult?.evidenceLinks?.length ?? 0) > 0}
+        onClose={() => setIsResetModalOpen(false)}
+        onConfirm={async (unlinkEvidences) => {
+          if (!activeId) return;
+          await resetIndicatorAssessment(activeId, unlinkEvidences);
+          setSelectedScore(null);
+          setJustification('');
+          setSelectedVerificationMethods([]);
+          onResetSuccess?.();
+        }}
+      />
     </div>
   );
 };

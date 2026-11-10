@@ -12,9 +12,13 @@ import {
 
 interface NotificationsCenterProps {
   onNavigate: (screen: EvaluatorScreen) => void;
+  onNotificationsChanged?: () => void;
 }
 
-export const NotificationsCenter: React.FC<NotificationsCenterProps> = ({ onNavigate }) => {
+export const NotificationsCenter: React.FC<NotificationsCenterProps> = ({
+  onNavigate,
+  onNotificationsChanged,
+}) => {
   const [notifications, setNotifications] = useState<EvaluatorNotificationItem[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -43,6 +47,7 @@ export const NotificationsCenter: React.FC<NotificationsCenterProps> = ({ onNavi
     try {
       await evaluatorApi.markAllNotificationsAsRead();
       setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
+      onNotificationsChanged?.();
     } catch (err) {
       console.error('Failed to mark all as read:', err);
     }
@@ -54,6 +59,7 @@ export const NotificationsCenter: React.FC<NotificationsCenterProps> = ({ onNavi
       setNotifications((prev) =>
         prev.map((n) => (n.notificationId === id ? { ...n, isRead: true } : n))
       );
+      onNotificationsChanged?.();
     } catch (err) {
       console.error(`Failed to mark notification ${id} as read:`, err);
     }
