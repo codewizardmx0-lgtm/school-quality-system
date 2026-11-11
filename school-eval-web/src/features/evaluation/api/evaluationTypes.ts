@@ -61,6 +61,9 @@ export interface StandardProgressItem {
   scoredIndicators: number;
   percentage: number;
   averageScore?: number;
+  totalMandatoryRequirements?: number;
+  coveredRequirements?: number;
+  evidencesCount?: number;
   scoreDistribution?: {
     level3: number;
     level2: number;
@@ -81,6 +84,8 @@ export interface PendingIndicatorItem {
   evidenceStatus?: 'sufficient' | 'missing';
   evidenceStatusArabic?: string;
   evidenceCount?: number;
+  coveredRequirementsCount?: number;
+  mandatoryRequirementsCount?: number;
   score?: number | null;
 }
 
@@ -110,7 +115,10 @@ export interface ScoreDescriptor {
 export interface VerificationMethod {
   id: number;
   name: string;
+  toolType?: string;
   description?: string;
+  required?: boolean;
+  guidance?: string;
 }
 
 export interface EvidenceRequirementItem {
@@ -128,6 +136,8 @@ export interface IndicatorNode {
   weight: number;
   score?: number | null;
   evidenceCount?: number;
+  mandatoryRequirementsCount?: number;
+  coveredRequirementsCount?: number;
   descriptors: ScoreDescriptor[];
   verificationMethods: VerificationMethod[];
   evidenceRequirements?: EvidenceRequirementItem[];
@@ -149,6 +159,8 @@ export interface StandardStats {
   level1Count: number;
   level0Count: number;
   totalEvidences: number;
+  totalMandatoryRequirements?: number;
+  coveredRequirements?: number;
 }
 
 export interface StandardNode {
@@ -162,6 +174,7 @@ export interface StandardNode {
 }
 
 export interface StandardsTreeData {
+  evaluationId?: number;
   versionId: number;
   versionCode: string;
   title: string;
@@ -213,10 +226,23 @@ export interface EvidenceVaultStats {
   storagePercentage: number;
 }
 
+export interface LinkedIndicatorBrief {
+  linkId: number;
+  indicatorId: number;
+  indicatorCode: string;
+  indicatorTitle: string;
+  standardId?: number;
+  standardCode?: string;
+  standardName?: string;
+  justification?: string;
+  coveredRequirements?: number[];
+}
+
 export interface EvidenceItem {
   id: number;
   documentId: number;
   linkId?: number;
+  isUnlinked?: boolean;
   indicatorId?: number;
   title: string;
   fileName: string;
@@ -228,6 +254,11 @@ export interface EvidenceItem {
   standardName: string;
   indicatorCode: string;
   indicatorTitle: string;
+  documentType?: string;
+  documentTypeArabic?: string;
+  description?: string;
+  justification?: string;
+  linkedIndicators?: LinkedIndicatorBrief[];
   uploadedAt: string;
   uploadedBy: string;
   verificationStatus: VerificationTagStatus;
@@ -283,9 +314,30 @@ export interface AiRecommendationsResponse {
   initiatives: AiInitiative[];
 }
 
+export type PlanType = 'QualityImprovement' | 'StaffProfessionalDevelopment' | 'AnnualOperational';
+
+export interface ImprovementAreaBrief {
+  areaId: number;
+  name: string;
+  priority: PriorityLevel;
+  targetScore?: number;
+}
+
+export interface EvaluationCycleArchiveItem {
+  evaluationId: number;
+  cycleId: number;
+  academicYear: string;
+  cycleStatus: string;
+  evaluationStatus: string;
+  isLocked: boolean;
+  createdAt?: string;
+}
+
 export interface ImprovementPlanAction {
   actionId: number;
   planId: number;
+  areaId?: number;
+  areaName?: string;
   title: string;
   standardName: string;
   leader: string;
@@ -305,17 +357,43 @@ export interface ImprovementPlanSummary {
   pendingActions: number;
 }
 
+export interface PlanReviewNoteItem {
+  noteId: number;
+  authorName: string;
+  authorUsername: string;
+  reviewerRole: string;
+  roleArabic: string;
+  text: string;
+  createdAt?: string;
+}
+
+export interface CreateImprovementPlanPayload {
+  cycleId?: number;
+  planType: PlanType;
+  title: string;
+  startDate?: string;
+  endDate?: string;
+  areaIds?: number[];
+}
+
 export interface ImprovementPlanData {
   planId: number;
+  planType?: PlanType;
   title: string;
   status: PlanStatus;
   startDate: string;
   endDate: string;
+  areas?: ImprovementAreaBrief[];
+  availableAreas?: ImprovementAreaBrief[];
   summary: ImprovementPlanSummary;
   actions: ImprovementPlanAction[];
+  reviewNotes?: PlanReviewNoteItem[];
 }
 
 export interface CreateImprovementActionPayload {
+  planId?: number;
+  planType?: PlanType;
+  areaId?: number;
   title: string;
   leader?: string;
   startDate?: string;
@@ -449,6 +527,8 @@ export interface EvidenceInventoryIndicator {
     evidenceId: number;
     title: string;
     evidenceType: string;
+    evidenceTypeArabic?: string;
+    justification?: string;
     status: string;
     createdAt?: string;
     versionsCount?: number;
@@ -495,4 +575,43 @@ export interface EvaluatorNotificationItem {
   isRead: boolean;
   readAt?: string;
   createdAt: string;
+}
+
+export interface IndicatorMetricsContextItem {
+  indicator_code: string;
+  name: string;
+  calculated_value: number | string | null;
+  calculated_ratio: number | null;
+  suggested_level: number | null;
+  badge: string;
+  message: string;
+  raw_data?: Record<string, any>;
+}
+
+export interface IndicatorsContextResponse {
+  evaluationId?: number;
+  is_snapshot?: boolean;
+  is_legacy_completed_without_snapshot?: boolean;
+  notice?: string;
+  indicators: Record<string, IndicatorMetricsContextItem>;
+}
+
+export interface ActionCatalogRecommendationItem {
+  catalog_id: number;
+  sub_standard_code: string;
+  plan_type: PlanType | string;
+  title: string;
+  suggested_responsible_description?: string;
+  suggested_duration_days?: number;
+}
+
+export interface ActionRecommendationsResponse {
+  is_weak: boolean;
+  indicator_code: string;
+  indicator_name?: string | null;
+  sub_standard_code?: string | null;
+  score: number | null;
+  recommendations_count?: number;
+  message?: string;
+  recommendations: ActionCatalogRecommendationItem[];
 }

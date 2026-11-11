@@ -91,8 +91,8 @@ export const GapAnalysisPage: React.FC<GapAnalysisPageProps> = ({
             gap: '8px',
           }}
         >
-          <Target size={16} />
-          📊 المقترحات الحسابية الفورية (FR-SCH-16)
+          <Lightbulb size={16} />
+          💡 الاقتراحات ومجالات التحسين (تبني المبادرات والفجوات)
         </button>
 
         <button

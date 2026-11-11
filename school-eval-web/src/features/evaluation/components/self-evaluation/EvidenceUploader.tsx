@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import type { LinkedEvidenceBrief, EvidenceRequirementItem } from '../../api/evaluationTypes';
-import { UploadCloud, File, RefreshCw, AlertCircle, Trash2, FileCheck, Link2, ArrowRightLeft } from 'lucide-react';
+import { UploadCloud, File, RefreshCw, AlertCircle, Trash2, FileCheck, Link2, Download } from 'lucide-react';
+import { evaluatorApi } from '../../api/evaluatorApi';
 
 interface EvidenceUploaderProps {
   indicatorId?: number;
@@ -144,6 +145,15 @@ export const EvidenceUploader: React.FC<EvidenceUploaderProps> = ({
     fileInputRef.current?.click();
   };
 
+  const handleDownloadLink = async (link: LinkedEvidenceBrief) => {
+    try {
+      const idToDownload = link.versionId || link.linkId;
+      await evaluatorApi.downloadEvidence(idToDownload, link.fileName);
+    } catch {
+      setErrorMessage('تعذر تحميل الشاهد من الخادم.');
+    }
+  };
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
       {/* 1. Official Evidence Requirements specific to this Indicator (FR-SCH-12 / Prototype feature) */}
@@ -208,7 +218,7 @@ export const EvidenceUploader: React.FC<EvidenceUploaderProps> = ({
       {/* 2. Upload and Drop Zone */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <label style={{ fontSize: '13px', fontWeight: 800, color: '#1E293B' }}>
-          الشواهد المرفقة والمربوطة بالمؤشر حالياً (PDF, PNG, JPG, Word, Excel - بحد أقصى 25MB):
+          الشواهد المرفقة والمربوطة بالمؤشر حالياً (PDF, PNG, JPG, Word, Excel - بحد أقصى 25 ميجابايت لكل ملف على حدة):
         </label>
         <span
           style={{
@@ -417,52 +427,50 @@ export const EvidenceUploader: React.FC<EvidenceUploaderProps> = ({
                 {!readOnly && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                     {onManageEvidenceLink && (
-                      <>
-                        <button
-                          type="button"
-                          onClick={() => onManageEvidenceLink(link, 'multi')}
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '4px',
-                            padding: '5px 10px',
-                            borderRadius: '6px',
-                            backgroundColor: '#ECFDF5',
-                            color: '#047857',
-                            fontSize: '11.5px',
-                            fontWeight: 700,
-                            border: '1px solid #A7F3D0',
-                            cursor: 'pointer',
-                          }}
-                          title="ربط هذا الشاهد بمؤشرات إضافية أخرى"
-                        >
-                          <Link2 size={12} />
-                          <span>ربط مؤشرات أخرى</span>
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => onManageEvidenceLink(link, 'single')}
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '4px',
-                            padding: '5px 10px',
-                            borderRadius: '6px',
-                            backgroundColor: '#EFF6FF',
-                            color: '#1D4ED8',
-                            fontSize: '11.5px',
-                            fontWeight: 700,
-                            border: '1px solid #BFDBFE',
-                            cursor: 'pointer',
-                          }}
-                          title="نقل الشاهد إلى مؤشر آخر"
-                        >
-                          <ArrowRightLeft size={12} />
-                          <span>نقل المؤشر</span>
-                        </button>
-                      </>
+                      <button
+                        type="button"
+                        onClick={() => onManageEvidenceLink(link, 'multi')}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          padding: '5px 10px',
+                          borderRadius: '6px',
+                          backgroundColor: '#ECFDF5',
+                          color: '#047857',
+                          fontSize: '11.5px',
+                          fontWeight: 700,
+                          border: '1px solid #A7F3D0',
+                          cursor: 'pointer',
+                        }}
+                        title="إدارة علاقات الشاهد (ربط بمؤشرات أخرى، نقل لمؤشر آخر، أو فك الارتباط)"
+                      >
+                        <Link2 size={12} />
+                        <span>ربط / نقل الشاهد</span>
+                      </button>
                     )}
+
+                    <button
+                      type="button"
+                      onClick={() => handleDownloadLink(link)}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        padding: '5px 10px',
+                        borderRadius: '6px',
+                        backgroundColor: '#ECFDF5',
+                        color: '#059669',
+                        fontSize: '11.5px',
+                        fontWeight: 700,
+                        border: '1px solid #A7F3D0',
+                        cursor: 'pointer',
+                      }}
+                      title="تحميل ومعاينة هذا الشاهد"
+                    >
+                      <Download size={12} />
+                      <span>تحميل</span>
+                    </button>
 
                     <button
                       type="button"

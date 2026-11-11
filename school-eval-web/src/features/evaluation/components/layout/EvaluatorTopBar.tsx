@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import type { EvaluatorSchoolInfo, EvaluatorScreen } from '../../api/evaluationTypes';
+import type { EvaluatorSchoolInfo, EvaluatorScreen, EvaluationCycleArchiveItem } from '../../api/evaluationTypes';
 import {
   Bell,
   CheckCircle2,
@@ -8,6 +8,7 @@ import {
   KeyRound,
   LogOut,
   ChevronLeft,
+  History,
 } from 'lucide-react';
 import { SYSTEM_SHORT_NAME } from '../../../../constants/systemConstants';
 import { evaluatorApi } from '../../api/evaluatorApi';
@@ -29,6 +30,9 @@ interface EvaluatorTopBarProps {
   onLogout?: () => void;
   notifRefreshKey?: number;
   addToast?: (type: 'error' | 'success' | 'warning' | 'info', message: string, duration?: number) => void;
+  archiveEvaluations?: EvaluationCycleArchiveItem[];
+  selectedArchiveEvalId?: number | null;
+  onSelectArchiveEvaluation?: (evalId: number | null) => void;
 }
 
 export const EvaluatorTopBar: React.FC<EvaluatorTopBarProps> = ({
@@ -45,6 +49,9 @@ export const EvaluatorTopBar: React.FC<EvaluatorTopBarProps> = ({
   onLogout,
   notifRefreshKey = 0,
   addToast: _addToast,
+  archiveEvaluations = [],
+  selectedArchiveEvalId = null,
+  onSelectArchiveEvaluation,
 }) => {
   const [unreadNotificationsCount, setUnreadNotificationsCount] = useState<number>(0);
 
@@ -212,6 +219,50 @@ export const EvaluatorTopBar: React.FC<EvaluatorTopBarProps> = ({
 
         {/* Left (RTL End): Actions & User Capsule */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+          {/* Archive / Evaluation Cycles Switcher (IMP-06: Read-Only for Past Cycles) */}
+          {archiveEvaluations.length > 0 && onSelectArchiveEvaluation && (
+            <div
+              className="hidden md:flex"
+              style={{
+                alignItems: 'center',
+                gap: '6px',
+                backgroundColor: selectedArchiveEvalId ? '#EFF6FF' : '#F8FAFC',
+                border: `1px solid ${selectedArchiveEvalId ? '#93C5FD' : '#E2E8F0'}`,
+                borderRadius: '8px',
+                padding: '4px 8px',
+              }}
+              title="استعراض أرشيف دورات التقييم السابقة للمدرسة (للقراءة فقط)"
+            >
+              <History size={14} color={selectedArchiveEvalId ? '#2563EB' : '#64748B'} />
+              <select
+                value={selectedArchiveEvalId ? String(selectedArchiveEvalId) : ''}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  onSelectArchiveEvaluation(val ? Number(val) : null);
+                }}
+                style={{
+                  border: 'none',
+                  background: 'transparent',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  color: selectedArchiveEvalId ? '#1E40AF' : '#334155',
+                  outline: 'none',
+                  cursor: 'pointer',
+                  paddingLeft: '4px',
+                }}
+              >
+                <option value="">
+                  الدورة الحالية ({archiveEvaluations[0]?.academicYear || '2026/2027'})
+                </option>
+                {archiveEvaluations.slice(1).map((ev) => (
+                  <option key={ev.evaluationId} value={String(ev.evaluationId)}>
+                    أرشيف {ev.academicYear} ({ev.evaluationStatus} - قراءة فقط)
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           {/* Notifications */}
           <button
             onClick={() => onNavigate('notifications')}

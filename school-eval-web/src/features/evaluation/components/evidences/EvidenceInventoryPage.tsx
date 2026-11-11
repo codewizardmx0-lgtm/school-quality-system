@@ -477,25 +477,60 @@ export const EvidenceInventoryPage: React.FC<EvidenceInventoryPageProps> = ({
                                       display: 'flex',
                                       alignItems: 'center',
                                       justifyContent: 'space-between',
-                                      padding: '4px 6px',
+                                      padding: '5px 8px',
                                       borderRadius: '6px',
                                       backgroundColor: '#f8fafc',
                                       border: '1px solid #e2e8f0',
                                       fontSize: '11px',
+                                      gap: '8px',
                                     }}
                                   >
-                                    <span
-                                      title={ev.title}
-                                      style={{
-                                        overflow: 'hidden',
-                                        textOverflow: 'ellipsis',
-                                        whiteSpace: 'nowrap',
-                                        maxWidth: '100px',
-                                        color: '#334155',
-                                      }}
-                                    >
-                                      {ev.title}
-                                    </span>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0, flex: 1 }}>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                        <span
+                                          title={ev.title}
+                                          style={{
+                                            overflow: 'hidden',
+                                            textOverflow: 'ellipsis',
+                                            whiteSpace: 'nowrap',
+                                            maxWidth: '130px',
+                                            color: '#1e293b',
+                                            fontWeight: 600,
+                                          }}
+                                        >
+                                          {ev.title}
+                                        </span>
+                                        {ev.evidenceTypeArabic && (
+                                          <span
+                                            style={{
+                                              padding: '1px 5px',
+                                              borderRadius: '4px',
+                                              backgroundColor: '#f1f5f9',
+                                              color: '#475569',
+                                              fontSize: '9.5px',
+                                              fontWeight: 600,
+                                            }}
+                                          >
+                                            {ev.evidenceTypeArabic}
+                                          </span>
+                                        )}
+                                      </div>
+                                      {ev.justification && (
+                                        <div
+                                          title={ev.justification}
+                                          style={{
+                                            fontSize: '10px',
+                                            color: '#64748b',
+                                            overflow: 'hidden',
+                                            textOverflow: 'ellipsis',
+                                            whiteSpace: 'nowrap',
+                                            maxWidth: '170px',
+                                          }}
+                                        >
+                                          مبرر الربط: {ev.justification}
+                                        </div>
+                                      )}
+                                    </div>
                                     {!readOnly && (
                                       <button
                                         type="button"

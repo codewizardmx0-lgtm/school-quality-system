@@ -13,7 +13,7 @@ interface UploadEvidenceModalProps {
 }
 
 const ALLOWED_EXTENSIONS = ['.pdf', '.png', '.jpg', '.jpeg', '.docx', '.xlsx'];
-const MAX_FILE_SIZE_BYTES = 20 * 1024 * 1024; // 20 MB الموحد نظامياً
+const MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024; // 25 MB الموحد نظامياً
 
 export const UploadEvidenceModal: React.FC<UploadEvidenceModalProps> = ({
   isOpen,
@@ -65,7 +65,7 @@ export const UploadEvidenceModal: React.FC<UploadEvidenceModalProps> = ({
 
     // التحقق من الحجم
     if (selected.size > MAX_FILE_SIZE_BYTES) {
-      setError(`حجم الملف (${(selected.size / (1024 * 1024)).toFixed(2)} ميجابايت) يتجاوز الحد الأقصى المسموح به (20 ميجابايت).`);
+      setError(`حجم الملف (${(selected.size / (1024 * 1024)).toFixed(2)} ميجابايت) يتجاوز الحد الأقصى المسموح به (25 ميجابايت).`);
       return false;
     }
 
@@ -391,7 +391,7 @@ export const UploadEvidenceModal: React.FC<UploadEvidenceModalProps> = ({
                     {isDragging ? 'أفلت الملف هنا للإيداع المباشر' : 'اسحب وأفلت ملف الشاهد هنا، أو اضغط للتصفح'}
                   </div>
                   <div style={{ fontSize: '11px', color: theme.colors.neutral[500], marginTop: '4px' }}>
-                    الصيغ المدعومة: PDF, PNG, JPG, Word (docx), Excel (xlsx) — الحجم الأقصى 20 ميجابايت
+                    الصيغ المدعومة: PDF, PNG, JPG, Word (docx), Excel (xlsx) — الحجم الأقصى 25 ميجابايت
                   </div>
                 </div>
               )}

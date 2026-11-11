@@ -1,11 +1,12 @@
-import React, { useState } from 'react';
-import type { ActionStatus, CreateImprovementActionPayload, ActionCatalogItem } from '../../api/evaluationTypes';
+import React, { useState, useEffect } from 'react';
+import type { ActionStatus, CreateImprovementActionPayload, ActionCatalogItem, ImprovementAreaBrief } from '../../api/evaluationTypes';
 import { Target, X, Check, BookOpen } from 'lucide-react';
 import { ActionCatalogModal } from './ActionCatalogModal';
 
 interface AddActionModalProps {
   isOpen: boolean;
   onClose: () => void;
+  areas?: ImprovementAreaBrief[];
   onAddAction: (payload: CreateImprovementActionPayload) => Promise<void>;
   isSubmitting?: boolean;
 }
@@ -13,11 +14,11 @@ interface AddActionModalProps {
 export const AddActionModal: React.FC<AddActionModalProps> = ({
   isOpen,
   onClose,
+  areas = [],
   onAddAction,
   isSubmitting = false,
 }) => {
-  if (!isOpen) return null;
-
+  const [selectedAreaId, setSelectedAreaId] = useState<string>('');
   const [title, setTitle] = useState('');
   const [leader, setLeader] = useState('');
   const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
@@ -28,6 +29,14 @@ export const AddActionModal: React.FC<AddActionModalProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [isCatalogOpen, setIsCatalogOpen] = useState(false);
 
+  useEffect(() => {
+    if (isOpen && areas.length > 0 && !selectedAreaId) {
+      setSelectedAreaId(String(areas[0].areaId));
+    }
+  }, [isOpen, areas, selectedAreaId]);
+
+  if (!isOpen) return null;
+
   const handleSelectCatalogAction = (action: ActionCatalogItem) => {
     setTitle(action.action_title || action.title || '');
     if (action.description) setProgressDescription(action.description);
@@ -35,7 +44,7 @@ export const AddActionModal: React.FC<AddActionModalProps> = ({
     setIsCatalogOpen(false);
   };
 
-    const handleClose = () => {
+  const handleClose = () => {
     if (isSubmitting) return;
     setTitle('');
     setLeader('');
@@ -52,6 +61,11 @@ export const AddActionModal: React.FC<AddActionModalProps> = ({
     e.preventDefault();
     setError(null);
 
+    if (areas.length > 0 && !selectedAreaId) {
+      setError('يرجى اختيار مجال التحسين المستهدف المرتبط بالخطة (المفتاح المركب).');
+      return;
+    }
+
     if (!title.trim()) {
       setError('عنوان الإجراء التنفيذي مطلوب.');
       return;
@@ -59,6 +73,7 @@ export const AddActionModal: React.FC<AddActionModalProps> = ({
 
     try {
       await onAddAction({
+        areaId: selectedAreaId ? Number(selectedAreaId) : undefined,
         title,
         leader: leader || 'فريق التطوير والتحسين',
         startDate,
@@ -67,9 +82,10 @@ export const AddActionModal: React.FC<AddActionModalProps> = ({
         progressDescription: progressDescription || 'تم اعتماد الإجراء والبدء في تنفيذه.',
         completionPercentage: status === 'Done' ? 100 : completionPercentage,
       });
-      onClose();
-    } catch (err: unknown) {
-      setError((err as Error)?.message || 'فشل في حفظ إجراء التحسين.');
+      handleClose();
+    } catch (err: any) {
+      const msg = err?.response?.data?.message || (err as Error)?.message || 'فشل في حفظ إجراء التحسين.';
+      setError(msg);
     }
   };
 
@@ -189,6 +205,38 @@ export const AddActionModal: React.FC<AddActionModalProps> = ({
               }}
             >
               {error}
+            </div>
+          )}
+
+          {/* مجال التحسين المستهدف — قيد المفتاح المركب (IMP-04) */}
+          {areas.length > 0 && (
+            <div>
+              <label style={{ fontSize: '13px', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '6px' }}>
+                مجال التحسين المستهدف (المفتاح المركب بالخطة) <span style={{ color: '#DC2626' }}>*</span>
+              </label>
+              <select
+                value={selectedAreaId}
+                onChange={(e) => setSelectedAreaId(e.target.value)}
+                required
+                style={{
+                  width: '100%',
+                  padding: '9px 12px',
+                  borderRadius: '8px',
+                  border: '1px solid #CBD5E1',
+                  fontSize: '13px',
+                  backgroundColor: '#FFFFFF',
+                  color: '#0F172A',
+                  outline: 'none',
+                  boxSizing: 'border-box',
+                }}
+              >
+                <option value="">-- اختر مجال التحسين --</option>
+                {areas.map((area) => (
+                  <option key={area.areaId} value={area.areaId}>
+                    {area.name} ({area.priority === 'High' ? 'أولوية عالية' : area.priority === 'Medium' ? 'متوسطة' : 'منخفضة'})
+                  </option>
+                ))}
+              </select>
             </div>
           )}
 

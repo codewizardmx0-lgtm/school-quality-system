@@ -370,7 +370,7 @@ class EvaluationReportService
             'orientation'      => 'P',
             'margin_left'      => 10,
             'margin_right'     => 10,
-            'margin_top'       => 48,
+            'margin_top'       => 31,
             'margin_bottom'    => 18,
             'margin_header'    => 8,
             'margin_footer'    => 8,

@@ -91,10 +91,8 @@ class ActionCatalogService
             }));
         }
 
-        // في حال عدم وجود إجراءات مطابقة للمجال الفرعي بدقة، نقدم عينة استرشادية من أول 3 إجراءات
-        if (empty($recommendations)) {
-            $recommendations = array_slice($this->allActions(), 0, 3);
-        }
+        // في حال عدم وجود إجراءات مطابقة للمجال الفرعي، لا نعرض إجراءات عشوائية (القرار 3)
+        // بل تبقى القائمة فارغة حتى اكتمال التغطية في Slice 12
 
         return [
             'is_weak' => true,

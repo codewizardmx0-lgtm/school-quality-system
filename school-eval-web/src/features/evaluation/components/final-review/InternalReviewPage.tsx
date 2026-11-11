@@ -10,6 +10,7 @@ import {
   Lock,
   Download,
   ShieldCheck,
+  RefreshCw,
 } from 'lucide-react';
 
 interface InternalReviewPageProps {
@@ -28,21 +29,22 @@ export const InternalReviewPage: React.FC<InternalReviewPageProps> = ({
     preflightData,
     isSubmitting,
     submitFinalLock,
+    refreshPreflight,
   } = useFinalSubmission();
 
   const [isLockModalOpen, setIsLockModalOpen] = useState(false);
   const [successBanner, setSuccessBanner] = useState<string | null>(null);
 
   const checklist = preflightData?.checklist || [
-    { id: 'scores_completed', title: 'رصد تقديرات كافة مؤشرات المعايير الوطنية (56 مؤشراً)', description: 'تم رصد وتثبيت تقديرات 56 من أصل 56 مؤشراً معياريًا.', passed: true, weight: 25 },
-    { id: 'verification_methods_set', title: 'تحديد أدوات وأساليب التحقق المعتمدة لكل مؤشر', description: 'تم استيفاء أساليب فحص الوثائق وبطاقات الملاحظة والمقابلات.', passed: true, weight: 20 },
-    { id: 'evidence_linked', title: 'فهرسة وربط الشواهد والوثائق الداعمة للتقديرات', description: 'تم إيداع وفهرسة الشواهد الموثقة في مستودع الأدلة بنجاح.', passed: true, weight: 20 },
-    { id: 'action_plan_included', title: 'صياغة خطة التحسين ومبادرات التطوير للمؤشرات المتدنية', description: 'الخطة تتضمن 6 إجراءات تنفيذية محددة بالمسؤوليات والمواعيد.', passed: true, weight: 20 },
-    { id: 'draft_report_generated', title: 'جاهزية مسودة التقرير الشامل والمراجعة الداخلية لمدير المدرسة', description: 'التقرير متكامل ومراجع ومطابق لاشتراطات الرفع الوزاري.', passed: true, weight: 15 },
+    { id: 'scores_completed', title: 'رصد تقديرات كافة مؤشرات المعايير الوطنية (109 مؤشرات)', description: 'تم رصد وتثبيت تقديرات 109 من أصل 109 مؤشراً معياريًا.', passed: false, weight: 25 },
+    { id: 'verification_methods_set', title: 'تحديد أدوات وأساليب التحقق المعتمدة لكل مؤشر', description: 'تم استيفاء أساليب فحص الوثائق وبطاقات الملاحظة والمقابلات.', passed: false, weight: 20 },
+    { id: 'evidence_linked', title: 'فهرسة وربط الشواهد والوثائق الداعمة للتقديرات', description: 'تم إيداع وفهرسة الشواهد الموثقة في مستودع الأدلة بنجاح.', passed: false, weight: 20 },
+    { id: 'action_plan_included', title: 'صياغة خطة التحسين ومبادرات التطوير للمؤشرات المتدنية', description: 'الخطة تتضمن إجراءات تنفيذية محددة بالمسؤوليات والمواعيد.', passed: false, weight: 20 },
+    { id: 'draft_report_generated', title: 'جاهزية مسودة التقرير الشامل والمراجعة الداخلية لمدير المدرسة', description: 'التقرير متكامل ومراجع ومطابق لاشتراطات الرفع الوزاري.', passed: false, weight: 15 },
   ];
 
-  const canSubmit = preflightData?.canSubmit ?? true;
-  const readiness = preflightData?.readinessPercentage ?? 100;
+  const canSubmit = preflightData ? preflightData.canSubmit : false;
+  const readiness = preflightData?.readinessPercentage ?? 0;
 
   const [isExporting, setIsExporting] = useState(false);
 
@@ -88,7 +90,7 @@ export const InternalReviewPage: React.FC<InternalReviewPageProps> = ({
             <ShieldCheck size={24} color="#059669" />
             <div>
               <div style={{ fontSize: '14px', fontWeight: 800 }}>
-                تم الرفع والختم الرقمي بنجاح (رمز التتبع: ARQ-2026-SCH104-FIN)
+                تم الرفع والختم الرقمي بنجاح (رمز التتبع: {preflightData?.digitalSealInfo?.systemCode || 'ARQ-2026-FINAL'})
               </div>
               <div style={{ fontSize: '12px', color: '#047857', marginTop: '2px' }}>
                 الملف قيد المراجعة الوزارية الرسمية، وجميع الشاشات في وضع القراءة فقط.
@@ -117,6 +119,91 @@ export const InternalReviewPage: React.FC<InternalReviewPageProps> = ({
         </div>
       )}
 
+      {/* Review KPIs Overview (Note 36) */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+          gap: '14px',
+        }}
+      >
+        <div
+          style={{
+            backgroundColor: '#FFFFFF',
+            borderRadius: '12px',
+            padding: '16px',
+            border: '1px solid #E2E8F0',
+            borderRight: '4px solid #3B82F6',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+          }}
+        >
+          <div style={{ fontSize: '12px', color: '#64748B', fontWeight: 600 }}>رصد المؤشرات الوطنية</div>
+          <div style={{ fontSize: '24px', fontWeight: 800, color: '#1E293B', marginTop: '4px' }}>
+            {checklist.find((c) => c.id === 'scores_completed')?.passed ? '109 / 109' : 'قيد الاستكمال'}
+          </div>
+          <div style={{ fontSize: '11.5px', color: checklist.find((c) => c.id === 'scores_completed')?.passed ? '#059669' : '#DC2626', marginTop: '4px', fontWeight: 600 }}>
+            {checklist.find((c) => c.id === 'scores_completed')?.passed ? 'مكتمل بنسبة 100%' : 'بانتظار رصد كافة التقديرات'}
+          </div>
+        </div>
+
+        <div
+          style={{
+            backgroundColor: '#FFFFFF',
+            borderRadius: '12px',
+            padding: '16px',
+            border: '1px solid #E2E8F0',
+            borderRight: '4px solid #10B981',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+          }}
+        >
+          <div style={{ fontSize: '12px', color: '#64748B', fontWeight: 600 }}>جاهزية الرفع الوزاري</div>
+          <div style={{ fontSize: '24px', fontWeight: 800, color: readiness >= 100 ? '#059669' : '#D97706', marginTop: '4px' }}>
+            {readiness}%
+          </div>
+          <div style={{ fontSize: '11.5px', color: '#64748B', marginTop: '4px' }}>
+            {preflightData?.passedCriteriaCount ?? 0} من 5 معايير إلزامية مستوفاة
+          </div>
+        </div>
+
+        <div
+          style={{
+            backgroundColor: '#FFFFFF',
+            borderRadius: '12px',
+            padding: '16px',
+            border: '1px solid #E2E8F0',
+            borderRight: '4px solid #8B5CF6',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+          }}
+        >
+          <div style={{ fontSize: '12px', color: '#64748B', fontWeight: 600 }}>توثيق الشواهد والأدلة</div>
+          <div style={{ fontSize: '24px', fontWeight: 800, color: '#1E293B', marginTop: '4px' }}>
+            {checklist.find((c) => c.id === 'evidence_linked')?.passed ? 'مستوفى' : 'ناقص'}
+          </div>
+          <div style={{ fontSize: '11.5px', color: checklist.find((c) => c.id === 'evidence_linked')?.passed ? '#059669' : '#DC2626', marginTop: '4px', fontWeight: 600 }}>
+            {checklist.find((c) => c.id === 'evidence_linked')?.passed ? 'الشواهد مربوطة بالمؤشرات' : 'يتطلب ربط وثائق داعمة'}
+          </div>
+        </div>
+
+        <div
+          style={{
+            backgroundColor: '#FFFFFF',
+            borderRadius: '12px',
+            padding: '16px',
+            border: '1px solid #E2E8F0',
+            borderRight: `4px solid ${isLocked ? '#059669' : canSubmit ? '#2563EB' : '#EF4444'}`,
+            boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+          }}
+        >
+          <div style={{ fontSize: '12px', color: '#64748B', fontWeight: 600 }}>حالة الختم الرقمي</div>
+          <div style={{ fontSize: '20px', fontWeight: 800, color: isLocked ? '#059669' : canSubmit ? '#2563EB' : '#EF4444', marginTop: '6px' }}>
+            {isLocked ? 'مختوم ومرفوع' : canSubmit ? 'جاهز للختم النهائي' : 'غير مؤهل للختم'}
+          </div>
+          <div style={{ fontSize: '11.5px', color: '#64748B', marginTop: '4px' }}>
+            {isLocked ? 'وضع القراءة فقط' : canSubmit ? 'بانتظار توقيع المقيم' : 'يتطلب استيفاء المعايير'}
+          </div>
+        </div>
+      </div>
+
       {/* 1. Pre-Flight Validation Checklist */}
       <div
         style={{
@@ -138,6 +225,28 @@ export const InternalReviewPage: React.FC<InternalReviewPageProps> = ({
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <button
+              onClick={refreshPreflight}
+              disabled={isSubmitting}
+              title="إعادة فحص معايير الجاهزية للرفع"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '8px 14px',
+                borderRadius: '8px',
+                backgroundColor: '#F8FAFC',
+                border: '1px solid #CBD5E1',
+                color: '#475569',
+                fontSize: '12.5px',
+                fontWeight: 700,
+                cursor: 'pointer',
+              }}
+            >
+              <RefreshCw size={14} className={isSubmitting ? 'animate-spin' : ''} />
+              <span>تحديث الفحص</span>
+            </button>
+
             <div
               style={{
                 padding: '6px 14px',

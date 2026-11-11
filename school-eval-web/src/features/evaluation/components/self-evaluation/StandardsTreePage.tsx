@@ -9,6 +9,7 @@ import {
   ArrowLeft,
   FileSpreadsheet,
   RotateCcw,
+  RefreshCw,
 } from 'lucide-react';
 import { DetailedReportExportModal } from '../reports/DetailedReportExportModal';
 import { SafeResetConfirmModal } from './SafeResetConfirmModal';
@@ -26,7 +27,7 @@ export const StandardsTreePage: React.FC<StandardsTreePageProps> = ({
   isLocked = false,
   onResetSuccess,
 }) => {
-  const { treeData, isLoadingTree, resetStandardAssessment } = useSelfEvaluation(undefined, isLocked);
+  const { treeData, isLoadingTree, resetStandardAssessment, reloadTree } = useSelfEvaluation(undefined, isLocked);
   const [searchTerm, setSearchTerm] = useState('');
   const [expandedStandards, setExpandedStandards] = useState<Record<number, boolean>>({ 1: true, 2: true });
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
@@ -100,6 +101,28 @@ export const StandardsTreePage: React.FC<StandardsTreePageProps> = ({
 
         {/* Action Buttons & Search Input */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            onClick={() => reloadTree()}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '9px 14px',
+              borderRadius: '8px',
+              backgroundColor: '#FFFFFF',
+              color: '#475569',
+              fontSize: '12.5px',
+              fontWeight: 600,
+              border: '1px solid #CBD5E1',
+              cursor: 'pointer',
+            }}
+            title="تحديث شجرة المعايير ونسب الإنجاز"
+          >
+            <RefreshCw size={15} />
+            <span>تحديث</span>
+          </button>
+
           <button
             type="button"
             onClick={() => setIsExportModalOpen(true)}
@@ -350,6 +373,11 @@ export const StandardsTreePage: React.FC<StandardsTreePageProps> = ({
                     >
                       <strong>{stats.totalEvidences}</strong>
                       <span>{stats.totalEvidences === 1 ? 'شاهد' : 'شواهد'}</span>
+                      {stats.totalMandatoryRequirements !== undefined && stats.totalMandatoryRequirements > 0 && (
+                        <span style={{ fontSize: '10.5px', fontWeight: 600, color: '#3730A3' }}>
+                          ({stats.coveredRequirements ?? 0} / {stats.totalMandatoryRequirements} متطلب)
+                        </span>
+                      )}
                     </span>
 
                     {/* Unentered badge */}
@@ -434,6 +462,9 @@ export const StandardsTreePage: React.FC<StandardsTreePageProps> = ({
                           {sub.indicators.map((ind) => {
                             const isScored = ind.score !== null && ind.score !== undefined;
                             const evCount = ind.evidenceCount ?? 0;
+                            const mandatoryCount = ind.mandatoryRequirementsCount ?? 0;
+                            const coveredCount = ind.coveredRequirementsCount ?? evCount;
+                            const isEvSufficient = mandatoryCount > 0 ? coveredCount >= mandatoryCount : evCount > 0;
 
                             return (
                               <div
@@ -507,19 +538,20 @@ export const StandardsTreePage: React.FC<StandardsTreePageProps> = ({
                                         </span>
                                       )}
 
-                                      {/* Evidence count badge */}
+                                      {/* Evidence count & requirement coverage badge (UX-6) */}
                                       <span
                                         style={{
                                           fontSize: '10.5px',
                                           fontWeight: 700,
                                           padding: '2px 6px',
                                           borderRadius: '6px',
-                                          backgroundColor: evCount > 0 ? '#ECFDF5' : '#FEF2F2',
-                                          color: evCount > 0 ? '#059669' : '#DC2626',
-                                          border: `1px solid ${evCount > 0 ? '#A7F3D0' : '#FECACA'}`,
+                                          backgroundColor: isEvSufficient ? '#ECFDF5' : evCount > 0 ? '#FFFBEB' : '#FEF2F2',
+                                          color: isEvSufficient ? '#059669' : evCount > 0 ? '#B45309' : '#DC2626',
+                                          border: `1px solid ${isEvSufficient ? '#A7F3D0' : evCount > 0 ? '#FDE68A' : '#FECACA'}`,
                                         }}
                                       >
                                         {evCount} {evCount === 1 ? 'شاهد' : 'شواهد'}
+                                        {mandatoryCount > 0 ? ` (غطى ${coveredCount} من ${mandatoryCount} متطلبات)` : ''}
                                       </span>
                                     </div>
                                     <div style={{ fontSize: '11.5px', color: '#64748B', marginTop: '3px' }}>

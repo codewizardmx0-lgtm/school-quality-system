@@ -153,6 +153,7 @@ Route::prefix('v1')->group(function () {
 
         Route::post('/evidences/upload', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'uploadEvidence'])->name('api.v1.evidences.upload');
         Route::get('/evidences', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'getEvidences'])->name('api.v1.evidences.index');
+        Route::patch('/evidences/documents/{documentId}', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'updateDocumentMetadata'])->name('api.v1.evidences.documents.update');
         Route::patch('/evidence-links/{id}/covered-requirements', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'updateLinkCoveredRequirements'])->name('api.v1.evidence-links.covered-requirements');
 
         Route::prefix('ai')->group(function () {
@@ -162,6 +163,8 @@ Route::prefix('v1')->group(function () {
         });
 
         Route::get('/improvement-plans/current', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'getCurrentImprovementPlan'])->name('api.v1.improvement-plans.current');
+        Route::post('/evaluator/improvement-plans', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'createImprovementPlan'])->name('api.v1.evaluator.improvement-plans.store');
+        Route::post('/evaluator/improvement-plans/{id}/review-notes', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'storePlanReviewNote'])->name('api.v1.evaluator.improvement-plans.review-notes.store');
         Route::post('/improvement-actions', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'createImprovementAction'])->name('api.v1.improvement-actions.store');
         Route::put('/improvement-actions/{id}', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'updateImprovementAction'])->name('api.v1.improvement-actions.update');
         Route::post('/improvement-actions/{id}/evidences', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'attachActionEvidence'])->name('api.v1.improvement-actions.evidences.store');

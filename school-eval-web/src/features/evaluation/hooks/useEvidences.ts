@@ -39,11 +39,11 @@ export function useEvidences(initialStandardId?: number) {
   // رفع شاهد جديد أو استبدال بنسخة جديدة مع شريط التقدم
   const uploadEvidenceFile = useCallback(
     async (payload: UploadEvidencePayload) => {
-      // التحقق من الحجم (20 ميجابايت الموحد مع الباك إند)
-      const maxSizeBytes = 20 * 1024 * 1024;
+      // التحقق من الحجم (25 ميجابايت الموحد مع الباك إند)
+      const maxSizeBytes = 25 * 1024 * 1024;
       if (payload.file.size > maxSizeBytes) {
-        setUploadError('حجم الملف يتجاوز الحد الأقصى المسموح (20 ميجابايت).');
-        throw new Error('حجم الملف يتجاوز الحد الأقصى المسموح (20 ميجابايت).');
+        setUploadError('حجم الملف يتجاوز الحد الأقصى المسموح (25 ميجابايت).');
+        throw new Error('حجم الملف يتجاوز الحد الأقصى المسموح (25 ميجابايت).');
       }
 
       // التحقق من نوع الملف
@@ -73,21 +73,25 @@ export function useEvidences(initialStandardId?: number) {
         setUploadProgress(100);
 
         // إضافة الشاهد تفاؤلياً للمستودع
+        const isUnlinked = !payload.indicatorId;
         const newEvidenceItem: EvidenceItem = {
           id: result.versionId,
           documentId: result.documentId,
+          linkId: result.linkId,
+          isUnlinked,
+          indicatorId: payload.indicatorId,
           title: result.title,
           fileName: result.fileName,
           mimeType: payload.file.type,
           fileSize: payload.file.size,
           formattedSize: (payload.file.size / (1024 * 1024)).toFixed(2) + ' MB',
           versionNumber: result.versionNumber,
-          standardCode: 'STD-01',
-          standardName: 'القيادة والإدارة المدرسية',
-          indicatorCode: 'IND-01-01',
-          indicatorTitle: 'شاهد موثق حديثاً',
+          standardCode: isUnlinked ? 'UNLINKED' : 'STD',
+          standardName: isUnlinked ? 'مستودع المدرسة (غير مرتبط)' : 'تم التوثيق بالمؤشر',
+          indicatorCode: isUnlinked ? 'غير مرتبط' : `#${payload.indicatorId}`,
+          indicatorTitle: isUnlinked ? 'غير مرتبط بأي مؤشر' : 'شاهد موثق حديثاً',
           uploadedAt: new Date().toISOString().split('T')[0],
-          uploadedBy: 'عمار عمر عبدالله',
+          uploadedBy: 'المقيّم المدرسي',
           verificationStatus: 'Compliant',
           verificationStatusArabic: 'مطابق ومعتمد داخلياً',
         };

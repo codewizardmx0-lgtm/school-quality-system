@@ -92,6 +92,25 @@ export const StandardsProgressBar: React.FC<StandardsProgressBarProps> = ({
                 </div>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  {std.totalMandatoryRequirements !== undefined && std.totalMandatoryRequirements > 0 && (
+                    <span
+                      style={{
+                        fontSize: '11px',
+                        fontWeight: 700,
+                        padding: '2px 8px',
+                        borderRadius: '6px',
+                        backgroundColor:
+                          (std.coveredRequirements ?? 0) >= std.totalMandatoryRequirements ? '#ECFDF5' : '#FFFBEB',
+                        color:
+                          (std.coveredRequirements ?? 0) >= std.totalMandatoryRequirements ? '#059669' : '#B45309',
+                        border: `1px solid ${
+                          (std.coveredRequirements ?? 0) >= std.totalMandatoryRequirements ? '#A7F3D0' : '#FDE68A'
+                        }`,
+                      }}
+                    >
+                      شواهد: {std.coveredRequirements ?? 0} من {std.totalMandatoryRequirements} متطلب
+                    </span>
+                  )}
                   <span style={{ fontSize: '12px', color: '#64748B' }}>
                     {std.scoredIndicators} من {std.totalIndicators} مؤشراً
                   </span>

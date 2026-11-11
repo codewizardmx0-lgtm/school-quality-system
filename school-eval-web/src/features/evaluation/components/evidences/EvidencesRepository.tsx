@@ -4,10 +4,12 @@ import { useEvidences } from '../../hooks/useEvidences';
 import { evaluatorApi } from '../../api/evaluatorApi';
 import { EvidenceCard } from './EvidenceCard';
 import { LinkEvidenceModal } from './LinkEvidenceModal';
+import { EditEvidenceMetadataModal } from './EditEvidenceMetadataModal';
 import { EvidenceInventoryPage } from './EvidenceInventoryPage';
 import { useToast } from '../../../admin/components/common/useToast';
 import { ToastNotification } from '../../../admin/components/common/ToastNotification';
 import { UploadEvidenceModal } from './UploadEvidenceModal';
+import { useAuth } from '../../../auth/AuthContext';
 import type { EvidenceItem, EvaluatorScreen } from '../../api/evaluationTypes';
 import {
   FolderLock,
@@ -21,15 +23,19 @@ import {
   Table as TableIcon,
   LayoutGrid,
   Link2,
+  Pencil,
+  RefreshCw,
+  ExternalLink,
 } from 'lucide-react';
 
 interface EvidencesRepositoryProps {
-  onNavigate?: (screen: EvaluatorScreen) => void;
+  onNavigate?: (screen: EvaluatorScreen, param?: number) => void;
   readOnly?: boolean;
 }
 
 export const EvidencesRepository: React.FC<EvidencesRepositoryProps> = ({
   readOnly = false,
+  onNavigate,
 }) => {
   const {
     evidences,
@@ -40,21 +46,55 @@ export const EvidencesRepository: React.FC<EvidencesRepositoryProps> = ({
     setSelectedFormatFilter,
     isUploading,
     uploadProgress,
+    fetchEvidences,
     uploadEvidenceFile,
   } = useEvidences();
 
   const [searchTerm, setSearchTerm] = useState('');
+  const [linkFilter, setLinkFilter] = useState<'all' | 'linked' | 'unlinked'>('all');
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [replaceDocId, setReplaceDocId] = useState<number | undefined>(undefined);
   const [viewMode, setViewMode] = useState<'grid' | 'table'>('table');
   const [activeTab, setActiveTab] = useState<'repository' | 'inventory'>('repository');
   const [selectedEvidenceForLinking, setSelectedEvidenceForLinking] = useState<EvidenceItem | null>(null);
+  const [editModalEvidence, setEditModalEvidence] = useState<EvidenceItem | null>(null);
   const [isLinkModalOpen, setIsLinkModalOpen] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const { toasts, addToast, dismissToast } = useToast();
+  const { user } = useAuth();
 
   const handleOpenLinkModal = (evidence: EvidenceItem) => {
     setSelectedEvidenceForLinking(evidence);
     setIsLinkModalOpen(true);
+  };
+
+  const handleOpenEditMetadata = (evidence: EvidenceItem) => {
+    setEditModalEvidence(evidence);
+  };
+
+  const handleSaveMetadata = async (payload: {
+    documentId: number;
+    title: string;
+    documentType: string;
+    description: string;
+    justification: string;
+    linkId?: number;
+  }) => {
+    await evaluatorApi.updateDocumentMetadata(payload.documentId, payload);
+    await fetchEvidences();
+    addToast('success', 'تم تحديث بيانات الشاهد بنجاح.');
+  };
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      await fetchEvidences();
+      addToast('success', 'تم تحديث بيانات مستودع الشواهد بنجاح.');
+    } catch {
+      addToast('error', 'تعذر تحديث البيانات من الخادم.');
+    } finally {
+      setIsRefreshing(false);
+    }
   };
 
 
@@ -73,7 +113,9 @@ export const EvidencesRepository: React.FC<EvidencesRepositoryProps> = ({
       item.fileName.includes(searchTerm) ||
       item.standardName.includes(searchTerm) ||
       item.indicatorCode.includes(searchTerm);
-    return matchesSearch;
+    const isUnlinked = Boolean(item.isUnlinked || !item.indicatorId);
+    const matchesLink = linkFilter === 'all' || (linkFilter === 'unlinked' ? isUnlinked : !isUnlinked);
+    return matchesSearch && matchesLink;
   });
 
   const handleOpenUpload = (docId?: number) => {
@@ -105,7 +147,13 @@ export const EvidencesRepository: React.FC<EvidencesRepositoryProps> = ({
       e.uploadedAt,
     ]);
     const filename = formatExportFilename('مستودع_الشواهد_والأدلة', 'xlsx');
-    exportToExcel(filename, 'مستودع الشواهد', headers, rows);
+    const schoolName = user?.school?.schoolName || 'مدرسة الفاروق النموذجية';
+    const schoolCode = String(user?.school?.schoolId || 'SCH-104');
+    exportToExcel(filename, 'مستودع الشواهد', headers, rows, {
+      schoolName,
+      schoolCode,
+      reportTitle: 'سجل مستودع الشواهد والأدلة المدرسية',
+    });
   };
 
   return (
@@ -415,6 +463,25 @@ export const EvidencesRepository: React.FC<EvidencesRepositoryProps> = ({
             <option value="word">مستندات Word</option>
             <option value="image">صور ميدانية</option>
           </select>
+
+          <select
+            value={linkFilter}
+            onChange={(e) => setLinkFilter(e.target.value as 'all' | 'linked' | 'unlinked')}
+            style={{
+              padding: '8px 12px',
+              borderRadius: '8px',
+              border: '1px solid #CBD5E1',
+              fontSize: '13px',
+              backgroundColor: '#FFFFFF',
+              color: '#334155',
+              outline: 'none',
+              cursor: 'pointer',
+            }}
+          >
+            <option value="all">كافة حالات الربط</option>
+            <option value="linked">مرتبطة بمؤشرات</option>
+            <option value="unlinked">غير مرتبطة بأي مؤشر</option>
+          </select>
         </div>
 
         {/* View Mode & Actions */}
@@ -454,6 +521,28 @@ export const EvidencesRepository: React.FC<EvidencesRepositoryProps> = ({
               <LayoutGrid size={16} />
             </button>
           </div>
+
+          <button
+            onClick={handleRefresh}
+            disabled={isRefreshing}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '8px 12px',
+              borderRadius: '8px',
+              backgroundColor: '#FFFFFF',
+              color: '#475569',
+              border: '1px solid #CBD5E1',
+              fontSize: '12.5px',
+              fontWeight: 600,
+              cursor: isRefreshing ? 'wait' : 'pointer',
+            }}
+            title="تحديث قائمة الشواهد والأدلة"
+          >
+            <RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''} />
+            تحديث
+          </button>
 
           <button
             onClick={handleExportExcel}
@@ -569,12 +658,40 @@ export const EvidencesRepository: React.FC<EvidencesRepositoryProps> = ({
                       </div>
                     </td>
                     <td style={{ padding: '14px 16px', fontSize: '12.5px', color: '#334155' }}>
-                      <span style={{ fontWeight: 700, color: '#059669' }}>{ev.standardCode}:</span> {ev.standardName}
+                      {ev.isUnlinked || !ev.indicatorId ? (
+                        <span style={{ fontSize: '11.5px', fontWeight: 700, color: '#B45309', backgroundColor: '#FFFBEB', border: '1px solid #FDE68A', padding: '3px 8px', borderRadius: '6px' }}>
+                          غير مرتبط بأي مؤشر
+                        </span>
+                      ) : (
+                        <>
+                          <span style={{ fontWeight: 700, color: '#059669' }}>{ev.standardCode}:</span> {ev.standardName}
+                        </>
+                      )}
                     </td>
                     <td style={{ padding: '14px 16px' }}>
-                      <span style={{ fontSize: '11.5px', fontWeight: 700, color: '#2563EB', backgroundColor: '#EFF6FF', padding: '2px 6px', borderRadius: '4px' }}>
-                        {ev.indicatorCode}
-                      </span>
+                      {ev.isUnlinked || (!ev.indicatorId && (!ev.linkedIndicators || ev.linkedIndicators.length === 0)) ? (
+                        <span style={{ fontSize: '11px', fontWeight: 700, color: '#B45309', backgroundColor: '#FEF3C7', padding: '2px 6px', borderRadius: '4px' }}>
+                          بانتظار الربط
+                        </span>
+                      ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                          {(ev.linkedIndicators && ev.linkedIndicators.length > 0
+                            ? ev.linkedIndicators
+                            : [{ indicatorId: ev.indicatorId, indicatorCode: ev.indicatorCode, indicatorTitle: ev.indicatorTitle }]
+                          ).map((li, idx) => (
+                            <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <span style={{ fontSize: '11px', fontWeight: 800, color: '#2563EB', backgroundColor: '#EFF6FF', padding: '2px 6px', borderRadius: '4px', whiteSpace: 'nowrap' }}>
+                                {li.indicatorCode}
+                              </span>
+                              {li.indicatorTitle && (
+                                <span style={{ fontSize: '11.5px', color: '#334155', maxWidth: '240px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={li.indicatorTitle}>
+                                  {li.indicatorTitle}
+                                </span>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </td>
                     <td style={{ padding: '14px 16px' }}>
                       <span style={{ fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: '12px', backgroundColor: '#F1F5F9', color: '#475569' }}>
@@ -600,7 +717,51 @@ export const EvidencesRepository: React.FC<EvidencesRepositoryProps> = ({
                       </span>
                     </td>
                     <td style={{ padding: '14px 16px', textAlign: 'center' }}>
-                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', justifyContent: 'center' }}>
+                        {onNavigate && ev.indicatorId && (
+                          <button
+                            onClick={() => onNavigate('rubric-assessment', ev.indicatorId)}
+                            style={{
+                              padding: '5px 10px',
+                              borderRadius: '6px',
+                              backgroundColor: '#F0FDF4',
+                              border: '1px solid #BBF7D0',
+                              color: '#15803D',
+                              fontSize: '11.5px',
+                              fontWeight: 700,
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                            }}
+                            title="الانتقال المباشر لاستمارة تقييم هذا المؤشر"
+                          >
+                            <ExternalLink size={12} />
+                            الانتقال للمؤشر
+                          </button>
+                        )}
+                        {!readOnly && (
+                          <button
+                            onClick={() => handleOpenEditMetadata(ev)}
+                            style={{
+                              padding: '5px 10px',
+                              borderRadius: '6px',
+                              backgroundColor: '#F8FAFC',
+                              border: '1px solid #CBD5E1',
+                              color: '#475569',
+                              fontSize: '11.5px',
+                              fontWeight: 600,
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                            }}
+                            title="تعديل بيانات الشاهد والنوع والوصف"
+                          >
+                            <Pencil size={12} />
+                            تعديل
+                          </button>
+                        )}
                         {!readOnly && (
                           <button
                             onClick={() => handleOpenUpload(ev.documentId)}
@@ -675,6 +836,8 @@ export const EvidencesRepository: React.FC<EvidencesRepositoryProps> = ({
               onDownload={handleDownloadEvidence}
               readOnly={readOnly}
               onManageLinks={handleOpenLinkModal}
+              onEditMetadata={handleOpenEditMetadata}
+              onNavigate={onNavigate}
             />
           ))}
         </div>
@@ -682,6 +845,14 @@ export const EvidencesRepository: React.FC<EvidencesRepositoryProps> = ({
 
         </>
       )}
+
+      {/* Edit Evidence Metadata Modal */}
+      <EditEvidenceMetadataModal
+        isOpen={Boolean(editModalEvidence)}
+        onClose={() => setEditModalEvidence(null)}
+        evidence={editModalEvidence}
+        onSave={handleSaveMetadata}
+      />
 
       {/* Link Evidence Modal */}
       <LinkEvidenceModal
@@ -691,7 +862,7 @@ export const EvidencesRepository: React.FC<EvidencesRepositoryProps> = ({
           setSelectedEvidenceForLinking(null);
         }}
         evidence={selectedEvidenceForLinking}
-        onSuccess={(msg) => addToast('success', msg)}
+        onSuccess={(msg) => { addToast('success', msg); fetchEvidences(); }}
         onError={(err) => addToast('error', err)}
       />
 

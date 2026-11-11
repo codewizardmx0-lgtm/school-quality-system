@@ -4,7 +4,6 @@ import {
   LayoutDashboard,
   ClipboardList,
   FolderLock,
-  Sparkles,
   Target,
   FileCheck2,
   AlertCircle,
@@ -16,6 +15,7 @@ import {
   Lock,
   X,
   User as UserIcon,
+  Lightbulb,
 } from 'lucide-react';
 import { SYSTEM_SHORT_NAME } from '../../../../constants/systemConstants';
 import { useAuth } from '../../../auth/AuthContext';
@@ -76,9 +76,9 @@ export const EvaluatorSidebar: React.FC<EvaluatorSidebarProps> = ({
     },
     {
       id: 'ai-assistant',
-      label: 'المساعد الذكي (AI)',
-      icon: <Sparkles size={19} />,
-      badge: 'جديد',
+      label: 'الاقتراحات',
+      icon: <Lightbulb size={19} />,
+      badge: 'فجوات ومبادرات',
       badgeColor: '#10B981',
     },
     {

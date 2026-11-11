@@ -23,6 +23,7 @@ use App\Models\Note;
 use App\Models\Report;
 use App\Models\School;
 use App\Models\SchoolDocument;
+use App\Models\ScoreLevel;
 use App\Models\Standard;
 use App\Models\StandardVersion;
 use Illuminate\Http\JsonResponse;
@@ -58,6 +59,16 @@ class EvaluatorApiController extends Controller
 
         if (!$schoolId) {
             $schoolId = School::first()?->school_id ?? 1;
+        }
+
+        $requestedEvalId = $request->query('evaluationId') ?? $request->header('X-Evaluation-Id');
+        if ($requestedEvalId && is_numeric($requestedEvalId)) {
+            $selected = Evaluation::where('school_id', $schoolId)
+                ->where('evaluation_id', (int) $requestedEvalId)
+                ->first();
+            if ($selected) {
+                return $selected;
+            }
         }
 
         $evaluation = Evaluation::where('school_id', $schoolId)
@@ -165,7 +176,12 @@ class EvaluatorApiController extends Controller
             ],
         ];
 
-        // نسبة اكتمال إدخال المعايير الوطنية (7 معايير)
+        // نسبة اكتمال إدخال المعايير الوطنية (7 معايير) مع تغطية المتطلبات
+        $suffStdMap = collect($sufficiencyData['standards'] ?? [])->keyBy('standard_id');
+        $suffIndMap = collect($sufficiencyData['standards'] ?? [])
+            ->flatMap(fn($s) => $s['indicators'] ?? [])
+            ->keyBy('indicator_id');
+
         $standards = Standard::with('subStandards.indicators')->get();
         $standardsProgress = [];
 
@@ -177,6 +193,12 @@ class EvaluatorApiController extends Controller
             $stdScored = $stdScoredResults->count();
             $pct = round(($stdScored / $stdTotal) * 100);
             $avgScore = $stdScored > 0 ? round($stdScoredResults->avg('score'), 2) : 0.0;
+
+            $stdSuff = $suffStdMap->get($std->standard_id);
+            $stdMandatoryReqs = (int) ($stdSuff['mandatory_required_count'] ?? 0);
+            $stdCoveredReqs = (int) collect($stdSuff['indicators'] ?? [])->sum('effective_covered_count');
+            $stdUploadedEvs = (int) ($stdSuff['uploaded_evidence_count'] ?? 0);
+
             $standardsProgress[] = [
                 'standardId' => $std->standard_id,
                 'code' => $std->code,
@@ -185,6 +207,9 @@ class EvaluatorApiController extends Controller
                 'scoredIndicators' => $stdScored,
                 'percentage' => $pct,
                 'averageScore' => $avgScore,
+                'totalMandatoryRequirements' => $stdMandatoryReqs,
+                'coveredRequirements' => $stdCoveredReqs,
+                'evidencesCount' => $stdUploadedEvs,
                 'scoreDistribution' => [
                     'level3' => $stdScoredResults->where('score', 3)->count(),
                     'level2' => $stdScoredResults->where('score', 2)->count(),
@@ -211,12 +236,19 @@ class EvaluatorApiController extends Controller
         foreach ($allIndicatorsList as $ind) {
             $hasScore = in_array($ind->indicator_id, $scoredIndicatorIds);
             $evCount = $evidenceCountsByIndicator[$ind->indicator_id] ?? 0;
-            $hasEvidence = $evCount > 0;
+            $indSuff = $suffIndMap->get($ind->indicator_id);
+            $mandatoryCnt = (int) ($indSuff['mandatory_required_count'] ?? 0);
+            $coveredCnt = (int) ($indSuff['effective_covered_count'] ?? $evCount);
+            $hasEvidence = $indSuff ? (bool) $indSuff['is_sufficient'] : ($evCount > 0);
 
             if (!$hasScore || !$hasEvidence) {
                 $statusText = !$hasScore
                     ? (!$hasEvidence ? 'تقدير وشواهد غير مكتملة' : 'تقدير غير مدخل')
                     : 'شواهد ناقصة';
+
+                $evLabel = $mandatoryCnt > 0
+                    ? "شاهد {$evCount} (غطى {$coveredCnt} من {$mandatoryCnt} متطلبات)"
+                    : ($evCount > 0 ? "شاهد {$evCount}" : 'ناقص (0)');
 
                 $pendingIndicators[] = [
                     'indicatorId' => $ind->indicator_id,
@@ -226,8 +258,10 @@ class EvaluatorApiController extends Controller
                     'scoreStatus' => $hasScore ? 'scored' : 'unscored',
                     'scoreStatusArabic' => $hasScore ? 'مدخل' : 'غير مدخل',
                     'evidenceStatus' => $hasEvidence ? 'sufficient' : 'missing',
-                    'evidenceStatusArabic' => $hasEvidence ? "مستوفٍ ({$evCount})" : 'ناقص (0)',
+                    'evidenceStatusArabic' => $evLabel,
                     'evidenceCount' => $evCount,
+                    'coveredRequirementsCount' => $coveredCnt,
+                    'mandatoryRequirementsCount' => $mandatoryCnt,
                     'score' => $hasScore ? $results->firstWhere('indicator_id', $ind->indicator_id)?->score : null,
                     'status' => $statusText,
                 ];
@@ -307,28 +341,25 @@ class EvaluatorApiController extends Controller
             ]);
         }
 
-        $user = $request->user();
-        $school = $user?->school ?? School::first();
-        $evaluation = Evaluation::where('school_id', $school?->school_id)->orderBy('evaluation_id', 'desc')->first();
+        $evaluation = $this->getActiveEvaluation($request);
         $results = $evaluation ? EvaluationResult::where('evaluation_id', $evaluation->evaluation_id)->get() : collect();
-        $evidenceCounts = $evaluation ? EvidenceLink::where('school_id', $school?->school_id)
+        $linksByIndicator = $evaluation ? EvidenceLink::where('school_id', $evaluation->school_id)
             ->where('evaluation_id', $evaluation->evaluation_id)
-            ->selectRaw('indicator_id, count(*) as count')
-            ->groupBy('indicator_id')
-            ->pluck('count', 'indicator_id')
-            ->toArray() : [];
+            ->get()
+            ->groupBy('indicator_id') : collect();
 
         $standards = Standard::where('version_id', $version->version_id)
             ->with([
                 'subStandards.indicators.scoreDescriptors',
                 'subStandards.indicators.evidenceRequirements',
-                'subStandards.indicators.verificationMethods',
+                'subStandards.indicators.verificationTools',
             ])
             ->orderBy('code')
             ->get();
 
-        $tree = $standards->map(function ($std) use ($results, $evidenceCounts) {
-            $indIds = $std->subStandards->flatMap(fn($sub) => $sub->indicators)->pluck('indicator_id');
+        $tree = $standards->map(function ($std) use ($results, $linksByIndicator) {
+            $allStdIndicators = $std->subStandards->flatMap(fn($sub) => $sub->indicators);
+            $indIds = $allStdIndicators->pluck('indicator_id');
             $stdResults = $results->whereIn('indicator_id', $indIds);
             $totalInds = max(1, $indIds->count());
             $scoredCount = $stdResults->whereNotNull('score')->count();
@@ -339,8 +370,41 @@ class EvaluatorApiController extends Controller
             $l0 = $stdResults->where('score', 0)->count();
 
             $stdTotalEvidences = 0;
-            foreach ($indIds as $iid) {
-                $stdTotalEvidences += $evidenceCounts[$iid] ?? 0;
+            $stdTotalMandatory = 0;
+            $stdTotalCovered = 0;
+
+            $computeIndicatorCoverage = function ($ind) use ($linksByIndicator) {
+                $indLinks = $linksByIndicator->get($ind->indicator_id, collect());
+                $evCount = $indLinks->count();
+                $mandatoryIds = $ind->evidenceRequirements->where('required', true)->pluck('requirement_id')->map(fn($x) => (int)$x)->all();
+                $mandatoryCnt = count($mandatoryIds);
+                $explicitIds = [];
+                $legacyCnt = 0;
+                foreach ($indLinks as $lnk) {
+                    if (strtolower($lnk->status ?? '') !== 'completed') {
+                        continue;
+                    }
+                    $cov = $lnk->covered_requirements;
+                    if (is_array($cov) && count($cov) > 0) {
+                        foreach ($cov as $rid) {
+                            $intId = (int)$rid;
+                            if (in_array($intId, $mandatoryIds, true)) {
+                                $explicitIds[$intId] = true;
+                            }
+                        }
+                    } else {
+                        $legacyCnt++;
+                    }
+                }
+                $coveredCnt = $mandatoryCnt > 0 ? min($mandatoryCnt, count($explicitIds) + $legacyCnt) : $evCount;
+                return [$evCount, $mandatoryCnt, $coveredCnt];
+            };
+
+            foreach ($allStdIndicators as $indItem) {
+                [$evC, $mC, $cC] = $computeIndicatorCoverage($indItem);
+                $stdTotalEvidences += $evC;
+                $stdTotalMandatory += $mC;
+                $stdTotalCovered += $cC;
             }
 
             return [
@@ -358,15 +422,17 @@ class EvaluatorApiController extends Controller
                     'level1Count' => $l1,
                     'level0Count' => $l0,
                     'totalEvidences' => $stdTotalEvidences,
+                    'totalMandatoryRequirements' => $stdTotalMandatory,
+                    'coveredRequirements' => $stdTotalCovered,
                 ],
-                'subStandards' => $std->subStandards->map(function ($sub) use ($results, $evidenceCounts) {
+                'subStandards' => $std->subStandards->map(function ($sub) use ($results, $computeIndicatorCoverage) {
                     return [
                         'subStandardId' => $sub->sub_standard_id,
                         'code' => $sub->code,
                         'title' => $sub->name,
-                        'indicators' => $sub->indicators->map(function ($ind) use ($results, $evidenceCounts) {
+                        'indicators' => $sub->indicators->map(function ($ind) use ($results, $computeIndicatorCoverage) {
                             $res = $results->firstWhere('indicator_id', $ind->indicator_id);
-                            $evCount = $evidenceCounts[$ind->indicator_id] ?? 0;
+                            [$evCount, $mandatoryCnt, $coveredCnt] = $computeIndicatorCoverage($ind);
 
                             return [
                                 'indicatorId' => $ind->indicator_id,
@@ -376,15 +442,21 @@ class EvaluatorApiController extends Controller
                                 'weight' => $ind->weight ?? 1,
                                 'score' => $res?->score,
                                 'evidenceCount' => $evCount,
+                                'mandatoryRequirementsCount' => $mandatoryCnt,
+                                'coveredRequirementsCount' => $coveredCnt,
                                 'descriptors' => $ind->scoreDescriptors->map(fn($d) => [
                                     'descriptorId' => $d->descriptor_id ?? $d->id,
                                     'level' => $d->level ?? $d->score_level,
                                     'title' => $d->title ?? ('المستوى ' . ($d->level ?? $d->score_level)),
                                     'description' => $d->description,
                                 ]),
-                                'verificationMethods' => $ind->verificationMethods->map(fn($vm) => [
-                                    'id' => $vm->id ?? $vm->method_id,
-                                    'name' => $vm->name ?? $vm->method_name ?? 'فحص الوثائق والسجلات',
+                                'verificationMethods' => $ind->verificationTools->map(fn($vt) => [
+                                    'id' => $vt->tool_id,
+                                    'name' => $vt->name,
+                                    'toolType' => $vt->tool_type,
+                                    'description' => $vt->description,
+                                    'required' => (bool)($vt->pivot->required ?? true),
+                                    'guidance' => $vt->pivot->usage_guidance ?? '',
                                 ]),
                                 'evidenceRequirements' => $ind->evidenceRequirements->map(fn($er) => [
                                     'id' => $er->requirement_id,
@@ -400,6 +472,7 @@ class EvaluatorApiController extends Controller
         });
 
         return ApiResponse::success([
+            'evaluationId' => $evaluation?->evaluation_id,
             'versionId' => $version->version_id,
             'versionCode' => $version->version_code ?? 'NSS-2026-V1',
             'title' => $version->version_name ?? 'المعايير الوطنية لتقويم الأداء المدرسي 2026',
@@ -471,7 +544,7 @@ class EvaluatorApiController extends Controller
             'score' => $result->score,
             'scoreDescriptorId' => $result->score_descriptor_id,
             'completionStatus' => $result->completion_status ?? 'Completed',
-            'justification' => $justificationNote ? $justificationNote->content : ($result->textual_result ?? ''),
+            'justification' => $justificationNote ? ($justificationNote->text ?? $justificationNote->content) : ($result->textual_result ?? ''),
             'verificationMethods' => $result->verificationMethods->pluck('verification_tool_id')->toArray(),
             'evidenceLinks' => $evidenceLinks,
             'evidenceRequirements' => $reqs,
@@ -509,17 +582,26 @@ class EvaluatorApiController extends Controller
         }
 
         $evaluation = $this->getActiveEvaluation($request);
+        if (in_array($evaluation->status, ['Submitted', 'UnderReview', 'Completed'], true) || ($evaluation->cycle && $evaluation->cycle->status === 'Closed')) {
+            return ApiResponse::error('لا يمكن التعديل على ملف تقييم مقفل أو دورة مغلقة (للقراءة فقط).', 422);
+        }
         $indicatorId = $request->input('indicatorId');
         $score = $request->input('score');
 
         // البحث عن وصف الدرجة التلقائي إذا لم يتم تمريره
         $descriptorId = $request->input('scoreDescriptorId');
-        if (!$descriptorId) {
-            $descriptor = IndicatorScoreDescriptor::where('indicator_id', $indicatorId)
-                ->where('level', $score)
-                ->first();
-            $descriptorId = $descriptor?->descriptor_id ?? $descriptor?->id;
+        if (!$descriptorId && $score !== null && $score !== '') {
+            $numericScore = (int)$score;
+            $scoreLevel = ScoreLevel::where('score_value', $numericScore)->first();
+            if ($scoreLevel) {
+                $descriptor = IndicatorScoreDescriptor::where('indicator_id', $indicatorId)
+                    ->where('score_level_id', $scoreLevel->score_level_id)
+                    ->first();
+                $descriptorId = $descriptor?->descriptor_id ?? $descriptor?->id;
+            }
         }
+
+        $versionId = $evaluation->cycle?->version_id ?? Indicator::find($indicatorId)?->subStandard?->standard?->version_id ?? 1;
 
         $result = EvaluationResult::updateOrCreate(
             [
@@ -527,6 +609,7 @@ class EvaluatorApiController extends Controller
                 'indicator_id' => $indicatorId,
             ],
             [
+                'standard_version_id' => $versionId,
                 'score' => $score,
                 'score_descriptor_id' => $descriptorId,
                 'evaluator_user_id' => $user?->user_id ?? 1,
@@ -540,7 +623,7 @@ class EvaluatorApiController extends Controller
             Note::create([
                 'result_id' => $result->result_id,
                 'author_user_id' => $user?->user_id ?? 1,
-                'content' => $request->input('justification'),
+                'text' => $request->input('justification'),
             ]);
         }
 
@@ -574,15 +657,19 @@ class EvaluatorApiController extends Controller
     public function uploadEvidence(Request $request): JsonResponse
     {
         $validator = Validator::make($request->all(), [
-            'file' => 'required|file|max:20480|mimes:pdf,png,jpg,jpeg,docx,xlsx',
+            'file' => 'required|file|max:25600|mimes:pdf,png,jpg,jpeg,docx,xlsx',
             'title' => 'nullable|string|max:255',
+            'documentType' => 'nullable|string|in:evidence,minutes,plan,record,report,board,image,other',
+            'document_type' => 'nullable|string|in:evidence,minutes,plan,record,report,board,image,other',
+            'description' => 'nullable|string|max:2000',
+            'justification' => 'nullable|string|max:1000',
             'indicatorId' => 'nullable|integer',
             'actionId' => 'nullable|integer',
             'notes' => 'nullable|string',
             'documentId' => 'nullable|integer', // إذا كان استبدالاً لنسخة سابقة
         ], [
             'file.required' => 'الملف مطلوب.',
-            'file.max' => 'حجم الملف يتجاوز الحد الأقصى المسموح (20 ميجابايت).',
+            'file.max' => 'حجم الملف يتجاوز الحد الأقصى المسموح (25 ميجابايت).',
             'file.mimes' => 'نوع الملف غير مسموح. الأنواع المسموحة: pdf, png, jpg, jpeg, docx, xlsx.',
         ]);
 
@@ -596,6 +683,9 @@ class EvaluatorApiController extends Controller
         }
 
         $evaluation = $this->getActiveEvaluation($request);
+        if (in_array($evaluation->status, ['Submitted', 'UnderReview', 'Completed'], true) || ($evaluation->cycle && $evaluation->cycle->status === 'Closed')) {
+            return ApiResponse::error('لا يمكن رفع شواهد على ملف تقييم مقفل أو دورة مغلقة (للقراءة فقط).', 422);
+        }
         $schoolId = $evaluation->school_id;
         $uploadedFile = $request->file('file');
 
@@ -611,10 +701,13 @@ class EvaluatorApiController extends Controller
             $document = SchoolDocument::where('school_id', $schoolId)->where('id', $docId)->first();
         } else {
             $title = $request->input('title') ?: pathinfo($originalName, PATHINFO_FILENAME);
+            $documentType = $request->input('documentType') ?: $request->input('document_type', 'evidence');
+            $description = $request->input('description');
             $document = SchoolDocument::create([
                 'school_id' => $schoolId,
                 'title' => $title,
-                'document_type' => 'evidence',
+                'document_type' => $documentType,
+                'description' => $description,
                 'created_by_user_id' => $user?->user_id ?? 1,
             ]);
         }
@@ -659,7 +752,7 @@ class EvaluatorApiController extends Controller
                 'indicator_id' => $request->input('indicatorId'),
                 'document_version_id' => $docVersion->id,
                 'action_id' => $request->input('actionId'),
-                'justification' => $request->input('notes', ''),
+                'justification' => $request->input('justification') ?: $request->input('notes', ''),
                 'covered_requirements' => $coveredReqs,
                 'status' => 'completed',
             ]);
@@ -747,7 +840,7 @@ class EvaluatorApiController extends Controller
         $standardFilter = $request->query('standardId');
         $formatFilter = $request->query('format');
 
-        $query = DocumentVersion::with(['document', 'uploader'])
+        $query = DocumentVersion::with(['document.creator', 'evidenceLinks.indicator.subStandard.standard'])
             ->whereHas('document', function ($q) use ($schoolId) {
                 $q->where('school_id', $schoolId);
             });
@@ -756,13 +849,53 @@ class EvaluatorApiController extends Controller
             $query->where('mime_type', 'like', '%' . $formatFilter . '%');
         }
 
+        if ($standardFilter) {
+            $query->whereHas('evidenceLinks.indicator.subStandard.standard', function ($q) use ($standardFilter) {
+                if (is_numeric($standardFilter)) {
+                    $q->where('standard_id', (int)$standardFilter);
+                } else {
+                    $q->where('code', $standardFilter)->orWhere('name', 'like', '%' . $standardFilter . '%');
+                }
+            });
+        }
+
         $versions = $query->orderBy('id', 'desc')->get();
 
-        $evidencesList = $versions->map(function ($ver) {
-            $link = EvidenceLink::where('document_version_id', $ver->id)->with('indicator.subStandard.standard')->first();
+        $evidencesList = $versions->map(function ($ver) use ($evaluation) {
+            $links = EvidenceLink::where('document_version_id', $ver->id)
+                ->where('evaluation_id', $evaluation->evaluation_id)
+                ->with('indicator.subStandard.standard')
+                ->get();
+            $link = $links->first();
+            $isUnlinked = ($link === null);
+
+            $linkedIndicators = $links->map(fn($l) => [
+                'linkId' => $l->id,
+                'indicatorId' => $l->indicator_id,
+                'indicatorCode' => $l->indicator?->code ?? '',
+                'indicatorTitle' => $l->indicator?->name ?? '',
+                'standardId' => $l->indicator?->subStandard?->standard?->standard_id,
+                'standardCode' => $l->indicator?->subStandard?->standard?->code ?? '',
+                'standardName' => $l->indicator?->subStandard?->standard?->name ?? '',
+                'justification' => $l->justification ?? '',
+                'coveredRequirements' => $l->covered_requirements ?? [],
+            ])->values()->all();
+
+            $docType = $ver->document?->document_type ?? 'evidence';
+            $docTypeArabic = match ($docType) {
+                'minutes' => 'محضر اجتماع',
+                'plan' => 'خطة تشغيلية',
+                'record' => 'سجل توثيقي',
+                'report' => 'تقرير إنجاز',
+                'board' => 'لوحة حائطية/بيانية',
+                'image' => 'صورة ميدانية',
+                default => 'شاهد توثيقي',
+            };
+
             return [
                 'id' => $ver->id,
-                'linkId' => $link?->id ?? $ver->id,
+                'linkId' => $link?->id,
+                'isUnlinked' => $isUnlinked,
                 'documentId' => $ver->school_document_id,
                 'indicatorId' => $link?->indicator_id,
                 'title' => $ver->document?->title ?? $ver->file_name,
@@ -771,12 +904,17 @@ class EvaluatorApiController extends Controller
                 'fileSize' => $ver->file_size,
                 'formattedSize' => round($ver->file_size / (1024 * 1024), 2) . ' MB',
                 'versionNumber' => $ver->version_no,
-                'standardCode' => $link?->indicator?->subStandard?->standard?->code ?? 'STD-01',
-                'standardName' => $link?->indicator?->subStandard?->standard?->name ?? 'معيار عام',
-                'indicatorCode' => $link?->indicator?->code ?? 'IND-GEN',
-                'indicatorTitle' => $link?->indicator?->name ?? 'شاهد موثق',
+                'standardCode' => $link?->indicator?->subStandard?->standard?->code ?? 'UNLINKED',
+                'standardName' => $link?->indicator?->subStandard?->standard?->name ?? 'مستودع المدرسة (غير مرتبط)',
+                'indicatorCode' => $link?->indicator?->code ?? 'غير مرتبط',
+                'indicatorTitle' => $link?->indicator?->name ?? 'غير مرتبط بأي مؤشر',
+                'documentType' => $docType,
+                'documentTypeArabic' => $docTypeArabic,
+                'description' => $ver->document?->description ?? '',
+                'justification' => $link?->justification ?? '',
+                'linkedIndicators' => $linkedIndicators,
                 'uploadedAt' => $ver->created_at?->toDateString() ?? '2026-10-15',
-                'uploadedBy' => $ver->uploader?->full_name ?? 'مسؤول الجودة',
+                'uploadedBy' => $ver->document?->creator?->full_name ?? 'مسؤول الجودة',
                 'verificationStatus' => $ver->version_no > 2 ? 'NeedsReplacement' : 'Compliant',
                 'verificationStatusArabic' => $ver->version_no > 2 ? 'يتطلب استبدال' : 'مطابق ومعتمد داخلياً',
             ];
@@ -799,6 +937,67 @@ class EvaluatorApiController extends Controller
             ],
             'evidences' => $evidencesList,
         ]);
+    }
+
+    /**
+     * PATCH /api/v1/evidences/documents/{documentId}
+     * Update school document title, type, description, and link justification
+     */
+    public function updateDocumentMetadata(Request $request, int $documentId): JsonResponse
+    {
+        $evaluation = $this->getActiveEvaluation($request);
+        $schoolId = $evaluation->school_id;
+
+        $document = SchoolDocument::where('school_id', $schoolId)->where('id', $documentId)->first();
+        if (!$document) {
+            return ApiResponse::notFound('المستند غير موجود في ملف المدرسة.');
+        }
+
+        $validator = Validator::make($request->all(), [
+            'title' => 'nullable|string|max:255',
+            'documentType' => 'nullable|string|in:evidence,minutes,plan,record,report,board,image,other',
+            'document_type' => 'nullable|string|in:evidence,minutes,plan,record,report,board,image,other',
+            'description' => 'nullable|string|max:2000',
+            'justification' => 'nullable|string|max:1000',
+            'linkId' => 'nullable|integer',
+        ]);
+
+        if ($validator->fails()) {
+            return ApiResponse::validationError($validator->errors()->toArray());
+        }
+
+        if ($request->filled('title')) {
+            $document->title = $request->input('title');
+        }
+        $docType = $request->input('documentType') ?: $request->input('document_type');
+        if ($docType) {
+            $document->document_type = $docType;
+        }
+        if ($request->has('description')) {
+            $document->description = $request->input('description');
+        }
+        $document->save();
+
+        if ($request->filled('justification')) {
+            $justification = $request->input('justification');
+            if ($request->filled('linkId')) {
+                EvidenceLink::where('id', $request->input('linkId'))
+                    ->where('school_id', $schoolId)
+                    ->update(['justification' => $justification]);
+            } else {
+                $versionIds = DocumentVersion::where('school_document_id', $document->id)->pluck('id');
+                EvidenceLink::whereIn('document_version_id', $versionIds)
+                    ->where('evaluation_id', $evaluation->evaluation_id)
+                    ->update(['justification' => $justification]);
+            }
+        }
+
+        return ApiResponse::success([
+            'documentId' => $document->id,
+            'title' => $document->title,
+            'documentType' => $document->document_type,
+            'description' => $document->description,
+        ], 'تم تحديث بيانات الشاهد بنجاح.');
     }
 
     /**
@@ -1006,28 +1205,94 @@ class EvaluatorApiController extends Controller
         $evaluation = $this->getActiveEvaluation($request);
         $schoolId = $evaluation->school_id;
 
+        $allowedTypes = [
+            ImprovementPlan::TYPE_QUALITY_IMPROVEMENT,
+            ImprovementPlan::TYPE_STAFF_DEVELOPMENT,
+            ImprovementPlan::TYPE_ANNUAL_OPERATIONAL,
+        ];
+        $planType = $request->query('plan_type') ?? $request->query('planType') ?? ImprovementPlan::TYPE_QUALITY_IMPROVEMENT;
+        if (!in_array($planType, $allowedTypes, true)) {
+            $planType = ImprovementPlan::TYPE_QUALITY_IMPROVEMENT;
+        }
+
         $plan = ImprovementPlan::where('school_id', $schoolId)
+            ->where('cycle_id', $evaluation->cycle_id)
+            ->where('plan_type', $planType)
             ->where('status', '!=', 'Cancelled')
             ->orderBy('plan_id', 'desc')
-            ->with(['actions'])
+            ->with(['actions.area'])
             ->first();
 
+        if (!$plan && $planType === ImprovementPlan::TYPE_QUALITY_IMPROVEMENT) {
+            // توافق تراجعي في حال وجود خطة قديمة بدون مطابقة الدورة
+            $plan = ImprovementPlan::where('school_id', $schoolId)
+                ->where('plan_type', $planType)
+                ->where('status', '!=', 'Cancelled')
+                ->orderBy('plan_id', 'desc')
+                ->with(['actions.area'])
+                ->first();
+        }
+
+        // جلب كافة مجالات التحسين المعتمدة لهذا التقييم/المدرسة
+        $evalResultIds = \App\Models\EvaluationResult::where('evaluation_id', $evaluation->evaluation_id)->pluck('result_id');
+        $availableAreas = \App\Models\ImprovementArea::where(function ($q) use ($evalResultIds) {
+            $q->whereIn('result_id', $evalResultIds);
+        })->orderBy('area_id', 'desc')->get();
+
         if (!$plan) {
+            if (in_array($evaluation->status, ['Submitted', 'UnderReview', 'Completed'], true) || $evaluation->cycle?->status === 'Closed') {
+                return ApiResponse::success([
+                    'planId' => 0,
+                    'planType' => $planType,
+                    'title' => 'خطة غير مسجلة لهذه الدورة',
+                    'status' => 'Archived',
+                    'startDate' => null,
+                    'endDate' => null,
+                    'areas' => [],
+                    'availableAreas' => [],
+                    'summary' => ['totalActions' => 0, 'inProgressActions' => 0, 'doneActions' => 0, 'pendingActions' => 0],
+                    'actions' => [],
+                ]);
+            }
+            $defaultTitleMap = [
+                ImprovementPlan::TYPE_QUALITY_IMPROVEMENT => 'خطة تحسين الجودة المدرسية الشاملة',
+                ImprovementPlan::TYPE_STAFF_DEVELOPMENT   => 'خطة التطوير المهني والتربوي للكوادر',
+                ImprovementPlan::TYPE_ANNUAL_OPERATIONAL  => 'الخطة التشغيلية السنوية للمدرسة',
+            ];
             $plan = ImprovementPlan::create([
                 'school_id' => $schoolId,
                 'cycle_id' => $evaluation->cycle_id,
-                'title' => 'خطة التحسين والتطوير المدرسي الشاملة 2026/2027',
-                'plan_type' => ImprovementPlan::TYPE_QUALITY_IMPROVEMENT,
+                'title' => $defaultTitleMap[$planType] ?? 'خطة التحسين والتطوير المدرسي',
+                'plan_type' => $planType,
                 'start_date' => now()->toDateString(),
                 'end_date' => now()->addMonths(6)->toDateString(),
                 'status' => 'Draft',
                 'created_by_user_id' => $request->user()?->user_id ?? 1,
             ]);
 
-            // الخطة تبدأ فارغة ليتم إدخال أو استيراد الإجراءات من بنك الإجراءات المعتمدة
+            // ربط المجالات المتوفرة تلقائياً بالخطة الجديدة لتمكين إضافة الإجراءات ضمن قيد المفتاح المركب
+            foreach ($availableAreas as $avArea) {
+                \App\Models\PlanImprovementArea::firstOrCreate([
+                    'plan_id' => $plan->plan_id,
+                    'area_id' => $avArea->area_id,
+                ], [
+                    'created_at' => now(),
+                ]);
+            }
         }
 
-        $actions = ImprovementAction::where('plan_id', $plan->plan_id)->orderBy('action_id', 'desc')->get();
+        $planAreaIds = \App\Models\PlanImprovementArea::where('plan_id', $plan->plan_id)->pluck('area_id');
+        $planAreas = \App\Models\ImprovementArea::whereIn('area_id', $planAreaIds)->get()->map(fn ($a) => [
+            'areaId' => $a->area_id,
+            'name' => $a->name,
+            'priority' => $a->priority,
+            'targetScore' => $a->target_score ?? 3,
+        ])->values();
+
+        $actions = ImprovementAction::where('plan_id', $plan->plan_id)
+            ->with(['area'])
+            ->orderBy('action_id', 'desc')
+            ->get();
 
         $totalActions = $actions->count();
         $inProgressActions = $actions->where('status', 'InProgress')->count();
@@ -1038,8 +1303,10 @@ class EvaluatorApiController extends Controller
             return [
                 'actionId' => $act->action_id,
                 'planId' => $act->plan_id,
+                'areaId' => $act->area_id,
+                'areaName' => $act->area?->name ?? 'مجال عام',
                 'title' => $act->title,
-                'standardName' => 'معيار التطوير والجودة',
+                'standardName' => $act->area?->name ?? 'معيار التطوير والجودة',
                 'leader' => $act->responsible_person_description ?: 'فريق التطوير والتحسين',
                 'startDate' => $act->start_date?->toDateString() ?? '2026-10-01',
                 'dueDate' => $act->due_date?->toDateString() ?? '2026-12-31',
@@ -1050,12 +1317,34 @@ class EvaluatorApiController extends Controller
             ];
         });
 
+        $reviewNotes = \App\Models\PlanReviewNote::where('plan_id', $plan->plan_id)
+            ->with(['author'])
+            ->orderBy('note_id', 'desc')
+            ->get()
+            ->map(fn ($n) => [
+                'noteId' => $n->note_id,
+                'authorName' => $n->author?->full_name ?? $n->author?->username ?? 'مراجع معتمد',
+                'authorUsername' => $n->author?->username ?? '',
+                'reviewerRole' => $n->reviewer_role,
+                'roleArabic' => $n->reviewer_role === 'ministry_supervisor' ? 'مشرف وزاري' : ($n->reviewer_role === 'school_principal' ? 'مدير مدرسة' : 'مقيم جودة'),
+                'text' => $n->text,
+                'createdAt' => $n->created_at?->toIso8601String(),
+            ])->values();
+
         return ApiResponse::success([
             'planId' => $plan->plan_id,
+            'planType' => $plan->plan_type ?? ImprovementPlan::TYPE_QUALITY_IMPROVEMENT,
             'title' => $plan->title,
             'status' => $plan->status,
             'startDate' => $plan->start_date?->toDateString() ?? '2026-10-01',
             'endDate' => $plan->end_date?->toDateString() ?? '2027-03-31',
+            'areas' => $planAreas,
+            'availableAreas' => $availableAreas->map(fn ($a) => [
+                'areaId' => $a->area_id,
+                'name' => $a->name,
+                'priority' => $a->priority,
+                'targetScore' => $a->target_score ?? 3,
+            ])->values(),
             'summary' => [
                 'totalActions' => $totalActions,
                 'inProgressActions' => $inProgressActions,
@@ -1063,16 +1352,142 @@ class EvaluatorApiController extends Controller
                 'pendingActions' => $pendingActions,
             ],
             'actions' => $actionsFormatted,
+            'reviewNotes' => $reviewNotes,
         ]);
     }
 
     /**
+     * POST /api/v1/evaluator/improvement-plans
+     * Create a new improvement plan scoped to school's active evaluation
+     */
+    public function createImprovementPlan(Request $request): JsonResponse
+    {
+        $evaluation = $this->getActiveEvaluation($request);
+        if (in_array($evaluation->status, ['Submitted', 'UnderReview', 'Completed'], true) || $evaluation->cycle?->status === 'Closed') {
+            return ApiResponse::validationError([
+                'evaluation' => ['لا يمكن إنشاء خطة تحسين لدورة تقييم مقفلة أو مؤرشفة (وضع القراءة فقط).'],
+            ], 'لا يمكن إنشاء خطة تحسين لدورة تقييم مقفلة أو مؤرشفة (وضع القراءة فقط).');
+        }
+
+        $validator = Validator::make($request->all(), [
+            'title'     => 'required|string|max:200',
+            'planType'  => 'nullable|string|in:QualityImprovement,StaffProfessionalDevelopment,AnnualOperational',
+            'startDate' => 'nullable|date',
+            'endDate'   => 'nullable|date|after_or_equal:startDate',
+            'areaIds'   => 'nullable|array',
+            'areaIds.*' => 'integer',
+        ], [
+            'title.required'         => 'عنوان خطة التحسين إلزامي.',
+            'title.max'              => 'لا يمكن أن يتجاوز عنوان الخطة 200 حرف.',
+            'endDate.after_or_equal' => 'تاريخ نهاية الخطة يجب أن يكون مساوياً أو لاحقاً لتاريخ البداية.',
+        ]);
+
+        if ($validator->fails()) {
+            return ApiResponse::validationError($validator->errors()->toArray());
+        }
+
+        $schoolId = $evaluation->school_id;
+        $planType = $request->input('planType') ?? ImprovementPlan::TYPE_QUALITY_IMPROVEMENT;
+
+        $plan = ImprovementPlan::create([
+            'school_id'          => $schoolId,
+            'cycle_id'           => $evaluation->cycle_id,
+            'title'              => $request->input('title'),
+            'plan_type'          => $planType,
+            'start_date'         => $request->input('startDate') ?? now()->toDateString(),
+            'end_date'           => $request->input('endDate') ?? now()->addMonths(6)->toDateString(),
+            'status'             => 'Draft',
+            'created_by_user_id' => $request->user()?->user_id ?? 1,
+        ]);
+
+        // ربط مجالات التحسين المحددة أو المتاحة
+        $evalResultIds = \App\Models\EvaluationResult::where('evaluation_id', $evaluation->evaluation_id)->pluck('result_id');
+        $availableAreaIds = \App\Models\ImprovementArea::whereIn('result_id', $evalResultIds)->pluck('area_id')->toArray();
+
+        $requestedAreaIds = $request->input('areaIds');
+        $areaIdsToLink = (!empty($requestedAreaIds) && is_array($requestedAreaIds))
+            ? array_values(array_intersect($requestedAreaIds, $availableAreaIds))
+            : $availableAreaIds;
+
+        foreach ($areaIdsToLink as $areaId) {
+            \App\Models\PlanImprovementArea::firstOrCreate([
+                'plan_id' => $plan->plan_id,
+                'area_id' => $areaId,
+            ], [
+                'created_at' => now(),
+            ]);
+        }
+
+        return ApiResponse::created([
+            'planId'    => $plan->plan_id,
+            'planType'  => $plan->plan_type,
+            'title'     => $plan->title,
+            'status'    => $plan->status,
+            'startDate' => $plan->start_date?->toDateString(),
+            'endDate'   => $plan->end_date?->toDateString(),
+            'areaCount' => count($areaIdsToLink),
+        ], 'تم إنشاء خطة التحسين وربط مجالاتها بنجاح.');
+    }
+
+    /**
+     * POST /api/v1/evaluator/improvement-plans/{id}/review-notes
+     * Add review note to an improvement plan
+     */
+    public function storePlanReviewNote(Request $request, int $id): JsonResponse
+    {
+        $evaluation = $this->getActiveEvaluation($request);
+        $plan = ImprovementPlan::where('plan_id', $id)
+            ->where('school_id', $evaluation->school_id)
+            ->first();
+
+        if (!$plan) {
+            return ApiResponse::notFound('خطة التحسين المطلوبة غير موجودة.');
+        }
+
+        $validator = Validator::make($request->all(), [
+            'text' => 'required|string|max:2000',
+        ], [
+            'text.required' => 'نص ملاحظة المراجعة إلزامي.',
+            'text.max'      => 'لا يمكن أن يتجاوز نص الملاحظة 2000 حرف.',
+        ]);
+
+        if ($validator->fails()) {
+            return ApiResponse::validationError($validator->errors()->toArray());
+        }
+
+        $user = $request->user();
+        $reviewerRole = $user && $user->hasRole('school_principal')
+            ? 'school_principal'
+            : ($user && $user->hasRole('ministry_supervisor') ? 'ministry_supervisor' : 'school_evaluator');
+
+        $note = \App\Models\PlanReviewNote::create([
+            'plan_id'        => $plan->plan_id,
+            'author_user_id' => $user?->user_id ?? 1,
+            'reviewer_role'  => $reviewerRole,
+            'text'           => $request->input('text'),
+        ]);
+
+        return ApiResponse::created([
+            'noteId'         => $note->note_id,
+            'authorName'     => $user?->full_name ?? $user?->username ?? 'مراجع معتمد',
+            'authorUsername' => $user?->username ?? '',
+            'reviewerRole'   => $note->reviewer_role,
+            'roleArabic'     => $note->reviewer_role === 'ministry_supervisor' ? 'مشرف وزاري' : ($note->reviewer_role === 'school_principal' ? 'مدير مدرسة' : 'مقيم جودة'),
+            'text'           => $note->text,
+            'createdAt'      => $note->created_at?->toIso8601String(),
+        ], 'تم تسجيل ملاحظة المراجعة بنجاح.');
+    }
+
+    /**
      * POST /api/v1/improvement-actions
-     * Create action (or transfer from AI initiative)
+     * Create action (or transfer from AI initiative) with composite FK enforcement
      */
     public function createImprovementAction(Request $request): JsonResponse
     {
         $validator = Validator::make($request->all(), [
+            'planId' => 'nullable|integer',
+            'planType' => 'nullable|in:QualityImprovement,StaffProfessionalDevelopment,AnnualOperational',
+            'areaId' => 'nullable|integer',
             'title' => 'required|string|max:255',
             'leader' => 'nullable|string|max:255',
             'startDate' => 'nullable|date',
@@ -1095,17 +1510,30 @@ class EvaluatorApiController extends Controller
         }
 
         $evaluation = $this->getActiveEvaluation($request);
-        $plan = ImprovementPlan::where('school_id', $evaluation->school_id)
-            ->where('status', '!=', 'Cancelled')
-            ->orderBy('plan_id', 'desc')
-            ->first();
+        if (in_array($evaluation->status, ['Submitted', 'UnderReview', 'Completed'], true)) {
+            return ApiResponse::error('لا يمكن إضافة إجراءات في تقييم مقفل أو مرفوع للمراجعة.', 422);
+        }
+
+        $planQuery = ImprovementPlan::where('school_id', $evaluation->school_id)
+            ->where('status', '!=', 'Cancelled');
+
+        if ($request->filled('planId')) {
+            $plan = (clone $planQuery)->where('plan_id', (int) $request->input('planId'))->first();
+            if (!$plan) {
+                return ApiResponse::notFound('خطة التحسين المحددة غير موجودة.');
+            }
+        } else {
+            $planType = $request->input('planType') ?? ImprovementPlan::TYPE_QUALITY_IMPROVEMENT;
+            $plan = (clone $planQuery)->where('plan_type', $planType)->orderBy('plan_id', 'desc')->first()
+                ?? (clone $planQuery)->orderBy('plan_id', 'desc')->first();
+        }
 
         if (!$plan) {
             $plan = ImprovementPlan::create([
                 'school_id' => $evaluation->school_id,
                 'cycle_id' => $evaluation->cycle_id,
                 'title' => 'خطة التحسين والتطوير المدرسي',
-                'plan_type' => ImprovementPlan::TYPE_QUALITY_IMPROVEMENT,
+                'plan_type' => $request->input('planType', ImprovementPlan::TYPE_QUALITY_IMPROVEMENT),
                 'start_date' => now()->toDateString(),
                 'end_date' => now()->addMonths(6)->toDateString(),
                 'status' => 'Draft',
@@ -1113,8 +1541,42 @@ class EvaluatorApiController extends Controller
             ]);
         }
 
+        // التحقق الصارم من قيد المفتاح الأجنبي المركب (plan_id, area_id)
+        $areaId = $request->input('areaId');
+        if ($areaId) {
+            $existsInPlan = \App\Models\PlanImprovementArea::where('plan_id', $plan->plan_id)
+                ->where('area_id', (int) $areaId)
+                ->exists();
+            if (!$existsInPlan) {
+                return ApiResponse::validationError([
+                    'areaId' => ['المجال المستهدف لا ينتمي لمجالات الخطة المعتمدة (قيد المفتاح المركب).'],
+                ]);
+            }
+        } else {
+            // توافق تراجعي عند التحويل التلقائي من الذكاء الاصطناعي بدون تحديد مجال صريح
+            $areaId = \App\Models\PlanImprovementArea::where('plan_id', $plan->plan_id)->value('area_id');
+            if (!$areaId) {
+                $firstResult = \App\Models\EvaluationResult::where('evaluation_id', $evaluation->evaluation_id)->first();
+                $defaultArea = \App\Models\ImprovementArea::create([
+                    'result_id' => $firstResult?->result_id,
+                    'indicator_id' => $firstResult?->indicator_id ?? \App\Models\Indicator::value('indicator_id'),
+                    'name' => 'مجال التطوير والجودة المؤسسية العام',
+                    'priority' => 'Medium',
+                    'target_score' => 3,
+                    'description' => 'مجال عام مضاف تلقائياً لدعم خطة التحسين.',
+                ]);
+                \App\Models\PlanImprovementArea::create([
+                    'plan_id' => $plan->plan_id,
+                    'area_id' => $defaultArea->area_id,
+                    'created_at' => now(),
+                ]);
+                $areaId = $defaultArea->area_id;
+            }
+        }
+
         $action = ImprovementAction::create([
             'plan_id' => $plan->plan_id,
+            'area_id' => (int) $areaId,
             'title' => $request->input('title'),
             'responsible_person_description' => $request->input('leader', 'مسؤول فريق التحسين'),
             'start_date' => $request->input('startDate', now()->toDateString()),
@@ -1137,6 +1599,8 @@ class EvaluatorApiController extends Controller
         return ApiResponse::created([
             'actionId' => $action->action_id,
             'planId' => $action->plan_id,
+            'areaId' => $action->area_id,
+            'areaName' => $action->area?->name ?? 'مجال التحسين',
             'title' => $action->title,
             'leader' => $action->responsible_person_description,
             'startDate' => $action->start_date?->toDateString(),
@@ -1228,27 +1692,30 @@ class EvaluatorApiController extends Controller
     {
         $evaluation = $this->getActiveEvaluation($request);
         $results = EvaluationResult::where('evaluation_id', $evaluation->evaluation_id)->get();
-        $totalIndicators = Indicator::count() ?: 56;
-        $scoredCount = $results->where('score', '!=', null)->count();
+        $totalIndicators = Indicator::count() ?: 109;
+        $scoredCount = $results->where('score', '!==', null)->where('score', '!=', null)->count();
 
-        // 1. اكتمال التقديرات
-        $scoresCompleted = ($scoredCount >= $totalIndicators) || ($scoredCount >= 42); // مسموح للـ demo
-        // 2. أساليب التحقق محددة
-        $verificationSet = true;
+        // 1. اكتمال التقديرات لكافة المؤشرات الوطنية
+        $scoresCompleted = ($scoredCount >= $totalIndicators);
+        // 2. أساليب التحقق المعتمدة
+        $verificationMethodsTotal = \App\Models\IndicatorVerificationMethod::count();
+        $verificationSet = ($verificationMethodsTotal > 0 && $scoresCompleted);
         // 3. الشواهد مربوطة
-        $evidenceLinked = true;
+        $evidenceLinksCount = EvidenceLink::where('evaluation_id', $evaluation->evaluation_id)->count();
+        $evidenceLinked = ($evidenceLinksCount > 0);
         // 4. خطة التحسين مدرجة وموثقة
+        $lowScoresCount = $results->where('score', '<=', 1)->count();
         $planCount = ImprovementAction::where('plan_id', function ($q) use ($evaluation) {
             $q->select('plan_id')->from('improvement_plans')->where('school_id', $evaluation->school_id)->limit(1);
         })->count();
-        $actionPlanFormulated = $planCount >= 3;
+        $actionPlanFormulated = ($lowScoresCount === 0) || ($planCount >= 1);
         // 5. مسودة التقرير الشامل مولدة
-        $reportGenerated = true;
+        $reportGenerated = $scoresCompleted && $evidenceLinked;
 
         $criteria = [
             [
                 'id' => 'scores_completed',
-                'title' => 'رصد تقديرات كافة مؤشرات المعايير الوطنية (56 مؤشراً)',
+                'title' => "رصد تقديرات كافة مؤشرات المعايير الوطنية ({$totalIndicators} مؤشراً)",
                 'description' => "تم رصد وتثبيت تقديرات $scoredCount من أصل $totalIndicators مؤشراً معياريًا.",
                 'passed' => $scoresCompleted,
                 'weight' => 25,
@@ -1256,14 +1723,14 @@ class EvaluatorApiController extends Controller
             [
                 'id' => 'verification_methods_set',
                 'title' => 'تحديد أدوات وأساليب التحقق المعتمدة لكل مؤشر',
-                'description' => 'تم استيفاء أساليب فحص الوثائق وبطاقات الملاحظة والمقابلات.',
+                'description' => 'تم استيفاء ومطابقة أدوات التحقق المرجعية المعتمدة لجميع المؤشرات المرصودة.',
                 'passed' => $verificationSet,
                 'weight' => 20,
             ],
             [
                 'id' => 'evidence_linked',
                 'title' => 'فهرسة وربط الشواهد والوثائق الداعمة للتقديرات',
-                'description' => 'تم إيداع وفهرسة الشواهد الموثقة في مستودع الأدلة بنجاح.',
+                'description' => "تم إيداع وفهرسة $evidenceLinksCount شاهداً موثقاً في مستودع الأدلة بنجاح.",
                 'passed' => $evidenceLinked,
                 'weight' => 20,
             ],
@@ -1287,6 +1754,10 @@ class EvaluatorApiController extends Controller
         $totalWeight = collect($criteria)->where('passed', true)->sum('weight');
         $canSubmit = $passedCount === 5;
 
+        $academicYear = $evaluation->cycle?->academic_year ?? date('Y');
+        $yearClean = preg_replace('/[^0-9]/', '', (string)$academicYear) ?: '2026';
+        $systemCode = 'ARQ-' . $yearClean . '-SCH' . str_pad((string)$evaluation->school_id, 3, '0', STR_PAD_LEFT) . '-FIN';
+
         return ApiResponse::success([
             'canSubmit' => $canSubmit,
             'readinessPercentage' => $totalWeight,
@@ -1294,7 +1765,7 @@ class EvaluatorApiController extends Controller
             'totalCriteriaCount' => count($criteria),
             'checklist' => $criteria,
             'digitalSealInfo' => [
-                'systemCode' => 'ARQ-2026-SCH104-FIN',
+                'systemCode' => $systemCode,
                 'hashAlgorithm' => 'SHA-256 Validated',
                 'submissionNotice' => 'إقرار نهائي: الرفع ينقل ملف التقييم إلى وضع القراءة فقط ولا يمكن التعديل عليه إلا بطلب استكمال رسمي من المشرف.',
             ],
@@ -1603,13 +2074,22 @@ class EvaluatorApiController extends Controller
         $validator = Validator::make($request->all(), [
             'documentId' => 'nullable|integer',
             'versionId' => 'nullable|integer',
-            'indicatorIds' => 'required|array',
+            'indicatorIds' => 'nullable|array',
             'indicatorIds.*' => 'integer',
+            'targetIndicatorIds' => 'nullable|array',
+            'targetIndicatorIds.*' => 'integer',
             'justification' => 'nullable|string',
         ]);
 
         if ($validator->fails()) {
             return ApiResponse::validationError($validator->errors()->toArray());
+        }
+
+        $indicatorIds = $request->input('indicatorIds') ?? $request->input('targetIndicatorIds') ?? [];
+        if (!is_array($indicatorIds) || count($indicatorIds) === 0) {
+            return ApiResponse::validationError([
+                'indicatorIds' => ['يرجى اختيار مؤشر واحد على الأقل لربط الشاهد به.'],
+            ]);
         }
 
         $user = $request->user();
@@ -1618,17 +2098,43 @@ class EvaluatorApiController extends Controller
         }
 
         $evaluation = $this->getActiveEvaluation($request);
+        if (in_array($evaluation->status, ['Submitted', 'UnderReview', 'Completed'], true)) {
+            return ApiResponse::error('لا يمكن تعديل روابط الشواهد لأن ملف التقييم مقفل أو مرفوع للمراجعة.', 422);
+        }
+
         $documentId = $request->input('documentId');
         $versionId = $request->input('versionId');
-        $indicatorIds = $request->input('indicatorIds');
         $justification = $request->input('justification');
 
+        // التحقق من رقم النسخة الفعلي في مستودع المدرسة
+        if ($versionId) {
+            $versionExists = DocumentVersion::where('id', $versionId)
+                ->whereHas('document', fn ($q) => $q->where('school_id', $evaluation->school_id))
+                ->exists();
+            if (!$versionExists) {
+                $versionId = null;
+            }
+        }
+        if (!$versionId && $documentId) {
+            $versionId = DocumentVersion::where('school_document_id', $documentId)
+                ->whereHas('document', fn ($q) => $q->where('school_id', $evaluation->school_id))
+                ->orderByDesc('is_current')
+                ->orderByDesc('id')
+                ->value('id');
+        }
+
+        if (!$versionId) {
+            return ApiResponse::validationError([
+                'versionId' => ['تعذر تحديد نسخة المستند المطلوب ربطها.'],
+            ]);
+        }
+
         $createdLinks = [];
-        foreach ($indicatorIds as $indId) {
+        foreach (array_unique(array_map('intval', $indicatorIds)) as $indId) {
             $link = EvidenceLink::firstOrCreate([
                 'evaluation_id' => $evaluation->evaluation_id,
                 'indicator_id' => $indId,
-                'document_version_id' => $versionId ?? $documentId,
+                'document_version_id' => $versionId,
             ], [
                 'school_id' => $evaluation->school_id,
                 'justification' => $justification,

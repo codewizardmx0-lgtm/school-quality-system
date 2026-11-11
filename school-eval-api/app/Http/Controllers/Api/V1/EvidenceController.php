@@ -101,16 +101,29 @@ class EvidenceController extends Controller
                     'status'                 => $ind['status'],
                     'evidences'              => $ind['evidences']->map(function ($ev) {
                         $doc = $ev->documentVersion?->document;
+                        $docType = $doc?->document_type ?? 'other';
+                        $arabicTypes = [
+                            'evidence' => 'شاهد توثيقي',
+                            'survey' => 'استبانة / استطلاع',
+                            'interview' => 'محضر مقابلة',
+                            'observation' => 'بطاقة ملاحظة صفية',
+                            'report' => 'تقرير وإحصائية',
+                            'policy' => 'سياسة / لائحة',
+                            'plan' => 'خطة عمل',
+                            'other' => 'مستند إثبات',
+                        ];
                         return [
-                            'evidenceId'    => $ev->id,
-                            'title'         => $doc?->title ?? '',
-                            'evidenceType'  => $doc?->document_type ?? 'other',
-                            'status'        => $ev->status,
-                            'reviewerNotes' => null,
-                            'reviewedBy'    => null,
-                            'reviewedAt'    => null,
-                            'createdAt'     => $ev->created_at?->toIso8601ZuluString(),
-                            'versionsCount' => $doc ? $doc->versions()->count() : 1,
+                            'evidenceId'         => $ev->id,
+                            'title'              => $doc?->title ?? '',
+                            'evidenceType'       => $docType,
+                            'evidenceTypeArabic' => $arabicTypes[$docType] ?? 'مستند إثبات',
+                            'justification'      => $ev->justification ?? '',
+                            'status'             => $ev->status,
+                            'reviewerNotes'      => null,
+                            'reviewedBy'         => null,
+                            'reviewedAt'         => null,
+                            'createdAt'          => $ev->created_at?->toIso8601ZuluString(),
+                            'versionsCount'      => $doc ? $doc->versions()->count() : 1,
                         ];
                     })->values(),
                 ];
@@ -426,7 +439,7 @@ class EvidenceController extends Controller
 
         $validator = Validator::make($request->all(), [
             'title'         => 'required|string|max:255',
-            'file'          => 'required|file|max:20480|mimes:pdf,png,jpg,jpeg,doc,docx,xls,xlsx',
+            'file'          => 'required|file|max:25600|mimes:pdf,png,jpg,jpeg,doc,docx,xls,xlsx',
             'document_type' => 'nullable|string|in:minutes,plan,record,report,board,image,other',
             'description'   => 'nullable|string|max:2000',
             'justification' => 'nullable|string|max:1000',

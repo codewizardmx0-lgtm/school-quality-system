@@ -5,7 +5,7 @@
     <title>استمارة التقرير المفصلة لتقويم المدرسة - {{ $school['school_name'] }}</title>
     <style>
         @page {
-            margin-top: 48mm;
+            margin-top: 31mm;
             margin-bottom: 18mm;
             margin-left: 10mm;
             margin-right: 10mm;
@@ -405,7 +405,7 @@
                                         عدد الشواهد المرفقة: {{ count($ind['evidence_titles']) }}
                                     </div>
                                     @foreach(array_slice($ind['evidence_titles'], 0, 3) as $evTitle)
-                                        <div style="color: #1e293b;">- {{ \Illuminate\Support\Str::limit($evTitle, 48) }}</div>
+                                        <div style="color: #1e293b; word-break: break-word;">- {{ $evTitle }}</div>
                                     @endforeach
                                     @if(count($ind['evidence_titles']) > 3)
                                         <div style="color: #64748b;">(+{{ count($ind['evidence_titles']) - 3 }} شواهد إضافية)</div>

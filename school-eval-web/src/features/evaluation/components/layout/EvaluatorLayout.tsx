@@ -14,9 +14,9 @@ import { ProfileModal } from '../../../auth/ProfileModal';
 import { useAuth } from '../../../auth/AuthContext';
 import { ToastNotification } from '../../../admin/components/common/ToastNotification';
 import { useToast } from '../../../admin/components/common/useToast';
-import type { EvaluatorScreen, EvaluatorSchoolInfo } from '../../api/evaluationTypes';
+import type { EvaluatorScreen, EvaluatorSchoolInfo, EvaluationCycleArchiveItem } from '../../api/evaluationTypes';
 import { evaluatorApi } from '../../api/evaluatorApi';
-import { ShieldAlert, AlertTriangle, ArrowLeft } from 'lucide-react';
+import { ShieldAlert, AlertTriangle, ArrowLeft, History } from 'lucide-react';
 
 interface EvaluatorLayoutProps {
   initialScreen?: EvaluatorScreen;
@@ -33,6 +33,14 @@ export const EvaluatorLayout: React.FC<EvaluatorLayoutProps> = ({
   const [isLocked, setIsLocked] = useState<boolean>(false);
   const [hasOpenCompletionRequest, setHasOpenCompletionRequest] = useState<boolean>(false);
   const [schoolInfo, setSchoolInfo] = useState<EvaluatorSchoolInfo | null>(null);
+  const [archiveEvaluations, setArchiveEvaluations] = useState<EvaluationCycleArchiveItem[]>([]);
+  const [selectedArchiveEvalId, setSelectedArchiveEvalId] = useState<number | null>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = sessionStorage.getItem('active_archive_evaluation_id');
+      return saved ? Number(saved) : null;
+    }
+    return null;
+  });
   const [notifRefreshKey, setNotifRefreshKey] = useState<number>(0);
   const [isChangePasswordOpen, setIsChangePasswordOpen] = useState<boolean>(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState<boolean>(false);
@@ -43,7 +51,21 @@ export const EvaluatorLayout: React.FC<EvaluatorLayoutProps> = ({
     (!hasPermission('evaluations.edit') && user?.userType === 'school')
   );
 
-  const effectiveReadOnly = isLocked || isPrincipal;
+  const isArchiveMode = selectedArchiveEvalId !== null;
+  const effectiveReadOnly = isLocked || isPrincipal || isArchiveMode;
+
+  const handleSelectArchiveEvaluation = (evalId: number | null) => {
+    const latestId = archiveEvaluations[0]?.evaluationId;
+    if (evalId === null || (latestId && evalId === latestId)) {
+      sessionStorage.removeItem('active_archive_evaluation_id');
+      setSelectedArchiveEvalId(null);
+      addToast('info', 'تمت العودة إلى الدورة التقييمية الحالية النشطة.');
+    } else {
+      sessionStorage.setItem('active_archive_evaluation_id', String(evalId));
+      setSelectedArchiveEvalId(evalId);
+      addToast('info', 'تم التبديل إلى استعراض دورة سابقة (وضع القراءة فقط).');
+    }
+  };
 
   // Responsive & Sidebar Collapse state (UI_STANDARDS.md §2)
   const [isCollapsed, setIsCollapsed] = useState(false);
@@ -67,9 +89,15 @@ export const EvaluatorLayout: React.FC<EvaluatorLayoutProps> = ({
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // مزامنة حالة طلب الاستكمال وقفل التقييم من قاعدة البيانات الفعلية
+  // جلب قائمة الدورات للأرشيف ومزامنة حالة طلب الاستكمال وقفل التقييم من قاعدة البيانات الفعلية
   useEffect(() => {
     let mounted = true;
+    evaluatorApi.getSchoolEvaluations()
+      .then((list) => {
+        if (mounted) setArchiveEvaluations(list);
+      })
+      .catch(() => {});
+
     evaluatorApi.getDashboardStats()
       .then((data) => {
         if (!mounted || !data) return;
@@ -83,7 +111,7 @@ export const EvaluatorLayout: React.FC<EvaluatorLayoutProps> = ({
     return () => {
       mounted = false;
     };
-  }, [user?.userId]);
+  }, [user?.userId, selectedArchiveEvalId]);
 
   const handleNavigate = (screen: EvaluatorScreen, param?: number) => {
     if (param !== undefined) {
@@ -238,18 +266,66 @@ export const EvaluatorLayout: React.FC<EvaluatorLayoutProps> = ({
           hasOpenCompletionRequest={hasOpenCompletionRequest}
           onOpenCompletionRequest={() => setActiveScreen('completion-request')}
           onNavigate={handleNavigate}
-          isLocked={isLocked}
+          isLocked={effectiveReadOnly}
           isMobile={isMobile}
           onOpenMobile={() => setIsMobileOpen(true)}
           isCollapsed={isCollapsed}
           onToggleCollapse={() => setIsCollapsed(!isCollapsed)}
           onOpenChangePassword={() => setIsChangePasswordOpen(true)}
           onOpenProfile={() => setIsProfileModalOpen(true)}
-          onLogout={onLogout}
+          onLogout={() => {
+            sessionStorage.removeItem('active_archive_evaluation_id');
+            onLogout?.();
+          }}
           notifRefreshKey={notifRefreshKey}
+          archiveEvaluations={archiveEvaluations}
+          selectedArchiveEvalId={selectedArchiveEvalId}
+          onSelectArchiveEvaluation={handleSelectArchiveEvaluation}
         />
 
         <main style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', minWidth: 0 }}>
+          {/* Archive Read-Only Banner (IMP-06) */}
+          {isArchiveMode && (
+            <div
+              style={{
+                backgroundColor: '#EFF6FF',
+                borderBottom: '1px solid #BFDBFE',
+                padding: '10px 24px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: '12px',
+                color: '#1E40AF',
+                fontSize: '13px',
+                fontWeight: 700,
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <History size={18} color="#2563EB" />
+                <span>
+                  وضع استعراض الأرشيف التاريخي: أنت تعرض دورة تقييم سابقة في وضع القراءة فقط (يُحظر التعديل أو الحذف).
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => handleSelectArchiveEvaluation(null)}
+                style={{
+                  backgroundColor: '#2563EB',
+                  color: '#FFFFFF',
+                  border: 'none',
+                  borderRadius: '6px',
+                  padding: '5px 14px',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                }}
+              >
+                العودة للدورة الحالية النشطة
+              </button>
+            </div>
+          )}
+
           {/* Distinct Banner for Ministerial Supervisor Completion Request */}
           {hasOpenCompletionRequest && (
             <div
@@ -319,7 +395,9 @@ export const EvaluatorLayout: React.FC<EvaluatorLayoutProps> = ({
             </div>
           )}
 
-          {renderScreenContent()}
+          <div key={selectedArchiveEvalId ?? 'current'}>
+            {renderScreenContent()}
+          </div>
         </main>
       </div>
 

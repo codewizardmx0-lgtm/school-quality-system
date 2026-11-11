@@ -74,14 +74,19 @@ export const LinkEvidenceModal: React.FC<LinkEvidenceModalProps> = ({
       ind.standardName.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  const isCurrentIndicator = (id: number) => Boolean(evidence.indicatorId && evidence.indicatorId === id);
+
   const handleToggleMultiIndicator = (id: number) => {
+    if (isCurrentIndicator(id)) return;
     setSelectedMultiIndicatorIds((prev) =>
       prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
     );
   };
 
   const handleSelectAllFiltered = () => {
-    const ids = filteredIndicators.map((i) => i.indicatorId);
+    const ids = filteredIndicators
+      .filter((i) => !isCurrentIndicator(i.indicatorId))
+      .map((i) => i.indicatorId);
     setSelectedMultiIndicatorIds((prev) => Array.from(new Set([...prev, ...ids])));
   };
 
@@ -95,8 +100,8 @@ export const LinkEvidenceModal: React.FC<LinkEvidenceModalProps> = ({
 
     try {
       if (mode === 'single') {
-        if (!selectedSingleIndicatorId) {
-          onError('يرجى اختيار المؤشر المستهدف لنقل الشاهد إليه.');
+        if (!selectedSingleIndicatorId || isCurrentIndicator(selectedSingleIndicatorId)) {
+          onError('يرجى اختيار مؤشر آخر مستهدف لنقل الشاهد إليه.');
           setIsSubmitting(false);
           return;
         }
@@ -117,8 +122,9 @@ export const LinkEvidenceModal: React.FC<LinkEvidenceModalProps> = ({
         onSuccess(`تم نقل الشاهد "${evidence.title}" بنجاح إلى المؤشر المختار.`);
         onClose();
       } else if (mode === 'multi') {
-        if (selectedMultiIndicatorIds.length === 0) {
-          onError('يرجى تحديد مؤشر إضافي واحد على الأقل للربط المتعدد.');
+        const targetIds = selectedMultiIndicatorIds.filter((id) => !isCurrentIndicator(id));
+        if (targetIds.length === 0) {
+          onError('يرجى تحديد مؤشر إضافي واحد على الأقل غير المؤشر الحالي.');
           setIsSubmitting(false);
           return;
         }
@@ -126,11 +132,11 @@ export const LinkEvidenceModal: React.FC<LinkEvidenceModalProps> = ({
         await evaluatorApi.multiLinkEvidence({
           documentId: evidence.documentId,
           versionId: evidence.id,
-          indicatorIds: selectedMultiIndicatorIds,
+          indicatorIds: targetIds,
           justification: justification || 'ربط متعدد للشاهد مع مؤشرات إضافية',
         });
 
-        onSuccess(`تم ربط الشاهد بنجاح بـ ${selectedMultiIndicatorIds.length} مؤشر إضافي.`);
+        onSuccess(`تم ربط الشاهد بنجاح بـ ${targetIds.length} مؤشر إضافي.`);
         onClose();
       } else if (mode === 'unlink') {
         if (!evidence.linkId) {
@@ -139,12 +145,21 @@ export const LinkEvidenceModal: React.FC<LinkEvidenceModalProps> = ({
           return;
         }
 
+        if (
+          !window.confirm(
+            `هل أنت متأكد من فك ارتباط الشاهد «${evidence.title}» من هذا المؤشر؟ سيبقى الملف محفوظاً في مستودع المدرسة بحالة «غير مرتبط بأي مؤشر».`
+          )
+        ) {
+          setIsSubmitting(false);
+          return;
+        }
+
         await evaluatorApi.unlinkEvidence(evidence.linkId);
-        onSuccess(`تم فك ارتباط الشاهد "${evidence.title}" من هذا المؤشر مع الاحتفاظ بالملف بأرشيف المدرسة.`);
+        onSuccess(`تم فك ارتباط الشاهد "${evidence.title}" من هذا المؤشر وبقي محفوظاً في مستودع المدرسة.`);
         onClose();
       }
-    } catch (err: unknown) {
-      const msg = (err as Error)?.message || 'فشلت عملية تحديث ارتباط الشاهد.';
+    } catch (err: any) {
+      const msg = err?.response?.data?.message || (err as Error)?.message || 'فشلت عملية تحديث ارتباط الشاهد.';
       onError(msg);
     } finally {
       setIsSubmitting(false);
@@ -370,32 +385,50 @@ export const LinkEvidenceModal: React.FC<LinkEvidenceModalProps> = ({
                     backgroundColor: '#ffffff',
                   }}
                 >
-                  {filteredIndicators.map((ind) => (
-                    <div
-                      key={ind.indicatorId}
-                      onClick={() => setSelectedSingleIndicatorId(ind.indicatorId)}
-                      style={{
-                        padding: '8px 10px',
-                        borderRadius: '6px',
-                        cursor: 'pointer',
-                        marginBottom: '4px',
-                        backgroundColor: selectedSingleIndicatorId === ind.indicatorId ? '#eff6ff' : '#ffffff',
-                        border: selectedSingleIndicatorId === ind.indicatorId ? '1px solid #3b82f6' : '1px solid transparent',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                      }}
-                    >
-                      <div>
-                        <div style={{ fontWeight: 600, fontSize: '12.5px', color: '#1e293b' }}>
-                          <span style={{ color: '#2563eb', marginLeft: '6px' }}>{ind.code}</span>
-                          {ind.title}
+                  {filteredIndicators.map((ind) => {
+                    const disabled = isCurrentIndicator(ind.indicatorId);
+                    return (
+                      <div
+                        key={ind.indicatorId}
+                        onClick={() => {
+                          if (!disabled) setSelectedSingleIndicatorId(ind.indicatorId);
+                        }}
+                        style={{
+                          padding: '8px 10px',
+                          borderRadius: '6px',
+                          cursor: disabled ? 'not-allowed' : 'pointer',
+                          marginBottom: '4px',
+                          opacity: disabled ? 0.55 : 1,
+                          backgroundColor: disabled
+                            ? '#f8fafc'
+                            : selectedSingleIndicatorId === ind.indicatorId
+                            ? '#eff6ff'
+                            : '#ffffff',
+                          border:
+                            selectedSingleIndicatorId === ind.indicatorId && !disabled
+                              ? '1px solid #3b82f6'
+                              : '1px solid transparent',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                        }}
+                      >
+                        <div>
+                          <div style={{ fontWeight: 600, fontSize: '12.5px', color: '#1e293b', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                            <span style={{ color: '#2563eb' }}>{ind.code}</span>
+                            <span>{ind.title}</span>
+                            {disabled && (
+                              <span style={{ fontSize: '10px', padding: '1px 6px', borderRadius: '4px', backgroundColor: '#e2e8f0', color: '#475569', fontWeight: 700 }}>
+                                المؤشر الحالي — مرتبط بالفعل
+                              </span>
+                            )}
+                          </div>
+                          <div style={{ fontSize: '11px', color: '#64748b' }}>{ind.standardName}</div>
                         </div>
-                        <div style={{ fontSize: '11px', color: '#64748b' }}>{ind.standardName}</div>
+                        {selectedSingleIndicatorId === ind.indicatorId && !disabled && <Check size={16} color="#2563eb" />}
                       </div>
-                      {selectedSingleIndicatorId === ind.indicatorId && <Check size={16} color="#2563eb" />}
-                    </div>
-                  ))}
+                    );
+                  })}
                   {filteredIndicators.length === 0 && (
                     <div style={{ textAlign: 'center', padding: '16px', color: '#94a3b8', fontSize: '13px' }}>
                       لا توجد مؤشرات مطابقة للبحث
@@ -479,7 +512,8 @@ export const LinkEvidenceModal: React.FC<LinkEvidenceModalProps> = ({
                   }}
                 >
                   {filteredIndicators.map((ind) => {
-                    const isChecked = selectedMultiIndicatorIds.includes(ind.indicatorId);
+                    const disabled = isCurrentIndicator(ind.indicatorId);
+                    const isChecked = !disabled && selectedMultiIndicatorIds.includes(ind.indicatorId);
                     return (
                       <label
                         key={ind.indicatorId}
@@ -489,22 +523,29 @@ export const LinkEvidenceModal: React.FC<LinkEvidenceModalProps> = ({
                           gap: '10px',
                           padding: '8px 10px',
                           borderRadius: '6px',
-                          cursor: 'pointer',
+                          cursor: disabled ? 'not-allowed' : 'pointer',
                           marginBottom: '4px',
-                          backgroundColor: isChecked ? '#f5f3ff' : '#ffffff',
+                          opacity: disabled ? 0.55 : 1,
+                          backgroundColor: disabled ? '#f8fafc' : isChecked ? '#f5f3ff' : '#ffffff',
                           border: isChecked ? '1px solid #8b5cf6' : '1px solid transparent',
                         }}
                       >
                         <input
                           type="checkbox"
+                          disabled={disabled}
                           checked={isChecked}
                           onChange={() => handleToggleMultiIndicator(ind.indicatorId)}
-                          style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                          style={{ width: '16px', height: '16px', cursor: disabled ? 'not-allowed' : 'pointer' }}
                         />
                         <div style={{ flex: 1 }}>
-                          <div style={{ fontWeight: 600, fontSize: '12.5px', color: '#1e293b' }}>
-                            <span style={{ color: '#7c3aed', marginLeft: '6px' }}>{ind.code}</span>
-                            {ind.title}
+                          <div style={{ fontWeight: 600, fontSize: '12.5px', color: '#1e293b', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                            <span style={{ color: '#7c3aed' }}>{ind.code}</span>
+                            <span>{ind.title}</span>
+                            {disabled && (
+                              <span style={{ fontSize: '10px', padding: '1px 6px', borderRadius: '4px', backgroundColor: '#e2e8f0', color: '#475569', fontWeight: 700 }}>
+                                المؤشر الحالي — مرتبط بالفعل
+                              </span>
+                            )}
                           </div>
                           <div style={{ fontSize: '11px', color: '#64748b' }}>{ind.standardName}</div>
                         </div>

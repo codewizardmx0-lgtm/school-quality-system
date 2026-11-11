@@ -16,6 +16,9 @@ import type {
   AiRecommendationsResponse,
   AiRecommendationStatus,
   ImprovementPlanData,
+  ImprovementPlanAction,
+  PlanType,
+  EvaluationCycleArchiveItem,
   CreateImprovementActionPayload,
   UpdateImprovementActionPayload,
   PreflightCheckData,
@@ -26,6 +29,8 @@ import type {
   ImprovementSuggestion,
   PriorityLevel,
   EvaluatorNotificationItem,
+  IndicatorsContextResponse,
+  ActionRecommendationsResponse,
 } from './evaluationTypes';
 
 export const evaluatorApi = {
@@ -139,6 +144,21 @@ export const evaluatorApi = {
   },
 
   /**
+   * 6b. PATCH /api/v1/evidences/documents/{documentId}
+   * Update evidence document metadata and justification
+   */
+  async updateDocumentMetadata(
+    documentId: number,
+    payload: { title?: string; documentType?: string; description?: string; justification?: string; linkId?: number }
+  ): Promise<{ documentId: number; title: string; documentType?: string; description?: string }> {
+    const response = await patch<{ documentId: number; title: string; documentType?: string; description?: string }>(
+      `/evidences/documents/${documentId}`,
+      payload
+    );
+    return response.data!;
+  },
+
+  /**
    * 7. POST /api/v1/ai/analyses
    * Trigger automated gap analysis on scores
    */
@@ -175,19 +195,46 @@ export const evaluatorApi = {
 
   /**
    * 10. GET /api/v1/improvement-plans/current
-   * Fetch active improvement plan with summary and actions
+   * Fetch active improvement plan with summary and actions (supports plan_type tabs)
    */
-  async getCurrentImprovementPlan(): Promise<ImprovementPlanData> {
-    const response = await get<ImprovementPlanData>('/improvement-plans/current');
+  async getCurrentImprovementPlan(planType?: PlanType): Promise<ImprovementPlanData> {
+    const params: Record<string, string> = {};
+    if (planType) params.plan_type = planType;
+    const response = await get<ImprovementPlanData>('/improvement-plans/current', { params });
     return response.data!;
   },
 
   /**
    * 11. POST /api/v1/improvement-actions
-   * Add a new action to current improvement plan
+   * Add a new action to current improvement plan (supports composite key areaId)
    */
-  async createImprovementAction(payload: CreateImprovementActionPayload): Promise<void> {
-    await post('/improvement-actions', payload);
+  async createImprovementAction(payload: CreateImprovementActionPayload): Promise<ImprovementPlanAction> {
+    const response = await post<ImprovementPlanAction>('/improvement-actions', payload);
+    return response.data!;
+  },
+
+  /**
+   * 11.b POST /api/v1/evaluator/improvement-plans
+   * Create a new improvement plan scoped to school's active evaluation
+   */
+  async createImprovementPlan(payload: {
+    title: string;
+    planType?: PlanType;
+    startDate?: string;
+    endDate?: string;
+    areaIds?: number[];
+  }): Promise<ImprovementPlanData> {
+    const response = await post<ImprovementPlanData>('/evaluator/improvement-plans', payload);
+    return response.data!;
+  },
+
+  /**
+   * 11.c POST /api/v1/evaluator/improvement-plans/{id}/review-notes
+   * Add an internal review note to the plan
+   */
+  async createPlanReviewNote(planId: number, text: string): Promise<any> {
+    const response = await post<any>(`/evaluator/improvement-plans/${planId}/review-notes`, { text });
+    return response.data!;
   },
 
   /**
@@ -343,7 +390,7 @@ export const evaluatorApi = {
     await post('/evaluator/evidence-links/multi', {
       documentId: payload.documentId,
       versionId: payload.versionId,
-      targetIndicatorIds: payload.indicatorIds,
+      indicatorIds: payload.indicatorIds,
       justification: payload.justification,
     });
   },
@@ -567,5 +614,67 @@ export const evaluatorApi = {
     link.click();
     document.body.removeChild(link);
     window.URL.revokeObjectURL(url);
+  },
+
+  /**
+   * 31. GET /api/v1/evaluations
+   * List all evaluation cycles/dossiers of the school for archive viewing (IMP-06)
+   */
+  async getSchoolEvaluations(): Promise<EvaluationCycleArchiveItem[]> {
+    const response = await get<any>('/evaluations');
+    const items = Array.isArray(response.data) ? response.data : [];
+    return items.map((ev: any) => {
+      const cycleStatus = ev.cycle?.status || 'Active';
+      const evaluationStatus = ev.status || 'InProgress';
+      const isLocked =
+        ['Submitted', 'UnderReview', 'Completed'].includes(evaluationStatus) ||
+        cycleStatus === 'Closed';
+      return {
+        evaluationId: ev.evaluationId || ev.evaluation_id,
+        cycleId: ev.cycleId || ev.cycle_id || ev.cycle?.cycleId || ev.cycle?.cycle_id || 1,
+        academicYear: ev.cycle?.academicYear || ev.cycle?.academic_year || ev.academicYear || '2026/2027',
+        cycleStatus,
+        evaluationStatus,
+        isLocked,
+        createdAt: ev.createdAt || ev.created_at,
+      };
+    });
+  },
+
+  /**
+   * 32. GET /api/v1/evaluations/{id}/indicators-context
+   * Fetch school quantitative metrics context for indicators (IMP-07 / GAP-EV-08)
+   */
+  async getIndicatorsContext(evaluationId: number): Promise<IndicatorsContextResponse> {
+    const response = await get<any>(`/evaluations/${evaluationId}/indicators-context`);
+    const raw = response.data || {};
+    return {
+      evaluationId,
+      is_snapshot: Boolean(raw.is_snapshot),
+      is_legacy_completed_without_snapshot: Boolean(raw.is_legacy_completed_without_snapshot),
+      notice: raw.notice || '',
+      indicators: raw.indicators || {},
+    };
+  },
+
+  /**
+   * 33. GET /api/v1/evaluations/{id}/action-recommendations
+   * Fetch action catalog recommendations for weak indicators 0/1 (IMP-08 / GAP-EV-09)
+   */
+  async getActionRecommendations(evaluationId: number, indicatorCode: string): Promise<ActionRecommendationsResponse> {
+    const response = await get<any>(`/evaluations/${evaluationId}/action-recommendations`, {
+      params: { indicator_code: indicatorCode },
+    });
+    const raw = response.data || {};
+    return {
+      is_weak: Boolean(raw.is_weak),
+      indicator_code: raw.indicator_code || indicatorCode,
+      indicator_name: raw.indicator_name || null,
+      sub_standard_code: raw.sub_standard_code || null,
+      score: raw.score ?? null,
+      recommendations_count: raw.recommendations_count ?? (raw.recommendations?.length || 0),
+      message: raw.message || '',
+      recommendations: Array.isArray(raw.recommendations) ? raw.recommendations : [],
+    };
   },
 };

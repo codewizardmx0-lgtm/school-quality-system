@@ -68,19 +68,7 @@ class DemoEvaluationSeeder extends Seeder
         );
 
         // تصفير أي شواهد أو نتائج أو خطط لمدرسة بلقيس لضمان Empty State نظيف 100%
-        EvidenceLink::where('school_id', $schoolBelqees->school_id)->delete();
-        $belqeesPlans = ImprovementPlan::where('school_id', $schoolBelqees->school_id)->get();
-        foreach ($belqeesPlans as $p) {
-            ImprovementAction::where('plan_id', $p->plan_id)->delete();
-            $areaIds = PlanImprovementArea::where('plan_id', $p->plan_id)->pluck('area_id');
-            PlanImprovementArea::where('plan_id', $p->plan_id)->delete();
-            ImprovementArea::whereIn('area_id', $areaIds)->delete();
-            $p->delete();
-        }
-        EvaluationResult::where('evaluation_id', $evalBelqees->evaluation_id)->delete();
-        $belqeesDocIds = SchoolDocument::where('school_id', $schoolBelqees->school_id)->pluck('id');
-        DocumentVersion::whereIn('school_document_id', $belqeesDocIds)->delete();
-        SchoolDocument::where('school_id', $schoolBelqees->school_id)->delete();
+        $this->cleanSchoolEvaluationData((int) $schoolBelqees->school_id, (int) $evalBelqees->evaluation_id);
 
         // =========================================================================
         // 2. مدرسة الفاروق الأساسية للبنين — تعز (بيانات كاملة وجاهزة للاختبار)
@@ -97,19 +85,7 @@ class DemoEvaluationSeeder extends Seeder
         );
 
         // تنظيف قديم لمدرسة الفاروق لإعادة البناء المنضبط وفق ترتيب المفاتيح الأجنبية
-        EvidenceLink::where('school_id', $schoolFarouq->school_id)->delete();
-        $farouqPlans = ImprovementPlan::where('school_id', $schoolFarouq->school_id)->get();
-        foreach ($farouqPlans as $p) {
-            ImprovementAction::where('plan_id', $p->plan_id)->delete();
-            $areaIds = PlanImprovementArea::where('plan_id', $p->plan_id)->pluck('area_id');
-            PlanImprovementArea::where('plan_id', $p->plan_id)->delete();
-            ImprovementArea::whereIn('area_id', $areaIds)->delete();
-            $p->delete();
-        }
-        EvaluationResult::where('evaluation_id', $evalFarouq->evaluation_id)->delete();
-        $farouqDocIds = SchoolDocument::where('school_id', $schoolFarouq->school_id)->pluck('id');
-        DocumentVersion::whereIn('school_document_id', $farouqDocIds)->delete();
-        SchoolDocument::where('school_id', $schoolFarouq->school_id)->delete();
+        $this->cleanSchoolEvaluationData((int) $schoolFarouq->school_id, (int) $evalFarouq->evaluation_id);
 
         // أ. رصد كافة المؤشرات الـ 109 بدرجات متنوعة (62 بدرجة 3، 32 بدرجة 2، 10 بدرجة 1، 5 بدرجة 0)
         $allIndicators = Indicator::orderBy('indicator_id')->get();
@@ -484,6 +460,45 @@ class DemoEvaluationSeeder extends Seeder
                 'read_at'             => $n['read'] ? now()->subHours(2) : null,
                 'created_at'          => now()->subHours(($idx + 1) * 3),
             ]);
+        }
+    }
+
+    /**
+     * تنظيف آمن لبيانات التقييم والخطط والوثائق الخاصة بمدرسة دون خرق قيود المفاتيح الأجنبية
+     * عند اشتراك أكثر من خطة تحسين في نفس مجال التحسين.
+     */
+    private function cleanSchoolEvaluationData(int $schoolId, int $evaluationId): void
+    {
+        EvidenceLink::where('school_id', $schoolId)->delete();
+
+        $planIds = ImprovementPlan::where('school_id', $schoolId)->pluck('plan_id');
+        if ($planIds->isNotEmpty()) {
+            ImprovementAction::whereIn('plan_id', $planIds)->delete();
+            $areaIdsFromPlans = PlanImprovementArea::whereIn('plan_id', $planIds)->pluck('area_id');
+            PlanImprovementArea::whereIn('plan_id', $planIds)->delete();
+            ImprovementPlan::whereIn('plan_id', $planIds)->delete();
+
+            if ($areaIdsFromPlans->isNotEmpty()) {
+                ImprovementArea::whereIn('area_id', $areaIdsFromPlans)
+                    ->whereNotIn('area_id', PlanImprovementArea::query()->select('area_id'))
+                    ->delete();
+            }
+        }
+
+        // تنظيف أي مجالات متبقية تخص التقييم الحالي وليست مرتبطة بأي خطة أخرى
+        $resultIds = EvaluationResult::where('evaluation_id', $evaluationId)->pluck('result_id');
+        if ($resultIds->isNotEmpty()) {
+            ImprovementArea::whereIn('result_id', $resultIds)
+                ->whereNotIn('area_id', PlanImprovementArea::query()->select('area_id'))
+                ->delete();
+        }
+
+        EvaluationResult::where('evaluation_id', $evaluationId)->delete();
+
+        $docIds = SchoolDocument::where('school_id', $schoolId)->pluck('id');
+        if ($docIds->isNotEmpty()) {
+            DocumentVersion::whereIn('school_document_id', $docIds)->delete();
+            SchoolDocument::whereIn('id', $docIds)->delete();
         }
     }
 }

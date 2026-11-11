@@ -16,14 +16,17 @@ export const FormulaSuggestionsSection: React.FC<FormulaSuggestionsSectionProps>
   onToast,
 }) => {
   const [suggestions, setSuggestions] = useState<ImprovementSuggestion[]>([]);
+  const [targetScore, setTargetScore] = useState<2 | 3>(3);
+  const [customTargetScores, setCustomTargetScores] = useState<Record<number, number>>({});
+  const [activeFilter, setActiveFilter] = useState<'all' | 'high' | 'medium' | 'adopted'>('all');
   const [isLoading, setIsLoading] = useState(true);
   const [selectedSuggestion, setSelectedSuggestion] = useState<ImprovementSuggestion | null>(null);
   const [isAdoptModalOpen, setIsAdoptModalOpen] = useState(false);
 
-  const fetchSuggestions = async () => {
+  const fetchSuggestions = async (scoreTarget: number = targetScore) => {
     setIsLoading(true);
     try {
-      const data = await evaluatorApi.getImprovementSuggestions();
+      const data = await evaluatorApi.getImprovementSuggestions(scoreTarget);
       setSuggestions(data);
     } catch (err) {
       console.error('Failed to load improvement suggestions:', err);
@@ -34,22 +37,78 @@ export const FormulaSuggestionsSection: React.FC<FormulaSuggestionsSectionProps>
   };
 
   useEffect(() => {
-    fetchSuggestions();
-  }, []);
+    fetchSuggestions(targetScore);
+  }, [targetScore]);
+
+  const handleToggleTargetScore = (newScore: 2 | 3) => {
+    if (newScore === targetScore) return;
+    const confirmed = window.confirm(
+      'تغيير التقدير المستهدف الجماعي سيؤدي إلى إعادة احتساب كافة فجوات المؤشرات وفق المستهدف الجديد. هل تريد الاستمرار؟'
+    );
+    if (!confirmed) return;
+    setCustomTargetScores({});
+    setTargetScore(newScore);
+  };
 
   const totalCount = suggestions.length;
   const highCount = suggestions.filter((s) => s.suggestedPriority === 'High').length;
   const medCount = suggestions.filter((s) => s.suggestedPriority === 'Medium').length;
   const adoptedCount = suggestions.filter((s) => s.isAdopted).length;
 
+  const filteredSuggestions = suggestions.filter((s) => {
+    if (activeFilter === 'high') return s.suggestedPriority === 'High';
+    if (activeFilter === 'medium') return s.suggestedPriority === 'Medium';
+    if (activeFilter === 'adopted') return s.isAdopted;
+    return true;
+  });
+
   const handleOpenAdopt = (sugg: ImprovementSuggestion) => {
     if (readOnly) return;
-    setSelectedSuggestion(sugg);
+    const target = customTargetScores[sugg.resultId] ?? sugg.targetScore;
+    const gap = Math.max(0, target - sugg.score);
+    setSelectedSuggestion({
+      ...sugg,
+      targetScore: target,
+      gap,
+    });
     setIsAdoptModalOpen(true);
   };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', direction: 'rtl' }}>
+      {/* Workflow Guidance Banner */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          backgroundColor: '#f8fafc',
+          borderRadius: '10px',
+          padding: '12px 20px',
+          border: '1px solid #e2e8f0',
+          fontSize: '12.5px',
+          fontWeight: 700,
+          color: '#475569',
+          flexWrap: 'wrap',
+          gap: '8px',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '22px', height: '22px', borderRadius: '50%', backgroundColor: '#dbeafe', color: '#1d4ed8', fontSize: '11px' }}>1</span>
+          <span style={{ color: '#1e293b' }}>رصد الفجوة المعيارية</span>
+        </div>
+        <span style={{ color: '#94a3b8' }}>←</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '22px', height: '22px', borderRadius: '50%', backgroundColor: '#fef3c7', color: '#b45309', fontSize: '11px' }}>2</span>
+          <span style={{ color: '#1e293b' }}>تبني المؤشر كمجال تحسين</span>
+        </div>
+        <span style={{ color: '#94a3b8' }}>←</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '22px', height: '22px', borderRadius: '50%', backgroundColor: '#dcfce7', color: '#15803d', fontSize: '11px' }}>3</span>
+          <span style={{ color: '#1e293b' }}>صياغة الأهداف والإجراءات التنفيذية</span>
+        </div>
+      </div>
+
       {/* Description & Navigation Header */}
       <div
         style={{
@@ -66,17 +125,63 @@ export const FormulaSuggestionsSection: React.FC<FormulaSuggestionsSectionProps>
       >
         <div>
           <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 700, color: '#1e293b' }}>
-            اقتراحات مجالات التحسين المبنية على نتائج التقييم (FR-SCH-16)
+            اقتراحات مجالات التحسين وتبني المبادرات (FR-SCH-16)
           </h3>
           <p style={{ margin: '4px 0 0 0', fontSize: '12.5px', color: '#64748b' }}>
-            يقوم النظام بحساب الفجوة تلقائيًا للمؤشرات المرصودة بتقدير أقل من المستهدف (المستهدف = 3) وتصنيف الأولويات.
+            يقوم النظام بحساب الفجوة تلقائيًا للمؤشرات المرصودة بتقدير أقل من المستهدف (المستهدف العام = {targetScore}) ويتيح تعديل المستهدف لكل مؤشر وتبنيها مباشرة كإجراءات في خطة التحسين المدرسية.
           </p>
         </div>
 
-        <div style={{ display: 'flex', gap: '8px' }}>
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+          {/* مفتاح تبديل التقدير المستهدف الجماعي (مع تحذير تأكيدي) */}
+          <div
+            style={{
+              display: 'inline-flex',
+              backgroundColor: '#F1F5F9',
+              borderRadius: '8px',
+              padding: '3px',
+              border: '1px solid #E2E8F0',
+            }}
+          >
+            <button
+              type="button"
+              onClick={() => handleToggleTargetScore(3)}
+              style={{
+                padding: '5px 12px',
+                borderRadius: '6px',
+                border: 'none',
+                fontSize: '12px',
+                fontWeight: 700,
+                cursor: 'pointer',
+                backgroundColor: targetScore === 3 ? '#FFFFFF' : 'transparent',
+                color: targetScore === 3 ? '#059669' : '#64748B',
+                boxShadow: targetScore === 3 ? '0 1px 2px rgba(0,0,0,0.08)' : 'none',
+              }}
+            >
+              المستهدف: 3 (التميز)
+            </button>
+            <button
+              type="button"
+              onClick={() => handleToggleTargetScore(2)}
+              style={{
+                padding: '5px 12px',
+                borderRadius: '6px',
+                border: 'none',
+                fontSize: '12px',
+                fontWeight: 700,
+                cursor: 'pointer',
+                backgroundColor: targetScore === 2 ? '#FFFFFF' : 'transparent',
+                color: targetScore === 2 ? '#B45309' : '#64748B',
+                boxShadow: targetScore === 2 ? '0 1px 2px rgba(0,0,0,0.08)' : 'none',
+              }}
+            >
+              المستهدف: 2 (الفجوات الحرجة)
+            </button>
+          </div>
+
           <button
             type="button"
-            onClick={fetchSuggestions}
+            onClick={() => fetchSuggestions(targetScore)}
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -119,7 +224,7 @@ export const FormulaSuggestionsSection: React.FC<FormulaSuggestionsSectionProps>
         </div>
       </div>
 
-      {/* KPI Cards */}
+      {/* Interactive KPI Filter Cards */}
       <div
         style={{
           display: 'grid',
@@ -128,27 +233,35 @@ export const FormulaSuggestionsSection: React.FC<FormulaSuggestionsSectionProps>
         }}
       >
         <div
+          onClick={() => setActiveFilter('all')}
           style={{
             backgroundColor: '#ffffff',
             borderRadius: '12px',
             padding: '16px',
-            border: '1px solid #e2e8f0',
+            border: activeFilter === 'all' ? '2px solid #2563eb' : '1px solid #e2e8f0',
             textAlign: 'center',
+            cursor: 'pointer',
+            boxShadow: activeFilter === 'all' ? '0 0 0 3px rgba(37,99,235,0.15)' : 'none',
+            transition: 'all 0.15s ease',
           }}
         >
-          <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 600 }}>إجمالي الاقتراحات المرصودة</div>
+          <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 600 }}>إجمالي الاقتراحات ({activeFilter === 'all' ? 'محدد' : 'عرض الكل'})</div>
           <div style={{ fontSize: '26px', fontWeight: 800, color: '#1e293b', marginTop: '4px' }}>
             {totalCount}
           </div>
         </div>
 
         <div
+          onClick={() => setActiveFilter('high')}
           style={{
             backgroundColor: '#fff1f2',
             borderRadius: '12px',
             padding: '16px',
-            border: '1px solid #fecdd3',
+            border: activeFilter === 'high' ? '2px solid #e11d48' : '1px solid #fecdd3',
             textAlign: 'center',
+            cursor: 'pointer',
+            boxShadow: activeFilter === 'high' ? '0 0 0 3px rgba(225,29,72,0.15)' : 'none',
+            transition: 'all 0.15s ease',
           }}
         >
           <div style={{ fontSize: '12px', color: '#e11d48', fontWeight: 600 }}>أولوية عالية (تقدير 0 - 1)</div>
@@ -158,12 +271,16 @@ export const FormulaSuggestionsSection: React.FC<FormulaSuggestionsSectionProps>
         </div>
 
         <div
+          onClick={() => setActiveFilter('medium')}
           style={{
             backgroundColor: '#fffbeb',
             borderRadius: '12px',
             padding: '16px',
-            border: '1px solid #fde68a',
+            border: activeFilter === 'medium' ? '2px solid #d97706' : '1px solid #fde68a',
             textAlign: 'center',
+            cursor: 'pointer',
+            boxShadow: activeFilter === 'medium' ? '0 0 0 3px rgba(217,119,6,0.15)' : 'none',
+            transition: 'all 0.15s ease',
           }}
         >
           <div style={{ fontSize: '12px', color: '#b45309', fontWeight: 600 }}>أولوية متوسطة (تقدير 2)</div>
@@ -173,12 +290,16 @@ export const FormulaSuggestionsSection: React.FC<FormulaSuggestionsSectionProps>
         </div>
 
         <div
+          onClick={() => setActiveFilter('adopted')}
           style={{
             backgroundColor: '#ecfdf5',
             borderRadius: '12px',
             padding: '16px',
-            border: '1px solid #a7f3d0',
+            border: activeFilter === 'adopted' ? '2px solid #059669' : '1px solid #a7f3d0',
             textAlign: 'center',
+            cursor: 'pointer',
+            boxShadow: activeFilter === 'adopted' ? '0 0 0 3px rgba(5,150,105,0.15)' : 'none',
+            transition: 'all 0.15s ease',
           }}
         >
           <div style={{ fontSize: '12px', color: '#047857', fontWeight: 600 }}>تم تبنيها مسبقاً</div>
@@ -219,102 +340,129 @@ export const FormulaSuggestionsSection: React.FC<FormulaSuggestionsSectionProps>
                     جارِ احتساب مقترحات الفجوات المعيارية...
                   </td>
                 </tr>
-              ) : suggestions.length === 0 ? (
+              ) : filteredSuggestions.length === 0 ? (
                 <tr>
-                  <td colSpan={8} style={{ textAlign: 'center', padding: '30px', color: '#059669', fontWeight: 600 }}>
-                    ممتاز! كافة المؤشرات المرصودة حققت التقدير المستهدف ولا توجد فجوات حالياً.
+                  <td colSpan={8} style={{ textAlign: 'center', padding: '30px', color: '#64748b', fontWeight: 600 }}>
+                    {suggestions.length === 0
+                      ? 'ممتاز! كافة المؤشرات المرصودة حققت التقدير المستهدف ولا توجد فجوات حالياً.'
+                      : 'لا توجد مقترحات تطابق خيار التصفية المحدد.'}
                   </td>
                 </tr>
               ) : (
-                suggestions.map((sugg) => (
-                  <tr
-                    key={sugg.resultId}
-                    style={{
-                      borderBottom: '1px solid #f1f5f9',
-                      backgroundColor: sugg.isAdopted ? '#fcfdfd' : '#ffffff',
-                    }}
-                  >
-                    <td style={{ padding: '12px 14px', fontWeight: 700, color: '#2563eb' }}>
-                      {sugg.indicatorCode}
-                    </td>
-                    <td style={{ padding: '12px 14px' }}>
-                      <div style={{ fontWeight: 600, color: '#1e293b' }}>{sugg.indicatorName}</div>
-                      <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>
-                        المجال المقترح: {sugg.suggestedName}
-                      </div>
-                    </td>
-                    <td style={{ padding: '12px 14px', textAlign: 'center', fontWeight: 700, color: '#dc2626' }}>
-                      {sugg.score}
-                    </td>
-                    <td style={{ padding: '12px 14px', textAlign: 'center', fontWeight: 600, color: '#16a34a' }}>
-                      {sugg.targetScore}
-                    </td>
-                    <td style={{ padding: '12px 14px', textAlign: 'center', fontWeight: 800, color: '#d97706' }}>
-                      -{sugg.gap}
-                    </td>
-                    <td style={{ padding: '12px 14px', textAlign: 'center' }}>
-                      <span
-                        style={{
-                          display: 'inline-block',
-                          padding: '3px 8px',
-                          borderRadius: '6px',
-                          fontSize: '11.5px',
-                          fontWeight: 700,
-                          backgroundColor: sugg.suggestedPriority === 'High' ? '#fef2f2' : '#fffbeb',
-                          color: sugg.suggestedPriority === 'High' ? '#dc2626' : '#d97706',
-                          border: `1px solid ${sugg.suggestedPriority === 'High' ? '#fecaca' : '#fde68a'}`,
-                        }}
-                      >
-                        {sugg.priorityLabel}
-                      </span>
-                    </td>
-                    <td style={{ padding: '12px 14px', textAlign: 'center' }}>
-                      {sugg.isAdopted ? (
-                        <span
-                          style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '4px',
-                            color: '#059669',
-                            fontSize: '12px',
-                            fontWeight: 700,
+                filteredSuggestions.map((sugg) => {
+                  const effectiveTarget = customTargetScores[sugg.resultId] ?? sugg.targetScore;
+                  const effectiveGap = Math.max(0, effectiveTarget - sugg.score);
+                  return (
+                    <tr
+                      key={sugg.resultId}
+                      style={{
+                        borderBottom: '1px solid #f1f5f9',
+                        backgroundColor: sugg.isAdopted ? '#fcfdfd' : '#ffffff',
+                      }}
+                    >
+                      <td style={{ padding: '12px 14px', fontWeight: 700, color: '#2563eb' }}>
+                        {sugg.indicatorCode}
+                      </td>
+                      <td style={{ padding: '12px 14px' }}>
+                        <div style={{ fontWeight: 600, color: '#1e293b' }}>{sugg.indicatorName}</div>
+                        <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>
+                          المجال المقترح: {sugg.suggestedName}
+                        </div>
+                      </td>
+                      <td style={{ padding: '12px 14px', textAlign: 'center', fontWeight: 700, color: '#dc2626' }}>
+                        {sugg.score}
+                      </td>
+                      <td style={{ padding: '12px 14px', textAlign: 'center' }}>
+                        <select
+                          disabled={sugg.isAdopted || readOnly}
+                          value={effectiveTarget}
+                          onChange={(e) => {
+                            const val = Number(e.target.value);
+                            setCustomTargetScores((prev) => ({ ...prev, [sugg.resultId]: val }));
                           }}
-                        >
-                          <CheckCircle2 size={14} />
-                          متبنى
-                        </span>
-                      ) : (
-                        <span style={{ color: '#94a3b8', fontSize: '12px' }}>بانتظار التبني</span>
-                      )}
-                    </td>
-                    <td style={{ padding: '12px 14px', textAlign: 'center' }}>
-                      {!sugg.isAdopted && !readOnly ? (
-                        <button
-                          type="button"
-                          onClick={() => handleOpenAdopt(sugg)}
                           style={{
-                            padding: '6px 12px',
+                            padding: '4px 6px',
                             borderRadius: '6px',
-                            backgroundColor: '#059669',
-                            color: '#ffffff',
-                            border: 'none',
+                            border: '1px solid #cbd5e1',
                             fontSize: '11.5px',
                             fontWeight: 700,
-                            cursor: 'pointer',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '4px',
+                            backgroundColor: '#ffffff',
+                            color: '#16a34a',
+                            cursor: sugg.isAdopted || readOnly ? 'default' : 'pointer',
                           }}
                         >
-                          <Target size={13} />
-                          تبني المقترح
-                        </button>
-                      ) : (
-                        <span style={{ fontSize: '11.5px', color: '#64748b' }}>—</span>
-                      )}
-                    </td>
-                  </tr>
-                ))
+                          <option value={1}>1 (مقبول)</option>
+                          <option value={2}>2 (جيد)</option>
+                          <option value={3}>3 (متميز)</option>
+                        </select>
+                      </td>
+                      <td style={{ padding: '12px 14px', textAlign: 'center', fontWeight: 800, color: '#d97706' }}>
+                        -{effectiveGap}
+                      </td>
+                      <td style={{ padding: '12px 14px', textAlign: 'center' }}>
+                        <span
+                          style={{
+                            display: 'inline-block',
+                            padding: '3px 8px',
+                            borderRadius: '6px',
+                            fontSize: '11.5px',
+                            fontWeight: 700,
+                            backgroundColor: sugg.suggestedPriority === 'High' ? '#fef2f2' : '#fffbeb',
+                            color: sugg.suggestedPriority === 'High' ? '#dc2626' : '#d97706',
+                            border: `1px solid ${sugg.suggestedPriority === 'High' ? '#fecaca' : '#fde68a'}`,
+                          }}
+                        >
+                          {sugg.priorityLabel}
+                        </span>
+                      </td>
+                      <td style={{ padding: '12px 14px', textAlign: 'center' }}>
+                        {sugg.isAdopted ? (
+                          <span
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              color: '#059669',
+                              fontSize: '12px',
+                              fontWeight: 700,
+                            }}
+                          >
+                            <CheckCircle2 size={14} />
+                            متبنى
+                          </span>
+                        ) : (
+                          <span style={{ color: '#94a3b8', fontSize: '12px' }}>بانتظار التبني</span>
+                        )}
+                      </td>
+                      <td style={{ padding: '12px 14px', textAlign: 'center' }}>
+                        {!sugg.isAdopted && !readOnly ? (
+                          <button
+                            type="button"
+                            onClick={() => handleOpenAdopt(sugg)}
+                            style={{
+                              padding: '6px 12px',
+                              borderRadius: '6px',
+                              backgroundColor: '#059669',
+                              color: '#ffffff',
+                              border: 'none',
+                              fontSize: '11.5px',
+                              fontWeight: 700,
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                            }}
+                          >
+                            <Target size={13} />
+                            تبني المقترح
+                          </button>
+                        ) : (
+                          <span style={{ fontSize: '11.5px', color: '#64748b' }}>—</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>

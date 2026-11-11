@@ -4,6 +4,7 @@ import { useAuth } from '../../auth/AuthContext';
 import type {
   StandardsTreeData,
   StandardNode,
+  SubStandardNode,
   IndicatorNode,
   EvaluationResultData,
   SaveEvaluationResultPayload,
@@ -30,6 +31,10 @@ export function useSelfEvaluation(
   // عزل مفتاح التخزين المحلي حسب المستخدم والمدرسة ودورة التقييم (FE-GAP-05 / Note 1 & Note 4)
   const storageKey = useMemo(() => {
     return `school_eval_drafts_u${userId}_s${schoolId}_e${effectiveEvalId}_v1`;
+  }, [userId, schoolId, effectiveEvalId]);
+
+  const lastIndicatorKey = useMemo(() => {
+    return `school_eval_last_ind_u${userId}_s${schoolId}_e${effectiveEvalId}`;
   }, [userId, schoolId, effectiveEvalId]);
 
   // فحص المسودات المحفوظة محلياً لمدرسة أو دورة أخرى للمستخدم الحالي (Note 4)
@@ -237,6 +242,12 @@ export function useSelfEvaluation(
     [getStoredDrafts, removeLocalDraft, refreshDraftsCount, isLocked]
   );
 
+  const clearAllDrafts = useCallback(() => {
+    if (typeof window === 'undefined') return;
+    localStorage.removeItem(storageKey);
+    refreshDraftsCount();
+  }, [storageKey, refreshDraftsCount]);
+
   // الاستماع لأحداث الاتصال بالإنترنت
   useEffect(() => {
     refreshDraftsCount();
@@ -268,33 +279,65 @@ export function useSelfEvaluation(
     try {
       const data = await evaluatorApi.getActiveStandardsTree();
       setTreeData(data);
-      if (data.standards.length > 0) {
-        if (!selectedStandardId) {
-          setSelectedStandardId(data.standards[0].standardId);
+      if (data.standards.length > 0 && !selectedIndicatorId) {
+        const flat: { standardId: number; ind: IndicatorNode }[] = [];
+        data.standards.forEach((std) => {
+          std.subStandards?.forEach((sub) => {
+            sub.indicators?.forEach((ind) => {
+              flat.push({ standardId: std.standardId, ind });
+            });
+          });
+        });
+
+        if (flat.length > 0) {
+          const isIncomplete = (ind: IndicatorNode) =>
+            ind.score === null ||
+            ind.score === undefined ||
+            ((ind.mandatoryRequirementsCount ?? 0) > 0 &&
+              (ind.coveredRequirementsCount ?? 0) < (ind.mandatoryRequirementsCount ?? 0));
+
+          const savedRaw = typeof window !== 'undefined' ? localStorage.getItem(lastIndicatorKey) : null;
+          const savedItem = savedRaw ? flat.find((x) => x.ind.indicatorId === Number(savedRaw)) : undefined;
+          const firstIncomplete = flat.find((x) => isIncomplete(x.ind));
+          const firstLowScore = flat.find((x) => x.ind.score !== null && x.ind.score !== undefined && x.ind.score <= 1);
+
+          const chosen =
+            (savedItem && (isIncomplete(savedItem.ind) || !firstIncomplete) ? savedItem : null) ||
+            firstIncomplete ||
+            firstLowScore ||
+            flat[0];
+
+          setSelectedStandardId(chosen.standardId);
+          setSelectedIndicatorId(chosen.ind.indicatorId);
         }
-        if (!selectedIndicatorId && data.standards[0].subStandards?.[0]?.indicators?.[0]) {
-          setSelectedIndicatorId(data.standards[0].subStandards[0].indicators[0].indicatorId);
-        }
+      } else if (data.standards.length > 0 && !selectedStandardId) {
+        setSelectedStandardId(data.standards[0].standardId);
       }
     } catch (err) {
       console.error('Failed to load standards tree:', err);
     } finally {
       setIsLoadingTree(false);
     }
-  }, [selectedStandardId, selectedIndicatorId]);
+  }, [selectedStandardId, selectedIndicatorId, lastIndicatorKey]);
 
   useEffect(() => {
     loadTree();
   }, [loadTree]);
 
+  useEffect(() => {
+    if (selectedIndicatorId && typeof window !== 'undefined') {
+      localStorage.setItem(lastIndicatorKey, String(selectedIndicatorId));
+    }
+  }, [selectedIndicatorId, lastIndicatorKey]);
+
   // قائمة مسطحة لجميع المؤشرات لتسهيل التنقل التالي/السابق
   const allIndicators = useMemo(() => {
     if (!treeData) return [];
-    const list: { indicator: IndicatorNode; standard: StandardNode }[] = [];
+    const list: { indicator: IndicatorNode; standard: StandardNode; subStandard: SubStandardNode }[] = [];
     treeData.standards.forEach((std) => {
       std.subStandards.forEach((sub) => {
         sub.indicators.forEach((ind) => {
-          list.push({ indicator: ind, standard: std });
+          list.push({ indicator: ind, standard: std, subStandard: sub });
         });
       });
     });
@@ -310,32 +353,45 @@ export function useSelfEvaluation(
   // تحميل نتيجة المؤشر المحدد
   const loadIndicatorResult = useCallback(
     async (indicatorId: number) => {
-      // إذا كان هناك مسودة محلية مخزنة لهذا المؤشر، نعرضها أولاً
-      const stored = getStoredDrafts()[indicatorId];
-      if (stored) {
-        setCurrentResult({
-          resultId: 888,
-          evaluationId: 1,
-          indicatorId,
-          score: stored.payload.score,
-          scoreDescriptorId: stored.payload.scoreDescriptorId ?? null,
-          completionStatus: stored.payload.completionStatus ?? 'Completed',
-          justification: stored.payload.justification || '',
-          verificationMethods: stored.payload.verificationMethods || [],
-          evidenceLinks: [],
-          updatedAt: stored.cachedAt,
-        });
-        setSaveStatus('saved_local');
-        return;
-      }
-
       setIsLoadingResult(true);
       try {
         const res = await evaluatorApi.getEvaluationResult(indicatorId);
-        setCurrentResult(res);
-        setSaveStatus('saved_server');
+        const stored = getStoredDrafts()[indicatorId];
+        if (stored) {
+          // دمج المسودة المحلية فوق نتيجة الخادم دون مسح الشواهد أو متطلباتها
+          setCurrentResult({
+            ...res,
+            score: stored.payload.score !== undefined ? stored.payload.score : res.score,
+            scoreDescriptorId: stored.payload.scoreDescriptorId !== undefined ? stored.payload.scoreDescriptorId : res.scoreDescriptorId,
+            completionStatus: stored.payload.completionStatus !== undefined ? stored.payload.completionStatus : res.completionStatus,
+            justification: stored.payload.justification !== undefined ? stored.payload.justification : res.justification,
+            verificationMethods: stored.payload.verificationMethods !== undefined ? stored.payload.verificationMethods : res.verificationMethods,
+            updatedAt: stored.cachedAt,
+          });
+          setSaveStatus('saved_local');
+        } else {
+          setCurrentResult(res);
+          setSaveStatus('saved_server');
+        }
       } catch (err) {
         console.error(`Failed to load indicator result for ${indicatorId}:`, err);
+        // في حالة عدم توفر اتصال بالخادم، نستخدم المسودة المحلية كخطة طوارئ
+        const stored = getStoredDrafts()[indicatorId];
+        if (stored) {
+          setCurrentResult({
+            resultId: 888,
+            evaluationId: 1,
+            indicatorId,
+            score: stored.payload.score,
+            scoreDescriptorId: stored.payload.scoreDescriptorId ?? null,
+            completionStatus: stored.payload.completionStatus ?? 'Completed',
+            justification: stored.payload.justification || '',
+            verificationMethods: stored.payload.verificationMethods || [],
+            evidenceLinks: [],
+            updatedAt: stored.cachedAt,
+          });
+          setSaveStatus('saved_local');
+        }
       } finally {
         setIsLoadingResult(false);
       }
@@ -413,13 +469,23 @@ export function useSelfEvaluation(
         setSaveStatus('saved_server');
         setSaveSuccessMessage('تم الحفظ بنجاح على الخادم');
         setTimeout(() => setSaveSuccessMessage(null), 3000);
-      } catch (err) {
-        console.warn('Network error while saving. Storing draft locally:', err);
-        saveDraftLocally(selectedIndicatorId, payload);
-        setSaveStatus('saved_local');
-        setLastFailedPayload(payload);
-        setSaveSuccessMessage('تم الحفظ محلياً (سيتم المزامنة عند استقرار الاتصال)');
-        setTimeout(() => setSaveSuccessMessage(null), 3500);
+      } catch (err: any) {
+        const isNetworkDrop = (typeof navigator !== 'undefined' && !navigator.onLine) || !err?.response || err?.code === 'ERR_NETWORK';
+        if (isNetworkDrop) {
+          console.warn('Network error while saving. Storing draft locally:', err);
+          saveDraftLocally(selectedIndicatorId, payload);
+          setSaveStatus('saved_local');
+          setLastFailedPayload(payload);
+          setSaveSuccessMessage('تم الحفظ محلياً (سيتم المزامنة عند استقرار الاتصال)');
+          setTimeout(() => setSaveSuccessMessage(null), 3500);
+        } else {
+          console.error('Server/validation error while saving assessment:', err);
+          setSaveStatus('error');
+          setLastFailedPayload(payload);
+          const errMsg = err?.response?.data?.message || 'تعذر الحفظ على الخادم، يرجى إعادة المحاولة';
+          setSaveSuccessMessage(errMsg);
+          setTimeout(() => setSaveSuccessMessage(null), 5000);
+        }
       } finally {
         setIsSaving(false);
       }
@@ -556,6 +622,7 @@ export function useSelfEvaluation(
     isSyncing,
     conflictWarning,
     syncOfflineDrafts,
+    clearAllDrafts,
     resolveConflictWithLocal: () => syncOfflineDrafts(true),
     dismissConflict: () => setConflictWarning(null),
     // Cross-school draft isolation & alert

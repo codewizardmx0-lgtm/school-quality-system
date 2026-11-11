@@ -3,12 +3,14 @@ import { evaluatorApi } from '../api/evaluatorApi';
 import type {
   ImprovementPlanData,
   ImprovementPlanAction,
+  PlanType,
   CreateImprovementActionPayload,
   UpdateImprovementActionPayload,
   ActionStatus,
 } from '../api/evaluationTypes';
 
 export function useImprovementPlan() {
+  const [selectedPlanType, setSelectedPlanType] = useState<PlanType>('QualityImprovement');
   const [planData, setPlanData] = useState<ImprovementPlanData | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
@@ -17,14 +19,14 @@ export function useImprovementPlan() {
   const fetchPlan = useCallback(async () => {
     setIsLoading(true);
     try {
-      const data = await evaluatorApi.getCurrentImprovementPlan();
+      const data = await evaluatorApi.getCurrentImprovementPlan(selectedPlanType);
       setPlanData(data);
     } catch (err) {
       console.error('Failed to load improvement plan:', err);
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [selectedPlanType]);
 
   useEffect(() => {
     fetchPlan();
@@ -48,42 +50,22 @@ export function useImprovementPlan() {
     };
   }, [planData?.actions]);
 
-  // إضافة إجراء تنفيذي جديد
+  // إضافة إجراء تنفيذي جديد عبر الـ API الحقيقي مع المفتاح المركب (plan_id, area_id)
   const addAction = useCallback(
     async (payload: CreateImprovementActionPayload) => {
       setIsSubmitting(true);
-      const newAction: ImprovementPlanAction = {
-        actionId: Math.floor(Math.random() * 9000) + 1000,
-        planId: planData?.planId || 1,
-        title: payload.title,
-        standardName: 'معيار التحسين المستمر والجودة',
-        leader: payload.leader || 'فريق التطوير المدرسي',
-        startDate: payload.startDate || new Date().toISOString().split('T')[0],
-        dueDate: payload.dueDate || '2027-01-31',
-        status: payload.status || 'InProgress',
-        statusArabic: payload.status === 'Done' ? 'مكتمل' : 'قيد التنفيذ',
-        completionPercentage: payload.completionPercentage ?? 10,
-        progressDescription: payload.progressDescription || 'تم اعتماد وإدراج الإجراء في خطة التحسين وبدء التنفيذ.',
-      };
-
-      // تحديث تفاؤلي فوري
-      setPlanData((prev) => {
-        if (!prev) return null;
-        return {
-          ...prev,
-          actions: [newAction, ...prev.actions],
-        };
-      });
-
       try {
-        await evaluatorApi.createImprovementAction(payload);
-      } catch (err) {
-        console.error('Failed to create action on server:', err);
+        await evaluatorApi.createImprovementAction({
+          ...payload,
+          planId: payload.planId ?? planData?.planId,
+          planType: payload.planType ?? selectedPlanType,
+        });
+        await fetchPlan();
       } finally {
         setIsSubmitting(false);
       }
     },
-    [planData?.planId]
+    [planData?.planId, selectedPlanType, fetchPlan]
   );
 
   // تحديث حالة وتقدم إجراء معين
@@ -138,7 +120,48 @@ export function useImprovementPlan() {
     []
   );
 
+  // إنشاء خطة تحسين جديدة وربطها بالمجالات
+  const createPlan = useCallback(
+    async (payload: {
+      title: string;
+      planType?: PlanType;
+      startDate?: string;
+      endDate?: string;
+      areaIds?: number[];
+    }) => {
+      setIsSubmitting(true);
+      try {
+        const res = await evaluatorApi.createImprovementPlan(payload);
+        if (payload.planType) {
+          setSelectedPlanType(payload.planType);
+        }
+        await fetchPlan();
+        return res;
+      } finally {
+        setIsSubmitting(false);
+      }
+    },
+    [fetchPlan]
+  );
+
+  // تسجيل ملاحظة مراجعة داخلية على الخطة
+  const addReviewNote = useCallback(
+    async (planId: number, text: string) => {
+      setIsSubmitting(true);
+      try {
+        const res = await evaluatorApi.createPlanReviewNote(planId, text);
+        await fetchPlan();
+        return res;
+      } finally {
+        setIsSubmitting(false);
+      }
+    },
+    [fetchPlan]
+  );
+
   return {
+    selectedPlanType,
+    setSelectedPlanType,
     planData,
     summary: dynamicSummary,
     isLoading,
@@ -147,6 +170,8 @@ export function useImprovementPlan() {
     setEditingAction,
     addAction,
     updateAction,
+    createPlan,
+    addReviewNote,
     refreshPlan: fetchPlan,
   };
 }

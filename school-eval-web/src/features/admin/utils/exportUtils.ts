@@ -22,19 +22,41 @@ export function formatExportFilename(reportName: string, ext: 'xlsx' | 'pdf' = '
   return `${cleanName}_${year}-${month}-${day}_${hours}-${minutes}.${ext}`;
 }
 
+export interface ExcelSchoolMetadata {
+  schoolName?: string;
+  schoolCode?: string;
+  academicYear?: string;
+  reportTitle?: string;
+}
+
 /**
  * تصدير البيانات إلى مصنف Microsoft Excel (.xlsx) مع ضبط اتجاه الورقة من اليمين لليسار (RTL).
+ * يدعم إضافة ترويسة هوية المدرسة (الاسم، الرقم الوزاري، العام الدراسي) أعلى الجدول.
  */
 export function exportToExcel(
   filename: string,
   sheetName: string,
   headers: string[],
-  rows: (string | number | null | undefined)[][]
+  rows: (string | number | null | undefined)[][],
+  metadata?: ExcelSchoolMetadata
 ): void {
-  const wsData = [
-    headers,
-    ...rows.map((row) => row.map((cell) => cell ?? '')),
-  ];
+  const wsData: (string | number)[][] = [];
+
+  if (metadata?.schoolName || metadata?.schoolCode || metadata?.reportTitle) {
+    if (metadata.reportTitle) {
+      wsData.push([metadata.reportTitle]);
+    }
+    const metaParts: string[] = [];
+    if (metadata.schoolName) metaParts.push(`المدرسة: ${metadata.schoolName}`);
+    if (metadata.schoolCode) metaParts.push(`الرقم الوزاري/الرمز: ${metadata.schoolCode}`);
+    if (metadata.academicYear) metaParts.push(`العام الدراسي: ${metadata.academicYear}`);
+    metaParts.push(`تاريخ التصدير: ${new Date().toLocaleDateString('ar-SA')}`);
+    wsData.push([metaParts.join('  |  ')]);
+    wsData.push([]); // سطر فارغ فاصل قبل الجدول
+  }
+
+  wsData.push(headers);
+  rows.forEach((row) => wsData.push(row.map((cell) => cell ?? '')));
 
   const ws = XLSX.utils.aoa_to_sheet(wsData);
 

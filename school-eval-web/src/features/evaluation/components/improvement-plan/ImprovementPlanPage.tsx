@@ -2,12 +2,13 @@ import { exportToExcel, formatExportFilename } from '../../../admin/utils/export
 import React, { useState } from 'react';
 import { useImprovementPlan } from '../../hooks/useImprovementPlan';
 import { AddActionModal } from './AddActionModal';
+import { AddPlanModal } from './AddPlanModal';
 import { ActionProgressModal } from './ActionProgressModal';
 import { AttachActionEvidenceModal } from './AttachActionEvidenceModal';
 import { useToast } from '../../../admin/components/common/useToast';
 import { ToastNotification } from '../../../admin/components/common/ToastNotification';
-import type { ImprovementPlanAction } from '../../api/evaluationTypes';
-import type { ActionStatus, EvaluatorScreen } from '../../api/evaluationTypes';
+import { useAuth } from '../../../auth/AuthContext';
+import type { ImprovementPlanAction, ActionStatus, EvaluatorScreen, PlanType } from '../../api/evaluationTypes';
 import {
   Target,
   Plus,
@@ -19,6 +20,10 @@ import {
   User,
   Edit2,
   Paperclip,
+  FolderPlus,
+  MessageSquare,
+  Send,
+  RefreshCw,
 } from 'lucide-react';
 
 interface ImprovementPlanPageProps {
@@ -30,6 +35,8 @@ export const ImprovementPlanPage: React.FC<ImprovementPlanPageProps> = ({
   readOnly = false,
 }) => {
   const {
+    selectedPlanType,
+    setSelectedPlanType,
     planData,
     summary,
     isLoading,
@@ -38,12 +45,24 @@ export const ImprovementPlanPage: React.FC<ImprovementPlanPageProps> = ({
     setEditingAction,
     addAction,
     updateAction,
+    createPlan,
+    addReviewNote,
+    refreshPlan,
   } = useImprovementPlan();
 
+  const planTypeTabs: { id: PlanType; label: string; desc: string }[] = [
+    { id: 'QualityImprovement', label: 'خطة تحسين الجودة المدرسية', desc: 'معالجة الفجوات المعيارية' },
+    { id: 'StaffProfessionalDevelopment', label: 'خطة التطوير المهني والتربوي', desc: 'تأهيل وتدريب الكوادر' },
+    { id: 'AnnualOperational', label: 'الخطة التشغيلية السنوية', desc: 'البرامج والأنشطة التنفيذية' },
+  ];
+
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isAddPlanModalOpen, setIsAddPlanModalOpen] = useState(false);
   const [filterStatus, setFilterStatus] = useState<string>('ALL');
   const [selectedActionForEvidence, setSelectedActionForEvidence] = useState<ImprovementPlanAction | null>(null);
   const [isAttachModalOpen, setIsAttachModalOpen] = useState(false);
+  const [newReviewNoteText, setNewReviewNoteText] = useState('');
+  const [isSubmittingReviewNote, setIsSubmittingReviewNote] = useState(false);
   const { toasts, addToast, dismissToast } = useToast();
 
 
@@ -61,6 +80,8 @@ export const ImprovementPlanPage: React.FC<ImprovementPlanPageProps> = ({
     return act.status === filterStatus;
   });
 
+  const { user } = useAuth();
+
   const handleExportPlan = () => {
     const headers = ['رقم الإجراء', 'عنوان الإجراء', 'المعيار', 'المسؤول', 'البداية', 'الاستحقاق', 'الحالة', 'نسبة الإنجاز', 'وصف التقدم'];
     const rows = actions.map((a) => [
@@ -75,7 +96,13 @@ export const ImprovementPlanPage: React.FC<ImprovementPlanPageProps> = ({
       a.progressDescription,
     ]);
     const filename = formatExportFilename('خطة_التحسين_المدرسي', 'xlsx');
-    exportToExcel(filename, 'خطة التحسين', headers, rows);
+    const schoolName = user?.school?.schoolName || 'مدرسة الفاروق النموذجية';
+    const schoolCode = String(user?.school?.schoolId || 'SCH-104');
+    exportToExcel(filename, 'خطة التحسين', headers, rows, {
+      schoolName,
+      schoolCode,
+      reportTitle: 'وثيقة خطة التحسين والتطوير المدرسي',
+    });
   };
 
   const handleDirectStatusChange = (actionId: number, newStatus: ActionStatus) => {
@@ -86,8 +113,64 @@ export const ImprovementPlanPage: React.FC<ImprovementPlanPageProps> = ({
     });
   };
 
+  const handleAddReviewNoteSubmit = async () => {
+    if (!newReviewNoteText.trim() || !planData?.planId || isSubmittingReviewNote) return;
+    setIsSubmittingReviewNote(true);
+    try {
+      await addReviewNote(planData.planId, newReviewNoteText.trim());
+      setNewReviewNoteText('');
+      addToast('success', 'تم تدوين ملاحظة المراجعة الداخلية بنجاح.');
+    } catch (err: any) {
+      addToast('error', err?.response?.data?.message || 'تعذر تسجيل ملاحظة المراجعة.');
+    } finally {
+      setIsSubmittingReviewNote(false);
+    }
+  };
+
   return (
     <div style={{ padding: '24px', maxWidth: '1440px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '22px' }}>
+      {/* 0. Plan Type Tabs (IMP-04: QualityImprovement, StaffProfessionalDevelopment, AnnualOperational) */}
+      <div
+        style={{
+          display: 'flex',
+          gap: '10px',
+          flexWrap: 'wrap',
+          borderBottom: '2px solid #E2E8F0',
+          paddingBottom: '12px',
+        }}
+      >
+        {planTypeTabs.map((tab) => {
+          const active = selectedPlanType === tab.id;
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setSelectedPlanType(tab.id)}
+              style={{
+                padding: '10px 18px',
+                borderRadius: '10px',
+                border: active ? '2px solid #059669' : '1px solid #E2E8F0',
+                backgroundColor: active ? '#ECFDF5' : '#FFFFFF',
+                color: active ? '#065F46' : '#475569',
+                fontWeight: active ? 800 : 600,
+                fontSize: '13px',
+                cursor: 'pointer',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'flex-start',
+                gap: '2px',
+                transition: 'all 0.15s',
+              }}
+            >
+              <span>{tab.label}</span>
+              <span style={{ fontSize: '11px', fontWeight: 500, color: active ? '#047857' : '#94A3B8' }}>
+                {tab.desc}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
       {/* 1. Header & Actions */}
       <div
         style={{
@@ -132,6 +215,31 @@ export const ImprovementPlanPage: React.FC<ImprovementPlanPageProps> = ({
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <button
+            type="button"
+            onClick={async () => {
+              await refreshPlan();
+              addToast('success', 'تم تحديث خطة وإجراءات التحسين بنجاح.');
+            }}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '9px 14px',
+              borderRadius: '8px',
+              backgroundColor: '#FFFFFF',
+              color: '#334155',
+              border: '1px solid #CBD5E1',
+              fontSize: '13px',
+              fontWeight: 600,
+              cursor: 'pointer',
+            }}
+            title="تحديث بيانات الخطة والإجراءات"
+          >
+            <RefreshCw size={15} />
+            تحديث
+          </button>
+
+          <button
             onClick={handleExportPlan}
             style={{
               display: 'flex',
@@ -152,26 +260,49 @@ export const ImprovementPlanPage: React.FC<ImprovementPlanPageProps> = ({
           </button>
 
           {!readOnly && (
-            <button
-              onClick={() => setIsAddModalOpen(true)}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                padding: '9px 18px',
-                borderRadius: '8px',
-                backgroundColor: '#059669',
-                color: '#FFFFFF',
-                fontSize: '13px',
-                fontWeight: 700,
-                border: 'none',
-                cursor: 'pointer',
-                boxShadow: '0 2px 8px rgba(5, 150, 105, 0.25)',
-              }}
-            >
-              <Plus size={16} />
-              إضافة إجراء تنفيذي
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={() => setIsAddPlanModalOpen(true)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '9px 16px',
+                  borderRadius: '8px',
+                  backgroundColor: '#EFF6FF',
+                  color: '#1D4ED8',
+                  border: '1px solid #BFDBFE',
+                  fontSize: '13px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                }}
+              >
+                <FolderPlus size={16} />
+                إنشاء خطة جديدة
+              </button>
+
+              <button
+                onClick={() => setIsAddModalOpen(true)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '9px 18px',
+                  borderRadius: '8px',
+                  backgroundColor: '#059669',
+                  color: '#FFFFFF',
+                  fontSize: '13px',
+                  fontWeight: 700,
+                  border: 'none',
+                  cursor: 'pointer',
+                  boxShadow: '0 2px 8px rgba(5, 150, 105, 0.25)',
+                }}
+              >
+                <Plus size={16} />
+                إضافة إجراء تنفيذي
+              </button>
+            </>
           )}
         </div>
       </div>
@@ -478,11 +609,191 @@ export const ImprovementPlanPage: React.FC<ImprovementPlanPageProps> = ({
         </div>
       </div>
 
+      {/* 4. Plan Internal Review Notes (GAP-EV-13: plan_review_notes) */}
+      <div
+        style={{
+          backgroundColor: '#FFFFFF',
+          borderRadius: '14px',
+          padding: '22px 24px',
+          border: '1px solid #E2E8F0',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '14px',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div
+              style={{
+                width: '36px',
+                height: '36px',
+                borderRadius: '8px',
+                backgroundColor: '#EFF6FF',
+                color: '#2563EB',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <MessageSquare size={18} />
+            </div>
+            <div>
+              <h3 style={{ fontSize: '15px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
+                ملاحظات المراجعة الداخلية والتوجيهات الإشرافية
+              </h3>
+              <p style={{ fontSize: '12px', color: '#64748B', margin: '2px 0 0 0' }}>
+                ملاحظات مدير المدرسة والمشرف التربوي على مسار تنفيذ الخطة المدرسية
+              </p>
+            </div>
+          </div>
+          <span
+            style={{
+              fontSize: '12px',
+              fontWeight: 700,
+              padding: '3px 10px',
+              borderRadius: '99px',
+              backgroundColor: '#F1F5F9',
+              color: '#475569',
+            }}
+          >
+            {planData?.reviewNotes?.length || 0} ملاحظة
+          </span>
+        </div>
+
+        {/* Existing Notes List */}
+        {!planData?.reviewNotes || planData.reviewNotes.length === 0 ? (
+          <div
+            style={{
+              padding: '16px',
+              borderRadius: '8px',
+              backgroundColor: '#F8FAFC',
+              border: '1px dashed #CBD5E1',
+              color: '#64748B',
+              fontSize: '12.5px',
+              textAlign: 'center',
+            }}
+          >
+            لا توجد ملاحظات مراجعة مسجلة على هذه الخطة حتى الآن.
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            {planData.reviewNotes.map((note) => (
+              <div
+                key={note.noteId}
+                style={{
+                  backgroundColor: '#F8FAFC',
+                  border: '1px solid #E2E8F0',
+                  borderRight: '3px solid #2563EB',
+                  borderRadius: '10px',
+                  padding: '12px 16px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '6px',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '12px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontWeight: 800, color: '#1E293B' }}>{note.authorName}</span>
+                    <span
+                      style={{
+                        padding: '1px 8px',
+                        borderRadius: '4px',
+                        backgroundColor: '#DBEAFE',
+                        color: '#1E40AF',
+                        fontSize: '11px',
+                        fontWeight: 700,
+                      }}
+                    >
+                      {note.roleArabic}
+                    </span>
+                  </div>
+                  {note.createdAt && (
+                    <span style={{ color: '#94A3B8', fontSize: '11px' }}>
+                      {new Date(note.createdAt).toLocaleDateString('ar-EG', { dateStyle: 'medium' })}
+                    </span>
+                  )}
+                </div>
+                <p style={{ margin: 0, fontSize: '13px', color: '#334155', lineHeight: 1.6 }}>
+                  {note.text}
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Add Note Input if not ReadOnly */}
+        {!readOnly && planData && planData.planId > 0 && (
+          <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginTop: '6px' }}>
+            <input
+              type="text"
+              value={newReviewNoteText}
+              onChange={(e) => setNewReviewNoteText(e.target.value)}
+              placeholder="اكتب ملاحظة أو توجيهاً داخلياً على الخطة..."
+              style={{
+                flex: 1,
+                padding: '9px 14px',
+                borderRadius: '8px',
+                border: '1px solid #CBD5E1',
+                fontSize: '13px',
+                outline: 'none',
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  handleAddReviewNoteSubmit();
+                }
+              }}
+            />
+            <button
+              type="button"
+              onClick={handleAddReviewNoteSubmit}
+              disabled={isSubmittingReviewNote || !newReviewNoteText.trim()}
+              style={{
+                padding: '9px 18px',
+                borderRadius: '8px',
+                backgroundColor: '#2563EB',
+                color: '#FFFFFF',
+                border: 'none',
+                fontSize: '13px',
+                fontWeight: 700,
+                cursor: isSubmittingReviewNote || !newReviewNoteText.trim() ? 'not-allowed' : 'pointer',
+                opacity: isSubmittingReviewNote || !newReviewNoteText.trim() ? 0.6 : 1,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              <Send size={14} />
+              <span>{isSubmittingReviewNote ? 'جاري الإرسال...' : 'إضافة ملاحظة'}</span>
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Add Plan Modal */}
+      <AddPlanModal
+        isOpen={isAddPlanModalOpen}
+        onClose={() => setIsAddPlanModalOpen(false)}
+        availableAreas={planData?.availableAreas || []}
+        defaultPlanType={selectedPlanType}
+        onCreatePlan={async (payload) => {
+          await createPlan(payload);
+          addToast('success', 'تم إنشاء خطة التحسين وربط مجالاتها بنجاح.');
+        }}
+        isSubmitting={isSubmitting}
+      />
+
       {/* Add Action Modal */}
       <AddActionModal
         isOpen={isAddModalOpen}
         onClose={() => setIsAddModalOpen(false)}
-        onAddAction={addAction}
+        areas={planData?.areas || planData?.availableAreas || []}
+        onAddAction={async (payload) => {
+          await addAction(payload);
+          addToast('success', 'تمت إضافة الإجراء التنفيذي وربطه بمجال التحسين بنجاح.');
+        }}
         isSubmitting={isSubmitting}
       />
 
