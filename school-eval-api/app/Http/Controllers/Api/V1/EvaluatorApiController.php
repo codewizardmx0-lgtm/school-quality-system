@@ -99,8 +99,15 @@ class EvaluatorApiController extends Controller
 
         $completionPercentage = $totalIndicators > 0 ? round(($scoredCount / $totalIndicators) * 100) : 0;
 
-        // إحصاءات تغطية الشواهد ومتطلبات المعايير والملفات الفيزيائية الفعلية (الملاحظة 3)
-        $evidencesCount = EvidenceLink::where('evaluation_id', $evaluation->evaluation_id)->count();
+        // إحصاءات تغطية الشواهد ومتطلبات المعايير والملفات الفيزيائية الفعلية
+        try {
+            $sufficiencyData = app(\App\Services\EvidenceSufficiencyService::class)->evaluateEvaluation($evaluation);
+            $evidencesCount = (int) collect($sufficiencyData['standards'] ?? [])
+                ->flatMap(fn($s) => $s['indicators'] ?? [])
+                ->sum('effective_covered_count');
+        } catch (\Throwable $e) {
+            $evidencesCount = EvidenceLink::where('evaluation_id', $evaluation->evaluation_id)->count();
+        }
         $targetEvidencesCount = \App\Models\IndicatorEvidenceRequirement::count() ?: 278;
         $uniqueDocumentsCount = SchoolDocument::where('school_id', $evaluation->school_id)->count();
         $coveredIndicatorsCount = EvidenceLink::where('evaluation_id', $evaluation->evaluation_id)
@@ -420,12 +427,15 @@ class EvaluatorApiController extends Controller
             ->map(function ($link) {
                 return [
                     'linkId' => $link->id,
+                    'versionId' => $link->document_version_id,
                     'documentId' => $link->documentVersion?->school_document_id ?? $link->documentVersion?->document?->id,
+                    'indicatorId' => $link->indicator_id,
                     'title' => $link->documentVersion?->document?->title ?? 'مستند شاهد',
                     'fileName' => $link->documentVersion?->file_name ?? 'document.pdf',
                     'fileSize' => $link->documentVersion?->file_size ?? 1024000,
                     'versionNumber' => $link->documentVersion?->version_no ?? 1,
                     'status' => $link->status ?? 'completed',
+                    'coveredRequirements' => $link->covered_requirements ?? [],
                 ];
             });
 
@@ -630,6 +640,18 @@ class EvaluatorApiController extends Controller
 
         // ربط الشاهد بالمؤشر إذا تم تمرير indicatorId
         $linkId = null;
+        $coveredReqs = null;
+        if ($request->filled('coveredRequirements')) {
+            $rawCovered = $request->input('coveredRequirements');
+            if (is_string($rawCovered)) {
+                $decoded = json_decode($rawCovered, true);
+                $rawCovered = is_array($decoded) ? $decoded : [];
+            }
+            if (is_array($rawCovered)) {
+                $coveredReqs = array_values(array_unique(array_map('intval', array_filter($rawCovered, fn($v) => is_numeric($v)))));
+            }
+        }
+
         if ($request->filled('indicatorId')) {
             $link = EvidenceLink::create([
                 'school_id' => $schoolId,
@@ -638,13 +660,14 @@ class EvaluatorApiController extends Controller
                 'document_version_id' => $docVersion->id,
                 'action_id' => $request->input('actionId'),
                 'justification' => $request->input('notes', ''),
+                'covered_requirements' => $coveredReqs,
                 'status' => 'completed',
             ]);
             $linkId = $link->id;
         }
 
         return ApiResponse::created([
-            'documentId' => $document->document_id,
+            'documentId' => $document->id,
             'versionId' => $docVersion->id,
             'linkId' => $linkId,
             'title' => $document->title,
@@ -652,8 +675,64 @@ class EvaluatorApiController extends Controller
             'fileSize' => $fileSize,
             'mimeType' => $mimeType,
             'versionNumber' => $newVersionNumber,
+            'coveredRequirements' => $coveredReqs ?? [],
             'uploadedAt' => $docVersion->created_at?->toIso8601String(),
         ], 'تم رفع المستند وتوثيقه كشاهد معياري بنجاح');
+    }
+
+    /**
+     * PATCH /api/v1/evidence-links/{id}/covered-requirements
+     * Update mandatory requirements covered by an existing evidence link
+     */
+    public function updateLinkCoveredRequirements(Request $request, int $linkId): JsonResponse
+    {
+        $user = $request->user();
+        if ($user && !$user->hasPermission('evidence.manage')) {
+            return ApiResponse::forbidden('ليس لديك صلاحية تعديل تغطية الشواهد.');
+        }
+
+        $evaluation = $this->getActiveEvaluation($request);
+        if (in_array($evaluation->status, ['Submitted', 'UnderReview', 'Completed'], true)) {
+            return ApiResponse::error('لا يمكن تعديل تغطية الشواهد لأن ملف التقييم مقفل أو مرفوع للمراجعة.', 422);
+        }
+
+        $link = EvidenceLink::where('id', $linkId)
+            ->where('evaluation_id', $evaluation->evaluation_id)
+            ->where('school_id', $evaluation->school_id)
+            ->first();
+
+        if (!$link) {
+            return ApiResponse::notFound('رابط الشاهد المطلوب غير موجود ضمن هذا التقييم.');
+        }
+
+        $validator = Validator::make($request->all(), [
+            'coveredRequirements' => 'required|array',
+            'coveredRequirements.*' => 'integer',
+        ], [
+            'coveredRequirements.required' => 'يرجى تحديد المتطلبات المغطاة.',
+        ]);
+
+        if ($validator->fails()) {
+            return ApiResponse::validationError($validator->errors()->toArray());
+        }
+
+        // حصر المتطلبات المغطاة بالمتطلبات الإلزامية الفعلية التابعة للمؤشر نفسه
+        $mandatoryIds = \App\Models\IndicatorEvidenceRequirement::where('indicator_id', $link->indicator_id)
+            ->where('required', true)
+            ->pluck('requirement_id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
+
+        $requestedIds = array_map('intval', $request->input('coveredRequirements', []));
+        $validCovered = array_values(array_unique(array_intersect($requestedIds, $mandatoryIds)));
+
+        $link->covered_requirements = $validCovered;
+        $link->save();
+
+        return ApiResponse::success([
+            'linkId' => $link->id,
+            'coveredRequirements' => $validCovered,
+        ], 'تم تحديث تغطية متطلبات الشاهد بنجاح.');
     }
 
     /**

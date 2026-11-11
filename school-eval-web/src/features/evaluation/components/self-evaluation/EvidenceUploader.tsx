@@ -1,23 +1,33 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import type { LinkedEvidenceBrief, EvidenceRequirementItem } from '../../api/evaluationTypes';
-import { UploadCloud, File, RefreshCw, AlertCircle, Trash2, FileCheck } from 'lucide-react';
+import { UploadCloud, File, RefreshCw, AlertCircle, Trash2, FileCheck, Link2, ArrowRightLeft } from 'lucide-react';
 
 interface EvidenceUploaderProps {
   indicatorId?: number;
   evidenceLinks: LinkedEvidenceBrief[];
   evidenceRequirements?: EvidenceRequirementItem[];
-  onUploadFile: (file: File, notes?: string, documentId?: number) => Promise<unknown>;
+  onUploadFile: (
+    file: File,
+    notes?: string,
+    documentId?: number,
+    coveredRequirements?: number[]
+  ) => Promise<unknown>;
   onUnlinkEvidence?: (linkId: number) => Promise<void>;
+  onManageEvidenceLink?: (link: LinkedEvidenceBrief, mode: 'single' | 'multi' | 'unlink') => void;
+  onUpdateCoveredRequirements?: (linkId: number, coveredRequirements: number[]) => Promise<void>;
   isUploading?: boolean;
   uploadProgress?: number;
   readOnly?: boolean;
 }
 
 export const EvidenceUploader: React.FC<EvidenceUploaderProps> = ({
+  indicatorId,
   evidenceLinks,
   evidenceRequirements = [],
   onUploadFile,
   onUnlinkEvidence,
+  onManageEvidenceLink,
+  onUpdateCoveredRequirements,
   isUploading = false,
   uploadProgress = 0,
   readOnly = false,
@@ -26,7 +36,39 @@ export const EvidenceUploader: React.FC<EvidenceUploaderProps> = ({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [replaceDocId, setReplaceDocId] = useState<number | undefined>(undefined);
   const [unlinkingId, setUnlinkingId] = useState<number | null>(null);
+  const [selectedUploadReqIds, setSelectedUploadReqIds] = useState<number[]>([]);
+  const [updatingReqLinkId, setUpdatingReqLinkId] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const mandatoryRequirements = evidenceRequirements.filter((r) => r.required === true);
+
+  useEffect(() => {
+    setSelectedUploadReqIds([]);
+    setErrorMessage(null);
+  }, [indicatorId]);
+
+  const handleToggleUploadReq = (reqId: number) => {
+    setSelectedUploadReqIds((prev) =>
+      prev.includes(reqId) ? prev.filter((id) => id !== reqId) : [...prev, reqId]
+    );
+  };
+
+  const handleToggleExistingLinkReq = async (link: LinkedEvidenceBrief, reqId: number) => {
+    if (readOnly || !onUpdateCoveredRequirements) return;
+    const current = link.coveredRequirements || [];
+    const next = current.includes(reqId)
+      ? current.filter((id) => id !== reqId)
+      : [...current, reqId];
+    setUpdatingReqLinkId(link.linkId);
+    setErrorMessage(null);
+    try {
+      await onUpdateCoveredRequirements(link.linkId, next);
+    } catch (err: any) {
+      setErrorMessage(err?.response?.data?.message || 'تعذر تحديث المتطلبات المغطاة للشاهد.');
+    } finally {
+      setUpdatingReqLinkId(null);
+    }
+  };
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -67,9 +109,15 @@ export const EvidenceUploader: React.FC<EvidenceUploaderProps> = ({
 
     try {
       for (const file of files) {
-        await onUploadFile(file, 'تم الرفع من استمارة رصد المؤشر', replaceDocId);
+        await onUploadFile(
+          file,
+          'تم الرفع من استمارة رصد المؤشر',
+          replaceDocId,
+          selectedUploadReqIds.length > 0 ? selectedUploadReqIds : undefined
+        );
       }
       setReplaceDocId(undefined);
+      setSelectedUploadReqIds([]);
     } catch (err: unknown) {
       setErrorMessage((err as Error)?.message || 'فشل في رفع ملف الشاهد.');
     }
@@ -187,6 +235,56 @@ export const EvidenceUploader: React.FC<EvidenceUploaderProps> = ({
         style={{ display: 'none' }}
       />
 
+      {/* Mandatory Requirements Selection before Upload (IMP-03: Mandatory Only) */}
+      {!readOnly && mandatoryRequirements.length > 0 && (
+        <div
+          style={{
+            backgroundColor: '#FFFBEB',
+            border: '1px solid #FDE68A',
+            borderRadius: '10px',
+            padding: '12px 14px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '8px',
+          }}
+        >
+          <div style={{ fontSize: '12px', fontWeight: 800, color: '#92400E' }}>
+            حدد المتطلبات الإلزامية التي يغطيها الملف قبل الرفع (يمكن لملف واحد تغطية أكثر من متطلب):
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+            {mandatoryRequirements.map((req) => {
+              const checked = selectedUploadReqIds.includes(req.id);
+              return (
+                <label
+                  key={req.id}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '5px 10px',
+                    borderRadius: '6px',
+                    backgroundColor: checked ? '#FEF3C7' : '#FFFFFF',
+                    border: `1px solid ${checked ? '#D97706' : '#E2E8F0'}`,
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    color: '#1E293B',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() => handleToggleUploadReq(req.id)}
+                    style={{ accentColor: '#D97706' }}
+                  />
+                  <span>{req.title}</span>
+                </label>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Drag & Drop Upload Zone */}
       {!readOnly && (
         <div
@@ -262,97 +360,205 @@ export const EvidenceUploader: React.FC<EvidenceUploaderProps> = ({
         </div>
       )}
 
-      {/* Attached Evidences List with Unlink & Replace actions */}
+      {/* Attached Evidences List with Multi-Link, Transfer, Unlink & Replace actions */}
       {evidenceLinks.length > 0 && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
           {evidenceLinks.map((link) => (
             <div
               key={link.linkId}
               style={{
                 display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                padding: '10px 14px',
-                borderRadius: '8px',
+                flexDirection: 'column',
+                gap: '10px',
+                padding: '12px 14px',
+                borderRadius: '10px',
                 backgroundColor: '#FFFFFF',
                 border: '1px solid #E2E8F0',
                 transition: 'background-color 0.15s',
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <div
-                  style={{
-                    width: '32px',
-                    height: '32px',
-                    borderRadius: '6px',
-                    backgroundColor: '#EFF6FF',
-                    color: '#2563EB',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    flexShrink: 0,
-                  }}
-                >
-                  <File size={16} />
-                </div>
-                <div>
-                  <div style={{ fontSize: '13px', fontWeight: 700, color: '#1E293B' }}>
-                    {link.title}
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  flexWrap: 'wrap',
+                  gap: '10px',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <div
+                    style={{
+                      width: '32px',
+                      height: '32px',
+                      borderRadius: '6px',
+                      backgroundColor: '#EFF6FF',
+                      color: '#2563EB',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0,
+                    }}
+                  >
+                    <File size={16} />
                   </div>
-                  <div style={{ fontSize: '11px', color: '#64748B', display: 'flex', gap: '8px', marginTop: '2px' }}>
-                    <span>{link.fileName}</span>
-                    <span>•</span>
-                    <span style={{ color: '#059669', fontWeight: 600 }}>الإصدار v{link.versionNumber}</span>
+                  <div>
+                    <div style={{ fontSize: '13px', fontWeight: 700, color: '#1E293B' }}>
+                      {link.title}
+                    </div>
+                    <div style={{ fontSize: '11px', color: '#64748B', display: 'flex', gap: '8px', marginTop: '2px' }}>
+                      <span>{link.fileName}</span>
+                      <span>•</span>
+                      <span style={{ color: '#059669', fontWeight: 600 }}>الإصدار v{link.versionNumber}</span>
+                    </div>
                   </div>
                 </div>
+
+                {!readOnly && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                    {onManageEvidenceLink && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => onManageEvidenceLink(link, 'multi')}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            padding: '5px 10px',
+                            borderRadius: '6px',
+                            backgroundColor: '#ECFDF5',
+                            color: '#047857',
+                            fontSize: '11.5px',
+                            fontWeight: 700,
+                            border: '1px solid #A7F3D0',
+                            cursor: 'pointer',
+                          }}
+                          title="ربط هذا الشاهد بمؤشرات إضافية أخرى"
+                        >
+                          <Link2 size={12} />
+                          <span>ربط مؤشرات أخرى</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => onManageEvidenceLink(link, 'single')}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            padding: '5px 10px',
+                            borderRadius: '6px',
+                            backgroundColor: '#EFF6FF',
+                            color: '#1D4ED8',
+                            fontSize: '11.5px',
+                            fontWeight: 700,
+                            border: '1px solid #BFDBFE',
+                            cursor: 'pointer',
+                          }}
+                          title="نقل الشاهد إلى مؤشر آخر"
+                        >
+                          <ArrowRightLeft size={12} />
+                          <span>نقل المؤشر</span>
+                        </button>
+                      </>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={() => triggerSelectFile(link.documentId)}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        padding: '5px 10px',
+                        borderRadius: '6px',
+                        backgroundColor: '#F1F5F9',
+                        color: '#475569',
+                        fontSize: '11.5px',
+                        fontWeight: 600,
+                        border: 'none',
+                        cursor: 'pointer',
+                      }}
+                      title="رفع نسخة أحدث لهذا الشاهد"
+                    >
+                      <RefreshCw size={12} />
+                      <span>تحديث النسخة</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      disabled={unlinkingId === link.linkId}
+                      onClick={() => handleUnlink(link.linkId)}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        padding: '5px 10px',
+                        borderRadius: '6px',
+                        backgroundColor: '#FEF2F2',
+                        color: '#DC2626',
+                        fontSize: '11.5px',
+                        fontWeight: 700,
+                        border: '1px solid #FECACA',
+                        cursor: 'pointer',
+                      }}
+                      title="فك ارتباط هذا الشاهد بالمؤشر"
+                    >
+                      <Trash2 size={12} />
+                      <span>{unlinkingId === link.linkId ? 'جارٍ الفك...' : 'فك الارتباط'}</span>
+                    </button>
+                  </div>
+                )}
               </div>
 
-              {!readOnly && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <button
-                    type="button"
-                    onClick={() => triggerSelectFile(link.documentId)}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '4px',
-                      padding: '5px 10px',
-                      borderRadius: '6px',
-                      backgroundColor: '#F1F5F9',
-                      color: '#475569',
-                      fontSize: '11.5px',
-                      fontWeight: 600,
-                      border: 'none',
-                      cursor: 'pointer',
-                    }}
-                    title="رفع نسخة أحدث لهذا الشاهد"
-                  >
-                    <RefreshCw size={12} />
-                    <span>تحديث النسخة</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    disabled={unlinkingId === link.linkId}
-                    onClick={() => handleUnlink(link.linkId)}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '4px',
-                      padding: '5px 10px',
-                      borderRadius: '6px',
-                      backgroundColor: '#FEF2F2',
-                      color: '#DC2626',
-                      fontSize: '11.5px',
-                      fontWeight: 700,
-                      border: '1px solid #FECACA',
-                      cursor: 'pointer',
-                    }}
-                    title="فك ارتباط هذا الشاهد بالمؤشر"
-                  >
-                    <Trash2 size={12} />
-                    <span>{unlinkingId === link.linkId ? 'جارٍ الفك...' : 'فك الارتباط'}</span>
-                  </button>
+              {/* Mandatory requirements covered by this existing link (IMP-03: Mandatory only) */}
+              {mandatoryRequirements.length > 0 && (
+                <div
+                  style={{
+                    backgroundColor: '#F8FAFC',
+                    borderRadius: '6px',
+                    padding: '8px 10px',
+                    border: '1px solid #E2E8F0',
+                    display: 'flex',
+                    alignItems: 'center',
+                    flexWrap: 'wrap',
+                    gap: '8px',
+                  }}
+                >
+                  <span style={{ fontSize: '11px', fontWeight: 700, color: '#475569' }}>
+                    المتطلبات الإلزامية المغطاة بهذا الشاهد:
+                  </span>
+                  {mandatoryRequirements.map((req) => {
+                    const isCovered = (link.coveredRequirements || []).includes(req.id);
+                    return (
+                      <label
+                        key={req.id}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '5px',
+                          padding: '3px 8px',
+                          borderRadius: '5px',
+                          backgroundColor: isCovered ? '#ECFDF5' : '#FFFFFF',
+                          border: `1px solid ${isCovered ? '#10B981' : '#CBD5E1'}`,
+                          fontSize: '11px',
+                          fontWeight: 600,
+                          color: isCovered ? '#065F46' : '#64748B',
+                          cursor: readOnly || updatingReqLinkId === link.linkId ? 'default' : 'pointer',
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isCovered}
+                          disabled={readOnly || updatingReqLinkId === link.linkId}
+                          onChange={() => handleToggleExistingLinkReq(link, req.id)}
+                          style={{ accentColor: '#059669' }}
+                        />
+                        <span>{req.title}</span>
+                      </label>
+                    );
+                  })}
                 </div>
               )}
             </div>

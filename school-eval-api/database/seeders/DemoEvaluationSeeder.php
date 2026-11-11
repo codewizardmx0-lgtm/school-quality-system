@@ -307,44 +307,24 @@ class DemoEvaluationSeeder extends Seeder
             $createdVersions[] = $ver;
         }
 
-        // ج. ربط كافة المؤشرات الـ 109 بوثائق شواهد كافية ومستوفاة (متوسط 2-3 شواهد لكل مؤشر بإجمالي 250+ شاهد)
+        // ج. ربط كافة المؤشرات الـ 109 بعدد شواهد مطابق تماماً لمتطلباتها في المعايير الوطنية (278 متطلباً)
+        $versionCount = count($createdVersions);
         for ($i = 0; $i < count($ratedResults); $i++) {
             $item = $ratedResults[$i];
-            $ver1 = $createdVersions[$i % count($createdVersions)];
-            $ver2 = $createdVersions[($i + 7) % count($createdVersions)];
+            $indicator = $item['indicator'];
+            $requirements = $indicator->evidenceRequirements()->orderBy('requirement_id')->get();
 
-            // الشاهد الأساسي الأول
-            EvidenceLink::create([
-                'evaluation_id'        => $evalFarouq->evaluation_id,
-                'indicator_id'         => $item['indicator']->indicator_id,
-                'document_version_id'  => $ver1->id,
-                'school_id'            => $schoolFarouq->school_id,
-                'evaluation_result_id' => $item['result']->result_id,
-                'justification'        => "شاهد إثبات أساسي مستوفٍ عبر الوثيقة الرسمية ({$ver1->file_name}) لعام 2026.",
-                'status'               => 'completed',
-            ]);
-
-            // الشاهد الداعم الثاني لجميع المؤشرات
-            EvidenceLink::create([
-                'evaluation_id'        => $evalFarouq->evaluation_id,
-                'indicator_id'         => $item['indicator']->indicator_id,
-                'document_version_id'  => $ver2->id,
-                'school_id'            => $schoolFarouq->school_id,
-                'evaluation_result_id' => $item['result']->result_id,
-                'justification'        => "وثيقة داعمة ومحضر متابعة ميداني إضافي عبر ({$ver2->file_name}).",
-                'status'               => 'completed',
-            ]);
-
-            // الشاهد الثالث للمؤشرات ذات الأداء المتقدم (المستوى 2 والمستوى 3)
-            if ($item['score'] >= 2) {
-                $ver3 = $createdVersions[($i + 13) % count($createdVersions)];
+            foreach ($requirements as $reqIdx => $req) {
+                // اختيار وثيقة مميزة لكل متطلب داخل المؤشر دون تكرار نفس النسخة على نفس المؤشر
+                $ver = $createdVersions[($i + ($reqIdx * 3)) % $versionCount];
                 EvidenceLink::create([
                     'evaluation_id'        => $evalFarouq->evaluation_id,
-                    'indicator_id'         => $item['indicator']->indicator_id,
-                    'document_version_id'  => $ver3->id,
+                    'indicator_id'         => $indicator->indicator_id,
+                    'document_version_id'  => $ver->id,
                     'school_id'            => $schoolFarouq->school_id,
                     'evaluation_result_id' => $item['result']->result_id,
-                    'justification'        => "تقرير جودة دوري وإحصائيات داعمة للتحقق المستمر ({$ver3->file_name}).",
+                    'justification'        => "شاهد مستوفٍ لمتطلب ({$req->title}) عبر الوثيقة ({$ver->file_name}) لعام 2026.",
+                    'covered_requirements' => [$req->requirement_id],
                     'status'               => 'completed',
                 ]);
             }

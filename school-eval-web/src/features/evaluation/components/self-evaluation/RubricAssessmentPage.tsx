@@ -4,7 +4,10 @@ import { EvidenceUploader } from './EvidenceUploader';
 import { EvaluatorJustification } from './EvaluatorJustification';
 import { useEvidences } from '../../hooks/useEvidences';
 import { evaluatorApi } from '../../api/evaluatorApi';
-import type { EvaluatorScreen } from '../../api/evaluationTypes';
+import type { EvaluatorScreen, EvidenceItem, LinkedEvidenceBrief } from '../../api/evaluationTypes';
+import { LinkEvidenceModal } from '../evidences/LinkEvidenceModal';
+import { useToast } from '../../../admin/components/common/useToast';
+import { ToastNotification } from '../../../admin/components/common/ToastNotification';
 import {
   CheckCircle2,
   Save,
@@ -46,6 +49,8 @@ export const RubricAssessmentPage: React.FC<RubricAssessmentPageProps> = ({
     goToNextIndicator,
     hasPrevious,
     hasNext,
+    reloadTree,
+    reloadIndicatorResult,
     isOffline,
     pendingOfflineCount,
     isSyncing,
@@ -56,12 +61,15 @@ export const RubricAssessmentPage: React.FC<RubricAssessmentPageProps> = ({
   } = useSelfEvaluation(selectedIndicatorId || undefined, isLocked);
 
   const { uploadEvidenceFile, isUploading, uploadProgress } = useEvidences();
+  const { toasts, addToast, dismissToast } = useToast();
 
   // Local form state
   const [selectedScore, setSelectedScore] = useState<number | null>(null);
   const [justification, setJustification] = useState<string>('');
   const [selectedVerificationMethods, setSelectedVerificationMethods] = useState<number[]>([]);
   const [isResetModalOpen, setIsResetModalOpen] = useState<boolean>(false);
+  const [linkModalEvidence, setLinkModalEvidence] = useState<EvidenceItem | null>(null);
+  const [linkModalMode, setLinkModalMode] = useState<'single' | 'multi' | 'unlink'>('single');
 
   const hasIndicatorData =
     selectedScore !== null ||
@@ -121,13 +129,18 @@ export const RubricAssessmentPage: React.FC<RubricAssessmentPageProps> = ({
     },
   ];
 
-  // Official verification methods
-  const officialMethods = [
+  const fallbackMethods = [
     { id: 1, name: 'فحص الوثائق والسجلات المدرسية' },
     { id: 2, name: 'بطاقة ملاحظة صفية وميدانية' },
     { id: 3, name: 'مقابلة المعلمين والطلبة وأولياء الأمور' },
     { id: 4, name: 'استبانة قياس رضا المستفيدين وتحليل الاستجابات' },
   ];
+
+  // أساليب وأدوات التحقق الديناميكية الخاصة بالمؤشر من وثيقة المعايير الوطنية (IMP-01)
+  const officialMethods =
+    indicator?.verificationMethods && indicator.verificationMethods.length > 0
+      ? indicator.verificationMethods
+      : fallbackMethods;
 
   const handleScoreSelect = (level: number) => {
     if (isLocked) return;
@@ -175,7 +188,12 @@ export const RubricAssessmentPage: React.FC<RubricAssessmentPageProps> = ({
     goToNextIndicator();
   };
 
-  const handleUploadIndicatorEvidence = async (file: File, notes?: string, documentId?: number) => {
+  const handleUploadIndicatorEvidence = async (
+    file: File,
+    notes?: string,
+    documentId?: number,
+    coveredRequirements?: number[]
+  ) => {
     if (!indicator) return;
     await uploadEvidenceFile({
       file,
@@ -183,17 +201,50 @@ export const RubricAssessmentPage: React.FC<RubricAssessmentPageProps> = ({
       title: file.name,
       notes,
       documentId,
+      coveredRequirements,
     });
-    if (activeId) {
-      setSelectedIndicatorId(activeId);
-    }
+    await reloadIndicatorResult();
+    await reloadTree();
+    addToast('success', 'تم رفع الشاهد وربطه بالمؤشر بنجاح.');
   };
 
   const handleUnlinkEvidence = async (linkId: number) => {
     await evaluatorApi.unlinkEvidence(linkId);
-    if (activeId) {
-      setSelectedIndicatorId(activeId);
-    }
+    await reloadIndicatorResult();
+    await reloadTree();
+    addToast('success', 'تم فك ارتباط الشاهد من المؤشر.');
+  };
+
+  const handleUpdateCoveredRequirements = async (linkId: number, coveredRequirements: number[]) => {
+    await evaluatorApi.updateLinkCoveredRequirements(linkId, coveredRequirements);
+    await reloadIndicatorResult();
+    addToast('success', 'تم تحديث المتطلبات الإلزامية المغطاة للشاهد.');
+  };
+
+  const handleManageEvidenceLink = (link: LinkedEvidenceBrief, mode: 'single' | 'multi' | 'unlink') => {
+    if (isLocked) return;
+    const item: EvidenceItem = {
+      id: link.versionId || link.linkId,
+      documentId: link.documentId || link.linkId,
+      linkId: link.linkId,
+      indicatorId: link.indicatorId || indicator?.indicatorId,
+      title: link.title,
+      fileName: link.fileName,
+      mimeType: 'application/pdf',
+      fileSize: link.fileSize,
+      formattedSize: `${(link.fileSize / (1024 * 1024)).toFixed(2)} MB`,
+      versionNumber: link.versionNumber,
+      standardCode: standard?.code || 'STD',
+      standardName: standard?.title || '',
+      indicatorCode: indicator?.code || '',
+      indicatorTitle: indicator?.title || '',
+      uploadedAt: '',
+      uploadedBy: '',
+      verificationStatus: 'Compliant',
+      verificationStatusArabic: 'موثق',
+    };
+    setLinkModalMode(mode);
+    setLinkModalEvidence(item);
   };
 
   return (
@@ -606,6 +657,8 @@ export const RubricAssessmentPage: React.FC<RubricAssessmentPageProps> = ({
           evidenceRequirements={currentResult?.evidenceRequirements || indicator?.evidenceRequirements || []}
           onUploadFile={handleUploadIndicatorEvidence}
           onUnlinkEvidence={handleUnlinkEvidence}
+          onManageEvidenceLink={handleManageEvidenceLink}
+          onUpdateCoveredRequirements={handleUpdateCoveredRequirements}
           isUploading={isUploading}
           uploadProgress={uploadProgress}
           readOnly={isLocked}
@@ -757,6 +810,23 @@ export const RubricAssessmentPage: React.FC<RubricAssessmentPageProps> = ({
           onResetSuccess?.();
         }}
       />
+
+      {/* نافذة ربط ونقل الشواهد (IMP-02) */}
+      <LinkEvidenceModal
+        isOpen={!!linkModalEvidence}
+        onClose={() => setLinkModalEvidence(null)}
+        evidence={linkModalEvidence}
+        initialMode={linkModalMode}
+        onSuccess={async (msg) => {
+          addToast('success', msg);
+          await reloadIndicatorResult();
+          await reloadTree();
+        }}
+        onError={(msg) => addToast('error', msg)}
+      />
+
+      {/* الإشعارات المنبثقة */}
+      <ToastNotification toasts={toasts} onDismiss={dismissToast} />
     </div>
   );
 };

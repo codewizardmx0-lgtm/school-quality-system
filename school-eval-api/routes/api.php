@@ -153,6 +153,7 @@ Route::prefix('v1')->group(function () {
 
         Route::post('/evidences/upload', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'uploadEvidence'])->name('api.v1.evidences.upload');
         Route::get('/evidences', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'getEvidences'])->name('api.v1.evidences.index');
+        Route::patch('/evidence-links/{id}/covered-requirements', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'updateLinkCoveredRequirements'])->name('api.v1.evidence-links.covered-requirements');
 
         Route::prefix('ai')->group(function () {
             Route::post('/analyses', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'triggerAiAnalysis'])->name('api.v1.ai.analyses.store');

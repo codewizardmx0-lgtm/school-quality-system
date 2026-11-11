@@ -170,12 +170,15 @@ export interface StandardsTreeData {
 
 export interface LinkedEvidenceBrief {
   linkId: number;
+  versionId?: number;
   documentId?: number;
+  indicatorId?: number;
   title: string;
   fileName: string;
   fileSize: number;
   versionNumber: number;
   status?: string;
+  coveredRequirements?: number[];
 }
 
 export interface EvaluationResultData {
@@ -243,6 +246,7 @@ export interface UploadEvidencePayload {
   actionId?: number;
   notes?: string;
   documentId?: number; // for replacing an existing evidence with a new version
+  coveredRequirements?: number[];
 }
 
 export interface AiStrengthWeakness {

@@ -7,6 +7,7 @@ interface LinkEvidenceModalProps {
   isOpen: boolean;
   onClose: () => void;
   evidence: EvidenceItem | null;
+  initialMode?: LinkMode;
   onSuccess: (message: string) => void;
   onError: (message: string) => void;
 }
@@ -17,10 +18,11 @@ export const LinkEvidenceModal: React.FC<LinkEvidenceModalProps> = ({
   isOpen,
   onClose,
   evidence,
+  initialMode = 'single',
   onSuccess,
   onError,
 }) => {
-  const [mode, setMode] = useState<LinkMode>('single');
+  const [mode, setMode] = useState<LinkMode>(initialMode);
   const [standardsTree, setStandardsTree] = useState<StandardsTreeData | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedSingleIndicatorId, setSelectedSingleIndicatorId] = useState<number | null>(null);
@@ -34,13 +36,13 @@ export const LinkEvidenceModal: React.FC<LinkEvidenceModalProps> = ({
         setStandardsTree(tree);
       });
       // Reset state
-      setMode('single');
+      setMode(initialMode);
       setSearchTerm('');
       setSelectedSingleIndicatorId(null);
       setSelectedMultiIndicatorIds([]);
       setJustification('');
     }
-  }, [isOpen]);
+  }, [isOpen, initialMode]);
 
   if (!isOpen || !evidence) return null;
 

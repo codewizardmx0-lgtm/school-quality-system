@@ -3,7 +3,7 @@
 
 > **المشروع:** نظام إدارة الجودة والتقويم والاعتماد المدرسي (`school-quality-system`)  
 > **حالة الوثيقة:** السجل المرجعي الرسمي المعتمد لتتبع المشاكل الفنية والتوثيقية الـ 44 المستخرجة من مراجعة المشروع وأطروحة التخرج وفحص الواجهات.  
-> **تاريخ التحديث:** 10 نوفمبر 2026م.  
+> **تاريخ التحديث:** 11 نوفمبر 2026م.  
 > **الفرع:** `feature/school-evaluator-ui`.  
 > **خطة المعالجة المعتمدة:** يُحال للتفاصيل التنفيذية وجدول الأولويات إلى [docs/gap-remediation-plan.md](gap-remediation-plan.md).  
 > **سجل فجوات واجهات التقييم المحدث (المصادر الأربعة):** [school-eval-web/src/features/evaluation/evaluation-gaps.md](../school-eval-web/src/features/evaluation/evaluation-gaps.md).  

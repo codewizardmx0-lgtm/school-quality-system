@@ -98,6 +98,9 @@ export const evaluatorApi = {
     if (payload.notes) {
       formData.append('notes', payload.notes);
     }
+    if (payload.coveredRequirements && payload.coveredRequirements.length > 0) {
+      formData.append('coveredRequirements', JSON.stringify(payload.coveredRequirements));
+    }
 
     const response = await post<{
       documentId: number;
@@ -106,6 +109,7 @@ export const evaluatorApi = {
       fileName: string;
       title: string;
       linkId?: number;
+      coveredRequirements?: number[];
     }>('/evidences/upload', formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
@@ -350,6 +354,21 @@ export const evaluatorApi = {
    */
   async unlinkEvidence(linkId: number): Promise<void> {
     await del(`/evidence-links/${linkId}`);
+  },
+
+  /**
+   * 21.a2 PATCH /api/v1/evidence-links/{id}/covered-requirements
+   * Update covered mandatory requirements for an existing evidence link
+   */
+  async updateLinkCoveredRequirements(
+    linkId: number,
+    coveredRequirements: number[]
+  ): Promise<{ linkId: number; coveredRequirements: number[] }> {
+    const response = await patch<{ linkId: number; coveredRequirements: number[] }>(
+      `/evidence-links/${linkId}/covered-requirements`,
+      { coveredRequirements }
+    );
+    return response.data!;
   },
 
   /**

@@ -549,6 +549,7 @@ export function useSelfEvaluation(
     hasPrevious,
     hasNext,
     reloadTree: loadTree,
+    reloadIndicatorResult: () => (selectedIndicatorId ? loadIndicatorResult(selectedIndicatorId) : Promise.resolve()),
     // Offline caching & conflict resolution helpers
     isOffline,
     pendingOfflineCount,

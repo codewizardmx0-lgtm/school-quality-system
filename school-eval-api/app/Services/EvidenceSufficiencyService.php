@@ -63,18 +63,43 @@ class EvidenceSufficiencyService
             $sourceEvidences = $links;
         } else {
             $uploadedCount = 0;
+            $validLinks = collect();
             $validCount = 0;
             $draftCount = 0;
             $sourceEvidences = collect();
         }
 
+        // حساب التغطية الفعالة للمتطلبات الإلزامية (دعم الشاهد الشامل لأكثر من متطلب مع التوافق التراجعي)
+        $mandatoryIds = $mandatoryReqs->pluck('requirement_id')->map(fn ($id) => (int) $id)->all();
+        $explicitCoveredIds = [];
+        $legacyValidLinksCount = 0;
+
+        foreach ($validLinks as $link) {
+            $covered = $link->covered_requirements ?? null;
+            if (is_array($covered) && count($covered) > 0) {
+                foreach ($covered as $reqId) {
+                    $intId = (int) $reqId;
+                    if (in_array($intId, $mandatoryIds, true)) {
+                        $explicitCoveredIds[$intId] = true;
+                    }
+                }
+            } else {
+                // شاهد قديم/تراجعي بدون قائمة متطلبات صريحة يغطي متطلباً واحداً تلقائياً
+                $legacyValidLinksCount++;
+            }
+        }
+
+        $effectiveCoveredCount = $mandatoryCount > 0
+            ? min($mandatoryCount, count($explicitCoveredIds) + $legacyValidLinksCount)
+            : $validCount;
+
         // القاعدة: إذا كان له متطلبات إلزامية، يجب استيفاؤها بالشواهد الصالحة
         // وإذا لم يكن له متطلبات إلزامية، لا يُعدّ ناقصاً أبداً
         if ($mandatoryCount > 0) {
-            $isSufficient = ($validCount >= $mandatoryCount);
-            $missingCount = max(0, $mandatoryCount - $validCount);
+            $isSufficient = ($effectiveCoveredCount >= $mandatoryCount);
+            $missingCount = max(0, $mandatoryCount - $effectiveCoveredCount);
             $status = $isSufficient ? 'Completed' : 'Missing';
-            $completionRate = min(100.0, round(($validCount / $mandatoryCount) * 100, 2));
+            $completionRate = min(100.0, round(($effectiveCoveredCount / $mandatoryCount) * 100, 2));
         } else {
             $isSufficient = true;
             $missingCount = 0;
@@ -90,6 +115,8 @@ class EvidenceSufficiencyService
             'total_required_count'     => $totalReqCount,
             'uploaded_evidence_count'  => $uploadedCount,
             'valid_evidence_count'     => $validCount,
+            'effective_covered_count'  => $effectiveCoveredCount,
+            'covered_requirement_ids'  => array_keys($explicitCoveredIds),
             'draft_evidence_count'     => $draftCount,
             'is_sufficient'            => $isSufficient,
             'missing_count'            => $missingCount,
@@ -205,7 +232,7 @@ class EvidenceSufficiencyService
                     $totalDraftEvidences += $evaluatedInd['draft_evidence_count'];
                     $stdDraftEvidences += $evaluatedInd['draft_evidence_count'];
 
-                    $indCappedValid = min($evaluatedInd['valid_evidence_count'], $evaluatedInd['mandatory_required_count']);
+                    $indCappedValid = min($evaluatedInd['effective_covered_count'], $evaluatedInd['mandatory_required_count']);
                     $stdCappedValidEvidences += $indCappedValid;
                     $totalCappedValidEvidences += $indCappedValid;
 
