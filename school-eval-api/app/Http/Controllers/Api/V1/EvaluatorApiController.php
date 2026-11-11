@@ -103,6 +103,9 @@ class EvaluatorApiController extends Controller
         $evidencesCount = EvidenceLink::where('evaluation_id', $evaluation->evaluation_id)->count();
         $targetEvidencesCount = \App\Models\IndicatorEvidenceRequirement::count() ?: 278;
         $uniqueDocumentsCount = SchoolDocument::where('school_id', $evaluation->school_id)->count();
+        $coveredIndicatorsCount = EvidenceLink::where('evaluation_id', $evaluation->evaluation_id)
+            ->distinct('indicator_id')
+            ->count('indicator_id');
 
         // نقاط القوة (تقدير 2-3) وفرص التحسين (0-1) بناءً على النتائج الحقيقية المرصودة
         $strengthsCount = $scoredResults->filter(fn($r) => (int)$r->score >= 2)->count();
@@ -255,6 +258,7 @@ class EvaluatorApiController extends Controller
                 'documentedEvidences' => $evidencesCount,
                 'targetEvidences' => $targetEvidencesCount,
                 'uniqueDocumentsCount' => $uniqueDocumentsCount,
+                'coveredIndicatorsCount' => $coveredIndicatorsCount,
                 'strengthsCount' => $strengthsCount,
                 'gapsCount' => $gapsCount,
                 'scoreDistribution' => [

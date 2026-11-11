@@ -531,8 +531,21 @@ export const EvaluatorDashboard: React.FC<EvaluatorDashboardProps> = ({
             </span>
           </div>
 
-          <div style={{ fontSize: '12px', color: '#059669', marginTop: '10px', fontWeight: 600 }}>
+          <div style={{ fontSize: '12px', color: '#059669', marginTop: '8px', fontWeight: 600 }}>
             مغطاة عبر {kpis.uniqueDocumentsCount ?? 0} وثيقة وملفاً فعلياً في مستودع المدرسة
+          </div>
+          <div
+            style={{
+              fontSize: '11.5px',
+              color:
+                (kpis.coveredIndicatorsCount ?? 0) < (kpis.totalIndicators || 109) && (kpis.coveredIndicatorsCount ?? 0) > 0
+                  ? '#D97706'
+                  : '#475569',
+              marginTop: '4px',
+              fontWeight: 700,
+            }}
+          >
+            تغطي فعلياً {kpis.coveredIndicatorsCount ?? 0} من أصل {kpis.totalIndicators || 109} مؤشراً
           </div>
         </div>
 

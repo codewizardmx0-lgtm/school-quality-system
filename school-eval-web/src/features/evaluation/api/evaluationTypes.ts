@@ -32,6 +32,7 @@ export interface EvaluatorKpis {
   documentedEvidences: number;
   targetEvidences: number;
   uniqueDocumentsCount?: number;
+  coveredIndicatorsCount?: number;
   strengthsCount: number;
   gapsCount: number;
   scoreDistribution?: {

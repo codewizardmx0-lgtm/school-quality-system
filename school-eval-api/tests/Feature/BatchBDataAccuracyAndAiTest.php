@@ -28,6 +28,7 @@ class BatchBDataAccuracyAndAiTest extends TestCase
         $this->assertGreaterThanOrEqual(200, $kpis['documentedEvidences']);
         $this->assertEquals(278, $kpis['targetEvidences']);
         $this->assertEquals(20, $kpis['uniqueDocumentsCount']);
+        $this->assertEquals(109, $kpis['coveredIndicatorsCount']);
         $this->assertEquals(100, $kpis['completionPercentage']);
     }
 
