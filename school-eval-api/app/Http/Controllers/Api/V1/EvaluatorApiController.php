@@ -140,12 +140,13 @@ class EvaluatorApiController extends Controller
 
         // مسار دورة التقييم المعتمد نظامياً وفق SRS والفصل الرابع (بدون مسمى المكتب المعتمد)
         $isAllScored = ($scoredCount >= $totalIndicators && $totalIndicators > 0);
+        $cycleStartDate = $evaluation->cycle?->start_date?->toDateString() ?? $evaluation->created_at?->toDateString() ?? '2026-09-01';
         $cycleSteps = [
             [
                 'id' => 1,
                 'label' => 'إطلاق الدورة',
                 'status' => 'completed',
-                'date' => '2026-09-01',
+                'date' => $cycleStartDate,
                 'description' => 'فتح دورة التقييم الذاتي وتعميم المعايير الوطنية المعتمدة.',
             ],
             [
@@ -1248,7 +1249,7 @@ class EvaluatorApiController extends Controller
                 'description' => $ver->document?->description ?? '',
                 'justification' => $link?->justification ?? '',
                 'linkedIndicators' => $linkedIndicators,
-                'uploadedAt' => $ver->created_at?->toDateString() ?? '2026-10-15',
+                'uploadedAt' => $ver->created_at?->toDateString() ?? $ver->document?->created_at?->toDateString(),
                 'uploadedBy' => $ver->document?->creator?->full_name ?? 'مسؤول الجودة',
                 'verificationStatus' => $ver->version_no > 2 ? 'NeedsReplacement' : 'Compliant',
                 'verificationStatusArabic' => $ver->version_no > 2 ? 'يتطلب استبدال' : 'مطابق ومعتمد داخلياً',
@@ -1261,6 +1262,11 @@ class EvaluatorApiController extends Controller
         $storageUsedMb = round($versions->sum('file_size') / (1024 * 1024), 2);
         $storageLimitMb = 500.0;
 
+        $coveredIndicatorsCount = EvidenceLink::where('evaluation_id', $evaluation->evaluation_id)
+            ->distinct('indicator_id')
+            ->count('indicator_id');
+        $totalIndicatorsCount = Indicator::count() ?: 109;
+
         return ApiResponse::success([
             'vaultStats' => [
                 'totalEvidences' => $totalDocs,
@@ -1269,6 +1275,8 @@ class EvaluatorApiController extends Controller
                 'storageUsedMb' => $storageUsedMb,
                 'storageLimitMb' => $storageLimitMb,
                 'storagePercentage' => round(($storageUsedMb / $storageLimitMb) * 100, 1),
+                'coveredIndicatorsCount' => $coveredIndicatorsCount,
+                'totalIndicatorsCount' => $totalIndicatorsCount,
             ],
             'evidences' => $evidencesList,
         ]);
@@ -1643,8 +1651,8 @@ class EvaluatorApiController extends Controller
                 'title' => $act->title,
                 'standardName' => $act->area?->name ?? 'معيار التطوير والجودة',
                 'leader' => $act->responsible_person_description ?: 'فريق التطوير والتحسين',
-                'startDate' => $act->start_date?->toDateString() ?? '2026-10-01',
-                'dueDate' => $act->due_date?->toDateString() ?? '2026-12-31',
+                'startDate' => $act->start_date?->toDateString() ?? $plan->start_date?->toDateString(),
+                'dueDate' => $act->due_date?->toDateString() ?? $plan->end_date?->toDateString(),
                 'status' => $act->status,
                 'statusArabic' => $act->status === 'Done' ? 'مكتمل' : ($act->status === 'InProgress' ? 'قيد التنفيذ' : ($act->status === 'Cancelled' ? 'ملغي' : 'معلق')),
                 'completionPercentage' => $act->completion_percentage,
@@ -1671,8 +1679,8 @@ class EvaluatorApiController extends Controller
             'planType' => $plan->plan_type ?? ImprovementPlan::TYPE_QUALITY_IMPROVEMENT,
             'title' => $plan->title,
             'status' => $plan->status,
-            'startDate' => $plan->start_date?->toDateString() ?? '2026-10-01',
-            'endDate' => $plan->end_date?->toDateString() ?? '2027-03-31',
+            'startDate' => $plan->start_date?->toDateString(),
+            'endDate' => $plan->end_date?->toDateString(),
             'areas' => $planAreas,
             'availableAreas' => $availableAreas->map(fn ($a) => [
                 'areaId' => $a->area_id,
@@ -2207,22 +2215,24 @@ class EvaluatorApiController extends Controller
             return ApiResponse::success(null);
         }
 
-        $items = CompletionRequestItem::where('request_id', $completionRequest->request_id)->get();
+        $items = CompletionRequestItem::where('request_id', $completionRequest->request_id)
+            ->with(['indicator.subStandard.standard'])
+            ->get();
 
         return ApiResponse::success([
             'requestId' => $completionRequest->request_id,
             'status' => $completionRequest->status,
             'supervisorName' => 'المشرف التربوي الوزاري',
             'issuedAt' => $completionRequest->created_at?->toDateString(),
-            'completionDeadline' => $completionRequest->completion_deadline?->toDateString() ?? '2026-11-15',
-            'remainingDays' => max(0, now()->diffInDays($completionRequest->completion_deadline, false)),
+            'completionDeadline' => $completionRequest->completion_deadline?->toDateString(),
+            'remainingDays' => $completionRequest->completion_deadline ? max(0, now()->diffInDays($completionRequest->completion_deadline, false)) : 0,
             'supervisorGeneralNotes' => 'يرجى مراجعة البنود الموضحة وتحديث المرفقات والمبررات المطلوبة لإعادة الاعتماد.',
             'flaggedItems' => $items->map(fn($item) => [
                 'itemId' => $item->request_item_id,
                 'indicatorId' => $item->indicator_id,
-                'indicatorCode' => 'IND-' . str_pad($item->indicator_id, 2, '0', STR_PAD_LEFT),
-                'indicatorTitle' => 'مؤشر معياري مطلوب استكماله',
-                'standardTitle' => 'المعايير المحددة للاستكمال',
+                'indicatorCode' => $item->indicator?->code ?? ('IND-' . str_pad($item->indicator_id, 2, '0', STR_PAD_LEFT)),
+                'indicatorTitle' => $item->indicator?->name ?? 'مؤشر معياري مطلوب استكماله',
+                'standardTitle' => $item->indicator?->subStandard?->standard?->name ?? 'المعايير المحددة للاستكمال',
                 'missingDescription' => $item->missing_description,
                 'status' => $item->status,
                 'resolutionNotes' => '',

@@ -239,6 +239,8 @@ export interface EvidenceVaultStats {
   storageUsedMb: number;
   storageLimitMb: number;
   storagePercentage: number;
+  coveredIndicatorsCount?: number;
+  totalIndicatorsCount?: number;
 }
 
 export interface LinkedIndicatorBrief {

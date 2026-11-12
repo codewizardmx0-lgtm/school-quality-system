@@ -10,7 +10,6 @@ import type {
   EvidenceItem,
   LinkedEvidenceBrief,
   IndicatorMetricsContextItem,
-  VerificationMethod,
 } from '../../api/evaluationTypes';
 import { LinkEvidenceModal } from '../evidences/LinkEvidenceModal';
 import { EditEvidenceMetadataModal } from '../evidences/EditEvidenceMetadataModal';
@@ -179,18 +178,10 @@ export const RubricAssessmentPage: React.FC<RubricAssessmentPageProps> = ({
     },
   ];
 
-  const fallbackMethods: VerificationMethod[] = [
-    { id: 1, name: 'فحص الوثائق والسجلات المدرسية', toolType: 'وثائقي', description: 'فحص الوثائق والخطط والسجلات الرسمية المعتمدة.' },
-    { id: 2, name: 'بطاقة ملاحظة صفية وميدانية', toolType: 'ميداني', description: 'الملاحظة المباشرة للبيئة المدرسية والمرافق التعليمية.' },
-    { id: 3, name: 'مقابلة المعلمين والطلبة وأولياء الأمور', toolType: 'مقابلات', description: 'المقابلات المقننة مع الفئات المعنية.' },
-    { id: 4, name: 'استبانة قياس رضا المستفيدين', toolType: 'استبانة', description: 'استطلاع وتحليل آراء المستفيدين.' },
-  ];
-
-  // أساليب وأدوات التحقق الديناميكية الخاصة بالمؤشر من وثيقة المعايير الوطنية (IMP-01)
-  const officialMethods =
-    indicator?.verificationMethods && indicator.verificationMethods.length > 0
-      ? indicator.verificationMethods
-      : fallbackMethods;
+  // أساليب وأدوات التحقق الديناميكية الخاصة بالمؤشر من وثيقة المعايير الوطنية (IMP-01) - من قاعدة البيانات حصراً
+  const officialMethods = indicator?.verificationMethods && indicator.verificationMethods.length > 0
+    ? indicator.verificationMethods
+    : [];
 
   const handleScoreSelect = (level: number) => {
     if (isLocked) return;
@@ -841,11 +832,16 @@ export const RubricAssessmentPage: React.FC<RubricAssessmentPageProps> = ({
           </span>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '14px', marginTop: '16px' }}>
-          {officialMethods.map((method) => {
-            return (
-              <div
-                key={method.id}
+        {officialMethods.length === 0 ? (
+          <div style={{ marginTop: '14px', padding: '16px', borderRadius: '10px', backgroundColor: '#F8FAFC', border: '1px dashed #CBD5E1', textAlign: 'center', color: '#64748B', fontSize: '13px' }}>
+            لا توجد أساليب أو أدوات تحقق مخصصة لهذا المؤشر في دليل المعايير.
+          </div>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '14px', marginTop: '16px' }}>
+            {officialMethods.map((method) => {
+              return (
+                <div
+                  key={method.id}
                 style={{
                   display: 'flex',
                   flexDirection: 'column',
@@ -890,6 +886,7 @@ export const RubricAssessmentPage: React.FC<RubricAssessmentPageProps> = ({
             );
           })}
         </div>
+      )}
       </div>
 
       {/* Evidence Uploader */}

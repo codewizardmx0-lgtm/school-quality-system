@@ -19,19 +19,14 @@ export const BackupArchiveTable: React.FC<BackupArchiveTableProps> = ({
 }) => {
   const [testingHashId, setTestingHashId] = useState<number | null>(null);
 
-  const handleDownload = (backup: BackupRecord) => {
-    // Simulate real encrypted archive download
-    const dummyContent = `ARTEQA_ENCRYPTED_BACKUP_CONTAINER\nFILE: ${backup.fileName}\nSHA256: ${backup.sha256Hash}\nTIMESTAMP: ${backup.createdAt}\nSIZE: ${backup.sizeBytes}`;
-    const blob = new Blob([dummyContent], { type: 'application/octet-stream' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = backup.fileName;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-    addToast('success', `بدأ تنزيل ملف النسخة الاحتياطية (${backup.fileName})`);
+  const handleDownload = async (backup: BackupRecord) => {
+    try {
+      addToast('info', `جاري تنزيل ملف النسخة الاحتياطية (${backup.fileName})...`);
+      await backupApi.downloadBackup(backup.backupId, backup.fileName);
+      addToast('success', `اكتمل تنزيل ملف النسخة الاحتياطية (${backup.fileName}) بنجاح`);
+    } catch {
+      addToast('warning', `تعذر تنزيل النسخة الاحتياطية (${backup.fileName}) من الخادم`);
+    }
   };
 
   const handleTestHash = async (backup: BackupRecord) => {

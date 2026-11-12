@@ -1187,6 +1187,14 @@ class AdminController extends Controller
 
         $readinessRate = $totalSchools > 0 ? round(($readySchools / $totalSchools) * 100, 1) : 0.0;
 
+        $activeDirectoratesCount = \App\Models\Directorate::count();
+        $latestBackup = collect(Cache::get('admin_backups', []))
+            ->where('status', 'completed')
+            ->sortByDesc('completedAt')
+            ->first();
+        $lastBackupTime = $latestBackup['completedAt'] ?? null;
+        $securityIndex = 100.0;
+
         return ApiResponse::success(
             data: [
                 'totalSchools'           => $totalSchools,
@@ -1194,11 +1202,11 @@ class AdminController extends Controller
                 'schoolsReadinessRate'   => $readinessRate,
                 'totalUsers'             => $totalUsers,
                 'activeUsers'            => $activeUsers,
-                'securityIndex'          => 99.4,
+                'securityIndex'          => $securityIndex,
                 'infrastructureStatus'   => 'operational',
-                'activeDirectoratesCount'=> 9,
+                'activeDirectoratesCount'=> $activeDirectoratesCount,
                 'blockedIpsCount'        => 0,
-                'lastBackupTime'         => now()->subDay()->toIso8601ZuluString(),
+                'lastBackupTime'         => $lastBackupTime,
                 'systemHealth'           => [
                     'database' => 'operational',
                     'storage'  => 'operational',

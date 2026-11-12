@@ -1,5 +1,5 @@
 import { exportMultiSheetExcel, formatExportFilename } from '../../../admin/utils/exportUtils';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useEvidences } from '../../hooks/useEvidences';
 import { evaluatorApi } from '../../api/evaluatorApi';
 import { EvidenceCard } from './EvidenceCard';
@@ -117,13 +117,33 @@ export const EvidencesRepository: React.FC<EvidencesRepositoryProps> = ({
 
 
   const stats = vaultStats || {
-    totalEvidences: 38,
-    compliantEvidences: 36,
-    needsReplacement: 2,
-    storageUsedMb: 38.7,
+    totalEvidences: 0,
+    compliantEvidences: 0,
+    needsReplacement: 0,
+    storageUsedMb: 0,
     storageLimitMb: 500,
-    storagePercentage: 7.7,
+    storagePercentage: 0,
+    coveredIndicatorsCount: 0,
+    totalIndicatorsCount: 109,
   };
+
+  // حساب إجمالي المؤشرات الوطنية المغطاة بهذه الشواهد ديناميكياً
+  const uniqueCoveredIndicatorsCount = useMemo(() => {
+    const indicatorIds = new Set<number>();
+    evidences.forEach((ev) => {
+      if (ev.linkedIndicators && ev.linkedIndicators.length > 0) {
+        ev.linkedIndicators.forEach((li) => {
+          if (li.indicatorId) indicatorIds.add(li.indicatorId);
+        });
+      } else if (ev.indicatorId && !ev.isUnlinked) {
+        indicatorIds.add(ev.indicatorId);
+      }
+    });
+    return indicatorIds.size;
+  }, [evidences]);
+
+  const coveredIndicators = stats.coveredIndicatorsCount ?? (uniqueCoveredIndicatorsCount || 109);
+  const totalIndicators = stats.totalIndicatorsCount ?? 109;
 
   const filteredEvidences = evidences.filter((item) => {
     const matchesSearch =
@@ -374,7 +394,7 @@ export const EvidencesRepository: React.FC<EvidencesRepositoryProps> = ({
           gap: '16px',
         }}
       >
-        {/* Card 1: إجمالي الشواهد المفهرسة */}
+        {/* Card 1: إجمالي وثائق الشواهد المودعة */}
         <div
           style={{
             backgroundColor: '#FFFFFF',
@@ -386,7 +406,7 @@ export const EvidencesRepository: React.FC<EvidencesRepositoryProps> = ({
         >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <span style={{ fontSize: '12.5px', fontWeight: 700, color: '#64748B' }}>
-              إجمالي الشواهد المفهرسة
+              إجمالي وثائق الشواهد المودعة
             </span>
             <div
               style={{
@@ -408,7 +428,7 @@ export const EvidencesRepository: React.FC<EvidencesRepositoryProps> = ({
             <span style={{ fontSize: '13px', fontWeight: 600, color: '#64748B' }}>وثيقة</span>
           </div>
           <div style={{ fontSize: '11.5px', color: '#059669', marginTop: '4px', fontWeight: 600 }}>
-            مربوطة بـ 42 مؤشراً معيارياً
+            تغطي {coveredIndicators} من أصل {totalIndicators} مؤشراً معيارياً ({Math.min(100, Math.round((coveredIndicators / totalIndicators) * 100))}%)
           </div>
         </div>
 
@@ -481,7 +501,9 @@ export const EvidencesRepository: React.FC<EvidencesRepositoryProps> = ({
           </div>
           <div style={{ fontSize: '28px', fontWeight: 900, color: '#D97706', marginTop: '10px' }}>
             {stats.needsReplacement}{' '}
-            <span style={{ fontSize: '13px', fontWeight: 600, color: '#64748B' }}>وثيقتان</span>
+            <span style={{ fontSize: '13px', fontWeight: 600, color: '#64748B' }}>
+              {stats.needsReplacement === 1 ? 'وثيقة' : stats.needsReplacement === 2 ? 'وثيقتان' : 'وثائق'}
+            </span>
           </div>
           <div style={{ fontSize: '11.5px', color: '#B45309', marginTop: '4px', fontWeight: 600 }}>
             بحاجة لتحديث النسخة أو اعتمادها
