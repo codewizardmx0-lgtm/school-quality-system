@@ -146,6 +146,7 @@ class CompletionWorkflowFeatureTest extends TestCase
                         'indicator_id'         => $indicatorId,
                         'document_version_id'  => $version->id,
                         'justification'        => 'دلالة الشاهد',
+                        'covered_requirements' => [$req->requirement_id],
                         'status'               => 'completed',
                     ]);
                 }

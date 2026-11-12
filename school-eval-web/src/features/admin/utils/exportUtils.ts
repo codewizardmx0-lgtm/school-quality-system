@@ -46,12 +46,12 @@ export function exportToExcel(
     if (metadata.reportTitle) {
       wsData.push([metadata.reportTitle]);
     }
-    const metaParts: string[] = [];
-    if (metadata.schoolName) metaParts.push(`المدرسة: ${metadata.schoolName}`);
-    if (metadata.schoolCode) metaParts.push(`الرقم الوزاري/الرمز: ${metadata.schoolCode}`);
-    if (metadata.academicYear) metaParts.push(`العام الدراسي: ${metadata.academicYear}`);
-    metaParts.push(`تاريخ التصدير: ${new Date().toLocaleDateString('ar-SA')}`);
-    wsData.push([metaParts.join('  |  ')]);
+    const metaRow: (string | number)[] = [];
+    if (metadata.schoolName) metaRow.push(`المدرسة: ${metadata.schoolName}`);
+    if (metadata.schoolCode) metaRow.push(`الرمز الوزاري: ${metadata.schoolCode}`);
+    if (metadata.academicYear) metaRow.push(`العام الدراسي: ${metadata.academicYear}`);
+    metaRow.push(`تاريخ التصدير: ${new Date().toLocaleDateString('ar-SA')}`);
+    wsData.push(metaRow);
     wsData.push([]); // سطر فارغ فاصل قبل الجدول
   }
 
@@ -62,6 +62,17 @@ export function exportToExcel(
 
   // ضبط اتجاه الورقة ليكون RTL متوافقاً مع اللغة العربية
   ws['!dir'] = 'rtl';
+
+  // ضبط أبعاد الأعمدة تلقائياً لمنع تداخل النصوص والقص
+  const colWidths = headers.map((h, i) => {
+    let maxLen = h.length;
+    rows.forEach((r) => {
+      const val = r[i] !== null && r[i] !== undefined ? String(r[i]) : '';
+      if (val.length > maxLen) maxLen = val.length;
+    });
+    return { wch: Math.min(60, Math.max(16, maxLen + 3)) };
+  });
+  ws['!cols'] = colWidths;
 
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, sheetName || 'البيانات');

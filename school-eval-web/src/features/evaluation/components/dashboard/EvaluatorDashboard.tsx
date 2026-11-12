@@ -22,6 +22,7 @@ import {
   FileSpreadsheet,
 } from 'lucide-react';
 import { evaluatorApi } from '../../api/evaluatorApi';
+import { useAuth } from '../../../auth/AuthContext';
 import { DetailedReportExportModal } from '../reports/DetailedReportExportModal';
 
 interface EvaluatorDashboardProps {
@@ -33,6 +34,7 @@ export const EvaluatorDashboard: React.FC<EvaluatorDashboardProps> = ({
   onNavigate,
   isLocked = false,
 }) => {
+  const { user } = useAuth();
   const { dashboardData, isLoading, error, refreshDashboard } = useEvaluatorDashboard();
   const [selectedStandardIds, setSelectedStandardIds] = useState<number[]>([]);
   const [isExportingPdf, setIsExportingPdf] = useState(false);
@@ -857,8 +859,8 @@ export const EvaluatorDashboard: React.FC<EvaluatorDashboardProps> = ({
           totalIndicatorsCount: dashboardData.kpis.totalIndicators,
           totalEvidencesCount: dashboardData.kpis.documentedEvidences,
         } : null}
-        schoolName={school?.schoolName}
-        schoolCode={school?.schoolId ? String(school.schoolId) : 'SCH-001'}
+        schoolName={school?.schoolName || user?.school?.schoolName}
+        schoolCode={school?.schoolCode || user?.school?.schoolCode || (school?.schoolId ? `SCH-${school.schoolId}` : 'SCH-001')}
       />
     </div>
   );

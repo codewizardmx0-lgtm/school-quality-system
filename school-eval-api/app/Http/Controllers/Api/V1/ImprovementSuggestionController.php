@@ -56,22 +56,22 @@ class ImprovementSuggestionController extends Controller
             }
         }
 
-        // جلب نتائج التقييم الأقل من التقدير المستهدف
+        // جلب نتائج التقييم الأقل من التقدير المستهدف مع المعايير
         $lowResults = EvaluationResult::query()
             ->where('evaluation_id', $evaluation->evaluation_id)
             ->where('score', '<', $targetScore)
-            ->with(['indicator'])
+            ->with(['indicator.subStandard.standard'])
             ->orderBy('score', 'asc')
             ->get();
 
-        // معرفات النتائج المتبناة مسبقاً في جدول improvement_areas
-        $adoptedResultIds = ImprovementArea::query()
+        // مجالات التحسين المتبناة مسبقاً في جدول improvement_areas
+        $adoptedAreas = ImprovementArea::query()
             ->whereIn('result_id', $lowResults->pluck('result_id'))
-            ->pluck('result_id')
-            ->flip()
-            ->toArray();
+            ->get(['area_id', 'result_id']);
 
-        $suggestions = $lowResults->map(function ($result) use ($targetScore, $adoptedResultIds) {
+        $adoptedAreaMap = $adoptedAreas->pluck('area_id', 'result_id')->toArray();
+
+        $suggestions = $lowResults->map(function ($result) use ($targetScore, $adoptedAreaMap) {
             $isHigh = ($result->score <= 1);
             $suggestedPriority = $isHigh ? 'High' : 'Medium';
             $priorityLabel = $isHigh ? 'عالية' : 'متوسطة';
@@ -79,15 +79,18 @@ class ImprovementSuggestionController extends Controller
             return [
                 'resultId'          => (int) $result->result_id,
                 'indicatorId'       => (int) $result->indicator_id,
-                'indicatorCode'     => $result->indicator?->indicator_number ?? '',
+                'indicatorCode'     => $result->indicator?->code ?? '',
                 'indicatorName'     => $result->indicator?->name ?? '',
+                'standardCode'      => $result->indicator?->subStandard?->standard?->code ?? '',
+                'standardName'      => $result->indicator?->subStandard?->standard?->name ?? 'المعايير الوطنية',
                 'score'             => (int) $result->score,
                 'targetScore'       => $targetScore,
                 'gap'               => $targetScore - (int) $result->score,
                 'suggestedPriority' => $suggestedPriority,
                 'priorityLabel'     => $priorityLabel,
                 'suggestedName'     => 'تحسين أداء: ' . ($result->indicator?->name ?? 'المؤشر'),
-                'isAlreadyAdopted'  => isset($adoptedResultIds[$result->result_id]),
+                'isAlreadyAdopted'  => isset($adoptedAreaMap[$result->result_id]),
+                'adoptedAreaId'     => $adoptedAreaMap[$result->result_id] ?? null,
             ];
         })->values();
 

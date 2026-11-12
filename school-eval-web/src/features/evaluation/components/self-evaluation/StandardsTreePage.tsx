@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { DetailedReportExportModal } from '../reports/DetailedReportExportModal';
 import { SafeResetConfirmModal } from './SafeResetConfirmModal';
+import { useAuth } from '../../../auth/AuthContext';
 
 interface StandardsTreePageProps {
   onSelectIndicator: (indicatorId: number) => void;
@@ -27,6 +28,7 @@ export const StandardsTreePage: React.FC<StandardsTreePageProps> = ({
   isLocked = false,
   onResetSuccess,
 }) => {
+  const { user } = useAuth();
   const { treeData, isLoadingTree, resetStandardAssessment, reloadTree } = useSelfEvaluation(undefined, isLocked);
   const [searchTerm, setSearchTerm] = useState('');
   const [expandedStandards, setExpandedStandards] = useState<Record<number, boolean>>({ 1: true, 2: true });
@@ -603,6 +605,8 @@ export const StandardsTreePage: React.FC<StandardsTreePageProps> = ({
       <DetailedReportExportModal
         isOpen={isExportModalOpen}
         onClose={() => setIsExportModalOpen(false)}
+        schoolName={user?.school?.schoolName}
+        schoolCode={user?.school?.schoolCode || (user?.school?.schoolId ? `SCH-${user.school.schoolId}` : 'SCH-001')}
       />
 
       {/* نافذة تأكيد التصفير الآمن لمعيار كامل مع Double Confirm (الملاحظة 11) */}

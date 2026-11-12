@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import type { EvidenceItem, EvaluatorScreen } from '../../api/evaluationTypes';
-import { File, Download, RefreshCw, CheckCircle2, AlertCircle, Clock, Link2, Pencil, ExternalLink } from 'lucide-react';
+import { File, Download, RefreshCw, Clock, Link2, Pencil, ExternalLink, History } from 'lucide-react';
 
 interface EvidenceCardProps {
   evidence: EvidenceItem;
@@ -8,6 +8,7 @@ interface EvidenceCardProps {
   onDownload: (evidence: EvidenceItem) => void;
   onManageLinks?: (evidence: EvidenceItem) => void;
   onEditMetadata?: (evidence: EvidenceItem) => void;
+  onViewVersions?: (evidence: EvidenceItem) => void;
   onNavigate?: (screen: EvaluatorScreen, param?: number) => void;
   readOnly?: boolean;
 }
@@ -18,10 +19,23 @@ export const EvidenceCard: React.FC<EvidenceCardProps> = ({
   onDownload,
   onManageLinks,
   onEditMetadata,
+  onViewVersions,
   onNavigate,
   readOnly = false,
 }) => {
-  const isCompliant = evidence.verificationStatus === 'Compliant';
+  const [isNavOpen, setIsNavOpen] = useState(false);
+
+  const docTypeLabels: Record<string, { label: string; bg: string; text: string; border: string }> = {
+    minutes: { label: 'محضر اجتماع', bg: '#EFF6FF', text: '#1D4ED8', border: '#BFDBFE' },
+    plan: { label: 'خطة عمل', bg: '#ECFDF5', text: '#047857', border: '#A7F3D0' },
+    record: { label: 'سجل رسمي', bg: '#F5F3FF', text: '#6D28D9', border: '#DDD6FE' },
+    report: { label: 'تقرير وإحصائية', bg: '#FFFBEB', text: '#B45309', border: '#FDE68A' },
+    board: { label: 'لوحة إعلانات', bg: '#FDF2F8', text: '#BE185D', border: '#FBCFE8' },
+    image: { label: 'صورة فوتوغرافية', bg: '#F0FDFA', text: '#0F766E', border: '#99F6E4' },
+    evidence: { label: 'شاهد توثيقي', bg: '#F8FAFC', text: '#334155', border: '#CBD5E1' },
+    other: { label: 'أخرى / عام', bg: '#F8FAFC', text: '#475569', border: '#E2E8F0' },
+  };
+  const typeConf = docTypeLabels[evidence.documentType || 'other'] || docTypeLabels.other;
 
   return (
     <div
@@ -58,32 +72,16 @@ export const EvidenceCard: React.FC<EvidenceCardProps> = ({
                 fontWeight: 700,
                 padding: '3px 8px',
                 borderRadius: '6px',
-                backgroundColor: isCompliant ? '#ECFDF5' : '#FEF3C7',
-                color: isCompliant ? '#059669' : '#B45309',
-                border: `1px solid ${isCompliant ? '#A7F3D0' : '#FDE68A'}`,
-                display: 'flex',
+                backgroundColor: typeConf.bg,
+                color: typeConf.text,
+                border: `1px solid ${typeConf.border}`,
+                display: 'inline-flex',
                 alignItems: 'center',
                 gap: '4px',
               }}
             >
-              {isCompliant ? <CheckCircle2 size={13} /> : <AlertCircle size={13} />}
-              {evidence.verificationStatusArabic}
+              {typeConf.label}
             </span>
-
-            {evidence.documentTypeArabic && (
-              <span
-                style={{
-                  fontSize: '10.5px',
-                  fontWeight: 600,
-                  padding: '2px 7px',
-                  borderRadius: '6px',
-                  backgroundColor: '#F1F5F9',
-                  color: '#475569',
-                }}
-              >
-                {evidence.documentTypeArabic}
-              </span>
-            )}
           </div>
 
           <span
@@ -211,27 +209,95 @@ export const EvidenceCard: React.FC<EvidenceCardProps> = ({
         </span>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-          {onNavigate && evidence.indicatorId && (
-            <button
-              onClick={() => onNavigate('rubric-assessment', evidence.indicatorId)}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '3px',
-                padding: '5px 8px',
-                borderRadius: '6px',
-                backgroundColor: '#F0FDF4',
-                border: '1px solid #BBF7D0',
-                color: '#15803D',
-                fontSize: '11px',
-                fontWeight: 700,
-                cursor: 'pointer',
-              }}
-              title="الانتقال المباشر للمؤشر"
-            >
-              <ExternalLink size={11} />
-              المؤشر
-            </button>
+          {onNavigate && (evidence.indicatorId || (evidence.linkedIndicators && evidence.linkedIndicators.length > 0)) && (
+            <div style={{ position: 'relative' }}>
+              <button
+                onClick={() => {
+                  const count = evidence.linkedIndicators?.length || (evidence.indicatorId ? 1 : 0);
+                  if (count > 1) {
+                    setIsNavOpen((prev) => !prev);
+                  } else {
+                    const targetId = evidence.indicatorId || evidence.linkedIndicators?.[0]?.indicatorId;
+                    if (targetId) onNavigate('rubric-assessment', targetId);
+                  }
+                }}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '3px',
+                  padding: '5px 8px',
+                  borderRadius: '6px',
+                  backgroundColor: '#F0FDF4',
+                  border: '1px solid #BBF7D0',
+                  color: '#15803D',
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                }}
+                title="الانتقال المباشر للمؤشر"
+              >
+                <ExternalLink size={11} />
+                <span>المؤشر</span>
+                {evidence.linkedIndicators && evidence.linkedIndicators.length > 1 && (
+                  <span style={{ fontSize: '9.5px', padding: '0 4px', borderRadius: '8px', backgroundColor: '#DCFCE7' }}>
+                    ({evidence.linkedIndicators.length})
+                  </span>
+                )}
+              </button>
+
+              {isNavOpen && evidence.linkedIndicators && evidence.linkedIndicators.length > 1 && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    bottom: 'calc(100% + 4px)',
+                    right: 0,
+                    zIndex: 50,
+                    backgroundColor: '#FFFFFF',
+                    border: '1px solid #CBD5E1',
+                    borderRadius: '8px',
+                    boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.15)',
+                    padding: '6px',
+                    minWidth: '200px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '4px',
+                    textAlign: 'right',
+                  }}
+                >
+                  <div style={{ fontSize: '10.5px', fontWeight: 800, color: '#64748B', padding: '2px 4px', borderBottom: '1px solid #F1F5F9' }}>
+                    اختر المؤشر المستهدف:
+                  </div>
+                  {evidence.linkedIndicators.map((li) => (
+                    <button
+                      key={li.indicatorId}
+                      type="button"
+                      onClick={() => {
+                        setIsNavOpen(false);
+                        onNavigate('rubric-assessment', li.indicatorId);
+                      }}
+                      style={{
+                        padding: '5px 6px',
+                        borderRadius: '4px',
+                        border: 'none',
+                        backgroundColor: '#F8FAFC',
+                        textAlign: 'right',
+                        cursor: 'pointer',
+                        fontSize: '11px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: '6px',
+                      }}
+                    >
+                      <span style={{ fontWeight: 800, color: '#2563EB' }}>{li.indicatorCode}</span>
+                      <span style={{ color: '#334155', maxWidth: '120px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={li.indicatorTitle}>
+                        {li.indicatorTitle}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           )}
 
           {!readOnly && onEditMetadata && (
@@ -322,6 +388,29 @@ export const EvidenceCard: React.FC<EvidenceCardProps> = ({
             <Download size={12} />
             تحميل
           </button>
+
+          {onViewVersions && (
+            <button
+              onClick={() => onViewVersions(evidence)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '3px',
+                padding: '5px 8px',
+                borderRadius: '6px',
+                backgroundColor: '#F8FAFC',
+                border: '1px solid #CBD5E1',
+                color: '#4F46E5',
+                fontSize: '11px',
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+              title="استعراض سجل الإصدارات التاريخية للشاهد"
+            >
+              <History size={11} />
+              الإصدارات
+            </button>
+          )}
         </div>
       </div>
     </div>

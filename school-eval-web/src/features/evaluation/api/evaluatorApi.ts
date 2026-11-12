@@ -159,6 +159,35 @@ export const evaluatorApi = {
   },
 
   /**
+   * 6c. GET /api/v1/evidences/documents/{documentId}/versions
+   * استرجاع سجل الإصدارات التاريخية للشاهد
+   */
+  async getDocumentVersions(documentId: number): Promise<{
+    document: {
+      id: number;
+      title: string;
+      documentType: string;
+      description?: string;
+      totalVersions: number;
+    };
+    versions: Array<{
+      versionId: number;
+      documentId: number;
+      versionNo: number;
+      isCurrent: boolean;
+      fileName: string;
+      fileSize: number;
+      mimeType: string;
+      notes?: string;
+      createdAt: string;
+      downloadUrl: string;
+    }>;
+  }> {
+    const response = await get<any>(`/evidences/documents/${documentId}/versions`);
+    return response.data!;
+  },
+
+  /**
    * 7. POST /api/v1/ai/analyses
    * Trigger automated gap analysis on scores
    */
@@ -385,12 +414,16 @@ export const evaluatorApi = {
     documentId: number;
     versionId?: number;
     indicatorIds: number[];
+    unlinkedIndicatorIds?: number[];
+    coveredRequirements?: number[];
     justification?: string;
   }): Promise<void> {
     await post('/evaluator/evidence-links/multi', {
       documentId: payload.documentId,
       versionId: payload.versionId,
       indicatorIds: payload.indicatorIds,
+      unlinkedIndicatorIds: payload.unlinkedIndicatorIds,
+      coveredRequirements: payload.coveredRequirements,
       justification: payload.justification,
     });
   },
@@ -498,6 +531,8 @@ export const evaluatorApi = {
         indicatorId: s.indicatorId || s.indicator_id || s.resultId,
         indicatorCode: s.indicatorCode || s.indicator_code || 'IND-GAP',
         indicatorName: s.indicatorName || s.indicator_name || s.indicatorTitle || `مؤشر فجوة #${s.indicatorId || s.resultId}`,
+        standardCode: s.standardCode || s.standard_code || '',
+        standardName: s.standardName || s.standard_name || 'المعايير الوطنية',
         score,
         targetScore: target,
         gap,
@@ -528,6 +563,14 @@ export const evaluatorApi = {
       priority: payload.priority || 'High',
       targetScore: payload.targetScore,
     });
+  },
+
+  /**
+   * DELETE /api/v1/improvement-areas/{id}
+   * Cancel adopting an improvement area
+   */
+  async deleteImprovementArea(areaId: number): Promise<void> {
+    await del(`/improvement-areas/${areaId}`);
   },
 
   /**
@@ -676,5 +719,13 @@ export const evaluatorApi = {
       message: raw.message || '',
       recommendations: Array.isArray(raw.recommendations) ? raw.recommendations : [],
     };
+  },
+
+  /**
+   * 34. POST /api/v1/evaluation-results/{resultId}/notes
+   * Add a reviewer or evaluator note to an evaluation result
+   */
+  async addEvaluationResultNote(resultId: number, text: string): Promise<void> {
+    await post(`/evaluation-results/${resultId}/notes`, { text });
   },
 };

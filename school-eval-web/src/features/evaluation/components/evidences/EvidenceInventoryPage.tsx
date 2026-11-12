@@ -7,24 +7,28 @@ import {
   ChevronDown,
   ChevronUp,
   Link2,
+  ExternalLink,
 } from 'lucide-react';
 import { evaluatorApi } from '../../api/evaluatorApi';
 import type {
   EvidenceInventoryData,
   EvidenceInventoryStandard,
   EvidenceItem,
+  EvaluatorScreen,
 } from '../../api/evaluationTypes';
 import { LinkEvidenceModal } from './LinkEvidenceModal';
 
 interface EvidenceInventoryPageProps {
   onSuccessToast?: (msg: string) => void;
   onErrorToast?: (msg: string) => void;
+  onNavigate?: (screen: EvaluatorScreen, param?: number) => void;
   readOnly?: boolean;
 }
 
 export const EvidenceInventoryPage: React.FC<EvidenceInventoryPageProps> = ({
   onSuccessToast,
   onErrorToast,
+  onNavigate,
   readOnly = false,
 }) => {
   const [data, setData] = useState<EvidenceInventoryData | null>(null);
@@ -423,6 +427,62 @@ export const EvidenceInventoryPage: React.FC<EvidenceInventoryPageProps> = ({
                             {ind.domainName && (
                               <div style={{ fontSize: '11.5px', color: '#64748b' }}>المجال: {ind.domainName}</div>
                             )}
+
+                            {/* تفصيل متطلبات المؤشر والشواهد المغطية لكل متطلب */}
+                            {Array.isArray((ind as any).requirements) && (ind as any).requirements.length > 0 && (
+                              <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                                {(ind as any).requirements.map((req: any) => (
+                                  <div
+                                    key={req.requirementId}
+                                    style={{
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: '6px',
+                                      fontSize: '11px',
+                                      padding: '2px 6px',
+                                      borderRadius: '4px',
+                                      backgroundColor: req.isCovered ? '#F0FDF4' : '#FEF2F2',
+                                      border: `1px solid ${req.isCovered ? '#BBF7D0' : '#FECACA'}`,
+                                    }}
+                                  >
+                                    <span style={{ color: req.isCovered ? '#15803D' : '#DC2626', fontWeight: 700 }}>
+                                      {req.isCovered ? '✓' : '✗'}
+                                    </span>
+                                    <span style={{ fontWeight: 600, color: '#1E293B' }}>{req.title}:</span>
+                                    <span style={{ color: req.isCovered ? '#166534' : '#991B1B' }}>
+                                      {req.isCovered && req.coveringLinks && req.coveringLinks.length > 0
+                                        ? `يغطيه: ${req.coveringLinks.map((cl: any) => cl.title).join('، ')}`
+                                        : 'غير مستوفى بشاهد معتمد'}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+
+                            {onNavigate && (
+                              <button
+                                type="button"
+                                onClick={() => onNavigate('rubric-assessment', ind.indicatorId)}
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  padding: '3px 8px',
+                                  borderRadius: '5px',
+                                  backgroundColor: '#EFF6FF',
+                                  border: '1px solid #BFDBFE',
+                                  color: '#1D4ED8',
+                                  fontSize: '11px',
+                                  fontWeight: 700,
+                                  cursor: 'pointer',
+                                  marginTop: '6px',
+                                }}
+                                title="الانتقال إلى استمارة رصد المؤشر"
+                              >
+                                <ExternalLink size={11} />
+                                <span>الانتقال للمؤشر</span>
+                              </button>
+                            )}
                           </td>
                           <td style={{ padding: '12px 8px', textAlign: 'center' }}>
                             <span style={{ fontWeight: 700, color: ind.isSufficient ? '#16a34a' : '#dc2626' }}>
@@ -463,7 +523,7 @@ export const EvidenceInventoryPage: React.FC<EvidenceInventoryPageProps> = ({
                                 }}
                               >
                                 <AlertTriangle size={13} />
-                                ناقص ({ind.mandatoryRequiredCount - ind.uploadedEvidenceCount})
+                                ناقص ({ind.missingCount ?? Math.max(0, ind.mandatoryRequiredCount - (ind.effectiveCoveredCount ?? ind.uploadedEvidenceCount))})
                               </span>
                             )}
                           </td>

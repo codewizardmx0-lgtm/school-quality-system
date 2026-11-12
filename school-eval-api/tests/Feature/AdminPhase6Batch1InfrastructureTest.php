@@ -22,11 +22,13 @@ class AdminPhase6Batch1InfrastructureTest extends TestCase
 
     protected User $admin;
     protected User $evaluator;
+    protected string $defaultPassword;
 
     protected function setUp(): void
     {
         parent::setUp();
 
+        $this->defaultPassword = env('SEED_DEFAULT_PASSWORD') ?: 'ChangeMeDevPassword@2026';
         $this->seed(GovernorateSeeder::class);
         $this->seed(DirectorateSeeder::class);
         $this->seed(SchoolSeeder::class);
@@ -152,7 +154,7 @@ class AdminPhase6Batch1InfrastructureTest extends TestCase
 
         $response = $this->postJson('/api/v1/auth/login', [
             'username' => 'admin',
-            'password' => 'ChangeMeDevPassword@2026',
+            'password' => $this->defaultPassword,
         ]);
 
         // يجب ألا يحظر برمز 503

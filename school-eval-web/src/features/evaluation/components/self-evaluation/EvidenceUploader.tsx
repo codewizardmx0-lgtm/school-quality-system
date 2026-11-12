@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import type { LinkedEvidenceBrief, EvidenceRequirementItem } from '../../api/evaluationTypes';
-import { UploadCloud, File, RefreshCw, AlertCircle, Trash2, FileCheck, Link2, Download } from 'lucide-react';
+import { UploadCloud, File, RefreshCw, AlertCircle, FileCheck, Link2, Download, Pencil } from 'lucide-react';
 import { evaluatorApi } from '../../api/evaluatorApi';
 
 interface EvidenceUploaderProps {
@@ -15,6 +15,7 @@ interface EvidenceUploaderProps {
   ) => Promise<unknown>;
   onUnlinkEvidence?: (linkId: number) => Promise<void>;
   onManageEvidenceLink?: (link: LinkedEvidenceBrief, mode: 'single' | 'multi' | 'unlink') => void;
+  onEditEvidenceMetadata?: (link: LinkedEvidenceBrief) => void;
   onUpdateCoveredRequirements?: (linkId: number, coveredRequirements: number[]) => Promise<void>;
   isUploading?: boolean;
   uploadProgress?: number;
@@ -28,6 +29,7 @@ export const EvidenceUploader: React.FC<EvidenceUploaderProps> = ({
   onUploadFile,
   onUnlinkEvidence,
   onManageEvidenceLink,
+  onEditEvidenceMetadata,
   onUpdateCoveredRequirements,
   isUploading = false,
   uploadProgress = 0,
@@ -108,6 +110,12 @@ export const EvidenceUploader: React.FC<EvidenceUploaderProps> = ({
       }
     }
 
+    // شرط حتمي: إذا كان للمؤشر متطلبات إلزامية، يجب تحديد متطلب واحد على الأقل قبل الرفع
+    if (mandatoryRequirements.length > 0 && selectedUploadReqIds.length === 0) {
+      setErrorMessage('يرجى تحديد متطلب إلزامي واحد على الأقل ليتم تغطيته بواسطة هذا الشاهد قبل الرفع.');
+      return;
+    }
+
     try {
       for (const file of files) {
         await onUploadFile(
@@ -126,7 +134,13 @@ export const EvidenceUploader: React.FC<EvidenceUploaderProps> = ({
 
   const handleUnlink = async (linkId: number) => {
     if (readOnly || !onUnlinkEvidence) return;
-    if (!window.confirm('هل أنت متأكد من فك ارتباط هذا الشاهد بالمؤشر؟ لن يتم حذف الملف الأصلي من المستودع.')) {
+    const targetLink = evidenceLinks.find((l) => l.linkId === linkId);
+    const coveredReqs = targetLink?.coveredRequirements || [];
+    let confirmMsg = 'هل أنت متأكد من فك ارتباط هذا الشاهد بالمؤشر؟ لن يتم حذف الملف الأصلي من المستودع.';
+    if (coveredReqs.length > 0) {
+      confirmMsg = `تنبيه: هذا الشاهد يغطي (${coveredReqs.length}) متطلب(ات) إلزامي(ة) للمؤشر. سيؤدي فك الارتباط إلى نقص في تغطية هذه المتطلبات ما لم تكن مغطاة بشاهد آخر.\n\nهل تريد المتابعة وفك الارتباط؟`;
+    }
+    if (!window.confirm(confirmMsg)) {
       return;
     }
     setUnlinkingId(linkId);
@@ -264,6 +278,7 @@ export const EvidenceUploader: React.FC<EvidenceUploaderProps> = ({
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
             {mandatoryRequirements.map((req) => {
               const checked = selectedUploadReqIds.includes(req.id);
+              const alreadyCovered = evidenceLinks.some((l) => (l.coveredRequirements || []).includes(req.id));
               return (
                 <label
                   key={req.id}
@@ -273,8 +288,8 @@ export const EvidenceUploader: React.FC<EvidenceUploaderProps> = ({
                     gap: '6px',
                     padding: '5px 10px',
                     borderRadius: '6px',
-                    backgroundColor: checked ? '#FEF3C7' : '#FFFFFF',
-                    border: `1px solid ${checked ? '#D97706' : '#E2E8F0'}`,
+                    backgroundColor: checked ? '#FEF3C7' : alreadyCovered ? '#F0FDF4' : '#FFFFFF',
+                    border: `1px solid ${checked ? '#D97706' : alreadyCovered ? '#86EFAC' : '#E2E8F0'}`,
                     fontSize: '12px',
                     fontWeight: 600,
                     color: '#1E293B',
@@ -288,6 +303,21 @@ export const EvidenceUploader: React.FC<EvidenceUploaderProps> = ({
                     style={{ accentColor: '#D97706' }}
                   />
                   <span>{req.title}</span>
+                  {alreadyCovered && (
+                    <span
+                      style={{
+                        fontSize: '10px',
+                        padding: '1px 5px',
+                        borderRadius: '4px',
+                        backgroundColor: '#DCFCE7',
+                        color: '#15803D',
+                        fontWeight: 700,
+                        marginRight: '4px',
+                      }}
+                    >
+                      ✓ مستوفى بشاهد آخر
+                    </span>
+                  )}
                 </label>
               );
             })}
@@ -436,41 +466,43 @@ export const EvidenceUploader: React.FC<EvidenceUploaderProps> = ({
                           gap: '4px',
                           padding: '5px 10px',
                           borderRadius: '6px',
-                          backgroundColor: '#ECFDF5',
-                          color: '#047857',
+                          backgroundColor: '#EFF6FF',
+                          color: '#1D4ED8',
                           fontSize: '11.5px',
                           fontWeight: 700,
-                          border: '1px solid #A7F3D0',
+                          border: '1px solid #BFDBFE',
                           cursor: 'pointer',
                         }}
                         title="إدارة علاقات الشاهد (ربط بمؤشرات أخرى، نقل لمؤشر آخر، أو فك الارتباط)"
                       >
                         <Link2 size={12} />
-                        <span>ربط / نقل الشاهد</span>
+                        <span>إدارة الشاهد (ربط / نقل / فك)</span>
                       </button>
                     )}
 
-                    <button
-                      type="button"
-                      onClick={() => handleDownloadLink(link)}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '4px',
-                        padding: '5px 10px',
-                        borderRadius: '6px',
-                        backgroundColor: '#ECFDF5',
-                        color: '#059669',
-                        fontSize: '11.5px',
-                        fontWeight: 700,
-                        border: '1px solid #A7F3D0',
-                        cursor: 'pointer',
-                      }}
-                      title="تحميل ومعاينة هذا الشاهد"
-                    >
-                      <Download size={12} />
-                      <span>تحميل</span>
-                    </button>
+                    {onEditEvidenceMetadata && (
+                      <button
+                        type="button"
+                        onClick={() => onEditEvidenceMetadata(link)}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          padding: '5px 10px',
+                          borderRadius: '6px',
+                          backgroundColor: '#F8FAFC',
+                          color: '#334155',
+                          fontSize: '11.5px',
+                          fontWeight: 600,
+                          border: '1px solid #CBD5E1',
+                          cursor: 'pointer',
+                        }}
+                        title="تعديل بيانات الشاهد والنوع والمبررات"
+                      >
+                        <Pencil size={12} />
+                        <span>تعديل البيانات</span>
+                      </button>
+                    )}
 
                     <button
                       type="button"
@@ -496,26 +528,49 @@ export const EvidenceUploader: React.FC<EvidenceUploaderProps> = ({
 
                     <button
                       type="button"
-                      disabled={unlinkingId === link.linkId}
-                      onClick={() => handleUnlink(link.linkId)}
+                      onClick={() => handleDownloadLink(link)}
                       style={{
                         display: 'flex',
                         alignItems: 'center',
                         gap: '4px',
                         padding: '5px 10px',
                         borderRadius: '6px',
-                        backgroundColor: '#FEF2F2',
-                        color: '#DC2626',
+                        backgroundColor: '#ECFDF5',
+                        color: '#059669',
                         fontSize: '11.5px',
                         fontWeight: 700,
-                        border: '1px solid #FECACA',
+                        border: '1px solid #A7F3D0',
                         cursor: 'pointer',
                       }}
-                      title="فك ارتباط هذا الشاهد بالمؤشر"
+                      title="تحميل ومعاينة هذا الشاهد"
                     >
-                      <Trash2 size={12} />
-                      <span>{unlinkingId === link.linkId ? 'جارٍ الفك...' : 'فك الارتباط'}</span>
+                      <Download size={12} />
+                      <span>تحميل</span>
                     </button>
+
+                    {!onManageEvidenceLink && onUnlinkEvidence && (
+                      <button
+                        type="button"
+                        disabled={unlinkingId === link.linkId}
+                        onClick={() => handleUnlink(link.linkId)}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          padding: '5px 10px',
+                          borderRadius: '6px',
+                          backgroundColor: '#FEF2F2',
+                          color: '#DC2626',
+                          fontSize: '11.5px',
+                          fontWeight: 700,
+                          border: '1px solid #FECACA',
+                          cursor: 'pointer',
+                        }}
+                        title="فك ارتباط هذا الشاهد بالمؤشر"
+                      >
+                        <span>{unlinkingId === link.linkId ? 'جارٍ الفك...' : 'فك الارتباط'}</span>
+                      </button>
+                    )}
                   </div>
                 )}
               </div>

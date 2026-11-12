@@ -183,6 +183,40 @@ class ImprovementAreaController extends Controller
     }
 
     /**
+     * إلغاء تبني مجال التحسين وحذفه ما لم تكن هناك إجراءات تنفيذية بدأت بالفعل.
+     *
+     * DELETE /api/v1/improvement-areas/{id}
+     */
+    public function destroy(Request $request, int $id): JsonResponse
+    {
+        $user = $request->user();
+        if (!$user->hasPermission('plans.manage')) {
+            return ApiResponse::forbidden('غير مصرح لك بإلغاء أو حذف مجال التحسين.');
+        }
+
+        $area = ImprovementArea::with(['actions', 'result.evaluation'])->find($id);
+        if (!$area) {
+            return ApiResponse::notFound('مجال التحسين المطلوب غير موجود.');
+        }
+
+        if ($user->user_type === 'school') {
+            $evalSchoolId = $area->result?->evaluation?->school_id;
+            if ($evalSchoolId && (int) $evalSchoolId !== (int) $user->school_id) {
+                return ApiResponse::forbidden('غير مصرح لك بحذف مجال تحسين لمدرسة أخرى.');
+            }
+        }
+
+        if ($area->actions()->exists()) {
+            return ApiResponse::error('لا يمكن إلغاء تبني مجال التحسين لوجود إجراءات تنفيذية مرتبطة به. يرجى حذف الإجراءات أولاً.', 422);
+        }
+
+        \App\Models\PlanImprovementArea::where('area_id', $area->area_id)->delete();
+        $area->delete();
+
+        return ApiResponse::success(null, 'تم إلغاء تبني مجال التحسين بنجاح.');
+    }
+
+    /**
      * تنسيق بيانات مجال التحسين للاستجابة.
      */
     private function formatArea(ImprovementArea $area): array

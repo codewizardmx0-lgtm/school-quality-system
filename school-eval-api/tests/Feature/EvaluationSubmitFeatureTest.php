@@ -173,6 +173,7 @@ class EvaluationSubmitFeatureTest extends TestCase
                         'indicator_id'         => $indicatorId,
                         'document_version_id'  => $version->id,
                         'justification'        => 'مبررات ودلالات الشاهد',
+                        'covered_requirements' => [$req->requirement_id],
                         'status'               => 'completed',
                     ]);
                 }

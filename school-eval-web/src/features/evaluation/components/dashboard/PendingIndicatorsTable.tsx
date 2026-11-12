@@ -86,8 +86,10 @@ export const PendingIndicatorsTable: React.FC<PendingIndicatorsTableProps> = ({
   };
 
   const getEvidenceBadge = (item: PendingIndicatorItem) => {
+    const isSufficient = item.evidenceStatus === 'sufficient';
     const count = item.evidenceCount ?? 0;
-    const isSufficient = count > 0 || item.evidenceStatus === 'sufficient';
+    const covered = item.coveredRequirementsCount ?? count;
+    const mandatory = item.mandatoryRequirementsCount ?? 0;
 
     if (isSufficient) {
       return (
@@ -106,10 +108,14 @@ export const PendingIndicatorsTable: React.FC<PendingIndicatorsTableProps> = ({
           }}
         >
           <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#059669' }} />
-          مستوفٍ ({count} {count === 1 ? 'شاهد' : count === 2 ? 'شاهدان' : 'شواهد'})
+          مستوفٍ ({count} شاهد{mandatory > 0 ? ` • غطى ${covered}/${mandatory}` : ''})
         </span>
       );
     }
+
+    const missingLabel = mandatory > 0
+      ? `ناقص (مطلوب ${mandatory} • غطى ${covered} • ناقص ${Math.max(0, mandatory - covered)})`
+      : `ناقص (${count} شاهد)`;
 
     return (
       <span
@@ -127,7 +133,7 @@ export const PendingIndicatorsTable: React.FC<PendingIndicatorsTableProps> = ({
         }}
       >
         <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#DC2626' }} />
-        ناقص (0 شواهد)
+        {missingLabel}
       </span>
     );
   };

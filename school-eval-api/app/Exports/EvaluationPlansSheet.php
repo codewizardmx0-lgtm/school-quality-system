@@ -7,6 +7,7 @@ use App\Models\ImprovementPlan;
 use Illuminate\Support\Collection;
 use Maatwebsite\Excel\Concerns\FromCollection;
 use Maatwebsite\Excel\Concerns\ShouldAutoSize;
+use Maatwebsite\Excel\Concerns\WithCustomStartCell;
 use Maatwebsite\Excel\Concerns\WithEvents;
 use Maatwebsite\Excel\Concerns\WithHeadings;
 use Maatwebsite\Excel\Concerns\WithStyles;
@@ -14,11 +15,16 @@ use Maatwebsite\Excel\Concerns\WithTitle;
 use Maatwebsite\Excel\Events\AfterSheet;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 
-class EvaluationPlansSheet implements FromCollection, WithHeadings, WithTitle, ShouldAutoSize, WithStyles, WithEvents
+class EvaluationPlansSheet implements FromCollection, WithHeadings, WithTitle, ShouldAutoSize, WithStyles, WithEvents, WithCustomStartCell
 {
     public function __construct(
         protected Evaluation $evaluation
     ) {}
+
+    public function startCell(): string
+    {
+        return 'A6';
+    }
 
     public function title(): string
     {
@@ -102,7 +108,7 @@ class EvaluationPlansSheet implements FromCollection, WithHeadings, WithTitle, S
     public function styles(Worksheet $sheet): array
     {
         return [
-            1 => [
+            6 => [
                 'font' => ['bold' => true, 'color' => ['argb' => 'FFFFFFFF']],
                 'fill' => [
                     'fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID,
@@ -116,7 +122,45 @@ class EvaluationPlansSheet implements FromCollection, WithHeadings, WithTitle, S
     {
         return [
             AfterSheet::class => function(AfterSheet $event) {
-                $event->sheet->getDelegate()->setRightToLeft(true);
+                $sheet = $event->sheet->getDelegate();
+                $sheet->setRightToLeft(true);
+
+                $this->evaluation->loadMissing(['school', 'cycle']);
+                $school = $this->evaluation->school;
+                $schoolName = $school?->name ?? 'المدرسة';
+                $schoolCode = $school?->code ?? $school?->school_id ?? 'SCH-001';
+                $academicYear = $this->evaluation->cycle?->academic_year ?? '2025/2026';
+                $dateStr = now()->format('Y-m-d');
+
+                // الصف 1: عنوان التقرير
+                $sheet->mergeCells('A1:I1');
+                $sheet->setCellValue('A1', 'نظام تقييم وضمان جودة المدارس — ' . $this->title());
+                $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(14)->getColor()->setARGB('FF0F766E');
+                $sheet->getStyle('A1')->getAlignment()->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER);
+
+                // الصف 2: اسم المدرسة ورقمها
+                $sheet->mergeCells('A2:D2');
+                $sheet->setCellValue('A2', 'اسم المدرسة: ' . $schoolName);
+                $sheet->getStyle('A2')->getFont()->setBold(true)->setSize(11);
+
+                $sheet->mergeCells('E2:I2');
+                $sheet->setCellValue('E2', 'الرقم الوزاري / الكود: ' . $schoolCode);
+                $sheet->getStyle('E2')->getFont()->setBold(true)->setSize(11);
+
+                // الصف 3: العام الدراسي وتاريخ التصدير
+                $sheet->mergeCells('A3:D3');
+                $sheet->setCellValue('A3', 'العام الدراسي: ' . $academicYear);
+                $sheet->getStyle('A3')->getFont()->setSize(10);
+
+                $sheet->mergeCells('E3:I3');
+                $sheet->setCellValue('E3', 'تاريخ التصدير: ' . $dateStr);
+                $sheet->getStyle('E3')->getFont()->setSize(10);
+
+                // تنسيق خلفية الترويسة العلوية
+                $sheet->getStyle('A1:I3')->getFill()->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID)
+                    ->getStartColor()->setARGB('FFF0FDF4');
+                $sheet->getStyle('A1:I3')->getBorders()->getAllBorders()->setBorderStyle(\PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN)
+                    ->getColor()->setARGB('FFCBD5E1');
             },
         ];
     }

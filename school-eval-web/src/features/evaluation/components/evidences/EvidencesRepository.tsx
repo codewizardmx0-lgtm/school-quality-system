@@ -9,6 +9,7 @@ import { EvidenceInventoryPage } from './EvidenceInventoryPage';
 import { useToast } from '../../../admin/components/common/useToast';
 import { ToastNotification } from '../../../admin/components/common/ToastNotification';
 import { UploadEvidenceModal } from './UploadEvidenceModal';
+import { DocumentVersionsModal } from './DocumentVersionsModal';
 import { useAuth } from '../../../auth/AuthContext';
 import type { EvidenceItem, EvaluatorScreen } from '../../api/evaluationTypes';
 import {
@@ -26,6 +27,7 @@ import {
   Pencil,
   RefreshCw,
   ExternalLink,
+  History,
 } from 'lucide-react';
 
 interface EvidencesRepositoryProps {
@@ -52,14 +54,17 @@ export const EvidencesRepository: React.FC<EvidencesRepositoryProps> = ({
 
   const [searchTerm, setSearchTerm] = useState('');
   const [linkFilter, setLinkFilter] = useState<'all' | 'linked' | 'unlinked'>('all');
+  const [documentTypeFilter, setDocumentTypeFilter] = useState<string>('all');
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [replaceDocId, setReplaceDocId] = useState<number | undefined>(undefined);
   const [viewMode, setViewMode] = useState<'grid' | 'table'>('table');
   const [activeTab, setActiveTab] = useState<'repository' | 'inventory'>('repository');
   const [selectedEvidenceForLinking, setSelectedEvidenceForLinking] = useState<EvidenceItem | null>(null);
   const [editModalEvidence, setEditModalEvidence] = useState<EvidenceItem | null>(null);
+  const [versionsModalEvidence, setVersionsModalEvidence] = useState<EvidenceItem | null>(null);
   const [isLinkModalOpen, setIsLinkModalOpen] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [navPopoverEvidenceId, setNavPopoverEvidenceId] = useState<number | null>(null);
   const { toasts, addToast, dismissToast } = useToast();
   const { user } = useAuth();
 
@@ -115,7 +120,8 @@ export const EvidencesRepository: React.FC<EvidencesRepositoryProps> = ({
       item.indicatorCode.includes(searchTerm);
     const isUnlinked = Boolean(item.isUnlinked || !item.indicatorId);
     const matchesLink = linkFilter === 'all' || (linkFilter === 'unlinked' ? isUnlinked : !isUnlinked);
-    return matchesSearch && matchesLink;
+    const matchesType = documentTypeFilter === 'all' || item.documentType === documentTypeFilter;
+    return matchesSearch && matchesLink && matchesType;
   });
 
   const handleOpenUpload = (docId?: number) => {
@@ -213,6 +219,7 @@ export const EvidencesRepository: React.FC<EvidencesRepositoryProps> = ({
       {activeTab === 'inventory' ? (
         <EvidenceInventoryPage
           readOnly={readOnly}
+          onNavigate={onNavigate}
           onSuccessToast={(msg) => addToast('success', msg)}
           onErrorToast={(err) => addToast('error', err)}
         />
@@ -482,6 +489,31 @@ export const EvidencesRepository: React.FC<EvidencesRepositoryProps> = ({
             <option value="linked">مرتبطة بمؤشرات</option>
             <option value="unlinked">غير مرتبطة بأي مؤشر</option>
           </select>
+
+          <select
+            value={documentTypeFilter}
+            onChange={(e) => setDocumentTypeFilter(e.target.value)}
+            style={{
+              padding: '8px 12px',
+              borderRadius: '8px',
+              border: '1px solid #CBD5E1',
+              fontSize: '13px',
+              backgroundColor: '#FFFFFF',
+              color: '#334155',
+              outline: 'none',
+              cursor: 'pointer',
+            }}
+          >
+            <option value="all">كافة أنواع الوثائق</option>
+            <option value="evidence">شاهد توثيقي</option>
+            <option value="minutes">محضر اجتماع</option>
+            <option value="plan">خطة عمل</option>
+            <option value="record">سجل رسمي</option>
+            <option value="report">تقرير وإحصائية</option>
+            <option value="board">لوحة إعلانات</option>
+            <option value="image">صورة فوتوغرافية</option>
+            <option value="other">أخرى / عام</option>
+          </select>
         </div>
 
         {/* View Mode & Actions */}
@@ -609,7 +641,7 @@ export const EvidencesRepository: React.FC<EvidencesRepositoryProps> = ({
                   <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: 700, color: '#475569' }}>المؤشر</th>
                   <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: 700, color: '#475569' }}>الإصدار</th>
                   <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: 700, color: '#475569' }}>الحجم والصيغة</th>
-                  <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: 700, color: '#475569' }}>حالة المطابقة</th>
+                  <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: 700, color: '#475569' }}>نوع الوثيقة</th>
                   <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: 700, color: '#475569', textAlign: 'center' }}>الإجراءات</th>
                 </tr>
               </thead>
@@ -658,15 +690,39 @@ export const EvidencesRepository: React.FC<EvidencesRepositoryProps> = ({
                       </div>
                     </td>
                     <td style={{ padding: '14px 16px', fontSize: '12.5px', color: '#334155' }}>
-                      {ev.isUnlinked || !ev.indicatorId ? (
-                        <span style={{ fontSize: '11.5px', fontWeight: 700, color: '#B45309', backgroundColor: '#FFFBEB', border: '1px solid #FDE68A', padding: '3px 8px', borderRadius: '6px' }}>
-                          غير مرتبط بأي مؤشر
-                        </span>
-                      ) : (
-                        <>
-                          <span style={{ fontWeight: 700, color: '#059669' }}>{ev.standardCode}:</span> {ev.standardName}
-                        </>
-                      )}
+                      {(() => {
+                        const uniqueStds: { code: string; name: string }[] = [];
+                        const seenCodes = new Set<string>();
+                        if (ev.linkedIndicators && ev.linkedIndicators.length > 0) {
+                          for (const li of ev.linkedIndicators) {
+                            if (li.standardCode && !seenCodes.has(li.standardCode)) {
+                              seenCodes.add(li.standardCode);
+                              uniqueStds.push({ code: li.standardCode, name: li.standardName || '' });
+                            }
+                          }
+                        }
+                        if (uniqueStds.length === 0 && ev.standardCode && !seenCodes.has(ev.standardCode)) {
+                          uniqueStds.push({ code: ev.standardCode, name: ev.standardName || '' });
+                        }
+
+                        if (uniqueStds.length === 0 || ev.isUnlinked) {
+                          return (
+                            <span style={{ fontSize: '11.5px', fontWeight: 700, color: '#B45309', backgroundColor: '#FFFBEB', border: '1px solid #FDE68A', padding: '3px 8px', borderRadius: '6px' }}>
+                              غير مرتبط بأي مؤشر
+                            </span>
+                          );
+                        }
+
+                        return (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                            {uniqueStds.map((std, sIdx) => (
+                              <div key={sIdx} style={{ fontSize: '12px' }}>
+                                <span style={{ fontWeight: 700, color: '#059669' }}>{std.code}:</span> {std.name}
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      })()}
                     </td>
                     <td style={{ padding: '14px 16px' }}>
                       {ev.isUnlinked || (!ev.indicatorId && (!ev.linkedIndicators || ev.linkedIndicators.length === 0)) ? (
@@ -702,43 +758,128 @@ export const EvidencesRepository: React.FC<EvidencesRepositoryProps> = ({
                       {ev.formattedSize}
                     </td>
                     <td style={{ padding: '14px 16px' }}>
-                      <span
-                        style={{
-                          fontSize: '11px',
-                          fontWeight: 700,
-                          padding: '3px 8px',
-                          borderRadius: '6px',
-                          backgroundColor: ev.verificationStatus === 'Compliant' ? '#ECFDF5' : '#FFFBEB',
-                          color: ev.verificationStatus === 'Compliant' ? '#059669' : '#D97706',
-                          border: `1px solid ${ev.verificationStatus === 'Compliant' ? '#A7F3D0' : '#FDE68A'}`,
-                        }}
-                      >
-                        {ev.verificationStatusArabic}
-                      </span>
+                      {(() => {
+                        const typeMap: Record<string, { label: string; bg: string; text: string; border: string }> = {
+                          minutes: { label: 'محضر اجتماع', bg: '#EFF6FF', text: '#1D4ED8', border: '#BFDBFE' },
+                          plan: { label: 'خطة عمل', bg: '#ECFDF5', text: '#047857', border: '#A7F3D0' },
+                          record: { label: 'سجل رسمي', bg: '#F5F3FF', text: '#6D28D9', border: '#DDD6FE' },
+                          report: { label: 'تقرير وإحصائية', bg: '#FFFBEB', text: '#B45309', border: '#FDE68A' },
+                          board: { label: 'لوحة إعلانات', bg: '#FDF2F8', text: '#BE185D', border: '#FBCFE8' },
+                          image: { label: 'صورة فوتوغرافية', bg: '#F0FDFA', text: '#0F766E', border: '#99F6E4' },
+                          evidence: { label: 'شاهد توثيقي', bg: '#F8FAFC', text: '#334155', border: '#CBD5E1' },
+                          other: { label: 'أخرى / عام', bg: '#F8FAFC', text: '#475569', border: '#E2E8F0' },
+                        };
+                        const conf = typeMap[ev.documentType || 'other'] || typeMap.other;
+                        return (
+                          <span
+                            style={{
+                              fontSize: '11px',
+                              fontWeight: 700,
+                              padding: '3px 8px',
+                              borderRadius: '6px',
+                              backgroundColor: conf.bg,
+                              color: conf.text,
+                              border: `1px solid ${conf.border}`,
+                              whiteSpace: 'nowrap',
+                            }}
+                          >
+                            {conf.label}
+                          </span>
+                        );
+                      })()}
                     </td>
                     <td style={{ padding: '14px 16px', textAlign: 'center' }}>
-                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', justifyContent: 'center' }}>
-                        {onNavigate && ev.indicatorId && (
-                          <button
-                            onClick={() => onNavigate('rubric-assessment', ev.indicatorId)}
-                            style={{
-                              padding: '5px 10px',
-                              borderRadius: '6px',
-                              backgroundColor: '#F0FDF4',
-                              border: '1px solid #BBF7D0',
-                              color: '#15803D',
-                              fontSize: '11.5px',
-                              fontWeight: 700,
-                              cursor: 'pointer',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '4px',
-                            }}
-                            title="الانتقال المباشر لاستمارة تقييم هذا المؤشر"
-                          >
-                            <ExternalLink size={12} />
-                            الانتقال للمؤشر
-                          </button>
+                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', justifyContent: 'center', position: 'relative' }}>
+                        {onNavigate && (ev.indicatorId || (ev.linkedIndicators && ev.linkedIndicators.length > 0)) && (
+                          <div style={{ position: 'relative' }}>
+                            <button
+                              onClick={() => {
+                                const count = ev.linkedIndicators?.length || (ev.indicatorId ? 1 : 0);
+                                if (count > 1) {
+                                  setNavPopoverEvidenceId((prev) => (prev === ev.id ? null : ev.id));
+                                } else {
+                                  const targetId = ev.indicatorId || ev.linkedIndicators?.[0]?.indicatorId;
+                                  if (targetId) onNavigate('rubric-assessment', targetId);
+                                }
+                              }}
+                              style={{
+                                padding: '5px 10px',
+                                borderRadius: '6px',
+                                backgroundColor: '#F0FDF4',
+                                border: '1px solid #BBF7D0',
+                                color: '#15803D',
+                                fontSize: '11.5px',
+                                fontWeight: 700,
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                              }}
+                              title="الانتقال المباشر لاستمارة تقييم هذا المؤشر"
+                            >
+                              <ExternalLink size={12} />
+                              <span>الانتقال للمؤشر</span>
+                              {ev.linkedIndicators && ev.linkedIndicators.length > 1 && (
+                                <span style={{ fontSize: '10px', padding: '0 4px', borderRadius: '10px', backgroundColor: '#DCFCE7', color: '#166534' }}>
+                                  ({ev.linkedIndicators.length})
+                                </span>
+                              )}
+                            </button>
+
+                            {/* Indicator Navigation Popover when multiple indicators are linked */}
+                            {navPopoverEvidenceId === ev.id && ev.linkedIndicators && ev.linkedIndicators.length > 1 && (
+                              <div
+                                style={{
+                                  position: 'absolute',
+                                  top: 'calc(100% + 4px)',
+                                  right: 0,
+                                  zIndex: 50,
+                                  backgroundColor: '#FFFFFF',
+                                  border: '1px solid #CBD5E1',
+                                  borderRadius: '8px',
+                                  boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.15)',
+                                  padding: '8px',
+                                  minWidth: '220px',
+                                  display: 'flex',
+                                  flexDirection: 'column',
+                                  gap: '4px',
+                                  textAlign: 'right',
+                                }}
+                              >
+                                <div style={{ fontSize: '11px', fontWeight: 800, color: '#64748B', padding: '2px 4px', borderBottom: '1px solid #F1F5F9' }}>
+                                  اختر المؤشر المستهدف:
+                                </div>
+                                {ev.linkedIndicators.map((li) => (
+                                  <button
+                                    key={li.indicatorId}
+                                    type="button"
+                                    onClick={() => {
+                                      setNavPopoverEvidenceId(null);
+                                      onNavigate('rubric-assessment', li.indicatorId);
+                                    }}
+                                    style={{
+                                      padding: '6px 8px',
+                                      borderRadius: '6px',
+                                      border: 'none',
+                                      backgroundColor: '#F8FAFC',
+                                      textAlign: 'right',
+                                      cursor: 'pointer',
+                                      fontSize: '11.5px',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'space-between',
+                                      gap: '6px',
+                                    }}
+                                  >
+                                    <span style={{ fontWeight: 800, color: '#2563EB' }}>{li.indicatorCode}</span>
+                                    <span style={{ color: '#334155', maxWidth: '140px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={li.indicatorTitle}>
+                                      {li.indicatorTitle}
+                                    </span>
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
                         )}
                         {!readOnly && (
                           <button
@@ -817,6 +958,26 @@ export const EvidencesRepository: React.FC<EvidencesRepositoryProps> = ({
                         >
                           تحميل
                         </button>
+                        <button
+                          onClick={() => setVersionsModalEvidence(ev)}
+                          style={{
+                            padding: '5px 8px',
+                            borderRadius: '6px',
+                            backgroundColor: '#F8FAFC',
+                            border: '1px solid #CBD5E1',
+                            color: '#4F46E5',
+                            fontSize: '11.5px',
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                          }}
+                          title="استعراض سجل الإصدارات التاريخية للشاهد"
+                        >
+                          <History size={12} />
+                          الإصدارات
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -837,6 +998,7 @@ export const EvidencesRepository: React.FC<EvidencesRepositoryProps> = ({
               readOnly={readOnly}
               onManageLinks={handleOpenLinkModal}
               onEditMetadata={handleOpenEditMetadata}
+              onViewVersions={(evidence) => setVersionsModalEvidence(evidence)}
               onNavigate={onNavigate}
             />
           ))}
@@ -845,6 +1007,14 @@ export const EvidencesRepository: React.FC<EvidencesRepositoryProps> = ({
 
         </>
       )}
+
+      {/* Document Versions History Modal */}
+      <DocumentVersionsModal
+        isOpen={Boolean(versionsModalEvidence)}
+        onClose={() => setVersionsModalEvidence(null)}
+        documentId={versionsModalEvidence?.documentId || versionsModalEvidence?.id || null}
+        documentTitle={versionsModalEvidence?.title}
+      />
 
       {/* Edit Evidence Metadata Modal */}
       <EditEvidenceMetadataModal

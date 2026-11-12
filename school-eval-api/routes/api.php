@@ -153,6 +153,7 @@ Route::prefix('v1')->group(function () {
 
         Route::post('/evidences/upload', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'uploadEvidence'])->name('api.v1.evidences.upload');
         Route::get('/evidences', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'getEvidences'])->name('api.v1.evidences.index');
+        Route::get('/evidences/documents/{documentId}/versions', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'getDocumentVersions'])->name('api.v1.evidences.documents.versions');
         Route::patch('/evidences/documents/{documentId}', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'updateDocumentMetadata'])->name('api.v1.evidences.documents.update');
         Route::patch('/evidence-links/{id}/covered-requirements', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'updateLinkCoveredRequirements'])->name('api.v1.evidence-links.covered-requirements');
 
@@ -271,6 +272,7 @@ Route::prefix('v1')->group(function () {
             Route::get('/', [\App\Http\Controllers\Api\V1\ImprovementAreaController::class, 'index'])->name('api.v1.improvement-areas.index');
             Route::post('/', [\App\Http\Controllers\Api\V1\ImprovementAreaController::class, 'store'])->name('api.v1.improvement-areas.store');
             Route::patch('/{id}', [\App\Http\Controllers\Api\V1\ImprovementAreaController::class, 'update'])->name('api.v1.improvement-areas.update');
+            Route::delete('/{id}', [\App\Http\Controllers\Api\V1\ImprovementAreaController::class, 'destroy'])->name('api.v1.improvement-areas.destroy');
         });
 
         // خطط التحسين المدرسي والتطوير المهني وإجراءاتها وملاحظات المراجعة (الشريحة 3 والشريحة 8)

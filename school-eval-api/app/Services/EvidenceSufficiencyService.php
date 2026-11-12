@@ -69,28 +69,29 @@ class EvidenceSufficiencyService
             $sourceEvidences = collect();
         }
 
-        // حساب التغطية الفعالة للمتطلبات الإلزامية (دعم الشاهد الشامل لأكثر من متطلب مع التوافق التراجعي)
+        // حساب التغطية الفعالة للمتطلبات الإلزامية (المتطلبات المحددة صراحة مع دعم الشواهد التراجعية القديمة)
         $mandatoryIds = $mandatoryReqs->pluck('requirement_id')->map(fn ($id) => (int) $id)->all();
         $explicitCoveredIds = [];
-        $legacyValidLinksCount = 0;
+        $legacyCount = 0;
 
         foreach ($validLinks as $link) {
-            $covered = $link->covered_requirements ?? null;
-            if (is_array($covered) && count($covered) > 0) {
+            $covered = $link->covered_requirements;
+            if (is_array($covered)) {
+                // إذا تم تمرير مصفوفة صريحة (حتى لو فارغة []), نلتزم بما اختاره المستخدم حصراً دون إضافة تلقائية
                 foreach ($covered as $reqId) {
                     $intId = (int) $reqId;
                     if (in_array($intId, $mandatoryIds, true)) {
                         $explicitCoveredIds[$intId] = true;
                     }
                 }
-            } else {
-                // شاهد قديم/تراجعي بدون قائمة متطلبات صريحة يغطي متطلباً واحداً تلقائياً
-                $legacyValidLinksCount++;
+            } elseif ($covered === null) {
+                // الشواهد التراجعية القديمة التي أُنشئت قبل تفعيل مصفوفة المتطلبات تغطي متطلباً واحداً
+                $legacyCount++;
             }
         }
 
         $effectiveCoveredCount = $mandatoryCount > 0
-            ? min($mandatoryCount, count($explicitCoveredIds) + $legacyValidLinksCount)
+            ? min($mandatoryCount, count($explicitCoveredIds) + $legacyCount)
             : $validCount;
 
         // القاعدة: إذا كان له متطلبات إلزامية، يجب استيفاؤها بالشواهد الصالحة
@@ -107,6 +108,33 @@ class EvidenceSufficiencyService
             $completionRate = 100.0;
         }
 
+        // تفصيل المتطلبات مع الشواهد المغطية لكل متطلب
+        $requirementsDetails = $requirements->map(function ($req) use ($validLinks, $explicitCoveredIds) {
+            $reqId = (int) $req->requirement_id;
+            $isRequired = (bool) $req->required;
+            $isCovered = isset($explicitCoveredIds[$reqId]);
+            $coveringLinks = [];
+            foreach ($validLinks as $link) {
+                $covered = $link->covered_requirements;
+                if (is_array($covered) && in_array($reqId, array_map('intval', $covered), true)) {
+                    $doc = $link->documentVersion?->document;
+                    $coveringLinks[] = [
+                        'linkId'     => (int) $link->id,
+                        'evidenceId' => (int) ($doc?->id ?? $link->id),
+                        'title'      => $doc?->title ?? $link->documentVersion?->file_name ?? 'شاهد موثق',
+                        'fileName'   => $link->documentVersion?->file_name ?? '',
+                    ];
+                }
+            }
+            return [
+                'requirementId' => $reqId,
+                'title'         => $req->name ?: $req->description ?: 'متطلب إلزامي',
+                'isRequired'    => $isRequired,
+                'isCovered'     => $isCovered,
+                'coveringLinks' => $coveringLinks,
+            ];
+        })->values()->all();
+
         return [
             'indicator_id'             => $indicator->indicator_id,
             'code'                     => $indicator->code,
@@ -117,6 +145,7 @@ class EvidenceSufficiencyService
             'valid_evidence_count'     => $validCount,
             'effective_covered_count'  => $effectiveCoveredCount,
             'covered_requirement_ids'  => array_keys($explicitCoveredIds),
+            'requirements'             => $requirementsDetails,
             'draft_evidence_count'     => $draftCount,
             'is_sufficient'            => $isSufficient,
             'missing_count'            => $missingCount,

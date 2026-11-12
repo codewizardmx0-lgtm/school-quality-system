@@ -18,6 +18,7 @@ export type VerificationTagStatus = 'Compliant' | 'NeedsReplacement' | 'UnderRev
 export interface EvaluatorSchoolInfo {
   schoolId: number;
   schoolName: string;
+  schoolCode?: string;
   status: SubmissionStatus;
   statusArabic: string;
   currentEvaluator: string;
@@ -191,7 +192,19 @@ export interface LinkedEvidenceBrief {
   fileSize: number;
   versionNumber: number;
   status?: string;
+  documentType?: string;
+  description?: string;
+  justification?: string;
+  uploadedAt?: string;
   coveredRequirements?: number[];
+}
+
+export interface ReviewerNoteItem {
+  noteId: number;
+  authorName: string;
+  authorRole?: string;
+  text: string;
+  createdAt?: string;
 }
 
 export interface EvaluationResultData {
@@ -205,6 +218,7 @@ export interface EvaluationResultData {
   verificationMethods: number[];
   evidenceLinks: LinkedEvidenceBrief[];
   evidenceRequirements?: EvidenceRequirementItem[];
+  reviewerNotes?: ReviewerNoteItem[];
   updatedAt?: string;
 }
 
@@ -500,6 +514,8 @@ export interface ImprovementSuggestion {
   indicatorId: number;
   indicatorCode: string;
   indicatorName: string;
+  standardCode?: string;
+  standardName?: string;
   score: number;
   targetScore: number;
   gap: number;
@@ -520,6 +536,8 @@ export interface EvidenceInventoryIndicator {
   uploadedEvidenceCount: number;
   validEvidenceCount: number;
   draftEvidenceCount: number;
+  effectiveCoveredCount?: number;
+  missingCount?: number;
   completionRate: number;
   isSufficient: boolean;
   status: string;
@@ -543,6 +561,8 @@ export interface EvidenceInventoryStandard {
   uploadedEvidenceCount: number;
   validEvidenceCount: number;
   draftEvidenceCount: number;
+  effectiveCoveredCount?: number;
+  missingCount?: number;
   completionRate: number;
   indicators: EvidenceInventoryIndicator[];
 }

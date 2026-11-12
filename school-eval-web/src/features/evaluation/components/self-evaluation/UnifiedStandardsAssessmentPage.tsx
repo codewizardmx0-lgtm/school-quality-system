@@ -2,15 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { StandardsTreePage } from './StandardsTreePage';
 import { RubricAssessmentPage } from './RubricAssessmentPage';
 import { PendingIndicatorsTable } from '../dashboard/PendingIndicatorsTable';
-import { useSelfEvaluation } from '../../hooks/useSelfEvaluation';
 import { useEvaluatorDashboard } from '../../hooks/useEvaluatorDashboard';
 import type { EvaluatorScreen } from '../../api/evaluationTypes';
 import {
   ClipboardList,
   SlidersHorizontal,
   AlertCircle,
-  CloudUpload,
-  RefreshCw,
 } from 'lucide-react';
 
 interface UnifiedStandardsAssessmentPageProps {
@@ -30,14 +27,6 @@ export const UnifiedStandardsAssessmentPage: React.FC<UnifiedStandardsAssessment
 }) => {
   const [activeTab, setActiveTab] = useState<'tree' | 'rubric' | 'pending'>(initialTab);
   const [currentIndicatorId, setCurrentIndicatorId] = useState<number | null>(selectedIndicatorId ?? null);
-
-  const {
-    hasOtherSchoolDrafts,
-    otherSchoolDraftsCount,
-    dismissOtherSchoolDrafts,
-    syncOtherSchoolDrafts,
-    isSyncing,
-  } = useSelfEvaluation(currentIndicatorId ?? undefined, isLocked);
 
   const { dashboardData, refreshDashboard } = useEvaluatorDashboard();
 
@@ -63,74 +52,7 @@ export const UnifiedStandardsAssessmentPage: React.FC<UnifiedStandardsAssessment
 
   return (
     <div style={{ minHeight: '100%', display: 'flex', flexDirection: 'column' }}>
-      {/* 1. Cross-School Offline Drafts Alert Banner (Note 1 & Note 4) */}
-      {hasOtherSchoolDrafts && (
-        <div
-          style={{
-            backgroundColor: '#FFFBEB',
-            borderBottom: '1px solid #FCD34D',
-            padding: '12px 24px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            flexWrap: 'wrap',
-            gap: '12px',
-            color: '#92400E',
-            fontSize: '13px',
-            fontWeight: 700,
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <AlertCircle size={19} color="#D97706" style={{ flexShrink: 0 }} />
-            <span>
-              تنبيه أوفلاين: لديك مسودات تقييم غير مرفوعة ({otherSchoolDraftsCount} مسودة) محفوظة محلياً في متصفحك من مدرسة أو دورة سابقة.
-            </span>
-          </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <button
-              type="button"
-              disabled={isSyncing}
-              onClick={syncOtherSchoolDrafts}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-                backgroundColor: '#D97706',
-                color: '#FFFFFF',
-                border: 'none',
-                borderRadius: '6px',
-                padding: '6px 12px',
-                fontSize: '12px',
-                fontWeight: 700,
-                cursor: 'pointer',
-              }}
-            >
-              {isSyncing ? <RefreshCw size={14} className="animate-spin" /> : <CloudUpload size={14} />}
-              <span>{isSyncing ? 'جارٍ الرفع...' : 'رفعها الآن'}</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={dismissOtherSchoolDrafts}
-              style={{
-                padding: '6px 10px',
-                backgroundColor: 'transparent',
-                border: '1px solid #D97706',
-                color: '#92400E',
-                borderRadius: '6px',
-                fontSize: '12px',
-                fontWeight: 600,
-                cursor: 'pointer',
-              }}
-            >
-              تجاهلها / تأجيلها
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* 2. Top Navigation Tabs Header (Note 18) */}
+      {/* Top Navigation Tabs Header */}
       <div
         style={{
           backgroundColor: '#FFFFFF',
@@ -195,7 +117,10 @@ export const UnifiedStandardsAssessmentPage: React.FC<UnifiedStandardsAssessment
           {/* Tab 3: عناصر بحاجة لاستيفاء التوثيق */}
           <button
             type="button"
-            onClick={() => setActiveTab('pending')}
+            onClick={() => {
+              setActiveTab('pending');
+              refreshDashboard();
+            }}
             style={{
               display: 'flex',
               alignItems: 'center',

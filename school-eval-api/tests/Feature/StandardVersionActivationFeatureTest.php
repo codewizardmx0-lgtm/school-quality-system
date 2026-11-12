@@ -51,9 +51,12 @@ class StandardVersionActivationFeatureTest extends TestCase
         $clonedResponse->assertCreated();
         $newVersionId = $clonedResponse->json('data.version_id');
 
-        // 2. إقرار المسودة
+        // 2. إقرار وتنشيط المسودة
         $approveResponse = $this->postJson("/api/v1/standard-versions/{$newVersionId}/approve");
         $approveResponse->assertOk();
+
+        $activateResponse = $this->postJson("/api/v1/standard-versions/{$newVersionId}/activate");
+        $activateResponse->assertOk();
 
         // 3. التحقق من حالة الإصدار الجديد والإصدار السابق
         $this->seededVersion->refresh();
@@ -123,15 +126,17 @@ class StandardVersionActivationFeatureTest extends TestCase
     public function test_model_safeguard_prevents_multiple_active_versions_simultaneously(): void
     {
         $v1 = StandardVersion::create([
-            'version_no' => '2099.V1',
-            'issue_date' => now()->toDateString(),
-            'status'     => StandardVersion::STATUS_DRAFT,
+            'version_no'          => '2099.V1',
+            'issue_date'          => now()->toDateString(),
+            'source_organization' => 'وزارة التربية',
+            'status'              => StandardVersion::STATUS_DRAFT,
         ]);
 
         $v2 = StandardVersion::create([
-            'version_no' => '2099.V2',
-            'issue_date' => now()->toDateString(),
-            'status'     => StandardVersion::STATUS_DRAFT,
+            'version_no'          => '2099.V2',
+            'issue_date'          => now()->toDateString(),
+            'source_organization' => 'وزارة التربية',
+            'status'              => StandardVersion::STATUS_DRAFT,
         ]);
 
         // تنشيط الأول

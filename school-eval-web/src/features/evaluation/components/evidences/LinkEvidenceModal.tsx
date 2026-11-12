@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
-import { X, Link2, Check, AlertTriangle, ArrowRightLeft, Unlink, Search } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { X, Link2, Check, AlertTriangle, ArrowRightLeft, Unlink, Search, FileCheck } from 'lucide-react';
 import { evaluatorApi } from '../../api/evaluatorApi';
-import type { EvidenceItem, StandardsTreeData } from '../../api/evaluationTypes';
+import type { EvidenceItem, StandardsTreeData, EvidenceRequirementItem } from '../../api/evaluationTypes';
 
 interface LinkEvidenceModalProps {
   isOpen: boolean;
@@ -27,11 +27,21 @@ export const LinkEvidenceModal: React.FC<LinkEvidenceModalProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedSingleIndicatorId, setSelectedSingleIndicatorId] = useState<number | null>(null);
   const [selectedMultiIndicatorIds, setSelectedMultiIndicatorIds] = useState<number[]>([]);
+  const [selectedCoveredReqIds, setSelectedCoveredReqIds] = useState<number[]>([]);
   const [justification, setJustification] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Compute initially linked indicator IDs
+  const initiallyLinkedIds: number[] = useMemo(() => {
+    if (!evidence) return [];
+    if (evidence.linkedIndicators && evidence.linkedIndicators.length > 0) {
+      return evidence.linkedIndicators.map((l) => l.indicatorId);
+    }
+    return evidence.indicatorId ? [evidence.indicatorId] : [];
+  }, [evidence]);
+
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && evidence) {
       evaluatorApi.getActiveStandardsTree().then((tree) => {
         setStandardsTree(tree);
       });
@@ -39,15 +49,40 @@ export const LinkEvidenceModal: React.FC<LinkEvidenceModalProps> = ({
       setMode(initialMode);
       setSearchTerm('');
       setSelectedSingleIndicatorId(null);
-      setSelectedMultiIndicatorIds([]);
+      const initialIds = evidence.linkedIndicators && evidence.linkedIndicators.length > 0
+        ? evidence.linkedIndicators.map((l) => l.indicatorId)
+        : (evidence.indicatorId ? [evidence.indicatorId] : []);
+      setSelectedMultiIndicatorIds(initialIds);
+
+      // تهيئة المتطلبات المحددة مسبقاً للشاهد
+      let initialCovered: number[] = [];
+      const evAny = evidence as any;
+      if (Array.isArray(evAny.coveredRequirements)) {
+        initialCovered.push(...evAny.coveredRequirements);
+      }
+      if (Array.isArray(evAny.linkedIndicators)) {
+        evAny.linkedIndicators.forEach((link: any) => {
+          if (Array.isArray(link.coveredRequirements)) {
+            initialCovered.push(...link.coveredRequirements);
+          }
+        });
+      }
+      setSelectedCoveredReqIds(Array.from(new Set(initialCovered)));
       setJustification('');
     }
-  }, [isOpen, initialMode]);
+  }, [isOpen, initialMode, evidence]);
 
   if (!isOpen || !evidence) return null;
 
-  // Flatten indicators from standards tree
-  const allIndicators: { indicatorId: number; code: string; title: string; standardName: string }[] = [];
+  // Flatten indicators from standards tree with evidence requirements
+  const allIndicators: {
+    indicatorId: number;
+    code: string;
+    title: string;
+    standardName: string;
+    evidenceRequirements: EvidenceRequirementItem[];
+  }[] = [];
+
   if (standardsTree?.standards) {
     for (const std of standardsTree.standards) {
       if (std.subStandards) {
@@ -59,6 +94,7 @@ export const LinkEvidenceModal: React.FC<LinkEvidenceModalProps> = ({
                 code: ind.code,
                 title: ind.title,
                 standardName: std.title,
+                evidenceRequirements: ind.evidenceRequirements || [],
               });
             }
           }
@@ -75,24 +111,38 @@ export const LinkEvidenceModal: React.FC<LinkEvidenceModalProps> = ({
   );
 
   const isCurrentIndicator = (id: number) => Boolean(evidence.indicatorId && evidence.indicatorId === id);
+  const isInitiallyLinked = (id: number) => initiallyLinkedIds.includes(id);
 
   const handleToggleMultiIndicator = (id: number) => {
-    if (isCurrentIndicator(id)) return;
     setSelectedMultiIndicatorIds((prev) =>
       prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
     );
   };
 
   const handleSelectAllFiltered = () => {
-    const ids = filteredIndicators
-      .filter((i) => !isCurrentIndicator(i.indicatorId))
-      .map((i) => i.indicatorId);
+    const ids = filteredIndicators.map((i) => i.indicatorId);
     setSelectedMultiIndicatorIds((prev) => Array.from(new Set([...prev, ...ids])));
   };
 
   const handleClearMultiSelection = () => {
     setSelectedMultiIndicatorIds([]);
   };
+
+  const handleToggleCoveredReq = (reqId: number) => {
+    setSelectedCoveredReqIds((prev) =>
+      prev.includes(reqId) ? prev.filter((id) => id !== reqId) : [...prev, reqId]
+    );
+  };
+
+  // Requirements for single mode target indicator
+  const singleIndicatorReqs = selectedSingleIndicatorId
+    ? allIndicators.find((i) => i.indicatorId === selectedSingleIndicatorId)?.evidenceRequirements?.filter((r) => r.required) || []
+    : [];
+
+  // Requirements for newly selected multi-mode indicators
+  const multiIndicatorsWithReqs = allIndicators.filter(
+    (ind) => selectedMultiIndicatorIds.includes(ind.indicatorId) && ind.evidenceRequirements.some((r) => r.required)
+  );
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -106,15 +156,16 @@ export const LinkEvidenceModal: React.FC<LinkEvidenceModalProps> = ({
           return;
         }
 
-        // Link to new indicator
+        // Link to new target indicator
         await evaluatorApi.multiLinkEvidence({
           documentId: evidence.documentId,
           versionId: evidence.id,
           indicatorIds: [selectedSingleIndicatorId],
+          coveredRequirements: selectedCoveredReqIds.length > 0 ? selectedCoveredReqIds : undefined,
           justification: justification || 'نقل الشاهد لمؤشر آخر بديل',
         });
 
-        // If linkId exists, unlink old link
+        // Unlink from old indicator if linkId exists
         if (evidence.linkId) {
           await evaluatorApi.unlinkEvidence(evidence.linkId);
         }
@@ -122,9 +173,11 @@ export const LinkEvidenceModal: React.FC<LinkEvidenceModalProps> = ({
         onSuccess(`تم نقل الشاهد "${evidence.title}" بنجاح إلى المؤشر المختار.`);
         onClose();
       } else if (mode === 'multi') {
-        const targetIds = selectedMultiIndicatorIds.filter((id) => !isCurrentIndicator(id));
-        if (targetIds.length === 0) {
-          onError('يرجى تحديد مؤشر إضافي واحد على الأقل غير المؤشر الحالي.');
+        const unlinkedIds = initiallyLinkedIds.filter((id) => !selectedMultiIndicatorIds.includes(id));
+        const keptOrAddedIds = selectedMultiIndicatorIds;
+
+        if (keptOrAddedIds.length === 0 && unlinkedIds.length === 0) {
+          onError('يرجى تحديد مؤشر واحد على الأقل أو فك الارتباط.');
           setIsSubmitting(false);
           return;
         }
@@ -132,11 +185,24 @@ export const LinkEvidenceModal: React.FC<LinkEvidenceModalProps> = ({
         await evaluatorApi.multiLinkEvidence({
           documentId: evidence.documentId,
           versionId: evidence.id,
-          indicatorIds: targetIds,
-          justification: justification || 'ربط متعدد للشاهد مع مؤشرات إضافية',
+          indicatorIds: keptOrAddedIds,
+          unlinkedIndicatorIds: unlinkedIds,
+          coveredRequirements: selectedCoveredReqIds.length > 0 ? selectedCoveredReqIds : undefined,
+          justification: justification || 'إدارة الروابط المتعددة للشاهد',
         });
 
-        onSuccess(`تم ربط الشاهد بنجاح بـ ${targetIds.length} مؤشر إضافي.`);
+        const addedCount = keptOrAddedIds.filter((id) => !initiallyLinkedIds.includes(id)).length;
+        const unlinkedCount = unlinkedIds.length;
+        let msg = `تم تحديث روابط الشاهد بنجاح`;
+        if (addedCount > 0 && unlinkedCount > 0) {
+          msg = `تم ربط الشاهد بـ ${addedCount} مؤشر جديد، وفك ارتباطه عن ${unlinkedCount} مؤشر.`;
+        } else if (addedCount > 0) {
+          msg = `تم ربط الشاهد بنجاح بـ ${addedCount} مؤشر إضافي.`;
+        } else if (unlinkedCount > 0) {
+          msg = `تم فك ارتباط الشاهد عن ${unlinkedCount} مؤشر بنجاح.`;
+        }
+
+        onSuccess(msg);
         onClose();
       } else if (mode === 'unlink') {
         if (!evidence.linkId) {
@@ -187,7 +253,7 @@ export const LinkEvidenceModal: React.FC<LinkEvidenceModalProps> = ({
           backgroundColor: '#ffffff',
           borderRadius: '14px',
           width: '100%',
-          maxWidth: '620px',
+          maxWidth: '640px',
           maxHeight: '90vh',
           display: 'flex',
           flexDirection: 'column',
@@ -225,7 +291,7 @@ export const LinkEvidenceModal: React.FC<LinkEvidenceModalProps> = ({
             </div>
             <div>
               <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 700, color: '#1e293b' }}>
-                🔗 ربط وإدارة علاقات الشاهد بالمؤشرات
+                🔗 إدارة روابط وعلاقات الشاهد بالمؤشرات
               </h3>
               <p style={{ margin: 0, fontSize: '12px', color: '#64748b' }}>
                 نقل الشاهد، أو ربطه بعدة مؤشرات (Multi-link)، أو فك الارتباط
@@ -261,11 +327,31 @@ export const LinkEvidenceModal: React.FC<LinkEvidenceModalProps> = ({
             <span style={{ color: '#64748b' }}>الشاهد المختار:</span>
             <strong style={{ color: '#1e293b' }}>{evidence.title}</strong>
           </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <span style={{ color: '#64748b' }}>المؤشر الحالي:</span>
-            <span style={{ color: '#0369a1', fontWeight: 600 }}>
-              {evidence.indicatorCode} — {evidence.indicatorTitle}
-            </span>
+          <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '6px' }}>
+            <span style={{ color: '#64748b' }}>المؤشرات المربوط بها حالياً:</span>
+            <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+              {initiallyLinkedIds.length > 0 ? (
+                allIndicators
+                  .filter((ind) => initiallyLinkedIds.includes(ind.indicatorId))
+                  .map((ind) => (
+                    <span
+                      key={ind.indicatorId}
+                      style={{
+                        fontSize: '11px',
+                        padding: '1px 6px',
+                        borderRadius: '4px',
+                        backgroundColor: '#E0E7FF',
+                        color: '#4338CA',
+                        fontWeight: 700,
+                      }}
+                    >
+                      {ind.code}
+                    </span>
+                  ))
+              ) : (
+                <span style={{ color: '#B45309', fontWeight: 600 }}>غير مرتبط بأي مؤشر</span>
+              )}
+            </div>
           </div>
         </div>
 
@@ -322,7 +408,7 @@ export const LinkEvidenceModal: React.FC<LinkEvidenceModalProps> = ({
             }}
           >
             <Link2 size={15} />
-            ربط متعدد (Multi-link)
+            إدارة الربط المتعدد (Multi-link)
           </button>
 
           <button
@@ -377,7 +463,7 @@ export const LinkEvidenceModal: React.FC<LinkEvidenceModalProps> = ({
 
                 <div
                   style={{
-                    maxHeight: '220px',
+                    maxHeight: '200px',
                     overflowY: 'auto',
                     border: '1px solid #cbd5e1',
                     borderRadius: '8px',
@@ -391,7 +477,10 @@ export const LinkEvidenceModal: React.FC<LinkEvidenceModalProps> = ({
                       <div
                         key={ind.indicatorId}
                         onClick={() => {
-                          if (!disabled) setSelectedSingleIndicatorId(ind.indicatorId);
+                          if (!disabled) {
+                            setSelectedSingleIndicatorId(ind.indicatorId);
+                            setSelectedCoveredReqIds([]);
+                          }
                         }}
                         style={{
                           padding: '8px 10px',
@@ -419,7 +508,7 @@ export const LinkEvidenceModal: React.FC<LinkEvidenceModalProps> = ({
                             <span>{ind.title}</span>
                             {disabled && (
                               <span style={{ fontSize: '10px', padding: '1px 6px', borderRadius: '4px', backgroundColor: '#e2e8f0', color: '#475569', fontWeight: 700 }}>
-                                المؤشر الحالي — مرتبط بالفعل
+                                المؤشر الحالي (المصدر)
                               </span>
                             )}
                           </div>
@@ -435,6 +524,45 @@ export const LinkEvidenceModal: React.FC<LinkEvidenceModalProps> = ({
                     </div>
                   )}
                 </div>
+
+                {/* Single Mode Mandatory Requirements selection */}
+                {singleIndicatorReqs.length > 0 && (
+                  <div style={{ marginTop: '12px', padding: '10px 12px', backgroundColor: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: '8px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 700, color: '#92400E', marginBottom: '6px' }}>
+                      <FileCheck size={14} color="#D97706" />
+                      <span>المتطلبات الإلزامية للمؤشر المستهدف (حدد المتطلبات التي يغطيها هذا الشاهد):</span>
+                    </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                      {singleIndicatorReqs.map((req) => {
+                        const checked = selectedCoveredReqIds.includes(req.id);
+                        return (
+                          <label
+                            key={req.id}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              padding: '4px 8px',
+                              borderRadius: '5px',
+                              backgroundColor: checked ? '#FEF3C7' : '#FFFFFF',
+                              border: `1px solid ${checked ? '#D97706' : '#CBD5E1'}`,
+                              fontSize: '11.5px',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => handleToggleCoveredReq(req.id)}
+                              style={{ accentColor: '#D97706' }}
+                            />
+                            <span style={{ fontWeight: checked ? 700 : 500 }}>{req.title}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
 
                 <div style={{ marginTop: '12px' }}>
                   <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#475569', marginBottom: '4px' }}>
@@ -462,7 +590,7 @@ export const LinkEvidenceModal: React.FC<LinkEvidenceModalProps> = ({
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                   <label style={{ fontSize: '13px', fontWeight: 600, color: '#334155' }}>
-                    حدد المؤشرات الإضافية للربط المتعدد ({selectedMultiIndicatorIds.length} محددة):
+                    حدد المؤشرات المرتبطة بهذا الشاهد ({selectedMultiIndicatorIds.length} مؤشر محدد):
                   </label>
                   <div style={{ display: 'flex', gap: '6px' }}>
                     <button
@@ -489,7 +617,7 @@ export const LinkEvidenceModal: React.FC<LinkEvidenceModalProps> = ({
                     type="text"
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    placeholder="ابحث لاختيار مؤشرات إضافية..."
+                    placeholder="ابحث لاختيار مؤشرات أو إلغاء ربطها..."
                     style={{
                       width: '100%',
                       padding: '8px 36px 8px 12px',
@@ -503,7 +631,7 @@ export const LinkEvidenceModal: React.FC<LinkEvidenceModalProps> = ({
 
                 <div
                   style={{
-                    maxHeight: '220px',
+                    maxHeight: '210px',
                     overflowY: 'auto',
                     border: '1px solid #cbd5e1',
                     borderRadius: '8px',
@@ -512,8 +640,8 @@ export const LinkEvidenceModal: React.FC<LinkEvidenceModalProps> = ({
                   }}
                 >
                   {filteredIndicators.map((ind) => {
-                    const disabled = isCurrentIndicator(ind.indicatorId);
-                    const isChecked = !disabled && selectedMultiIndicatorIds.includes(ind.indicatorId);
+                    const isChecked = selectedMultiIndicatorIds.includes(ind.indicatorId);
+                    const isPrior = isInitiallyLinked(ind.indicatorId);
                     return (
                       <label
                         key={ind.indicatorId}
@@ -523,27 +651,25 @@ export const LinkEvidenceModal: React.FC<LinkEvidenceModalProps> = ({
                           gap: '10px',
                           padding: '8px 10px',
                           borderRadius: '6px',
-                          cursor: disabled ? 'not-allowed' : 'pointer',
+                          cursor: 'pointer',
                           marginBottom: '4px',
-                          opacity: disabled ? 0.55 : 1,
-                          backgroundColor: disabled ? '#f8fafc' : isChecked ? '#f5f3ff' : '#ffffff',
+                          backgroundColor: isChecked ? '#f5f3ff' : '#ffffff',
                           border: isChecked ? '1px solid #8b5cf6' : '1px solid transparent',
                         }}
                       >
                         <input
                           type="checkbox"
-                          disabled={disabled}
                           checked={isChecked}
                           onChange={() => handleToggleMultiIndicator(ind.indicatorId)}
-                          style={{ width: '16px', height: '16px', cursor: disabled ? 'not-allowed' : 'pointer' }}
+                          style={{ width: '16px', height: '16px', cursor: 'pointer', accentColor: '#7c3aed' }}
                         />
                         <div style={{ flex: 1 }}>
                           <div style={{ fontWeight: 600, fontSize: '12.5px', color: '#1e293b', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                             <span style={{ color: '#7c3aed' }}>{ind.code}</span>
                             <span>{ind.title}</span>
-                            {disabled && (
-                              <span style={{ fontSize: '10px', padding: '1px 6px', borderRadius: '4px', backgroundColor: '#e2e8f0', color: '#475569', fontWeight: 700 }}>
-                                المؤشر الحالي — مرتبط بالفعل
+                            {isPrior && (
+                              <span style={{ fontSize: '10.5px', padding: '1px 6px', borderRadius: '4px', backgroundColor: '#ECFDF5', color: '#047857', border: '1px solid #A7F3D0', fontWeight: 700 }}>
+                                مربوط مسبقاً
                               </span>
                             )}
                           </div>
@@ -552,6 +678,77 @@ export const LinkEvidenceModal: React.FC<LinkEvidenceModalProps> = ({
                       </label>
                     );
                   })}
+                  {filteredIndicators.length === 0 && (
+                    <div style={{ textAlign: 'center', padding: '16px', color: '#94a3b8', fontSize: '13px' }}>
+                      لا توجد مؤشرات مطابقة للبحث
+                    </div>
+                  )}
+                </div>
+
+                {/* Mandatory Requirements selection for selected indicators in multi mode */}
+                {multiIndicatorsWithReqs.length > 0 && (
+                  <div style={{ marginTop: '12px', padding: '10px 12px', backgroundColor: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: '8px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 700, color: '#92400E', marginBottom: '6px' }}>
+                      <FileCheck size={14} color="#D97706" />
+                      <span>المتطلبات الإلزامية للمؤشرات المحددة (اختر ما يغطيه هذا الشاهد):</span>
+                    </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                      {multiIndicatorsWithReqs.flatMap((ind) =>
+                        ind.evidenceRequirements
+                          .filter((r) => r.required)
+                          .map((req) => {
+                            const checked = selectedCoveredReqIds.includes(req.id);
+                            return (
+                              <label
+                                key={req.id}
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '6px',
+                                  padding: '4px 8px',
+                                  borderRadius: '5px',
+                                  backgroundColor: checked ? '#FEF3C7' : '#FFFFFF',
+                                  border: `1px solid ${checked ? '#D97706' : '#CBD5E1'}`,
+                                  fontSize: '11px',
+                                  cursor: 'pointer',
+                                }}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  onChange={() => handleToggleCoveredReq(req.id)}
+                                  style={{ accentColor: '#D97706' }}
+                                />
+                                <span>
+                                  <strong style={{ color: '#7c3aed', marginLeft: '4px' }}>[{ind.code}]</strong>
+                                  {req.title}
+                                </span>
+                              </label>
+                            );
+                          })
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                <div style={{ marginTop: '12px' }}>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#475569', marginBottom: '4px' }}>
+                    مبررات الربط المتعدد (اختياري):
+                  </label>
+                  <textarea
+                    value={justification}
+                    onChange={(e) => setJustification(e.target.value)}
+                    rows={2}
+                    placeholder="بيان شمولية الشاهد لأكثر من مؤشر..."
+                    style={{
+                      width: '100%',
+                      padding: '8px 12px',
+                      borderRadius: '8px',
+                      border: '1px solid #cbd5e1',
+                      fontSize: '12px',
+                      outline: 'none',
+                    }}
+                  />
                 </div>
               </div>
             )}
@@ -637,7 +834,7 @@ export const LinkEvidenceModal: React.FC<LinkEvidenceModalProps> = ({
               ) : mode === 'multi' ? (
                 <>
                   <Link2 size={16} />
-                  حفظ الربط المتعدد
+                  حفظ إدارة الروابط
                 </>
               ) : (
                 <>

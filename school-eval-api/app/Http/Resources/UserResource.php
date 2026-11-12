@@ -42,6 +42,7 @@ class UserResource extends JsonResource
             'school'      => $this->school ? [
                 'schoolId'   => $this->school->school_id,
                 'schoolName' => $this->school->school_name,
+                'schoolCode' => $this->school->school_code,
                 'status'     => $this->school->status,
             ] : null,
             'ministry'    => $this->ministry ? [

@@ -4,16 +4,16 @@ import { EvidenceUploader } from './EvidenceUploader';
 import { EvaluatorJustification } from './EvaluatorJustification';
 import { useEvidences } from '../../hooks/useEvidences';
 import { evaluatorApi } from '../../api/evaluatorApi';
+import { useAuth } from '../../../auth/AuthContext';
 import type {
   EvaluatorScreen,
   EvidenceItem,
   LinkedEvidenceBrief,
   IndicatorMetricsContextItem,
-  ActionCatalogRecommendationItem,
-  PlanType,
   VerificationMethod,
 } from '../../api/evaluationTypes';
 import { LinkEvidenceModal } from '../evidences/LinkEvidenceModal';
+import { EditEvidenceMetadataModal } from '../evidences/EditEvidenceMetadataModal';
 import { useToast } from '../../../admin/components/common/useToast';
 import { ToastNotification } from '../../../admin/components/common/ToastNotification';
 import {
@@ -22,21 +22,21 @@ import {
   Lock,
   ArrowRight,
   ArrowLeft,
-  WifiOff,
   RefreshCw,
   AlertTriangle,
   Loader2,
   AlertCircle,
   RotateCcw,
   ChevronDown,
+  ChevronUp,
   Search,
   Layers,
   BarChart3,
-  Lightbulb,
-  Plus,
-  Check,
   Info,
   FileCheck2,
+  X,
+  MessageSquare,
+  Send,
 } from 'lucide-react';
 import { SafeResetConfirmModal } from './SafeResetConfirmModal';
 
@@ -61,6 +61,7 @@ export const RubricAssessmentPage: React.FC<RubricAssessmentPageProps> = ({
     currentResult,
     isSaving,
     saveStatus,
+    saveSuccessMessage,
     saveRubricAssessment,
     resetIndicatorAssessment,
     retryLastSave,
@@ -70,40 +71,31 @@ export const RubricAssessmentPage: React.FC<RubricAssessmentPageProps> = ({
     hasNext,
     reloadTree,
     reloadIndicatorResult,
-    isOffline,
-    pendingOfflineCount,
-    isSyncing,
-    conflictWarning,
-    syncOfflineDrafts,
-    resolveConflictWithLocal,
-    dismissConflict,
   } = useSelfEvaluation(selectedIndicatorId || undefined, isLocked);
 
   const { uploadEvidenceFile, isUploading, uploadProgress } = useEvidences();
   const { toasts, addToast, dismissToast } = useToast();
 
   // Local form state
+  const { user } = useAuth();
   const [selectedScore, setSelectedScore] = useState<number | null>(null);
   const [justification, setJustification] = useState<string>('');
   const [selectedVerificationMethods, setSelectedVerificationMethods] = useState<number[]>([]);
   const [isResetModalOpen, setIsResetModalOpen] = useState<boolean>(false);
   const [linkModalEvidence, setLinkModalEvidence] = useState<EvidenceItem | null>(null);
   const [linkModalMode, setLinkModalMode] = useState<'single' | 'multi' | 'unlink'>('single');
+  const [editModalEvidence, setEditModalEvidence] = useState<EvidenceItem | null>(null);
   const [isQuickNavOpen, setIsQuickNavOpen] = useState<boolean>(false);
   const [quickNavSearch, setQuickNavSearch] = useState<string>('');
+  const [expandedStdId, setExpandedStdId] = useState<number | null>(null);
+  const [newReviewerNote, setNewReviewerNote] = useState<string>('');
+  const [isAddingNote, setIsAddingNote] = useState<boolean>(false);
   const quickNavRef = useRef<HTMLDivElement | null>(null);
   const quickNavInputRef = useRef<HTMLInputElement | null>(null);
 
   // IMP-07: School Quantitative Metrics Context
   const [indicatorsContextMap, setIndicatorsContextMap] = useState<Record<string, IndicatorMetricsContextItem>>({});
   const [indicatorsContextNotice, setIndicatorsContextNotice] = useState<string>('');
-
-  // IMP-08: Action Catalog Recommendations (when score is 0 or 1 or manually toggled)
-  const [actionRecommendations, setActionRecommendations] = useState<ActionCatalogRecommendationItem[]>([]);
-  const [forceShowRecommendations, setForceShowRecommendations] = useState<boolean>(false);
-  const [isLoadingRecommendations, setIsLoadingRecommendations] = useState<boolean>(false);
-  const [addingRecId, setAddingRecId] = useState<number | null>(null);
-  const [addedRecIds, setAddedRecIds] = useState<number[]>([]);
 
   const evaluationId = treeData?.evaluationId || currentResult?.evaluationId;
 
@@ -164,64 +156,11 @@ export const RubricAssessmentPage: React.FC<RubricAssessmentPageProps> = ({
   const standard = currentIndicatorInfo?.standard;
   const subStandard = currentIndicatorInfo?.subStandard;
 
-  // IMP-08: Fetch Action Recommendations whenever indicator has weak score (0 or 1) or manually requested
-  useEffect(() => {
-    if (!evaluationId || !indicator?.code) {
-      setActionRecommendations([]);
-      return;
-    }
-    const isWeak = selectedScore === 0 || selectedScore === 1;
-    if (!isWeak && !forceShowRecommendations) {
-      setActionRecommendations([]);
-      return;
-    }
-    let cancelled = false;
-    setIsLoadingRecommendations(true);
-    evaluatorApi
-      .getActionRecommendations(evaluationId, indicator.code)
-      .then((res) => {
-        if (!cancelled) {
-          setActionRecommendations(res.recommendations || []);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) setActionRecommendations([]);
-      })
-      .finally(() => {
-        if (!cancelled) setIsLoadingRecommendations(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [evaluationId, indicator?.code, selectedScore, forceShowRecommendations]);
-
   const normalizedIndCode = indicator?.code ? indicator.code.replace(/\./g, '-') : '';
   const indicatorMetricsContext =
     (indicator?.code && indicatorsContextMap[indicator.code]) ||
     (normalizedIndCode && indicatorsContextMap[normalizedIndCode]) ||
     null;
-
-  const handleAdoptRecommendation = async (rec: ActionCatalogRecommendationItem) => {
-    if (isLocked || !indicator || addingRecId !== null) return;
-    setAddingRecId(rec.catalog_id);
-    try {
-      const due = new Date();
-      due.setDate(due.getDate() + (rec.suggested_duration_days || 45));
-      await evaluatorApi.createImprovementAction({
-        planType: (rec.plan_type as PlanType) || 'QualityImprovement',
-        title: rec.title,
-        leader: rec.suggested_responsible_description || 'فريق التحسين والجودة المدرسي',
-        dueDate: due.toISOString().split('T')[0],
-        progressDescription: `إجراء معتمد من بنك التدخلات لمعالجة المؤشر (${indicator.code}).`,
-      });
-      setAddedRecIds((prev) => [...prev, rec.catalog_id]);
-      addToast('success', 'تمت إضافة الإجراء المقترح إلى خطة التحسين بنجاح.');
-    } catch (err: any) {
-      addToast('error', err?.response?.data?.message || 'تعذر إضافة الإجراء إلى خطة التحسين.');
-    } finally {
-      setAddingRecId(null);
-    }
-  };
 
   // Rubric levels specification (Official National Standards Nomenclature)
   const rubricLevels = [
@@ -281,6 +220,8 @@ export const RubricAssessmentPage: React.FC<RubricAssessmentPageProps> = ({
       justification,
       verificationMethods: selectedVerificationMethods,
       completionStatus: 'Completed',
+    }).then(() => {
+      onResetSuccess?.();
     });
   };
 
@@ -294,9 +235,10 @@ export const RubricAssessmentPage: React.FC<RubricAssessmentPageProps> = ({
       score: selectedScore,
       justification,
       verificationMethods: selectedVerificationMethods,
-      completionStatus: 'Pending',
+      completionStatus: 'Completed',
     });
-    addToast('success', 'تم حفظ مسودة المؤشر بنجاح.');
+    onResetSuccess?.();
+    addToast('success', 'تم حفظ تقييم المؤشر بنجاح على الخادم.');
   };
 
   const handleSaveAndNext = async () => {
@@ -311,6 +253,7 @@ export const RubricAssessmentPage: React.FC<RubricAssessmentPageProps> = ({
         verificationMethods: selectedVerificationMethods,
         completionStatus: 'Completed',
       });
+      onResetSuccess?.();
       addToast('success', 'تم حفظ التقييم بنجاح، جاري الانتقال للمؤشر التالي.');
     }
     goToNextIndicator();
@@ -333,6 +276,7 @@ export const RubricAssessmentPage: React.FC<RubricAssessmentPageProps> = ({
     });
     await reloadIndicatorResult();
     await reloadTree();
+    onResetSuccess?.();
     addToast('success', 'تم رفع الشاهد وربطه بالمؤشر بنجاح.');
   };
 
@@ -340,7 +284,8 @@ export const RubricAssessmentPage: React.FC<RubricAssessmentPageProps> = ({
     await evaluatorApi.unlinkEvidence(linkId);
     await reloadIndicatorResult();
     await reloadTree();
-    addToast('success', 'تم فك ارتباط الشاهد من المؤشر.');
+    onResetSuccess?.();
+    addToast('success', 'تم فك ارتباط الشاهد بنجاح.');
   };
 
   const handleUpdateCoveredRequirements = async (linkId: number, coveredRequirements: number[]) => {
@@ -375,6 +320,67 @@ export const RubricAssessmentPage: React.FC<RubricAssessmentPageProps> = ({
     setLinkModalEvidence(item);
   };
 
+  const handleOpenEditMetadata = (link: LinkedEvidenceBrief) => {
+    if (isLocked) return;
+    setEditModalEvidence({
+      id: link.versionId || link.linkId,
+      documentId: link.documentId || link.linkId,
+      linkId: link.linkId,
+      indicatorId: link.indicatorId || indicator?.indicatorId,
+      title: link.title,
+      fileName: link.fileName,
+      mimeType: 'application/pdf',
+      fileSize: link.fileSize,
+      formattedSize: `${(link.fileSize / (1024 * 1024)).toFixed(2)} MB`,
+      versionNumber: link.versionNumber,
+      standardCode: standard?.code || 'STD',
+      standardName: standard?.title || '',
+      indicatorCode: indicator?.code || '',
+      indicatorTitle: indicator?.title || '',
+      documentType: link.documentType || 'evidence',
+      description: link.description || '',
+      justification: link.justification || '',
+      uploadedAt: link.uploadedAt || '',
+      uploadedBy: '',
+      verificationStatus: 'Compliant',
+      verificationStatusArabic: 'موثق',
+    });
+  };
+
+  const handleSaveEvidenceMetadata = async (payload: {
+    documentId: number;
+    title: string;
+    documentType: string;
+    description: string;
+    justification: string;
+    linkId?: number;
+  }) => {
+    try {
+      await evaluatorApi.updateDocumentMetadata(payload.documentId, payload);
+      await reloadIndicatorResult();
+      addToast('success', 'تم تحديث بيانات الشاهد بنجاح.');
+      setEditModalEvidence(null);
+    } catch (err: any) {
+      addToast('error', err?.response?.data?.message || 'تعذر تحديث بيانات الشاهد.');
+    }
+  };
+
+  const handleAddReviewerNote = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newReviewerNote.trim() || !currentResult?.resultId) return;
+    setIsAddingNote(true);
+    try {
+      await evaluatorApi.addEvaluationResultNote(currentResult.resultId, newReviewerNote.trim());
+      addToast('success', 'تمت إضافة الملاحظة التوجيهية بنجاح.');
+      setNewReviewerNote('');
+      await reloadIndicatorResult();
+    } catch (err: any) {
+      addToast('error', err?.response?.data?.message || 'تعذر إضافة الملاحظة.');
+    } finally {
+      setIsAddingNote(false);
+    }
+  };
+
   return (
     <div style={{ padding: '24px', maxWidth: '1200px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '22px' }}>
       {/* Top Banner Notice if Locked */}
@@ -398,13 +404,13 @@ export const RubricAssessmentPage: React.FC<RubricAssessmentPageProps> = ({
         </div>
       )}
 
-      {/* Offline Alert & Pending Sync Banner (FE-GAP-05 / U-35) */}
-      {(isOffline || pendingOfflineCount > 0) && (
+      {/* Network / Save Error Banner with Retry */}
+      {saveStatus === 'error' && (
         <div
-          role="status"
+          role="alert"
           style={{
-            backgroundColor: '#FFFBEB',
-            border: '1px solid #FDE68A',
+            backgroundColor: '#FEF2F2',
+            border: '1px solid #FECACA',
             borderRadius: '10px',
             padding: '12px 18px',
             display: 'flex',
@@ -412,98 +418,37 @@ export const RubricAssessmentPage: React.FC<RubricAssessmentPageProps> = ({
             justifyContent: 'space-between',
             flexWrap: 'wrap',
             gap: '12px',
-            color: '#92400E',
+            color: '#991B1B',
             fontSize: '13px',
-            fontWeight: 600,
+            fontWeight: 700,
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <WifiOff size={18} color="#D97706" />
-            <span>
-              {isOffline
-                ? 'وضع عدم الاتصال — المسودة والتعديلات تُحفظ محلياً تلقائياً.'
-                : `توجد ${pendingOfflineCount} تقييمات محفوظة محلياً بانتظار المزامنة مع الخادم.`}
-            </span>
+            <AlertTriangle size={18} color="#DC2626" />
+            <span>{saveSuccessMessage || 'تعذر الحفظ على الخادم بسبب انقطاع الاتصال أو خطأ في الشبكة.'}</span>
           </div>
 
           <button
             type="button"
-            onClick={() => syncOfflineDrafts()}
-            disabled={isSyncing}
+            onClick={retryLastSave}
+            disabled={isSaving}
             style={{
               padding: '6px 14px',
               borderRadius: '8px',
-              backgroundColor: '#D97706',
+              backgroundColor: '#DC2626',
               color: '#FFFFFF',
               border: 'none',
               fontSize: '12px',
               fontWeight: 700,
-              cursor: isSyncing ? 'not-allowed' : 'pointer',
+              cursor: isSaving ? 'not-allowed' : 'pointer',
               display: 'inline-flex',
               alignItems: 'center',
               gap: '6px',
             }}
           >
-            <RefreshCw size={14} className={isSyncing ? 'animate-spin' : ''} />
-            <span>{isSyncing ? 'جاري المزامنة...' : 'مزامنة الآن'}</span>
+            <RefreshCw size={14} className={isSaving ? 'animate-spin' : ''} />
+            <span>{isSaving ? 'جاري إعادة المحاولة...' : 'إعادة المحاولة الآن'}</span>
           </button>
-        </div>
-      )}
-
-      {/* Conflict Warning Banner (FE-GAP-05 Simple Conflict Resolution) */}
-      {conflictWarning && (
-        <div
-          role="alert"
-          style={{
-            backgroundColor: '#FEF2F2',
-            border: '1px solid #FECACA',
-            borderRadius: '10px',
-            padding: '14px 18px',
-            color: '#991B1B',
-            fontSize: '13px',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '10px',
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', fontWeight: 700 }}>
-            <AlertTriangle size={18} color="#DC2626" style={{ flexShrink: 0, marginTop: '2px' }} />
-            <span>{conflictWarning}</span>
-          </div>
-          <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
-            <button
-              type="button"
-              onClick={dismissConflict}
-              style={{
-                padding: '6px 12px',
-                borderRadius: '6px',
-                border: '1px solid #CBD5E1',
-                backgroundColor: '#FFFFFF',
-                color: '#475569',
-                fontSize: '12px',
-                cursor: 'pointer',
-                fontWeight: 600,
-              }}
-            >
-              إلغاء والتراجع
-            </button>
-            <button
-              type="button"
-              onClick={resolveConflictWithLocal}
-              style={{
-                padding: '6px 14px',
-                borderRadius: '6px',
-                border: 'none',
-                backgroundColor: '#DC2626',
-                color: '#FFFFFF',
-                fontSize: '12px',
-                cursor: 'pointer',
-                fontWeight: 700,
-              }}
-            >
-              اعتماد نسختي المحلية (آخر تعديل يفوز)
-            </button>
-          </div>
         </div>
       )}
 
@@ -584,6 +529,33 @@ export const RubricAssessmentPage: React.FC<RubricAssessmentPageProps> = ({
               <Search size={15} />
               بحث في المعايير
             </button>
+
+            <button
+              type="button"
+              onClick={async () => {
+                await reloadIndicatorResult();
+                await reloadTree();
+                addToast('success', 'تم تحديث بيانات المؤشر والشواهد من الخادم.');
+              }}
+              style={{
+                padding: '0 14px',
+                borderRadius: '12px',
+                border: '1px solid #CBD5E1',
+                backgroundColor: '#FFFFFF',
+                color: '#475569',
+                fontSize: '12.5px',
+                fontWeight: 700,
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                whiteSpace: 'nowrap',
+              }}
+              title="تحديث بيانات المؤشر والشواهد من الخادم"
+            >
+              <RefreshCw size={14} />
+              تحديث
+            </button>
           </div>
 
           {isQuickNavOpen && (
@@ -604,27 +576,47 @@ export const RubricAssessmentPage: React.FC<RubricAssessmentPageProps> = ({
                 gap: '10px',
               }}
             >
-              <div style={{ position: 'relative' }}>
-                <Search size={15} color="#94A3B8" style={{ position: 'absolute', right: '12px', top: '10px' }} />
-                <input
-                  ref={quickNavInputRef}
-                  type="text"
-                  value={quickNavSearch}
-                  onChange={(e) => setQuickNavSearch(e.target.value)}
-                  placeholder="ابحث باسم المعيار أو رمز أو عنوان المؤشر..."
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div style={{ position: 'relative', flex: 1 }}>
+                  <Search size={15} color="#94A3B8" style={{ position: 'absolute', right: '12px', top: '10px' }} />
+                  <input
+                    ref={quickNavInputRef}
+                    type="text"
+                    value={quickNavSearch}
+                    onChange={(e) => setQuickNavSearch(e.target.value)}
+                    placeholder="ابحث باسم المعيار أو رمز أو عنوان المؤشر..."
+                    style={{
+                      width: '100%',
+                      padding: '8px 36px 8px 12px',
+                      borderRadius: '8px',
+                      border: '1px solid #CBD5E1',
+                      fontSize: '13px',
+                      outline: 'none',
+                      boxSizing: 'border-box',
+                    }}
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsQuickNavOpen(false)}
                   style={{
-                    width: '100%',
-                    padding: '8px 36px 8px 12px',
+                    padding: '8px',
                     borderRadius: '8px',
                     border: '1px solid #CBD5E1',
-                    fontSize: '13px',
-                    outline: 'none',
-                    boxSizing: 'border-box',
+                    backgroundColor: '#F8FAFC',
+                    color: '#64748B',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
                   }}
-                />
+                  title="إغلاق القائمة"
+                >
+                  <X size={16} />
+                </button>
               </div>
 
-              <div style={{ maxHeight: '360px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <div style={{ maxHeight: '520px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '10px' }}>
                 {treeData.standards.map((std) => {
                   const query = quickNavSearch.trim().toLowerCase();
                   const stdMatches =
@@ -639,6 +631,8 @@ export const RubricAssessmentPage: React.FC<RubricAssessmentPageProps> = ({
                     )
                   );
                   if (matchingIndicators.length === 0) return null;
+
+                  const isExpanded = query ? true : (expandedStdId === std.standardId);
 
                   const stdScored = std.stats?.scoredIndicators ?? 0;
                   const stdTotal = std.stats?.totalIndicators ?? matchingIndicators.length;
@@ -656,6 +650,11 @@ export const RubricAssessmentPage: React.FC<RubricAssessmentPageProps> = ({
                       }}
                     >
                       <div
+                        onClick={() => {
+                          if (!query) {
+                            setExpandedStdId((prev) => (prev === std.standardId ? null : std.standardId));
+                          }
+                        }}
                         style={{
                           backgroundColor: '#F8FAFC',
                           padding: '8px 12px',
@@ -664,55 +663,85 @@ export const RubricAssessmentPage: React.FC<RubricAssessmentPageProps> = ({
                           justifyContent: 'space-between',
                           gap: '8px',
                           flexWrap: 'wrap',
-                          borderBottom: '1px solid #E2E8F0',
+                          borderBottom: isExpanded ? '1px solid #E2E8F0' : 'none',
+                          cursor: 'pointer',
+                          userSelect: 'none',
                         }}
                       >
-                        <span style={{ fontSize: '12.5px', fontWeight: 800, color: '#0F172A' }}>
-                          {std.code}: {std.title}
-                        </span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          {isExpanded ? <ChevronUp size={14} color="#64748B" /> : <ChevronDown size={14} color="#64748B" />}
+                          <span style={{ fontSize: '12.5px', fontWeight: 800, color: '#0F172A' }}>
+                            {std.code}: {std.title}
+                          </span>
+                        </div>
                         <span style={{ fontSize: '11px', fontWeight: 700, color: '#4338CA' }}>
                           ممتلئة: {stdScored} • فارغة: {stdEmpty} • متطلبات مغطاة: {stdCovered}/{stdMandatory}
                         </span>
                       </div>
-                      <div style={{ display: 'flex', flexDirection: 'column' }}>
-                        {matchingIndicators.map((ind) => {
-                          const isCurrent = ind.indicatorId === indicator?.indicatorId;
-                          const mCnt = ind.mandatoryRequirementsCount ?? 0;
-                          const cCnt = ind.coveredRequirementsCount ?? 0;
-                          const evCnt = ind.evidenceCount ?? 0;
-                          return (
-                            <button
-                              key={ind.indicatorId}
-                              type="button"
-                              onClick={() => {
-                                setSelectedStandardId(std.standardId);
-                                setSelectedIndicatorId(ind.indicatorId);
-                                setIsQuickNavOpen(false);
-                              }}
-                              style={{
-                                textAlign: 'right',
-                                padding: '8px 12px',
-                                border: 'none',
-                                borderBottom: '1px solid #F1F5F9',
-                                backgroundColor: isCurrent ? '#ECFDF5' : '#FFFFFF',
-                                cursor: 'pointer',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'space-between',
-                                gap: '10px',
-                              }}
-                            >
-                              <span style={{ fontSize: '12px', fontWeight: isCurrent ? 800 : 600, color: isCurrent ? '#065F46' : '#334155' }}>
-                                <strong style={{ color: '#059669', marginLeft: '6px' }}>{ind.code}</strong>
-                                {ind.title}
-                              </span>
-                              <span style={{ fontSize: '11px', color: mCnt > 0 && cCnt >= mCnt ? '#059669' : '#B45309', fontWeight: 700, whiteSpace: 'nowrap' }}>
-                                {ind.score !== null && ind.score !== undefined ? `تقدير: ${ind.score}` : 'غير مرصود'} • شواهد: {evCnt} • متطلبات مغطاة: {cCnt}/{mCnt}
-                              </span>
-                            </button>
-                          );
-                        })}
-                      </div>
+                      {isExpanded && (
+                        <div style={{ display: 'flex', flexDirection: 'column' }}>
+                          {std.subStandards.map((sub) => {
+                            const subMatchingIndicators = sub.indicators.filter((ind) =>
+                              !query || stdMatches || ind.code.toLowerCase().includes(query) || ind.title.toLowerCase().includes(query)
+                            );
+                            if (subMatchingIndicators.length === 0) return null;
+                            return (
+                              <div key={sub.subStandardId} style={{ borderBottom: '1px solid #E2E8F0' }}>
+                                <div
+                                  style={{
+                                    backgroundColor: '#F1F5F9',
+                                    padding: '6px 12px',
+                                    fontSize: '11px',
+                                    fontWeight: 700,
+                                    color: '#475569',
+                                    borderBottom: '1px solid #E2E8F0',
+                                  }}
+                                >
+                                  {sub.code}: {sub.title}
+                                </div>
+                                {subMatchingIndicators.map((ind) => {
+                                  const isCurrent = ind.indicatorId === indicator?.indicatorId;
+                                  const mCnt = ind.mandatoryRequirementsCount ?? 0;
+                                  const cCnt = ind.coveredRequirementsCount ?? 0;
+                                  const evCnt = ind.evidenceCount ?? 0;
+                                  return (
+                                    <button
+                                      key={ind.indicatorId}
+                                      type="button"
+                                      onClick={() => {
+                                        setSelectedStandardId(std.standardId);
+                                        setSelectedIndicatorId(ind.indicatorId);
+                                        setIsQuickNavOpen(false);
+                                      }}
+                                      style={{
+                                        textAlign: 'right',
+                                        padding: '8px 12px 8px 18px',
+                                        border: 'none',
+                                        borderBottom: '1px solid #F8FAFC',
+                                        backgroundColor: isCurrent ? '#ECFDF5' : '#FFFFFF',
+                                        cursor: 'pointer',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'space-between',
+                                        gap: '10px',
+                                        width: '100%',
+                                      }}
+                                    >
+                                      <span style={{ fontSize: '12px', fontWeight: isCurrent ? 800 : 600, color: isCurrent ? '#065F46' : '#334155' }}>
+                                        <strong style={{ color: '#059669', marginLeft: '6px' }}>{ind.code}</strong>
+                                        {ind.title}
+                                      </span>
+                                      <span style={{ fontSize: '11px', color: mCnt > 0 && cCnt >= mCnt ? '#059669' : '#B45309', fontWeight: 700, whiteSpace: 'nowrap' }}>
+                                        {ind.score !== null && ind.score !== undefined ? `تقدير: ${ind.score}` : 'غير مرصود'} • شواهد: {evCnt} • متطلبات مغطاة: {cCnt}/{mCnt}
+                                      </span>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
                   );
                 })}
@@ -794,26 +823,6 @@ export const RubricAssessmentPage: React.FC<RubricAssessmentPageProps> = ({
               >
                 <CheckCircle2 size={13} />
                 <span>محفوظ على الخادم</span>
-              </span>
-            )}
-
-            {saveStatus === 'saved_local' && (
-              <span
-                style={{
-                  fontSize: '12px',
-                  fontWeight: 600,
-                  color: '#D97706',
-                  backgroundColor: '#FFFBEB',
-                  border: '1px solid #FDE68A',
-                  padding: '3px 10px',
-                  borderRadius: '6px',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '4px',
-                }}
-              >
-                <WifiOff size={13} />
-                <span>محفوظ محلياً (أوفلاين)</span>
               </span>
             )}
 
@@ -946,6 +955,9 @@ export const RubricAssessmentPage: React.FC<RubricAssessmentPageProps> = ({
         >
           {rubricLevels.map((lvl) => {
             const isSelected = selectedScore === lvl.level;
+            const officialDesc = indicator?.descriptors?.find((d) => Number(d.level) === lvl.level);
+            const levelTitle = officialDesc?.title || lvl.title;
+            const levelDesc = officialDesc?.description || lvl.description;
 
             return (
               <div
@@ -991,148 +1003,17 @@ export const RubricAssessmentPage: React.FC<RubricAssessmentPageProps> = ({
                 </div>
 
                 <div style={{ fontSize: '14px', fontWeight: 800, color: '#1E293B', marginBottom: '6px' }}>
-                  {lvl.title}
+                  {levelTitle}
                 </div>
 
                 <div style={{ fontSize: '12px', color: '#64748B', lineHeight: '1.5' }}>
-                  {lvl.description}
+                  {levelDesc}
                 </div>
               </div>
             );
           })}
         </div>
       </div>
-
-      {/* IMP-08 (GAP-EV-09): Action Catalog Recommendations Card when Score <= 1 or manually requested */}
-      {!(selectedScore === 0 || selectedScore === 1 || forceShowRecommendations) && (
-        <div style={{ display: 'flex', justifyContent: 'flex-start', margin: '-6px 0 4px 0' }}>
-          <button
-            type="button"
-            onClick={() => setForceShowRecommendations(true)}
-            style={{
-              background: '#FFFBEB',
-              border: '1px dashed #FCD34D',
-              borderRadius: '8px',
-              color: '#B45309',
-              fontSize: '12.5px',
-              fontWeight: 700,
-              cursor: 'pointer',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '8px 14px',
-            }}
-          >
-            <Lightbulb size={15} />
-            <span>استعراض التدخلات التربوية المقترحة من بنك الإجراءات لهذا المؤشر</span>
-          </button>
-        </div>
-      )}
-
-      {(selectedScore === 0 || selectedScore === 1 || forceShowRecommendations) && (
-        <div
-          data-testid="action-recommendations-card"
-          style={{
-            backgroundColor: '#FFFBEB',
-            border: '1px solid #FCD34D',
-            borderRight: '4px solid #D97706',
-            borderRadius: '14px',
-            padding: '20px 24px',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '12px',
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Lightbulb size={18} color="#B45309" />
-              <h3 style={{ fontSize: '14.5px', fontWeight: 800, color: '#92400E', margin: 0 }}>
-                توصيات بنك الإجراءات النموذجية لمعالجة الفجوة {selectedScore !== null && selectedScore !== undefined ? `(الدرجة ${selectedScore})` : ''}
-              </h3>
-            </div>
-            <span style={{ fontSize: '11.5px', fontWeight: 700, color: '#B45309' }}>
-              بنك التدخلات المدرسية ({actionRecommendations.length})
-            </span>
-          </div>
-
-          {isLoadingRecommendations ? (
-            <div style={{ fontSize: '12.5px', color: '#92400E', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <Loader2 size={14} className="animate-spin" />
-              <span>جاري استخراج التدخلات المقترحة للمؤشر...</span>
-            </div>
-          ) : actionRecommendations.length === 0 ? (
-            <p style={{ fontSize: '12.5px', color: '#92400E', margin: 0 }}>
-              لا توجد توصيات نموذجية مطابقة حالياً؛ يمكنك إضافة إجراء مخصص من شاشة خطة التحسين.
-            </p>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              {actionRecommendations.map((rec) => {
-                const isAdded = addedRecIds.includes(rec.catalog_id);
-                const planTypeArabic =
-                  rec.plan_type === 'StaffProfessionalDevelopment'
-                    ? 'التطوير المهني'
-                    : rec.plan_type === 'AnnualOperational'
-                    ? 'الخطة التشغيلية'
-                    : 'تحسين الجودة';
-                return (
-                  <div
-                    key={rec.catalog_id}
-                    style={{
-                      backgroundColor: '#FFFFFF',
-                      border: '1px solid #FDE68A',
-                      borderRadius: '10px',
-                      padding: '12px 14px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      gap: '12px',
-                      flexWrap: 'wrap',
-                    }}
-                  >
-                    <div style={{ flex: 1, minWidth: '240px' }}>
-                      <div style={{ fontSize: '13px', fontWeight: 700, color: '#0F172A', marginBottom: '4px' }}>
-                        {rec.title}
-                      </div>
-                      <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', fontSize: '11.5px', color: '#64748B' }}>
-                        <span style={{ color: '#047857', fontWeight: 700 }}>نوع الخطة: {planTypeArabic}</span>
-                        {rec.suggested_responsible_description && (
-                          <span>المسؤول المقترح: {rec.suggested_responsible_description}</span>
-                        )}
-                        {rec.suggested_duration_days && <span>المدة: {rec.suggested_duration_days} يوماً</span>}
-                      </div>
-                    </div>
-
-                    {!isLocked && (
-                      <button
-                        type="button"
-                        disabled={isAdded || addingRecId === rec.catalog_id}
-                        onClick={() => handleAdoptRecommendation(rec)}
-                        style={{
-                          padding: '7px 14px',
-                          borderRadius: '8px',
-                          border: 'none',
-                          backgroundColor: isAdded ? '#ECFDF5' : '#D97706',
-                          color: isAdded ? '#059669' : '#FFFFFF',
-                          fontSize: '12px',
-                          fontWeight: 700,
-                          cursor: isAdded ? 'default' : 'pointer',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '5px',
-                          whiteSpace: 'nowrap',
-                        }}
-                      >
-                        {isAdded ? <Check size={14} /> : <Plus size={14} />}
-                        <span>{isAdded ? 'تمت الإضافة للخطة' : addingRecId === rec.catalog_id ? 'جاري الإضافة...' : 'إضافة إلى خطة التحسين'}</span>
-                      </button>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      )}
 
       {/* Official Verification Tools Reference (Static Cards per National Standards - Decision 2) */}
       <div
@@ -1237,6 +1118,7 @@ export const RubricAssessmentPage: React.FC<RubricAssessmentPageProps> = ({
           onUploadFile={handleUploadIndicatorEvidence}
           onUnlinkEvidence={handleUnlinkEvidence}
           onManageEvidenceLink={handleManageEvidenceLink}
+          onEditEvidenceMetadata={handleOpenEditMetadata}
           onUpdateCoveredRequirements={handleUpdateCoveredRequirements}
           isUploading={isUploading}
           uploadProgress={uploadProgress}
@@ -1259,6 +1141,136 @@ export const RubricAssessmentPage: React.FC<RubricAssessmentPageProps> = ({
           onChange={setJustification}
           readOnly={isLocked}
         />
+      </div>
+
+      {/* Reviewer Notes Section (Item 22) */}
+      <div
+        style={{
+          backgroundColor: '#FFFFFF',
+          borderRadius: '14px',
+          padding: '24px',
+          border: '1px solid #E2E8F0',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '14px',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <MessageSquare size={18} color="#4338CA" />
+            <h4 style={{ fontSize: '14px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
+              ملاحظات وتوجيهات المدير والمراجع (Reviewer Notes):
+            </h4>
+          </div>
+          <span style={{ fontSize: '11.5px', color: '#64748B', fontWeight: 600 }}>
+            {currentResult?.reviewerNotes?.length ?? 0} ملاحظة مسجلة
+          </span>
+        </div>
+
+        {/* Existing notes list */}
+        {currentResult?.reviewerNotes && currentResult.reviewerNotes.length > 0 ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            {currentResult.reviewerNotes.map((n) => (
+              <div
+                key={n.noteId}
+                style={{
+                  padding: '12px 14px',
+                  borderRadius: '10px',
+                  backgroundColor: '#F8FAFC',
+                  border: '1px solid #E2E8F0',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '6px',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '12.5px', fontWeight: 700, color: '#1E293B' }}>{n.authorName}</span>
+                    <span
+                      style={{
+                        fontSize: '10.5px',
+                        fontWeight: 700,
+                        padding: '1px 8px',
+                        borderRadius: '4px',
+                        backgroundColor: n.authorRole === 'ministry_supervisor' ? '#E0F2FE' : '#EEF2FF',
+                        color: n.authorRole === 'ministry_supervisor' ? '#0369A1' : '#4338CA',
+                      }}
+                    >
+                      {n.authorRole === 'ministry_supervisor'
+                        ? 'مشرف الوزارة (توجيه وزاري)'
+                        : n.authorRole === 'school_principal'
+                        ? 'مدير المدرسة (مراجعة داخلية)'
+                        : n.authorRole || 'مراجع'}
+                    </span>
+                  </div>
+                  {n.createdAt && (
+                    <span style={{ fontSize: '11px', color: '#94A3B8' }}>
+                      {new Date(n.createdAt).toLocaleDateString('ar-SA')}
+                    </span>
+                  )}
+                </div>
+                <p style={{ margin: 0, fontSize: '12.5px', color: '#334155', lineHeight: 1.6 }}>{n.text}</p>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div style={{ padding: '12px', borderRadius: '8px', backgroundColor: '#F8FAFC', border: '1px dashed #CBD5E1', color: '#64748B', fontSize: '12.5px', textAlign: 'center' }}>
+            لا توجد ملاحظات أو توجيهات مسجلة من المدير أو المراجع على هذا المؤشر حتى الآن.
+          </div>
+        )}
+
+        {/* Add note form for supervisors / principals / admins (Decision 4: Evaluator has read-only access) */}
+        {!isLocked && currentResult?.resultId && (
+          user?.roles?.some((r) => ['admin', 'school_principal', 'ministry_supervisor'].includes(r.roleName)) ||
+          user?.userType === 'ministry'
+        ) ? (
+          <form onSubmit={handleAddReviewerNote} style={{ display: 'flex', gap: '8px', marginTop: '6px' }}>
+            <input
+              type="text"
+              value={newReviewerNote}
+              onChange={(e) => setNewReviewerNote(e.target.value)}
+              placeholder={
+                user?.roles?.some((r) => r.roleName === 'ministry_supervisor') || user?.userType === 'ministry'
+                  ? 'اكتب توجيهاً إشرافياً وزارياً حول هذا المؤشر...'
+                  : 'اكتب ملاحظة وتوجيه مراجعة داخلية حول هذا المؤشر...'
+              }
+              style={{
+                flex: 1,
+                padding: '8px 12px',
+                borderRadius: '8px',
+                border: '1px solid #CBD5E1',
+                fontSize: '12.5px',
+                outline: 'none',
+              }}
+            />
+            <button
+              type="submit"
+              disabled={isAddingNote || !newReviewerNote.trim()}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '8px 16px',
+                borderRadius: '8px',
+                backgroundColor: '#4338CA',
+                color: '#FFFFFF',
+                border: 'none',
+                fontSize: '12.5px',
+                fontWeight: 700,
+                cursor: isAddingNote || !newReviewerNote.trim() ? 'not-allowed' : 'pointer',
+                opacity: isAddingNote || !newReviewerNote.trim() ? 0.6 : 1,
+              }}
+            >
+              <Send size={13} />
+              <span>{isAddingNote ? 'جارِ الإرسال...' : 'إرسال الملاحظة'}</span>
+            </button>
+          </form>
+        ) : (
+          <div style={{ fontSize: '11.5px', color: '#64748B', backgroundColor: '#F8FAFC', padding: '8px 12px', borderRadius: '6px' }}>
+            سجل الملاحظات مخصص لتوجيهات مدير المدرسة والمشرف التربوي (للقراءة فقط لمقيم المدرسة).
+          </div>
+        )}
       </div>
 
       {/* Bottom Sticky Navigation */}
@@ -1322,32 +1334,6 @@ export const RubricAssessmentPage: React.FC<RubricAssessmentPageProps> = ({
               <span>تصفير المؤشر</span>
             </button>
           )}
-
-          <button
-            type="button"
-            onClick={async () => {
-              await reloadIndicatorResult();
-              await reloadTree();
-              addToast('success', 'تم تحديث بيانات المؤشر والشواهد من الخادم.');
-            }}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '10px 14px',
-              borderRadius: '8px',
-              backgroundColor: '#FFFFFF',
-              color: '#475569',
-              border: '1px solid #CBD5E1',
-              fontWeight: 600,
-              fontSize: '13px',
-              cursor: 'pointer',
-            }}
-            title="تحديث بيانات المؤشر والشواهد"
-          >
-            <RefreshCw size={14} />
-            <span>تحديث</span>
-          </button>
 
           {!isLocked && (
             <button
@@ -1431,6 +1417,14 @@ export const RubricAssessmentPage: React.FC<RubricAssessmentPageProps> = ({
           await reloadTree();
         }}
         onError={(msg) => addToast('error', msg)}
+      />
+
+      {/* نافذة تعديل بيانات الشاهد (العنوان والنوع والوصف والمبررات) */}
+      <EditEvidenceMetadataModal
+        isOpen={Boolean(editModalEvidence)}
+        onClose={() => setEditModalEvidence(null)}
+        evidence={editModalEvidence}
+        onSave={handleSaveEvidenceMetadata}
       />
 
       {/* الإشعارات المنبثقة */}

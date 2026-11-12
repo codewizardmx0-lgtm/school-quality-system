@@ -12,6 +12,8 @@ use App\Models\ImprovementArea;
 use App\Models\ImprovementPlan;
 use App\Models\Indicator;
 use App\Models\IndicatorScoreDescriptor;
+use App\Models\Note;
+use App\Models\EvaluationResultVerificationMethod;
 use App\Models\Notification;
 use App\Models\PlanImprovementArea;
 use App\Models\School;
@@ -19,6 +21,7 @@ use App\Models\SchoolDocument;
 use App\Models\User;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Storage;
 
 /**
  * Seeder اختباري لتهيئة بيانات التقييم الحي لمدرسة الفاروق (مكتملة وقابلة للتعديل)
@@ -278,7 +281,12 @@ class DemoEvaluationSeeder extends Seeder
                 'storage_uri'        => "documents/{$schoolFarouq->school_id}/{$t['file']}",
                 'file_size'          => 2048 * (1 + $idx),
                 'mime_type'          => 'application/pdf',
+                'notes'              => 'الإصدار المبدئي المعتمد للشاهد',
             ]);
+
+            // كتابة محتوى ملف PDF فعلي في وحدة التخزين لتجنب خطأ 404 عند التحميل
+            $samplePdfContent = "%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n3 0 obj<</Type/Page/MediaBox[0 0 612 792]/Parent 2 0 R/Resources<<>>>>endobj\nxref\n0 4\n0000000000 65535 f\n0000000010 00000 n\n0000000053 00000 n\n0000000102 00000 n\ntrailer<</Size 4/Root 1 0 R>>\nstartxref\n178\n%%EOF\n";
+            Storage::disk('local')->put("documents/{$schoolFarouq->school_id}/{$t['file']}", $samplePdfContent);
 
             $createdVersions[] = $ver;
         }
@@ -485,9 +493,11 @@ class DemoEvaluationSeeder extends Seeder
             }
         }
 
-        // تنظيف أي مجالات متبقية تخص التقييم الحالي وليست مرتبطة بأي خطة أخرى
+        // تنظيف أي مجالات أو ملاحظات أو أساليب تحقق تابعة لنتائج التقييم
         $resultIds = EvaluationResult::where('evaluation_id', $evaluationId)->pluck('result_id');
         if ($resultIds->isNotEmpty()) {
+            Note::whereIn('result_id', $resultIds)->delete();
+            EvaluationResultVerificationMethod::whereIn('evaluation_result_id', $resultIds)->delete();
             ImprovementArea::whereIn('result_id', $resultIds)
                 ->whereNotIn('area_id', PlanImprovementArea::query()->select('area_id'))
                 ->delete();

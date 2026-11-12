@@ -11,6 +11,7 @@ import {
   Sparkles,
   Loader2,
 } from 'lucide-react';
+import { useAuth } from '../../../auth/AuthContext';
 import { evaluatorApi } from '../../api/evaluatorApi';
 
 export interface DetailedReportStats {
@@ -32,9 +33,12 @@ export const DetailedReportExportModal: React.FC<DetailedReportExportModalProps>
   isOpen,
   onClose,
   stats,
-  schoolName = 'مدرسة الفاروق النموذجية',
-  schoolCode = 'SCH-2026-001',
+  schoolName: propSchoolName,
+  schoolCode: propSchoolCode,
 }) => {
+  const { user } = useAuth();
+  const schoolName = propSchoolName || user?.school?.schoolName || 'مدرسة الفاروق النموذجية';
+  const schoolCode = propSchoolCode || user?.school?.schoolCode || (user?.school?.schoolId ? `SCH-${user.school.schoolId}` : 'SCH-2026-001');
   const [downloadingType, setDownloadingType] = useState<'pdf' | 'excel' | null>(null);
   const [feedbackMsg, setFeedbackMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
