@@ -650,6 +650,12 @@ class EvidenceController extends Controller
             return ApiResponse::notFound('نسخة المستند المطلوبة غير موجودة.');
         }
 
+        if (empty($version->storage_uri) || $version->file_size === 0 || str_contains($version->notes ?? '', 'تم شطب الملف الفيزيائي')) {
+            return ApiResponse::validationError([
+                'version' => ['تم شطب هذا الملف الفيزيائي مسبقاً لتوفير المساحة التخزينية. سجل النسخة محفوظ في الأرشيف للأغراض التوثيقية فقط.']
+            ], 'الملف الفيزيائي لهذه النسخة محذوف.');
+        }
+
         if (!Storage::disk('local')->exists($version->storage_uri)) {
             // توليد ملف PDF نموذجي تلقائياً عند غياب الملف الفيزيائي في البيئة المحلية لتفادي خطأ 404
             $samplePdf = "%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n3 0 obj<</Type/Page/MediaBox[0 0 612 792]/Parent 2 0 R/Resources<<>>>>endobj\nxref\n0 4\n0000000000 65535 f\n0000000010 00000 n\n0000000053 00000 n\n0000000102 00000 n\ntrailer<</Size 4/Root 1 0 R>>\nstartxref\n178\n%%EOF\n";

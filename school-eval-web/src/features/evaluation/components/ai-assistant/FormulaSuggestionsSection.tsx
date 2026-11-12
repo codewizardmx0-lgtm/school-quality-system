@@ -82,14 +82,41 @@ export const FormulaSuggestionsSection: React.FC<FormulaSuggestionsSectionProps>
       const aGap = Math.max(0, aTarget - a.score);
       const bTarget = customTargetScores[b.resultId] ?? b.targetScore;
       const bGap = Math.max(0, bTarget - b.score);
-      if (sortBy === 'gap_desc') return bGap - aGap;
-      if (sortBy === 'gap_asc') return aGap - bGap;
-      if (sortBy === 'code') return (a.indicatorCode || '').localeCompare(b.indicatorCode || '');
+
+      const parseCodeNumeric = (code?: string): [number, number, number] => {
+        if (!code) return [999, 999, 999];
+        const parts = code.split(/[-._]/).map((p) => parseInt(p.replace(/\D/g, ''), 10)).filter((n) => !isNaN(n));
+        return [parts[0] ?? 999, parts[1] ?? 999, parts[2] ?? 999];
+      };
+
+      const compareCodesNumeric = (codeA?: string, codeB?: string): number => {
+        const [sA, subA, iA] = parseCodeNumeric(codeA);
+        const [sB, subB, iB] = parseCodeNumeric(codeB);
+        if (sA !== sB) return sA - sB;
+        if (subA !== subB) return subA - subB;
+        return iA - iB;
+      };
+
+      if (sortBy === 'gap_desc') {
+        const diff = bGap - aGap;
+        if (diff !== 0) return diff;
+        return compareCodesNumeric(a.indicatorCode, b.indicatorCode);
+      }
+      if (sortBy === 'gap_asc') {
+        const diff = aGap - bGap;
+        if (diff !== 0) return diff;
+        return compareCodesNumeric(a.indicatorCode, b.indicatorCode);
+      }
+      if (sortBy === 'code') {
+        return compareCodesNumeric(a.indicatorCode, b.indicatorCode);
+      }
       if (sortBy === 'priority') {
         const pOrder: Record<string, number> = { High: 3, Medium: 2, Low: 1 };
-        return (pOrder[b.suggestedPriority] || 0) - (pOrder[a.suggestedPriority] || 0);
+        const diff = (pOrder[b.suggestedPriority] || 0) - (pOrder[a.suggestedPriority] || 0);
+        if (diff !== 0) return diff;
+        return compareCodesNumeric(a.indicatorCode, b.indicatorCode);
       }
-      return 0;
+      return compareCodesNumeric(a.indicatorCode, b.indicatorCode);
     });
 
   const [isUnadopting, setIsUnadopting] = useState<number | null>(null);

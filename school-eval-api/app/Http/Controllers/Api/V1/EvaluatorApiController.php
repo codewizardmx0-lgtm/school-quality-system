@@ -286,7 +286,7 @@ class EvaluatorApiController extends Controller
             'schoolInfo' => [
                 'schoolId' => $school?->school_id ?? 1,
                 'schoolName' => $school?->school_name ?? 'المدرسة المعتمدة',
-                'schoolCode' => $school?->code ?? ('SCH-' . str_pad((string)($school?->school_id ?? 1), 3, '0', STR_PAD_LEFT)),
+                'schoolCode' => $school?->school_code ?? $school?->code ?? ('SCH-' . str_pad((string)($school?->school_id ?? 1), 3, '0', STR_PAD_LEFT)),
                 'status' => $submissionStatus,
                 'statusArabic' => $submissionStatus === 'NeedsCompletion' ? 'طلب استكمال من المشرف' : ($submissionStatus === 'Submitted' ? 'تم الرفع (للقراءة فقط)' : 'مسودة قيد الإدخال'),
                 'currentEvaluator' => $user?->full_name ?? 'مقيم المدرسة',
@@ -865,16 +865,44 @@ class EvaluatorApiController extends Controller
             }
         }
 
+        // جلب جميع روابط المؤشرات المرتبطة بالنسخة الجديدة (سواء منقولة من نسخ سابقة أو مضافة حديثاً)
+        $allLinks = EvidenceLink::where('document_version_id', $docVersion->id)
+            ->where('evaluation_id', $evaluation->evaluation_id)
+            ->with(['indicator.subStandard.standard'])
+            ->get();
+
+        $linkedIndicators = $allLinks->map(fn($l) => [
+            'linkId' => (int) $l->id,
+            'indicatorId' => (int) $l->indicator_id,
+            'indicatorCode' => $l->indicator?->code ?? '',
+            'indicatorTitle' => $l->indicator?->name ?? '',
+            'standardId' => $l->indicator?->subStandard?->standard?->standard_id,
+            'standardCode' => $l->indicator?->subStandard?->standard?->code ?? '',
+            'standardName' => $l->indicator?->subStandard?->standard?->name ?? '',
+            'justification' => $l->justification ?? '',
+            'coveredRequirements' => $l->covered_requirements ?? [],
+        ])->values()->all();
+
+        $firstLink = $allLinks->first();
+        $isUnlinked = ($allLinks->isEmpty());
+
         return ApiResponse::created([
-            'documentId' => $document->id,
-            'versionId' => $docVersion->id,
-            'linkId' => $linkId,
+            'documentId' => (int) $document->id,
+            'versionId' => (int) $docVersion->id,
+            'linkId' => $linkId ?? $firstLink?->id,
             'title' => $document->title,
             'fileName' => $originalName,
             'fileSize' => $fileSize,
             'mimeType' => $mimeType,
             'versionNumber' => $newVersionNumber,
-            'coveredRequirements' => $coveredReqs ?? [],
+            'isUnlinked' => $isUnlinked,
+            'indicatorId' => $firstLink?->indicator_id,
+            'standardCode' => $firstLink?->indicator?->subStandard?->standard?->code ?? 'UNLINKED',
+            'standardName' => $firstLink?->indicator?->subStandard?->standard?->name ?? 'مستودع المدرسة (غير مرتبط)',
+            'indicatorCode' => $firstLink?->indicator?->code ?? 'غير مرتبط',
+            'indicatorTitle' => $firstLink?->indicator?->name ?? 'غير مرتبط بأي مؤشر',
+            'linkedIndicators' => $linkedIndicators,
+            'coveredRequirements' => $coveredReqs ?? $firstLink?->covered_requirements ?? [],
             'uploadedAt' => $docVersion->created_at?->toIso8601String(),
         ], 'تم رفع المستند وتوثيقه كشاهد معياري بنجاح');
     }
@@ -922,6 +950,158 @@ class EvaluatorApiController extends Controller
             ],
             'versions' => $data,
         ], 'تم جلب سجل إصدارات المستند بنجاح');
+    }
+
+    /**
+     * GET /api/v1/evidences/versions-archive
+     * استرجاع السجل الأرشيفي الشامل لكافة الوثائق وإصداراتها التاريخية
+     */
+    public function getVersionsArchive(Request $request): JsonResponse
+    {
+        $evaluation = $this->getActiveEvaluation($request);
+        $schoolId = $evaluation->school_id;
+
+        $documents = SchoolDocument::where('school_id', $schoolId)
+            ->with(['versions' => fn($q) => $q->orderBy('version_no', 'desc'), 'creator'])
+            ->orderBy('id', 'desc')
+            ->get();
+
+        $archive = $documents->map(function (SchoolDocument $doc) use ($evaluation) {
+            $currentVer = $doc->versions->firstWhere('is_current', true);
+            $historicalVers = $doc->versions->where('is_current', false)->values();
+
+            // روابط المؤشرات النشطة للنسخة الحالية
+            $activeLinks = $currentVer
+                ? EvidenceLink::where('document_version_id', $currentVer->id)
+                    ->where('evaluation_id', $evaluation->evaluation_id)
+                    ->with('indicator')
+                    ->get()
+                : collect();
+
+            $docType = $doc->document_type ?? 'evidence';
+            $docTypeArabic = match ($docType) {
+                'minutes' => 'محضر اجتماع',
+                'plan' => 'خطة تشغيلية',
+                'record' => 'سجل توثيقي',
+                'report' => 'تقرير إنجاز',
+                'board' => 'لوحة حائطية/بيانية',
+                'image' => 'صورة ميدانية',
+                default => 'شاهد توثيقي',
+            };
+
+            return [
+                'documentId' => (int) $doc->id,
+                'title' => $doc->title,
+                'documentType' => $docType,
+                'documentTypeArabic' => $docTypeArabic,
+                'description' => $doc->description ?? '',
+                'totalVersionsCount' => $doc->versions->count(),
+                'activeLinksCount' => $activeLinks->count(),
+                'linkedIndicators' => $activeLinks->map(fn($l) => [
+                    'indicatorId' => (int) $l->indicator_id,
+                    'indicatorCode' => $l->indicator?->code ?? '',
+                    'indicatorTitle' => $l->indicator?->name ?? '',
+                ])->values()->all(),
+                'currentVersion' => $currentVer ? [
+                    'versionId' => (int) $currentVer->id,
+                    'versionNo' => (int) $currentVer->version_no,
+                    'fileName' => $currentVer->file_name,
+                    'fileSize' => (int) $currentVer->file_size,
+                    'formattedSize' => round($currentVer->file_size / (1024 * 1024), 2) . ' MB',
+                    'notes' => $currentVer->notes ?: 'النسخة المعتمدة الحالية',
+                    'createdAt' => $currentVer->created_at?->toIso8601String(),
+                    'downloadUrl' => route('api.v1.document-versions.download', ['versionId' => $currentVer->id]),
+                ] : null,
+                'historicalVersions' => $historicalVers->map(function (DocumentVersion $ver) {
+                    $isPruned = empty($ver->storage_uri) || (int)$ver->file_size === 0 || str_contains($ver->notes ?? '', 'تم شطب الملف الفيزيائي');
+                    return [
+                        'versionId' => (int) $ver->id,
+                        'versionNo' => (int) $ver->version_no,
+                        'fileName' => $ver->file_name,
+                        'fileSize' => (int) $ver->file_size,
+                        'formattedSize' => round($ver->file_size / (1024 * 1024), 2) . ' MB',
+                        'notes' => $ver->notes ?: 'نسخة أرشيفية سابقة',
+                        'createdAt' => $ver->created_at?->toIso8601String(),
+                        'isFilePruned' => $isPruned,
+                        'downloadUrl' => $isPruned ? null : route('api.v1.document-versions.download', ['versionId' => $ver->id]),
+                    ];
+                })->all(),
+            ];
+        });
+
+        $totalVersions = DocumentVersion::where('school_id', $schoolId)->count();
+        $prunedVersionsCount = DocumentVersion::where('school_id', $schoolId)
+            ->where(function ($q) {
+                $q->whereNull('storage_uri')
+                  ->orWhere('storage_uri', '')
+                  ->orWhere('file_size', 0)
+                  ->orWhere('notes', 'like', '%تم شطب الملف الفيزيائي%');
+            })->count();
+
+        return ApiResponse::success([
+            'archiveStats' => [
+                'totalDocuments' => $documents->count(),
+                'totalVersions' => $totalVersions,
+                'historicalVersionsCount' => max(0, $totalVersions - $documents->count()),
+                'prunedVersionsCount' => $prunedVersionsCount,
+            ],
+            'documents' => $archive,
+        ], 'تم جلب سجل أرشيف الإصدارات بنجاح');
+    }
+
+    /**
+     * DELETE /api/v1/evidences/versions/{versionId}/file
+     * حذف الملف الفيزيائي للإصدار القديم مع الحفاظ على سجل الأرشيف
+     */
+    public function pruneVersionPhysicalFile(Request $request, int $versionId): JsonResponse
+    {
+        $evaluation = $this->getActiveEvaluation($request);
+        $schoolId = $evaluation->school_id;
+
+        $user = $request->user();
+        if ($user && !$user->hasPermission('evidence.manage') && !$user->hasPermission('evaluations.edit')) {
+            return ApiResponse::forbidden('غير مصرح لك بإدارة وحذف ملفات الشواهد.');
+        }
+
+        $version = DocumentVersion::where('id', $versionId)
+            ->where('school_id', $schoolId)
+            ->first();
+
+        if (!$version) {
+            return ApiResponse::notFound('إصدار الشاهد المطلوب غير موجود.');
+        }
+
+        if ($version->is_current) {
+            return ApiResponse::validationError([
+                'version' => ['لا يمكن حذف الملف الفيزيائي للإصدار المعتمد الحالي للشاهد. يُسمح فقط بتفريغ ملفات الإصدارات الأرشيفية السابقة.']
+            ], 'لا يمكن حذف الملف الفيزيائي للإصدار المعتمد الحالي.');
+        }
+
+        if ($version->storage_uri && Storage::disk('local')->exists($version->storage_uri)) {
+            Storage::disk('local')->delete($version->storage_uri);
+        }
+
+        $noteNotice = '[تم شطب الملف الفيزيائي لتوفير المساحة - الأرشيف محفوظ]';
+        $currentNotes = $version->notes ?: '';
+        if (!str_contains($currentNotes, 'تم شطب الملف الفيزيائي')) {
+            $updatedNotes = trim($currentNotes . ' ' . $noteNotice);
+        } else {
+            $updatedNotes = $currentNotes;
+        }
+
+        $version->update([
+            'storage_uri' => '',
+            'file_size' => 0,
+            'notes' => $updatedNotes,
+        ]);
+
+        return ApiResponse::success([
+            'versionId' => (int) $version->id,
+            'versionNo' => (int) $version->version_no,
+            'notes' => $version->notes,
+            'fileSize' => 0,
+            'isFilePruned' => true,
+        ], 'تم حذف الملف الفيزيائي للنسخة السابقة بنجاح مع الحفاظ على سجل الأرشيف.');
     }
 
     /**
@@ -994,7 +1174,8 @@ class EvaluatorApiController extends Controller
         $query = DocumentVersion::with(['document.creator', 'evidenceLinks.indicator.subStandard.standard'])
             ->whereHas('document', function ($q) use ($schoolId) {
                 $q->where('school_id', $schoolId);
-            });
+            })
+            ->where('is_current', true);
 
         if ($formatFilter) {
             $query->where('mime_type', 'like', '%' . $formatFilter . '%');
@@ -1899,8 +2080,8 @@ class EvaluatorApiController extends Controller
                 'id' => 'draft_report_generated',
                 'title' => 'جاهزية مسودة التقرير الشامل والمراجعة الداخلية لمدير المدرسة',
                 'description' => $reportGenerated
-                    ? 'مسودة التقرير الشامل ومصفوفة التقييم جاهزة ومستوفية للمراجعة الداخلية والاعتماد.'
-                    : 'يتطلب اكتمال رصد كافة المؤشرات الـ 109 واستيفاء تغطية الشواهد لتوليد مسودة التقرير النهائي للاعتماد.',
+                    ? "مسودة التقرير الشامل ومصفوفة الـ {$totalIndicators} مؤشراً مكتملة وجاهزة للمراجعة الداخلية والختم الرقمي من مدير المدرسة."
+                    : "متبقي استيفاء تقديرات " . max(0, $totalIndicators - $scoredCount) . " مؤشرات واستكمال ربط الشواهد لتوليد مسودة التقرير النهائي للاعتماد.",
                 'passed' => $reportGenerated,
                 'weight' => 20,
             ],

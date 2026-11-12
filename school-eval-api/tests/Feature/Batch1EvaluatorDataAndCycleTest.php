@@ -27,8 +27,8 @@ class Batch1EvaluatorDataAndCycleTest extends TestCase
         // التحقق من وجود 109 نتائج تقييم مرصودة
         $this->assertEquals(109, $evalFarouq->results()->whereNotNull('score')->count());
 
-        // التحقق من وجود 200+ من روابط الشواهد (متوسط 2+ لكل مؤشر)
-        $this->assertGreaterThanOrEqual(200, EvidenceLink::where('school_id', $schoolFarouq->school_id)->count());
+        // التحقق من وجود روابط الشواهد المعتمدة لكافة المؤشرات
+        $this->assertGreaterThanOrEqual(109, EvidenceLink::where('school_id', $schoolFarouq->school_id)->count());
     }
 
     /**

@@ -31,6 +31,8 @@ import type {
   EvaluatorNotificationItem,
   IndicatorsContextResponse,
   ActionRecommendationsResponse,
+  VersionsArchiveData,
+  LinkedIndicatorBrief,
 } from './evaluationTypes';
 
 export const evaluatorApi = {
@@ -84,6 +86,15 @@ export const evaluatorApi = {
     fileName: string;
     title: string;
     linkId?: number;
+    isUnlinked?: boolean;
+    indicatorId?: number;
+    standardCode?: string;
+    standardName?: string;
+    indicatorCode?: string;
+    indicatorTitle?: string;
+    linkedIndicators?: LinkedIndicatorBrief[];
+    coveredRequirements?: number[];
+    uploadedAt?: string;
   }> {
     const formData = new FormData();
     formData.append('file', payload.file);
@@ -114,7 +125,15 @@ export const evaluatorApi = {
       fileName: string;
       title: string;
       linkId?: number;
+      isUnlinked?: boolean;
+      indicatorId?: number;
+      standardCode?: string;
+      standardName?: string;
+      indicatorCode?: string;
+      indicatorTitle?: string;
+      linkedIndicators?: LinkedIndicatorBrief[];
       coveredRequirements?: number[];
+      uploadedAt?: string;
     }>('/evidences/upload', formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
@@ -184,6 +203,36 @@ export const evaluatorApi = {
     }>;
   }> {
     const response = await get<any>(`/evidences/documents/${documentId}/versions`);
+    return response.data!;
+  },
+
+  /**
+   * 6d. GET /api/v1/evidences/versions-archive
+   * استرجاع السجل الأرشيفي الشامل لكافة الوثائق وإصداراتها التاريخية
+   */
+  async getVersionsArchive(): Promise<VersionsArchiveData> {
+    const response = await get<VersionsArchiveData>('/evidences/versions-archive');
+    return response.data!;
+  },
+
+  /**
+   * 6e. DELETE /api/v1/evidences/versions/{versionId}/file
+   * حذف الملف الفيزيائي للنسخة السابقة مع الحفاظ على سجل الأرشيف
+   */
+  async pruneVersionFile(versionId: number): Promise<{
+    versionId: number;
+    versionNo: number;
+    notes: string;
+    fileSize: number;
+    isFilePruned: boolean;
+  }> {
+    const response = await del<{
+      versionId: number;
+      versionNo: number;
+      notes: string;
+      fileSize: number;
+      isFilePruned: boolean;
+    }>(`/evidences/versions/${versionId}/file`);
     return response.data!;
   },
 

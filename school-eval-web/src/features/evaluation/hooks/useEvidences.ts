@@ -4,6 +4,7 @@ import type {
   EvidenceItem,
   EvidenceVaultStats,
   UploadEvidencePayload,
+  VersionsArchiveData,
 } from '../api/evaluationTypes';
 
 export function useEvidences(initialStandardId?: number) {
@@ -15,6 +16,10 @@ export function useEvidences(initialStandardId?: number) {
   const [isUploading, setIsUploading] = useState<boolean>(false);
   const [uploadProgress, setUploadProgress] = useState<number>(0);
   const [uploadError, setUploadError] = useState<string | null>(null);
+
+  // حالة سجل الإصدارات والأرشيف
+  const [versionsArchive, setVersionsArchive] = useState<VersionsArchiveData | null>(null);
+  const [isLoadingArchive, setIsLoadingArchive] = useState<boolean>(false);
 
   const fetchEvidences = useCallback(async () => {
     setIsLoading(true);
@@ -31,6 +36,24 @@ export function useEvidences(initialStandardId?: number) {
       setIsLoading(false);
     }
   }, [selectedStandardFilter, selectedFormatFilter]);
+
+  const fetchVersionsArchive = useCallback(async () => {
+    setIsLoadingArchive(true);
+    try {
+      const data = await evaluatorApi.getVersionsArchive();
+      setVersionsArchive(data);
+    } catch (err) {
+      console.error('Failed to load versions archive:', err);
+    } finally {
+      setIsLoadingArchive(false);
+    }
+  }, []);
+
+  const pruneVersionFile = useCallback(async (versionId: number) => {
+    await evaluatorApi.pruneVersionFile(versionId);
+    await fetchVersionsArchive();
+    await fetchEvidences();
+  }, [fetchVersionsArchive, fetchEvidences]);
 
   useEffect(() => {
     fetchEvidences();
@@ -72,51 +95,11 @@ export function useEvidences(initialStandardId?: number) {
         });
         setUploadProgress(100);
 
-        // إضافة الشاهد تفاؤلياً للمستودع
-        const isUnlinked = !payload.indicatorId;
-        const newEvidenceItem: EvidenceItem = {
-          id: result.versionId,
-          documentId: result.documentId,
-          linkId: result.linkId,
-          isUnlinked,
-          indicatorId: payload.indicatorId,
-          title: result.title,
-          fileName: result.fileName,
-          mimeType: payload.file.type,
-          fileSize: payload.file.size,
-          formattedSize: (payload.file.size / (1024 * 1024)).toFixed(2) + ' MB',
-          versionNumber: result.versionNumber,
-          standardCode: isUnlinked ? 'UNLINKED' : 'STD',
-          standardName: isUnlinked ? 'مستودع المدرسة (غير مرتبط)' : 'تم التوثيق بالمؤشر',
-          indicatorCode: isUnlinked ? 'غير مرتبط' : `#${payload.indicatorId}`,
-          indicatorTitle: isUnlinked ? 'غير مرتبط بأي مؤشر' : 'شاهد موثق حديثاً',
-          uploadedAt: new Date().toISOString().split('T')[0],
-          uploadedBy: 'المقيّم المدرسي',
-          verificationStatus: 'Compliant',
-          verificationStatusArabic: 'مطابق ومعتمد داخلياً',
-        };
-
-        setEvidences((prev) => {
-          if (payload.documentId) {
-            // تحديث المستند القائم ببيانات الإصدار الأحدث
-            return prev.map((item) => (item.documentId === payload.documentId ? newEvidenceItem : item));
-          }
-          return [newEvidenceItem, ...prev];
-        });
-
-        // تحديث إحصاءات المستودع تفاؤلياً
-        setVaultStats((prev) => {
-          if (!prev) return null;
-          const additionalMb = payload.file.size / (1024 * 1024);
-          const newUsed = Number((prev.storageUsedMb + additionalMb).toFixed(2));
-          return {
-            ...prev,
-            totalEvidences: payload.documentId ? prev.totalEvidences : prev.totalEvidences + 1,
-            compliantEvidences: prev.compliantEvidences + 1,
-            storageUsedMb: newUsed,
-            storagePercentage: Number(((newUsed / prev.storageLimitMb) * 100).toFixed(1)),
-          };
-        });
+        // مزامنة حالة المستودع فورياً من الخادم لضمان دقة كامل الروابط
+        await fetchEvidences();
+        if (versionsArchive) {
+          await fetchVersionsArchive();
+        }
 
         return result;
       } catch (err: unknown) {
@@ -130,7 +113,7 @@ export function useEvidences(initialStandardId?: number) {
         }, 500);
       }
     },
-    []
+    [fetchEvidences, fetchVersionsArchive, versionsArchive]
   );
 
   return {
@@ -146,5 +129,9 @@ export function useEvidences(initialStandardId?: number) {
     uploadError,
     fetchEvidences,
     uploadEvidenceFile,
+    versionsArchive,
+    isLoadingArchive,
+    fetchVersionsArchive,
+    pruneVersionFile,
   };
 }

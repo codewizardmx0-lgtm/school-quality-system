@@ -1,5 +1,5 @@
 import { exportToExcel, formatExportFilename } from '../../../admin/utils/exportUtils';
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useEvidences } from '../../hooks/useEvidences';
 import { evaluatorApi } from '../../api/evaluatorApi';
 import { EvidenceCard } from './EvidenceCard';
@@ -10,6 +10,7 @@ import { useToast } from '../../../admin/components/common/useToast';
 import { ToastNotification } from '../../../admin/components/common/ToastNotification';
 import { UploadEvidenceModal } from './UploadEvidenceModal';
 import { DocumentVersionsModal } from './DocumentVersionsModal';
+import { OldEvidenceVersionsView } from './OldEvidenceVersionsView';
 import { useAuth } from '../../../auth/AuthContext';
 import type { EvidenceItem, EvaluatorScreen } from '../../api/evaluationTypes';
 import {
@@ -50,6 +51,10 @@ export const EvidencesRepository: React.FC<EvidencesRepositoryProps> = ({
     uploadProgress,
     fetchEvidences,
     uploadEvidenceFile,
+    versionsArchive,
+    isLoadingArchive,
+    fetchVersionsArchive,
+    pruneVersionFile,
   } = useEvidences();
 
   const [searchTerm, setSearchTerm] = useState('');
@@ -58,7 +63,7 @@ export const EvidencesRepository: React.FC<EvidencesRepositoryProps> = ({
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [replaceDocId, setReplaceDocId] = useState<number | undefined>(undefined);
   const [viewMode, setViewMode] = useState<'grid' | 'table'>('table');
-  const [activeTab, setActiveTab] = useState<'repository' | 'inventory'>('repository');
+  const [activeTab, setActiveTab] = useState<'repository' | 'inventory' | 'versions'>('repository');
   const [selectedEvidenceForLinking, setSelectedEvidenceForLinking] = useState<EvidenceItem | null>(null);
   const [editModalEvidence, setEditModalEvidence] = useState<EvidenceItem | null>(null);
   const [versionsModalEvidence, setVersionsModalEvidence] = useState<EvidenceItem | null>(null);
@@ -67,6 +72,12 @@ export const EvidencesRepository: React.FC<EvidencesRepositoryProps> = ({
   const [navPopoverEvidenceId, setNavPopoverEvidenceId] = useState<number | null>(null);
   const { toasts, addToast, dismissToast } = useToast();
   const { user } = useAuth();
+
+  useEffect(() => {
+    if (activeTab === 'versions') {
+      fetchVersionsArchive();
+    }
+  }, [activeTab, fetchVersionsArchive]);
 
   const handleOpenLinkModal = (evidence: EvidenceItem) => {
     setSelectedEvidenceForLinking(evidence);
@@ -214,6 +225,27 @@ export const EvidencesRepository: React.FC<EvidencesRepositoryProps> = ({
           <FileText size={16} />
           📊 جرد وحصر الشواهد (109 مؤشرات)
         </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('versions')}
+          style={{
+            padding: '8px 18px',
+            borderRadius: '8px',
+            fontSize: '13.5px',
+            fontWeight: 700,
+            cursor: 'pointer',
+            border: activeTab === 'versions' ? '2px solid #D97706' : '1px solid #E2E8F0',
+            backgroundColor: activeTab === 'versions' ? '#FEF3C7' : '#FFFFFF',
+            color: activeTab === 'versions' ? '#92400E' : '#64748B',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+          }}
+        >
+          <History size={16} />
+          🕒 الإصدارات والنسخ القديمة
+        </button>
       </div>
 
       {activeTab === 'inventory' ? (
@@ -222,6 +254,17 @@ export const EvidencesRepository: React.FC<EvidencesRepositoryProps> = ({
           onNavigate={onNavigate}
           onSuccessToast={(msg) => addToast('success', msg)}
           onErrorToast={(err) => addToast('error', err)}
+        />
+      ) : activeTab === 'versions' ? (
+        <OldEvidenceVersionsView
+          archiveData={versionsArchive}
+          isLoading={isLoadingArchive}
+          onRefresh={fetchVersionsArchive}
+          onPruneFile={async (versionId) => {
+            await pruneVersionFile(versionId);
+            addToast('success', 'تم شطب وتفريغ الملف الفيزيائي بنجاح مع إبقاء السجل في الأرشيف.');
+          }}
+          readOnly={readOnly}
         />
       ) : (
         <>
@@ -1045,6 +1088,7 @@ export const EvidencesRepository: React.FC<EvidencesRepositoryProps> = ({
         onClose={() => setIsUploadModalOpen(false)}
         onUpload={async (data) => {
           await uploadEvidenceFile(data);
+          addToast('success', replaceDocId ? 'تم استبدال الشاهد بنسخة أحدث ونقل كافة الروابط بنجاح.' : 'تم رفع الشاهد وتوثيقه بنجاح.');
         }}
         documentIdToReplace={replaceDocId}
         isUploading={isUploading}

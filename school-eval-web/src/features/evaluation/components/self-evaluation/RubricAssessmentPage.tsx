@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useSelfEvaluation } from '../../hooks/useSelfEvaluation';
 import { EvidenceUploader } from './EvidenceUploader';
 import { EvaluatorJustification } from './EvaluatorJustification';
@@ -28,17 +28,16 @@ import {
   AlertCircle,
   RotateCcw,
   ChevronDown,
-  ChevronUp,
-  Search,
   Layers,
   BarChart3,
   Info,
   FileCheck2,
-  X,
   MessageSquare,
   Send,
+  Compass,
 } from 'lucide-react';
 import { SafeResetConfirmModal } from './SafeResetConfirmModal';
+import { QuickNavModal } from './QuickNavModal';
 
 interface RubricAssessmentPageProps {
   selectedIndicatorId?: number | null;
@@ -86,12 +85,8 @@ export const RubricAssessmentPage: React.FC<RubricAssessmentPageProps> = ({
   const [linkModalMode, setLinkModalMode] = useState<'single' | 'multi' | 'unlink'>('single');
   const [editModalEvidence, setEditModalEvidence] = useState<EvidenceItem | null>(null);
   const [isQuickNavOpen, setIsQuickNavOpen] = useState<boolean>(false);
-  const [quickNavSearch, setQuickNavSearch] = useState<string>('');
-  const [expandedStdId, setExpandedStdId] = useState<number | null>(null);
   const [newReviewerNote, setNewReviewerNote] = useState<string>('');
   const [isAddingNote, setIsAddingNote] = useState<boolean>(false);
-  const quickNavRef = useRef<HTMLDivElement | null>(null);
-  const quickNavInputRef = useRef<HTMLInputElement | null>(null);
 
   // IMP-07: School Quantitative Metrics Context
   const [indicatorsContextMap, setIndicatorsContextMap] = useState<Record<string, IndicatorMetricsContextItem>>({});
@@ -117,20 +112,6 @@ export const RubricAssessmentPage: React.FC<RubricAssessmentPageProps> = ({
       setSelectedVerificationMethods(currentResult.verificationMethods || []);
     }
   }, [currentResult]);
-
-  // Close QuickNav dropdown on outside click
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (quickNavRef.current && !quickNavRef.current.contains(e.target as Node)) {
-        setIsQuickNavOpen(false);
-      }
-    };
-    if (isQuickNavOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-      setTimeout(() => quickNavInputRef.current?.focus(), 40);
-    }
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [isQuickNavOpen]);
 
   // IMP-07: Fetch Indicators Quantitative Context once per evaluationId
   useEffect(() => {
@@ -454,7 +435,7 @@ export const RubricAssessmentPage: React.FC<RubricAssessmentPageProps> = ({
 
       {/* Quick Searchable Standards & Indicators Dropdown (UX-8 / UX-Extra-3) */}
       {treeData && treeData.standards.length > 0 && (
-        <div ref={quickNavRef} style={{ position: 'relative' }}>
+        <div style={{ position: 'relative' }}>
           <div style={{ display: 'flex', gap: '8px', alignItems: 'stretch', flexWrap: 'wrap' }}>
             <button
               type="button"
@@ -514,9 +495,9 @@ export const RubricAssessmentPage: React.FC<RubricAssessmentPageProps> = ({
               style={{
                 padding: '0 16px',
                 borderRadius: '12px',
-                border: '1px solid #059669',
-                backgroundColor: '#ECFDF5',
-                color: '#065F46',
+                border: '1.5px solid #4F46E5',
+                backgroundColor: '#EEF2FF',
+                color: '#4338CA',
                 fontSize: '12.5px',
                 fontWeight: 800,
                 cursor: 'pointer',
@@ -525,9 +506,10 @@ export const RubricAssessmentPage: React.FC<RubricAssessmentPageProps> = ({
                 gap: '6px',
                 whiteSpace: 'nowrap',
               }}
+              title="دليل التنقل السريع بين كافة المعايير والمؤشرات الـ 109"
             >
-              <Search size={15} />
-              بحث في المعايير
+              <Compass size={15} />
+              تصفح المعايير والمؤشرات (109)
             </button>
 
             <button
@@ -557,197 +539,6 @@ export const RubricAssessmentPage: React.FC<RubricAssessmentPageProps> = ({
               تحديث
             </button>
           </div>
-
-          {isQuickNavOpen && (
-            <div
-              style={{
-                position: 'absolute',
-                top: 'calc(100% + 6px)',
-                left: 0,
-                right: 0,
-                zIndex: 40,
-                backgroundColor: '#FFFFFF',
-                border: '1px solid #CBD5E1',
-                borderRadius: '12px',
-                boxShadow: '0 12px 28px rgba(15, 23, 42, 0.14)',
-                padding: '14px',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '10px',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <div style={{ position: 'relative', flex: 1 }}>
-                  <Search size={15} color="#94A3B8" style={{ position: 'absolute', right: '12px', top: '10px' }} />
-                  <input
-                    ref={quickNavInputRef}
-                    type="text"
-                    value={quickNavSearch}
-                    onChange={(e) => setQuickNavSearch(e.target.value)}
-                    placeholder="ابحث باسم المعيار أو رمز أو عنوان المؤشر..."
-                    style={{
-                      width: '100%',
-                      padding: '8px 36px 8px 12px',
-                      borderRadius: '8px',
-                      border: '1px solid #CBD5E1',
-                      fontSize: '13px',
-                      outline: 'none',
-                      boxSizing: 'border-box',
-                    }}
-                  />
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setIsQuickNavOpen(false)}
-                  style={{
-                    padding: '8px',
-                    borderRadius: '8px',
-                    border: '1px solid #CBD5E1',
-                    backgroundColor: '#F8FAFC',
-                    color: '#64748B',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}
-                  title="إغلاق القائمة"
-                >
-                  <X size={16} />
-                </button>
-              </div>
-
-              <div style={{ maxHeight: '520px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                {treeData.standards.map((std) => {
-                  const query = quickNavSearch.trim().toLowerCase();
-                  const stdMatches =
-                    std.code.toLowerCase().includes(query) || std.title.toLowerCase().includes(query);
-                  const matchingIndicators = std.subStandards.flatMap((sub) =>
-                    sub.indicators.filter(
-                      (ind) =>
-                        !query ||
-                        stdMatches ||
-                        ind.code.toLowerCase().includes(query) ||
-                        ind.title.toLowerCase().includes(query)
-                    )
-                  );
-                  if (matchingIndicators.length === 0) return null;
-
-                  const isExpanded = query ? true : (expandedStdId === std.standardId);
-
-                  const stdScored = std.stats?.scoredIndicators ?? 0;
-                  const stdTotal = std.stats?.totalIndicators ?? matchingIndicators.length;
-                  const stdEmpty = Math.max(0, stdTotal - stdScored);
-                  const stdCovered = std.stats?.coveredRequirements ?? 0;
-                  const stdMandatory = std.stats?.totalMandatoryRequirements ?? 0;
-
-                  return (
-                    <div
-                      key={std.standardId}
-                      style={{
-                        border: '1px solid #E2E8F0',
-                        borderRadius: '8px',
-                        overflow: 'hidden',
-                      }}
-                    >
-                      <div
-                        onClick={() => {
-                          if (!query) {
-                            setExpandedStdId((prev) => (prev === std.standardId ? null : std.standardId));
-                          }
-                        }}
-                        style={{
-                          backgroundColor: '#F8FAFC',
-                          padding: '8px 12px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          gap: '8px',
-                          flexWrap: 'wrap',
-                          borderBottom: isExpanded ? '1px solid #E2E8F0' : 'none',
-                          cursor: 'pointer',
-                          userSelect: 'none',
-                        }}
-                      >
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          {isExpanded ? <ChevronUp size={14} color="#64748B" /> : <ChevronDown size={14} color="#64748B" />}
-                          <span style={{ fontSize: '12.5px', fontWeight: 800, color: '#0F172A' }}>
-                            {std.code}: {std.title}
-                          </span>
-                        </div>
-                        <span style={{ fontSize: '11px', fontWeight: 700, color: '#4338CA' }}>
-                          ممتلئة: {stdScored} • فارغة: {stdEmpty} • متطلبات مغطاة: {stdCovered}/{stdMandatory}
-                        </span>
-                      </div>
-                      {isExpanded && (
-                        <div style={{ display: 'flex', flexDirection: 'column' }}>
-                          {std.subStandards.map((sub) => {
-                            const subMatchingIndicators = sub.indicators.filter((ind) =>
-                              !query || stdMatches || ind.code.toLowerCase().includes(query) || ind.title.toLowerCase().includes(query)
-                            );
-                            if (subMatchingIndicators.length === 0) return null;
-                            return (
-                              <div key={sub.subStandardId} style={{ borderBottom: '1px solid #E2E8F0' }}>
-                                <div
-                                  style={{
-                                    backgroundColor: '#F1F5F9',
-                                    padding: '6px 12px',
-                                    fontSize: '11px',
-                                    fontWeight: 700,
-                                    color: '#475569',
-                                    borderBottom: '1px solid #E2E8F0',
-                                  }}
-                                >
-                                  {sub.code}: {sub.title}
-                                </div>
-                                {subMatchingIndicators.map((ind) => {
-                                  const isCurrent = ind.indicatorId === indicator?.indicatorId;
-                                  const mCnt = ind.mandatoryRequirementsCount ?? 0;
-                                  const cCnt = ind.coveredRequirementsCount ?? 0;
-                                  const evCnt = ind.evidenceCount ?? 0;
-                                  return (
-                                    <button
-                                      key={ind.indicatorId}
-                                      type="button"
-                                      onClick={() => {
-                                        setSelectedStandardId(std.standardId);
-                                        setSelectedIndicatorId(ind.indicatorId);
-                                        setIsQuickNavOpen(false);
-                                      }}
-                                      style={{
-                                        textAlign: 'right',
-                                        padding: '8px 12px 8px 18px',
-                                        border: 'none',
-                                        borderBottom: '1px solid #F8FAFC',
-                                        backgroundColor: isCurrent ? '#ECFDF5' : '#FFFFFF',
-                                        cursor: 'pointer',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'space-between',
-                                        gap: '10px',
-                                        width: '100%',
-                                      }}
-                                    >
-                                      <span style={{ fontSize: '12px', fontWeight: isCurrent ? 800 : 600, color: isCurrent ? '#065F46' : '#334155' }}>
-                                        <strong style={{ color: '#059669', marginLeft: '6px' }}>{ind.code}</strong>
-                                        {ind.title}
-                                      </span>
-                                      <span style={{ fontSize: '11px', color: mCnt > 0 && cCnt >= mCnt ? '#059669' : '#B45309', fontWeight: 700, whiteSpace: 'nowrap' }}>
-                                        {ind.score !== null && ind.score !== undefined ? `تقدير: ${ind.score}` : 'غير مرصود'} • شواهد: {evCnt} • متطلبات مغطاة: {cCnt}/{mCnt}
-                                      </span>
-                                    </button>
-                                  );
-                                })}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
         </div>
       )}
 
@@ -1425,6 +1216,19 @@ export const RubricAssessmentPage: React.FC<RubricAssessmentPageProps> = ({
         onClose={() => setEditModalEvidence(null)}
         evidence={editModalEvidence}
         onSave={handleSaveEvidenceMetadata}
+      />
+
+      {/* نافذة التنقل السريع التفاعلية بين الـ 109 مؤشراً (Modal مركزي تفاعلي) */}
+      <QuickNavModal
+        isOpen={isQuickNavOpen}
+        onClose={() => setIsQuickNavOpen(false)}
+        standards={treeData?.standards || []}
+        currentStandardId={standard?.standardId}
+        currentIndicatorId={selectedIndicatorId || undefined}
+        onSelectIndicator={(stdId, indId) => {
+          setSelectedStandardId(stdId);
+          setSelectedIndicatorId(indId);
+        }}
       />
 
       {/* الإشعارات المنبثقة */}

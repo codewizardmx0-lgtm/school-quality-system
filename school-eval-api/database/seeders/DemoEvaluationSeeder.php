@@ -16,6 +16,7 @@ use App\Models\Note;
 use App\Models\EvaluationResultVerificationMethod;
 use App\Models\Notification;
 use App\Models\PlanImprovementArea;
+use App\Models\PlanReviewNote;
 use App\Models\School;
 use App\Models\SchoolDocument;
 use App\Models\User;
@@ -138,177 +139,129 @@ class DemoEvaluationSeeder extends Seeder
             }
         }
 
-        // ب. إنشاء 20 وثيقة مدرسية معتمدة تغطي كافة المجالات المعيارية
-        $documentTemplates = [
-            [
-                'title' => 'الخطة الاستراتيجية والتشغيلية السنوية لمدرسة الفاروق (2026/2027)',
-                'type'  => 'plan',
-                'desc'  => 'الخطة العامة المعتمدة من مجلس إدارة المدرسة ومكتب التربية بالمحافظة.',
-                'file'  => 'farouq_operational_plan_2026.pdf',
-            ],
-            [
-                'title' => 'اللائحة التنظيمية وقواعد الانضباط المدرسي المعتمدة',
-                'type'  => 'policy',
-                'desc'  => 'ميثاق السلوك الطلابي وإجراءات ضبط العملية التعليمية وحماية البيئة المدرسية.',
-                'file'  => 'farouq_school_code_of_conduct.pdf',
-            ],
-            [
-                'title' => 'محاضر اجتماعات مجلس الآباء والمعلمين الدورية',
-                'type'  => 'minutes',
-                'desc'  => 'توثيق مشاركات المجتمع المحلي ومناقشات تطوير مستوى التحصيل العلمي للطلبة.',
-                'file'  => 'farouq_pt_council_minutes_2026.pdf',
-            ],
-            [
-                'title' => 'خطة الأمن والسلامة وإجراءات الإخلاء للطوارئ المدرسية',
-                'type'  => 'report',
-                'desc'  => 'تقرير التفتيش الميداني على مخارج الطوارئ ومعدات الإطفاء وتدريب الطلاب.',
-                'file'  => 'farouq_safety_and_evacuation_report.pdf',
-            ],
-            [
-                'title' => 'سجلات تقييم الأداء التدريسي والزيارات الصفية للمعلمين',
-                'type'  => 'record',
-                'desc'  => 'بطاقات الملاحظة الصفية المعتمدة من الموجه التربوي ومدير المدرسة.',
-                'file'  => 'farouq_teacher_evaluation_records.pdf',
-            ],
-            [
-                'title' => 'سجل خطط الأنشطة اللاصفية والمسابقات الثقافية والرياضية',
-                'type'  => 'record',
-                'desc'  => 'جداول البرامج الإذاعية المدرسية والمعارض والمسابقات الطلابية للعام الحالي.',
-                'file'  => 'farouq_extracurricular_activities_log.pdf',
-            ],
-            [
-                'title' => 'كشوفات الصيانة الوقائية للمختبرات وقاعات الحاسوب المدرسي',
-                'type'  => 'record',
-                'desc'  => 'محاضر فحص الأجهزة التعليمية وصيانة الوسائل والمختبر المدرسي.',
-                'file'  => 'farouq_lab_maintenance_checks.pdf',
-            ],
-            [
-                'title' => 'التقرير المالي والموازنة التشغيلية لمشاريع التطوير المدرسي',
-                'type'  => 'financial',
-                'desc'  => 'كشف الإيرادات والمصروفات المخصصة لتحسين البيئة المدرسية وصيانة المرافق.',
-                'file'  => 'farouq_financial_summary_2026.pdf',
-            ],
-            [
-                'title' => 'دليل الإرشاد التربوي والنفسي ورعاية الفئات الخاصة',
-                'type'  => 'policy',
-                'desc'  => 'برامج الدعم النفسي والاجتماعي ومتابعة الحالات السلوكية وصعوبات التعلم.',
-                'file'  => 'farouq_counseling_and_special_needs_guide.pdf',
-            ],
-            [
-                'title' => 'الخطة العلاجية والبرامج الإثرائية لتحسين التحصيل العلمي',
-                'type'  => 'plan',
-                'desc'  => 'كشوفات نتائج الاختبارات التشخيصية وخطط تحسين مستويات الطلبة الضعاف.',
-                'file'  => 'farouq_remedial_and_enrichment_plans.pdf',
-            ],
-            [
-                'title' => 'تقرير التدقيق الداخلي ومطابقة معايير الجودة والاعتماد',
-                'type'  => 'report',
-                'desc'  => 'محضر اجتماع لجنة التقييم الذاتي واعتماد حزم الشواهد المرفوعة.',
-                'file'  => 'farouq_internal_quality_audit_2026.pdf',
-            ],
-            [
-                'title' => 'سجل الدورات التدريبية والتطوير المهني للكوادر التعليمية',
-                'type'  => 'record',
-                'desc'  => 'بيانات الورش التدريبية المنفذة في استراتيجيات التدريس الحديثة والإدارة الصفية.',
-                'file'  => 'farouq_staff_professional_development.pdf',
-            ],
-            [
-                'title' => 'دليل وسياسات إدارة البيئة المدرسية والمرافق الصحية',
-                'type'  => 'policy',
-                'desc'  => 'تعليمات النظافة العامة ومتابعة المقصف المدرسي وجودة مياه الشرب.',
-                'file'  => 'farouq_hygiene_and_facilities_policy.pdf',
-            ],
-            [
-                'title' => 'تقرير تحليل نتائج الاختبارات الدورية والنهائية ونسب النجاح',
-                'type'  => 'report',
-                'desc'  => 'مقارنة مستويات التحصيل بين المراحل الدراسية ومؤشرات تقدم الطلبة.',
-                'file'  => 'farouq_academic_performance_analysis.pdf',
-            ],
-            [
-                'title' => 'ميثاق الشراكة المجتمعية وبرامج التعاون مع أولياء الأمور',
-                'type'  => 'policy',
-                'desc'  => 'وثيقة اتفاقيات التعاون مع المجتمع المحلي والمؤسسات الداعمة للمدرسة.',
-                'file'  => 'farouq_community_partnership_charter.pdf',
-            ],
-            [
-                'title' => 'سجلات حضور وغياب الطلبة والكوادر الإدارية والتعليمية',
-                'type'  => 'record',
-                'desc'  => 'بيانات الانضباط المدرسي ونسب الالتزام بالدوام الرسمي لعام 2026.',
-                'file'  => 'farouq_attendance_and_punctuality_log.pdf',
-            ],
-            [
-                'title' => 'محاضر تسليم واستلام المقررات المدرسية والوسائل التعليمية',
-                'type'  => 'minutes',
-                'desc'  => 'كشوفات توزيع الكتب المدرسية والوسائل الإيضاحية على الفصول.',
-                'file'  => 'farouq_textbook_and_media_inventory.pdf',
-            ],
-            [
-                'title' => 'خطة وبرامج الرعاية الصحية المدرسية والإسعافات الأولية',
-                'type'  => 'plan',
-                'desc'  => 'تجهيزات العيادة المدرسية وجداول الفحص الدوري ومتابعة السجلات الصحية.',
-                'file'  => 'farouq_school_health_program_2026.pdf',
-            ],
-            [
-                'title' => 'سجل برامج الموهوبين والابتكارات والمسابقات العلمية',
-                'type'  => 'record',
-                'desc'  => 'قوائم الطلاب الموهوبين والمشاريع العلمية المشاركة في معارض المديرية.',
-                'file'  => 'farouq_gifted_students_portfolio.pdf',
-            ],
-            [
-                'title' => 'دليل إجراءات الشكاوى والمقترحات وصندوق الملاحظات',
-                'type'  => 'policy',
-                'desc'  => 'آلية استقبال ومعالجة شكاوى أولياء الأمور والطلبة وضمان سرية المتابعة.',
-                'file'  => 'farouq_grievance_and_feedback_mechanism.pdf',
-            ],
-        ];
+        // ب. إنشاء وثائق مدرسية واقعية تغطي كافة المتطلبات الوطنية الـ 278 عبر الـ 109 مؤشراً (159 وثيقة أصيلة)
+        $samplePdfContent = "%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n3 0 obj<</Type/Page/MediaBox[0 0 612 792]/Parent 2 0 R/Resources<<>>>>endobj\nxref\n0 4\n0000000000 65535 f\n0000000010 00000 n\n0000000053 00000 n\n0000000102 00000 n\ntrailer<</Size 4/Root 1 0 R>>\nstartxref\n178\n%%EOF\n";
 
-        $createdVersions = [];
-        foreach ($documentTemplates as $idx => $t) {
-            $doc = SchoolDocument::create([
-                'school_id'          => $schoolFarouq->school_id,
-                'title'              => $t['title'],
-                'document_type'      => $t['type'],
-                'description'        => $t['desc'],
-                'created_by_user_id' => $evaluatorFarouq->user_id,
-            ]);
-
-            $ver = DocumentVersion::create([
-                'school_document_id' => $doc->id,
-                'version_no'         => 1,
-                'school_id'          => $schoolFarouq->school_id,
-                'is_current'         => true,
-                'file_name'          => $t['file'],
-                'storage_uri'        => "documents/{$schoolFarouq->school_id}/{$t['file']}",
-                'file_size'          => 2048 * (1 + $idx),
-                'mime_type'          => 'application/pdf',
-                'notes'              => 'الإصدار المبدئي المعتمد للشاهد',
-            ]);
-
-            // كتابة محتوى ملف PDF فعلي في وحدة التخزين لتجنب خطأ 404 عند التحميل
-            $samplePdfContent = "%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n3 0 obj<</Type/Page/MediaBox[0 0 612 792]/Parent 2 0 R/Resources<<>>>>endobj\nxref\n0 4\n0000000000 65535 f\n0000000010 00000 n\n0000000053 00000 n\n0000000102 00000 n\ntrailer<</Size 4/Root 1 0 R>>\nstartxref\n178\n%%EOF\n";
-            Storage::disk('local')->put("documents/{$schoolFarouq->school_id}/{$t['file']}", $samplePdfContent);
-
-            $createdVersions[] = $ver;
-        }
-
-        // ج. ربط كافة المؤشرات الـ 109 بعدد شواهد مطابق تماماً لمتطلباتها في المعايير الوطنية (278 متطلباً)
-        $versionCount = count($createdVersions);
-        for ($i = 0; $i < count($ratedResults); $i++) {
-            $item = $ratedResults[$i];
+        $docIndex = 0;
+        foreach ($ratedResults as $item) {
             $indicator = $item['indicator'];
-            $requirements = $indicator->evidenceRequirements()->orderBy('requirement_id')->get();
+            $result = $item['result'];
+            $reqs = $indicator->evidenceRequirements()->orderBy('requirement_id')->get();
+            if ($reqs->isEmpty()) {
+                continue;
+            }
 
-            foreach ($requirements as $reqIdx => $req) {
-                // اختيار وثيقة مميزة لكل متطلب داخل المؤشر دون تكرار نفس النسخة على نفس المؤشر
-                $ver = $createdVersions[($i + ($reqIdx * 3)) % $versionCount];
+            // تقسيم المتطلبات إلى وثيقة أو وثيقتين واقعيتين للمؤشر
+            $primaryReqs = [];
+            $secondaryReqs = [];
+
+            if ($reqs->count() === 1) {
+                $primaryReqs = [$reqs[0]];
+            } elseif ($reqs->count() === 2) {
+                $r1 = $reqs[0];
+                $r2 = $reqs[1];
+                $isBoard1 = str_contains($r1->title, 'لوحة') || str_contains($r1->title, 'صورة');
+                $isBoard2 = str_contains($r2->title, 'لوحة') || str_contains($r2->title, 'صورة');
+                if ($isBoard1 !== $isBoard2) {
+                    $primaryReqs = [$r1];
+                    $secondaryReqs = [$r2];
+                } else {
+                    $primaryReqs = [$r1, $r2];
+                }
+            } else {
+                $primaryReqs = [$reqs[0], $reqs[1]];
+                for ($k = 2; $k < $reqs->count(); $k++) {
+                    $secondaryReqs[] = $reqs[$k];
+                }
+            }
+
+            $docGroups = array_filter([$primaryReqs, $secondaryReqs]);
+
+            foreach ($docGroups as $group) {
+                $docIndex++;
+                $titleParts = array_map(function ($r) {
+                    $t = trim($r->title);
+                    $t = preg_replace('/^وثيقة\s+/u', '', $t);
+                    $t = preg_replace('/^نسخة\s+(من\s+)?/u', '', $t);
+                    return $t;
+                }, $group);
+                $combinedTitle = implode(' و', array_unique($titleParts));
+
+                $cleanTitle = $combinedTitle;
+                if (!preg_match('/^(محضر|سجل|خطة|تقرير|دليل|كشف|لوحة|قائمة|ملف|استمارة|استبانة|مصفوفة|ميثاق|برنامج|جدول)/u', $cleanTitle)) {
+                    $cleanTitle = "ملف وثائقي: " . $cleanTitle;
+                }
+                $cleanTitle .= " لمدرسة الفاروق (2026/2027)";
+
+                $docType = 'record';
+                if (preg_match('/(محضر|اجتماع)/u', $cleanTitle)) {
+                    $docType = 'minutes';
+                } elseif (preg_match('/(خطة|برنامج)/u', $cleanTitle)) {
+                    $docType = 'plan';
+                } elseif (preg_match('/(تقرير|تحليل|استبانة|نتائج)/u', $cleanTitle)) {
+                    $docType = 'report';
+                } elseif (preg_match('/(لوحة|صورة)/u', $cleanTitle)) {
+                    $docType = 'board';
+                } elseif (preg_match('/(دليل|لائحة|ميثاق|سياسة)/u', $cleanTitle)) {
+                    $docType = 'policy';
+                }
+
+                $doc = SchoolDocument::create([
+                    'school_id'          => $schoolFarouq->school_id,
+                    'title'              => $cleanTitle,
+                    'document_type'      => $docType,
+                    'description'        => "شاهد توثيقي رسمي معتمد يغطي متطلبات مؤشر ({$indicator->code}: {$indicator->name}) لمدرسة الفاروق.",
+                    'created_by_user_id' => $evaluatorFarouq->user_id,
+                ]);
+
+                // لأول 3 مستندات: إنشاء نسخة أرشيفية قديمة (v1) لإثبات واختبار تبويب الإصدارات والنسخ القديمة
+                if ($docIndex <= 3) {
+                    $oldFileName = "farouq_doc_{$doc->id}_v1.pdf";
+                    DocumentVersion::create([
+                        'school_document_id' => $doc->id,
+                        'version_no'         => 1,
+                        'school_id'          => $schoolFarouq->school_id,
+                        'is_current'         => false,
+                        'file_name'          => $oldFileName,
+                        'storage_uri'        => "documents/{$schoolFarouq->school_id}/{$oldFileName}",
+                        'file_size'          => 1024 * 1024 * 2, // 2MB
+                        'mime_type'          => 'application/pdf',
+                        'notes'              => 'المسودة الأولى قبل التعديل والاعتماد النهائي (نسخة أرشيفية سابقة)',
+                    ]);
+                    Storage::disk('local')->put("documents/{$schoolFarouq->school_id}/{$oldFileName}", $samplePdfContent);
+
+                    $currentVersionNo = 2;
+                } else {
+                    $currentVersionNo = 1;
+                }
+
+                $cleanCode = str_replace(['-', '.'], '_', $indicator->code);
+                $curFileName = "farouq_ind_{$cleanCode}_doc_{$doc->id}_v{$currentVersionNo}.pdf";
+                $fileSize = 1024 * 512 + (($docIndex * 43) % 2500) * 1024;
+
+                $ver = DocumentVersion::create([
+                    'school_document_id' => $doc->id,
+                    'version_no'         => $currentVersionNo,
+                    'school_id'          => $schoolFarouq->school_id,
+                    'is_current'         => true,
+                    'file_name'          => $curFileName,
+                    'storage_uri'        => "documents/{$schoolFarouq->school_id}/{$curFileName}",
+                    'file_size'          => $fileSize,
+                    'mime_type'          => 'application/pdf',
+                    'notes'              => 'الإصدار المعتمد للشاهد التوثيقي لعام 2026',
+                ]);
+                Storage::disk('local')->put("documents/{$schoolFarouq->school_id}/{$curFileName}", $samplePdfContent);
+
+                // ربط الشاهد حصرياً بالمؤشر والمتطلبات المحددة
+                $reqIds = array_map(fn($r) => $r->requirement_id, $group);
                 EvidenceLink::create([
                     'evaluation_id'        => $evalFarouq->evaluation_id,
                     'indicator_id'         => $indicator->indicator_id,
                     'document_version_id'  => $ver->id,
                     'school_id'            => $schoolFarouq->school_id,
-                    'evaluation_result_id' => $item['result']->result_id,
-                    'justification'        => "شاهد مستوفٍ لمتطلب ({$req->title}) عبر الوثيقة ({$ver->file_name}) لعام 2026.",
-                    'covered_requirements' => [$req->requirement_id],
+                    'evaluation_result_id' => $result->result_id,
+                    'justification'        => "شاهد توثيقي رسمي معتمد يغطي متطلبات (" . implode('، ', $titleParts) . ") لمؤشر ({$indicator->code}) لعام 2026/2027.",
+                    'covered_requirements' => $reqIds,
                     'status'               => 'completed',
                 ]);
             }
@@ -481,6 +434,7 @@ class DemoEvaluationSeeder extends Seeder
 
         $planIds = ImprovementPlan::where('school_id', $schoolId)->pluck('plan_id');
         if ($planIds->isNotEmpty()) {
+            PlanReviewNote::whereIn('plan_id', $planIds)->delete();
             ImprovementAction::whereIn('plan_id', $planIds)->delete();
             $areaIdsFromPlans = PlanImprovementArea::whereIn('plan_id', $planIds)->pluck('area_id');
             PlanImprovementArea::whereIn('plan_id', $planIds)->delete();

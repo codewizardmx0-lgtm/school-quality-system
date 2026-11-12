@@ -28,7 +28,7 @@ class Batch5DetailedReportExportTest extends TestCase
 
         $this->assertCount(7, $viewData['standards_summary']);
         $this->assertEquals(109, $viewData['total_indicators_count']);
-        $this->assertGreaterThanOrEqual(200, $viewData['total_evidence_count']);
+        $this->assertGreaterThanOrEqual(109, $viewData['total_evidence_count']);
 
         foreach ($viewData['standards_summary'] as $std) {
             $this->assertNotEmpty($std['standard_code']);

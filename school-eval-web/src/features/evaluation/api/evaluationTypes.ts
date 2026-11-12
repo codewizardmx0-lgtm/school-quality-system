@@ -284,6 +284,45 @@ export interface EvidencesRepositoryResponse {
   evidences: EvidenceItem[];
 }
 
+export interface ArchivedVersionItem {
+  versionId: number;
+  versionNo: number;
+  fileName: string;
+  fileSize: number;
+  formattedSize: string;
+  notes: string;
+  createdAt: string;
+  isFilePruned?: boolean;
+  downloadUrl?: string | null;
+}
+
+export interface ArchivedDocumentItem {
+  documentId: number;
+  title: string;
+  documentType: string;
+  documentTypeArabic: string;
+  description: string;
+  totalVersionsCount: number;
+  activeLinksCount: number;
+  linkedIndicators: {
+    indicatorId: number;
+    indicatorCode: string;
+    indicatorTitle: string;
+  }[];
+  currentVersion: ArchivedVersionItem | null;
+  historicalVersions: ArchivedVersionItem[];
+}
+
+export interface VersionsArchiveData {
+  archiveStats: {
+    totalDocuments: number;
+    totalVersions: number;
+    historicalVersionsCount: number;
+    prunedVersionsCount: number;
+  };
+  documents: ArchivedDocumentItem[];
+}
+
 export interface UploadEvidencePayload {
   file: File;
   title?: string;

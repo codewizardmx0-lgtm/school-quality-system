@@ -37,8 +37,8 @@ export const DetailedReportExportModal: React.FC<DetailedReportExportModalProps>
   schoolCode: propSchoolCode,
 }) => {
   const { user } = useAuth();
-  const schoolName = propSchoolName || user?.school?.schoolName || 'مدرسة الفاروق النموذجية';
-  const schoolCode = propSchoolCode || user?.school?.schoolCode || (user?.school?.schoolId ? `SCH-${user.school.schoolId}` : 'SCH-2026-001');
+  const schoolName = propSchoolName || user?.school?.schoolName || 'مدرسة الفاروق الأساسية للبنين';
+  const schoolCode = propSchoolCode || user?.school?.schoolCode || (user?.school?.schoolId ? `SCH-${user.school.schoolId}` : 'SCH-TAIZ-2026-001');
   const [downloadingType, setDownloadingType] = useState<'pdf' | 'excel' | null>(null);
   const [feedbackMsg, setFeedbackMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
