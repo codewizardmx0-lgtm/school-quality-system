@@ -48,6 +48,8 @@ class EvaluationResult extends Model
         'score',
         'textual_result',
         'completion_status',
+        'is_excluded',
+        'excluded_at',
     ];
 
     /**
@@ -64,6 +66,8 @@ class EvaluationResult extends Model
             'standard_version_id' => 'integer',
             'evaluator_user_id' => 'integer',
             'score' => 'integer',
+            'is_excluded' => 'boolean',
+            'excluded_at' => 'datetime',
             'created_at' => 'datetime',
             'updated_at' => 'datetime',
         ];

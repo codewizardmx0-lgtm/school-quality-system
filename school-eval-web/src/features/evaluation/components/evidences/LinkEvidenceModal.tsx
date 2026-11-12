@@ -156,6 +156,17 @@ export const LinkEvidenceModal: React.FC<LinkEvidenceModalProps> = ({
           return;
         }
 
+        const targetInd = allIndicators.find((i) => i.indicatorId === selectedSingleIndicatorId);
+        const reqs = targetInd?.evidenceRequirements?.filter((r) => r.required) || [];
+        if (reqs.length > 0) {
+          const hasSelected = reqs.some((r) => selectedCoveredReqIds.includes(r.id));
+          if (!hasSelected) {
+            onError(`لا بد أن تحدد متطلباً إلزامياً من المؤشر (${targetInd?.code || ''}).`);
+            setIsSubmitting(false);
+            return;
+          }
+        }
+
         // Link to new target indicator
         await evaluatorApi.multiLinkEvidence({
           documentId: evidence.documentId,
@@ -180,6 +191,19 @@ export const LinkEvidenceModal: React.FC<LinkEvidenceModalProps> = ({
           onError('يرجى تحديد مؤشر واحد على الأقل أو فك الارتباط.');
           setIsSubmitting(false);
           return;
+        }
+
+        for (const indId of keptOrAddedIds) {
+          const ind = allIndicators.find((i) => i.indicatorId === indId);
+          const reqs = ind?.evidenceRequirements?.filter((r) => r.required) || [];
+          if (reqs.length > 0) {
+            const hasSelected = reqs.some((r) => selectedCoveredReqIds.includes(r.id));
+            if (!hasSelected) {
+              onError(`لا بد أن تحدد متطلباً إلزامياً من المؤشر (${ind?.code || indId}).`);
+              setIsSubmitting(false);
+              return;
+            }
+          }
         }
 
         await evaluatorApi.multiLinkEvidence({
@@ -557,6 +581,21 @@ export const LinkEvidenceModal: React.FC<LinkEvidenceModalProps> = ({
                               style={{ accentColor: '#D97706' }}
                             />
                             <span style={{ fontWeight: checked ? 700 : 500 }}>{req.title}</span>
+                            {req.isCovered && (
+                              <span
+                                style={{
+                                  fontSize: '10px',
+                                  color: '#059669',
+                                  backgroundColor: '#ECFDF5',
+                                  padding: '1px 5px',
+                                  borderRadius: '4px',
+                                  border: '1px solid #A7F3D0',
+                                  fontWeight: 600,
+                                }}
+                              >
+                                ✓ مربوط بشاهد آخر
+                              </span>
+                            )}
                           </label>
                         );
                       })}
@@ -723,6 +762,22 @@ export const LinkEvidenceModal: React.FC<LinkEvidenceModalProps> = ({
                                   <strong style={{ color: '#7c3aed', marginLeft: '4px' }}>[{ind.code}]</strong>
                                   {req.title}
                                 </span>
+                                {req.isCovered && (
+                                  <span
+                                    style={{
+                                      fontSize: '10px',
+                                      color: '#059669',
+                                      backgroundColor: '#ECFDF5',
+                                      padding: '1px 5px',
+                                      borderRadius: '4px',
+                                      border: '1px solid #A7F3D0',
+                                      fontWeight: 600,
+                                      marginRight: '4px',
+                                    }}
+                                  >
+                                    ✓ مربوط بشاهد آخر
+                                  </span>
+                                )}
                               </label>
                             );
                           })

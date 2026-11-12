@@ -140,11 +140,15 @@ Route::prefix('v1')->group(function () {
             Route::get('/export-report-pdf', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'exportReportPdf'])->name('api.v1.evaluator.export-report-pdf');
             Route::get('/export-detailed-pdf', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'exportDetailedReportPdf'])->name('api.v1.evaluator.export-detailed-pdf');
             Route::get('/export-detailed-excel', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'exportDetailedReportExcel'])->name('api.v1.evaluator.export-detailed-excel');
+            Route::get('/export-improvement-workbook', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'exportImprovementWorkbook'])->name('api.v1.evaluator.export-improvement-workbook');
+            Route::get('/internal-review-note', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'getInternalReviewNote'])->name('api.v1.evaluator.internal-review-note.show');
+            Route::post('/internal-review-note', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'saveInternalReviewNote'])->name('api.v1.evaluator.internal-review-note.store');
             Route::get('/evidence-inventory', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'getEvidenceInventory'])->name('api.v1.evaluator.evidence-inventory');
             Route::get('/improvement-suggestions', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'getImprovementSuggestions'])->name('api.v1.evaluator.improvement-suggestions');
             Route::post('/evidence-links/multi', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'multiLinkEvidence'])->name('api.v1.evaluator.evidence-links.multi');
             Route::post('/indicators/{indicatorId}/reset', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'resetIndicator'])->name('api.v1.evaluator.indicators.reset');
             Route::post('/standards/{standardId}/reset', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'resetStandard'])->name('api.v1.evaluator.standards.reset');
+            Route::get('/discrepancies/audit', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'auditDiscrepancies'])->name('api.v1.evaluator.discrepancies.audit');
         });
 
         Route::get('/standard-versions/active/tree', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'activeStandardsTree'])->name('api.v1.standard-versions.active.tree');
@@ -166,6 +170,8 @@ Route::prefix('v1')->group(function () {
         });
 
         Route::get('/improvement-plans/current', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'getCurrentImprovementPlan'])->name('api.v1.improvement-plans.current');
+        Route::post('/evaluator/suggestions/{resultId}/exclude', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'excludeSuggestion'])->name('api.v1.evaluator.suggestions.exclude');
+        Route::post('/evaluator/suggestions/{resultId}/restore', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'restoreSuggestion'])->name('api.v1.evaluator.suggestions.restore');
         Route::post('/evaluator/improvement-plans', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'createImprovementPlan'])->name('api.v1.evaluator.improvement-plans.store');
         Route::post('/evaluator/improvement-plans/{id}/review-notes', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'storePlanReviewNote'])->name('api.v1.evaluator.improvement-plans.review-notes.store');
         Route::post('/improvement-actions', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'createImprovementAction'])->name('api.v1.improvement-actions.store');

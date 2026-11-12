@@ -127,6 +127,7 @@ export interface EvidenceRequirementItem {
   title: string;
   description?: string;
   required: boolean;
+  isCovered?: boolean;
 }
 
 export interface IndicatorNode {
@@ -563,6 +564,8 @@ export interface ImprovementSuggestion {
   suggestedName: string;
   isAdopted: boolean;
   adoptedAreaId?: number | null;
+  isExcluded?: boolean;
+  excludedAt?: string | null;
 }
 
 export interface EvidenceInventoryIndicator {
@@ -673,4 +676,48 @@ export interface ActionRecommendationsResponse {
   recommendations_count?: number;
   message?: string;
   recommendations: ActionCatalogRecommendationItem[];
+}
+
+export interface DiscrepancyItem {
+  indicatorId?: number;
+  standardId?: number;
+  code?: string;
+  name?: string;
+  standardName?: string;
+  score?: number;
+  evidenceCount?: number;
+  mandatoryCount?: number;
+  coveredCount?: number;
+  textLength?: number;
+  toolName?: string;
+  documentVersionId?: number;
+  documentTitle?: string;
+  linkedIndicatorsCount?: number;
+  sampleIndicatorCodes?: string;
+  issue: string;
+  recommendation: string;
+}
+
+export interface DiscrepancyCase {
+  caseId: 'case_1' | 'case_2' | 'case_3' | 'case_4' | 'case_5';
+  title: string;
+  severity: 'critical' | 'medium' | 'warning';
+  severityLabel: string;
+  description: string;
+  count: number;
+  items: DiscrepancyItem[];
+}
+
+export interface DiscrepancySummary {
+  totalDiscrepancies: number;
+  criticalCount: number;
+  mediumCount: number;
+  warningCount: number;
+  evaluatedIndicatorsCount: number;
+  auditPassed: boolean;
+}
+
+export interface DiscrepancyAuditResponse {
+  summary: DiscrepancySummary;
+  cases: DiscrepancyCase[];
 }

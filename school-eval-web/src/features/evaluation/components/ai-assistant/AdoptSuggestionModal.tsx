@@ -26,7 +26,7 @@ export const AdoptSuggestionModal: React.FC<AdoptSuggestionModalProps> = ({
     if (suggestion) {
       setName(suggestion.suggestedName || `تحسين أداء: ${suggestion.indicatorName}`);
       setDescription(
-        `مجال تحسين مبني على نتائج التقييم الذاتي للمؤشر (${suggestion.indicatorCode}). الدرجة المرصودة (${suggestion.score}) والدرجة المستهدفة (${suggestion.targetScore}) بفجوة قدرها (${suggestion.gap}).`
+        `إجراء تحسين مبني على نتائج التقييم الذاتي للمؤشر (${suggestion.indicatorCode}). الدرجة المرصودة (${suggestion.score}) والدرجة المستهدفة (${suggestion.targetScore}) بفجوة قدرها (${suggestion.gap}).`
       );
       setPriority(suggestion.suggestedPriority || 'High');
       setTargetScore(suggestion.targetScore || 3);
@@ -46,7 +46,7 @@ export const AdoptSuggestionModal: React.FC<AdoptSuggestionModalProps> = ({
         priority,
         targetScore,
       });
-      onSuccess(`تم تبني مجال التحسين "${name}" بنجاح وإدراجه في مجالات التطوير المدرسية.`);
+      onSuccess(`تم تبني إجراء التحسين "${name}" بنجاح وإدراجه في خطة التحسين المدرسية.`);
       onClose();
     } catch (err) {
       console.error('Failed to adopt suggestion:', err);
@@ -111,10 +111,10 @@ export const AdoptSuggestionModal: React.FC<AdoptSuggestionModalProps> = ({
             </div>
             <div>
               <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 700, color: '#1e293b' }}>
-                تبني اقتراح مجال التحسين (FR-SCH-16)
+                تبني مقترح إجراء التحسين (FR-SCH-16)
               </h3>
               <p style={{ margin: 0, fontSize: '12px', color: '#64748b' }}>
-                تحويل الفجوة المرصودة بالمؤشر إلى مجال تطوير مؤسسي معتمد
+                تحويل الفجوة المرصودة بالمؤشر إلى إجراء تحسين مدرسي معتمد
               </p>
             </div>
           </div>
@@ -158,7 +158,7 @@ export const AdoptSuggestionModal: React.FC<AdoptSuggestionModalProps> = ({
 
           <div>
             <label style={{ fontSize: '13px', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '6px' }}>
-              اسم أو عنوان مجال التحسين
+              عنوان إجراء التحسين
             </label>
             <input
               type="text"
@@ -220,15 +220,16 @@ export const AdoptSuggestionModal: React.FC<AdoptSuggestionModalProps> = ({
                   boxSizing: 'border-box',
                 }}
               >
-                <option value={3}>المستوى 3 (متحقق كلياً)</option>
+                <option value={3}>المستوى 3 (متحقق كلياً / التميز)</option>
                 <option value={2}>المستوى 2 (متحقق بدرجة متوسطة)</option>
+                <option value={1}>المستوى 1 (مقبول / الحد الأدنى)</option>
               </select>
             </div>
           </div>
 
           <div>
             <label style={{ fontSize: '13px', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '6px' }}>
-              وصف مجال التحسين والأهداف المرجوة
+              وصف ومبررات إجراء التحسين
             </label>
             <textarea
               value={description}

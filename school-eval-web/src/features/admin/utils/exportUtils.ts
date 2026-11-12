@@ -60,8 +60,9 @@ export function exportToExcel(
 
   const ws = XLSX.utils.aoa_to_sheet(wsData);
 
-  // ضبط اتجاه الورقة ليكون RTL متوافقاً مع اللغة العربية
-  ws['!dir'] = 'rtl';
+  // ضبط اتجاه الورقة ليكون RTL متوافقاً مع اللغة العربية في Microsoft Excel
+  (ws as any)['!dir'] = 'rtl';
+  (ws as any)['!views'] = [{ RTL: true }];
 
   // ضبط أبعاد الأعمدة تلقائياً لمنع تداخل النصوص والقص
   const colWidths = headers.map((h, i) => {
@@ -75,7 +76,68 @@ export function exportToExcel(
   ws['!cols'] = colWidths;
 
   const wb = XLSX.utils.book_new();
+  (wb as any).Workbook = { Views: [{ RTL: true }] };
   XLSX.utils.book_append_sheet(wb, ws, sheetName || 'البيانات');
+
+  const safeFilename = filename.endsWith('.xlsx')
+    ? filename
+    : `${filename.replace(/\.[^/.]+$/, '')}.xlsx`;
+
+  XLSX.writeFile(wb, safeFilename);
+}
+
+export interface ExcelSheetConfig {
+  sheetName: string;
+  headers: string[];
+  rows: (string | number | null | undefined)[][];
+}
+
+/**
+ * تصدير البيانات إلى مصنف Excel متعدد الأوراق (.xlsx) مع دعم RTL كامل لكافة الأوراق وترويسة المدرسة.
+ */
+export function exportMultiSheetExcel(
+  filename: string,
+  sheets: ExcelSheetConfig[],
+  metadata?: ExcelSchoolMetadata
+): void {
+  const wb = XLSX.utils.book_new();
+  (wb as any).Workbook = { Views: [{ RTL: true }] };
+
+  sheets.forEach((sheetConfig, index) => {
+    const wsData: (string | number)[][] = [];
+
+    if (metadata && (metadata.schoolName || metadata.schoolCode || metadata.reportTitle)) {
+      if (metadata.reportTitle) {
+        wsData.push([`${metadata.reportTitle} — ${sheetConfig.sheetName}`]);
+      }
+      const metaRow: (string | number)[] = [];
+      if (metadata.schoolName) metaRow.push(`المدرسة: ${metadata.schoolName}`);
+      if (metadata.schoolCode) metaRow.push(`الرمز الوزاري: ${metadata.schoolCode}`);
+      if (metadata.academicYear) metaRow.push(`العام الدراسي: ${metadata.academicYear}`);
+      metaRow.push(`تاريخ التصدير: ${new Date().toLocaleDateString('ar-SA')}`);
+      wsData.push(metaRow);
+      wsData.push([]); // سطر فارغ فاصل قبل الجدول
+    }
+
+    wsData.push(sheetConfig.headers);
+    sheetConfig.rows.forEach((row) => wsData.push(row.map((cell) => cell ?? '')));
+
+    const ws = XLSX.utils.aoa_to_sheet(wsData);
+    (ws as any)['!dir'] = 'rtl';
+    (ws as any)['!views'] = [{ RTL: true }];
+
+    const colWidths = sheetConfig.headers.map((h, i) => {
+      let maxLen = h.length;
+      sheetConfig.rows.forEach((r) => {
+        const val = r[i] !== null && r[i] !== undefined ? String(r[i]) : '';
+        if (val.length > maxLen) maxLen = val.length;
+      });
+      return { wch: Math.min(60, Math.max(16, maxLen + 3)) };
+    });
+    ws['!cols'] = colWidths;
+
+    XLSX.utils.book_append_sheet(wb, ws, sheetConfig.sheetName || `الورقة ${index + 1}`);
+  });
 
   const safeFilename = filename.endsWith('.xlsx')
     ? filename

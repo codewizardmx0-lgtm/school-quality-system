@@ -196,6 +196,7 @@ export const QuickNavModal: React.FC<QuickNavModalProps> = ({
         style={{
           width: '100%',
           maxWidth: '840px',
+          height: '88vh',
           maxHeight: '88vh',
           backgroundColor: '#FFFFFF',
           borderRadius: '16px',
@@ -218,6 +219,7 @@ export const QuickNavModal: React.FC<QuickNavModalProps> = ({
             alignItems: 'center',
             justifyContent: 'space-between',
             gap: '12px',
+            flexShrink: 0,
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -274,6 +276,7 @@ export const QuickNavModal: React.FC<QuickNavModalProps> = ({
             display: 'flex',
             flexDirection: 'column',
             gap: '12px',
+            flexShrink: 0,
           }}
         >
           {/* Search Input */}
@@ -470,13 +473,17 @@ export const QuickNavModal: React.FC<QuickNavModalProps> = ({
         {/* Scrollable List of Standards & Indicators */}
         <div
           style={{
-            flex: 1,
+            flex: '1 1 0%',
+            minHeight: 0,
             overflowY: 'auto',
+            overflowX: 'hidden',
             padding: '20px 24px',
             display: 'flex',
             flexDirection: 'column',
             gap: '14px',
             backgroundColor: '#F8FAFC',
+            scrollbarWidth: 'thin',
+            scrollbarColor: '#CBD5E1 transparent',
           }}
         >
           {filteredStandards.length === 0 ? (
@@ -487,6 +494,7 @@ export const QuickNavModal: React.FC<QuickNavModalProps> = ({
                 backgroundColor: '#FFFFFF',
                 borderRadius: '12px',
                 border: '1px dashed #CBD5E1',
+                flexShrink: 0,
               }}
             >
               <Compass size={36} color="#94A3B8" style={{ margin: '0 auto 12px' }} />
@@ -513,6 +521,10 @@ export const QuickNavModal: React.FC<QuickNavModalProps> = ({
                     border: isStdActive ? '1.5px solid #6366F1' : '1px solid #E2E8F0',
                     boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
                     overflow: 'hidden',
+                    flexShrink: 0,
+                    minHeight: 'fit-content',
+                    width: '100%',
+                    boxSizing: 'border-box',
                   }}
                 >
                   {/* Standard Header Accordion Bar */}
@@ -527,6 +539,9 @@ export const QuickNavModal: React.FC<QuickNavModalProps> = ({
                       cursor: 'pointer',
                       borderBottom: isExpanded ? '1px solid #F1F5F9' : 'none',
                       userSelect: 'none',
+                      flexShrink: 0,
+                      minHeight: '48px',
+                      boxSizing: 'border-box',
                     }}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1 }}>
@@ -578,9 +593,9 @@ export const QuickNavModal: React.FC<QuickNavModalProps> = ({
 
                   {/* Standard Content: SubStandards & Indicators */}
                   {isExpanded && (
-                    <div style={{ padding: '14px 18px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                    <div style={{ padding: '14px 18px', display: 'flex', flexDirection: 'column', gap: '14px', flexShrink: 0 }}>
                       {std.subStandards.map((sub) => (
-                        <div key={sub.subStandardId} style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        <div key={sub.subStandardId} style={{ display: 'flex', flexDirection: 'column', gap: '8px', flexShrink: 0 }}>
                           {/* Substandard Title */}
                           <div
                             style={{
@@ -605,7 +620,7 @@ export const QuickNavModal: React.FC<QuickNavModalProps> = ({
                           <div
                             style={{
                               display: 'grid',
-                              gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))',
+                              gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
                               gap: '8px',
                             }}
                           >
@@ -642,6 +657,8 @@ export const QuickNavModal: React.FC<QuickNavModalProps> = ({
                                     display: 'flex',
                                     flexDirection: 'column',
                                     gap: '6px',
+                                    minHeight: '95px',
+                                    boxSizing: 'border-box',
                                   }}
                                   onMouseEnter={(e) => {
                                     if (!isCurrent) {
@@ -766,6 +783,7 @@ export const QuickNavModal: React.FC<QuickNavModalProps> = ({
             justifyContent: 'space-between',
             fontSize: '12px',
             color: '#64748B',
+            flexShrink: 0,
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>

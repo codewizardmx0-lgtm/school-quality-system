@@ -12,6 +12,11 @@ import {
   ChevronUp,
   ShieldCheck,
   RefreshCw,
+  Eye,
+  X,
+  Info,
+  ChevronsDown,
+  ChevronsUp,
 } from 'lucide-react';
 import { evaluatorApi } from '../../api/evaluatorApi';
 
@@ -32,12 +37,30 @@ export const OldEvidenceVersionsView: React.FC<OldEvidenceVersionsViewProps> = (
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState<string>('all');
+  const [versionCountFilter, setVersionCountFilter] = useState<'all' | '1' | '2' | '3' | '4+'>('all');
   const [pruningId, setPruningId] = useState<number | null>(null);
   const [expandedDocIds, setExpandedDocIds] = useState<Record<number, boolean>>({});
   const [downloadingId, setDownloadingId] = useState<number | null>(null);
+  const [selectedDetails, setSelectedDetails] = useState<{
+    document: ArchivedDocumentItem;
+    version: ArchivedVersionItem;
+    isCurrent: boolean;
+  } | null>(null);
 
   const toggleExpand = (docId: number) => {
     setExpandedDocIds((prev) => ({ ...prev, [docId]: !prev[docId] }));
+  };
+
+  const handleExpandAll = () => {
+    const all: Record<number, boolean> = {};
+    documents.forEach((d) => (all[d.documentId] = true));
+    setExpandedDocIds(all);
+  };
+
+  const handleCollapseAll = () => {
+    const all: Record<number, boolean> = {};
+    documents.forEach((d) => (all[d.documentId] = false));
+    setExpandedDocIds(all);
   };
 
   const handleDownload = async (version: ArchivedVersionItem) => {
@@ -88,7 +111,36 @@ export const OldEvidenceVersionsView: React.FC<OldEvidenceVersionsViewProps> = (
       doc.historicalVersions.some((v) => v.fileName.toLowerCase().includes(term));
 
     const matchesType = filterType === 'all' || doc.documentType === filterType;
-    return matchesSearch && matchesType;
+
+    const totalVersions = 1 + doc.historicalVersions.length;
+    const matchesCount =
+      versionCountFilter === 'all' ||
+      (versionCountFilter === '1' && totalVersions === 1) ||
+      (versionCountFilter === '2' && totalVersions === 2) ||
+      (versionCountFilter === '3' && totalVersions === 3) ||
+      (versionCountFilter === '4+' && totalVersions >= 4);
+
+    return matchesSearch && matchesType && matchesCount;
+  });
+
+  const parseCodeNumeric = (code?: string): [number, number, number] => {
+    if (!code) return [999, 999, 999];
+    const parts = code.split(/[-._]/).map((p) => parseInt(p.replace(/\D/g, ''), 10)).filter((n) => !isNaN(n));
+    if (parts.length >= 3) {
+      return [parts[2] ?? 999, parts[1] ?? 999, parts[0] ?? 999];
+    }
+    return [parts[0] ?? 999, parts[1] ?? 999, parts[2] ?? 999];
+  };
+
+  const sortedDocs = [...filteredDocs].sort((a, b) => {
+    const codeA = a.linkedIndicators?.[0]?.indicatorCode;
+    const codeB = b.linkedIndicators?.[0]?.indicatorCode;
+    const [sA, subA, iA] = parseCodeNumeric(codeA);
+    const [sB, subB, iB] = parseCodeNumeric(codeB);
+    if (sA !== sB) return sA - sB;
+    if (subA !== subB) return subA - subB;
+    if (iA !== iB) return iA - iB;
+    return a.documentId - b.documentId;
   });
 
   return (
@@ -287,29 +339,98 @@ export const OldEvidenceVersionsView: React.FC<OldEvidenceVersionsViewProps> = (
             <option value="board">لوحات بيانية</option>
             <option value="image">صور ميدانية</option>
           </select>
+
+          {/* Filter by versions count */}
+          <select
+            value={versionCountFilter}
+            onChange={(e) => setVersionCountFilter(e.target.value as any)}
+            style={{
+              padding: '9px 14px',
+              borderRadius: '8px',
+              border: '1px solid #CBD5E1',
+              backgroundColor: '#FFFFFF',
+              fontSize: '12.5px',
+              fontWeight: 600,
+              color: '#334155',
+              outline: 'none',
+              cursor: 'pointer',
+            }}
+          >
+            <option value="all">كافة الوثائق (أي عدد إصدارات)</option>
+            <option value="1">إصدار واحد فقط (الحالي)</option>
+            <option value="2">إصداران (v1 + v2)</option>
+            <option value="3">3 إصدارات</option>
+            <option value="4+">4 إصدارات فأكثر</option>
+          </select>
         </div>
 
-        <button
-          type="button"
-          onClick={onRefresh}
-          disabled={isLoading}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            padding: '9px 16px',
-            borderRadius: '8px',
-            border: '1px solid #CBD5E1',
-            backgroundColor: '#F8FAFC',
-            color: '#475569',
-            fontSize: '12.5px',
-            fontWeight: 700,
-            cursor: 'pointer',
-          }}
-        >
-          <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />
-          <span>تحديث السجل</span>
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <button
+            type="button"
+            onClick={handleExpandAll}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              padding: '8px 12px',
+              borderRadius: '8px',
+              border: '1px solid #CBD5E1',
+              backgroundColor: '#FFFFFF',
+              color: '#475569',
+              fontSize: '12px',
+              fontWeight: 700,
+              cursor: 'pointer',
+            }}
+            title="توسيع كافة الوثائق لعرض تفاصيل الإصدارات"
+          >
+            <ChevronsDown size={14} />
+            <span>توسيع الكل</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={handleCollapseAll}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              padding: '8px 12px',
+              borderRadius: '8px',
+              border: '1px solid #CBD5E1',
+              backgroundColor: '#FFFFFF',
+              color: '#475569',
+              fontSize: '12px',
+              fontWeight: 700,
+              cursor: 'pointer',
+            }}
+            title="طي كافة الوثائق"
+          >
+            <ChevronsUp size={14} />
+            <span>طي الكل</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={onRefresh}
+            disabled={isLoading}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '9px 16px',
+              borderRadius: '8px',
+              border: '1px solid #CBD5E1',
+              backgroundColor: '#F8FAFC',
+              color: '#475569',
+              fontSize: '12.5px',
+              fontWeight: 700,
+              cursor: 'pointer',
+            }}
+          >
+            <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />
+            <span>تحديث السجل</span>
+          </button>
+        </div>
       </div>
 
       {/* 3. Document Versions List */}
@@ -319,7 +440,7 @@ export const OldEvidenceVersionsView: React.FC<OldEvidenceVersionsViewProps> = (
             <div key={i} style={{ height: '140px', backgroundColor: '#F1F5F9', borderRadius: '12px' }} className="animate-pulse" />
           ))}
         </div>
-      ) : filteredDocs.length === 0 ? (
+      ) : sortedDocs.length === 0 ? (
         <div
           style={{
             padding: '48px 24px',
@@ -337,7 +458,7 @@ export const OldEvidenceVersionsView: React.FC<OldEvidenceVersionsViewProps> = (
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          {filteredDocs.map((doc) => {
+          {sortedDocs.map((doc) => {
             const isExpanded = expandedDocIds[doc.documentId] ?? true;
             const hasHistory = doc.historicalVersions.length > 0;
 
@@ -484,27 +605,50 @@ export const OldEvidenceVersionsView: React.FC<OldEvidenceVersionsViewProps> = (
                           </div>
                         </div>
 
-                        <button
-                          type="button"
-                          onClick={() => handleDownload(doc.currentVersion!)}
-                          disabled={downloadingId === doc.currentVersion.versionId}
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '5px',
-                            padding: '6px 14px',
-                            borderRadius: '6px',
-                            backgroundColor: '#16A34A',
-                            color: '#FFFFFF',
-                            fontSize: '12px',
-                            fontWeight: 700,
-                            border: 'none',
-                            cursor: 'pointer',
-                          }}
-                        >
-                          <Download size={13} />
-                          <span>تنزيل النسخة الحالية</span>
-                        </button>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <button
+                            type="button"
+                            onClick={() => setSelectedDetails({ document: doc, version: doc.currentVersion!, isCurrent: true })}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '5px',
+                              padding: '6px 14px',
+                              borderRadius: '6px',
+                              backgroundColor: '#FFFFFF',
+                              color: '#15803D',
+                              border: '1px solid #86EFAC',
+                              fontSize: '12px',
+                              fontWeight: 700,
+                              cursor: 'pointer',
+                            }}
+                          >
+                            <Eye size={13} />
+                            <span>عرض التفاصيل</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handleDownload(doc.currentVersion!)}
+                            disabled={downloadingId === doc.currentVersion.versionId}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '5px',
+                              padding: '6px 14px',
+                              borderRadius: '6px',
+                              backgroundColor: '#16A34A',
+                              color: '#FFFFFF',
+                              fontSize: '12px',
+                              fontWeight: 700,
+                              border: 'none',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            <Download size={13} />
+                            <span>تنزيل النسخة الحالية</span>
+                          </button>
+                        </div>
                       </div>
                     )}
 
@@ -596,6 +740,28 @@ export const OldEvidenceVersionsView: React.FC<OldEvidenceVersionsViewProps> = (
                                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
                                       <button
                                         type="button"
+                                        onClick={() => setSelectedDetails({ document: doc, version: ver, isCurrent: false })}
+                                        style={{
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          gap: '4px',
+                                          padding: '5px 10px',
+                                          borderRadius: '6px',
+                                          border: '1px solid #CBD5E1',
+                                          backgroundColor: '#FFFFFF',
+                                          color: '#475569',
+                                          fontSize: '11px',
+                                          fontWeight: 700,
+                                          cursor: 'pointer',
+                                        }}
+                                        title="عرض تفاصيل هذا الإصدار الأرشيفي"
+                                      >
+                                        <Eye size={12} />
+                                        <span>تفاصيل</span>
+                                      </button>
+
+                                      <button
+                                        type="button"
                                         onClick={() => handleDownload(ver)}
                                         disabled={ver.isFilePruned || downloadingId === ver.versionId}
                                         style={{
@@ -655,6 +821,167 @@ export const OldEvidenceVersionsView: React.FC<OldEvidenceVersionsViewProps> = (
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Version Details Modal */}
+      {selectedDetails && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(15, 23, 42, 0.6)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+            padding: '16px',
+            direction: 'rtl',
+          }}
+          onClick={() => setSelectedDetails(null)}
+        >
+          <div
+            style={{
+              backgroundColor: '#FFFFFF',
+              borderRadius: '16px',
+              width: '100%',
+              maxWidth: '560px',
+              maxHeight: '90vh',
+              overflowY: 'auto',
+              padding: '24px',
+              boxShadow: '0 25px 50px -12px rgba(15, 23, 42, 0.25)',
+              border: '1px solid #E2E8F0',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px', borderBottom: '1px solid #F1F5F9', paddingBottom: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{ width: '38px', height: '38px', borderRadius: '8px', backgroundColor: selectedDetails.isCurrent ? '#ECFDF5' : '#FEF3C7', color: selectedDetails.isCurrent ? '#059669' : '#D97706', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Info size={20} />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 800, color: '#0F172A' }}>تفاصيل إصدار الشاهد</h3>
+                  <span style={{ fontSize: '11px', color: '#64748B' }}>{selectedDetails.isCurrent ? 'النسخة الحالية الفعالة في المستودع' : 'نسخة أرشيفية تاريخية سابقة'}</span>
+                </div>
+              </div>
+              <button type="button" onClick={() => setSelectedDetails(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8' }}>
+                <X size={20} />
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', fontSize: '13px' }}>
+              <div>
+                <div style={{ fontSize: '11px', fontWeight: 700, color: '#64748B', marginBottom: '2px' }}>عنوان الشاهد / الوثيقة</div>
+                <div style={{ fontWeight: 700, color: '#1E293B', fontSize: '14px' }}>{selectedDetails.document.title}</div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div>
+                  <div style={{ fontSize: '11px', fontWeight: 700, color: '#64748B', marginBottom: '2px' }}>رقم الإصدار</div>
+                  <div style={{ fontWeight: 800, color: selectedDetails.isCurrent ? '#16A34A' : '#D97706' }}>الإصدار v{selectedDetails.version.versionNo}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: '11px', fontWeight: 700, color: '#64748B', marginBottom: '2px' }}>نوع الوثيقة</div>
+                  <div style={{ fontWeight: 600, color: '#334155' }}>{selectedDetails.document.documentTypeArabic || selectedDetails.document.documentType}</div>
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div>
+                  <div style={{ fontSize: '11px', fontWeight: 700, color: '#64748B', marginBottom: '2px' }}>اسم الملف التخزيني</div>
+                  <div style={{ fontWeight: 600, color: '#1E293B', wordBreak: 'break-all' }}>{selectedDetails.version.fileName}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: '11px', fontWeight: 700, color: '#64748B', marginBottom: '2px' }}>حجم الملف</div>
+                  <div style={{ fontWeight: 600, color: '#334155' }}>{selectedDetails.version.isFilePruned ? '0.00 MB (مفرغ)' : selectedDetails.version.formattedSize}</div>
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div>
+                  <div style={{ fontSize: '11px', fontWeight: 700, color: '#64748B', marginBottom: '2px' }}>تاريخ الاعتماد / الرفع</div>
+                  <div style={{ fontWeight: 600, color: '#334155' }}>{selectedDetails.version.createdAt.split('T')[0]}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: '11px', fontWeight: 700, color: '#64748B', marginBottom: '2px' }}>حالة التخزين الفيزيائي</div>
+                  <div>
+                    {selectedDetails.version.isFilePruned ? (
+                      <span style={{ fontSize: '11px', fontWeight: 700, color: '#64748B', backgroundColor: '#F1F5F9', padding: '2px 8px', borderRadius: '4px' }}>
+                        تم تفريغ الملف الفيزيائي
+                      </span>
+                    ) : (
+                      <span style={{ fontSize: '11px', fontWeight: 700, color: '#047857', backgroundColor: '#ECFDF5', padding: '2px 8px', borderRadius: '4px' }}>
+                        موجود على وسائط التخزين
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {selectedDetails.version.notes && (
+                <div style={{ padding: '10px 12px', backgroundColor: '#F8FAFC', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
+                  <div style={{ fontSize: '11px', fontWeight: 700, color: '#64748B', marginBottom: '4px' }}>ملاحظات الإصدار والاستبدال</div>
+                  <div style={{ fontSize: '12.5px', color: '#334155', lineHeight: 1.6 }}>{selectedDetails.version.notes}</div>
+                </div>
+              )}
+
+              {selectedDetails.document.linkedIndicators && selectedDetails.document.linkedIndicators.length > 0 && (
+                <div>
+                  <div style={{ fontSize: '11px', fontWeight: 700, color: '#64748B', marginBottom: '6px' }}>المؤشرات المرتبطة بهذا الشاهد ({selectedDetails.document.linkedIndicators.length})</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    {selectedDetails.document.linkedIndicators.map((l) => (
+                      <div key={l.indicatorId} style={{ fontSize: '12px', padding: '6px 10px', backgroundColor: '#F0FDF4', borderRadius: '6px', border: '1px solid #BBF7D0', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <strong style={{ color: '#047857' }}>{l.indicatorCode}:</strong>
+                        <span style={{ color: '#166534' }}>{l.indicatorTitle}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+              {!selectedDetails.version.isFilePruned && (
+                <button
+                  type="button"
+                  onClick={() => handleDownload(selectedDetails.version)}
+                  style={{
+                    padding: '8px 16px',
+                    borderRadius: '8px',
+                    backgroundColor: '#16A34A',
+                    color: '#FFFFFF',
+                    fontSize: '12.5px',
+                    fontWeight: 700,
+                    border: 'none',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                  }}
+                >
+                  <Download size={14} />
+                  <span>تنزيل الملف</span>
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setSelectedDetails(null)}
+                style={{
+                  padding: '8px 18px',
+                  borderRadius: '8px',
+                  backgroundColor: '#334155',
+                  color: '#FFFFFF',
+                  fontSize: '12.5px',
+                  fontWeight: 700,
+                  border: 'none',
+                  cursor: 'pointer',
+                }}
+              >
+                إغلاق
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

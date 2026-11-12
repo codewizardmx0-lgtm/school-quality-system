@@ -33,6 +33,7 @@ import type {
   ActionRecommendationsResponse,
   VersionsArchiveData,
   LinkedIndicatorBrief,
+  DiscrepancyAuditResponse,
 } from './evaluationTypes';
 
 export const evaluatorApi = {
@@ -447,6 +448,73 @@ export const evaluatorApi = {
   },
 
   /**
+   * 18.d Export Unified Improvement Workbook (Suggestions, Plans, Actions) Excel
+   */
+  async exportImprovementWorkbook(): Promise<void> {
+    const response = await apiClient.get('/evaluator/export-improvement-workbook', {
+      responseType: 'blob',
+    });
+
+    const blob = new Blob([response as unknown as BlobPart], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    const now = new Date();
+    const dateStr = now.toISOString().split('T')[0];
+    link.download = `مصنف_خطط_ومقترحات_التطوير_${dateStr}.xlsx`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+  },
+
+  /**
+   * Fetch principal internal review note on draft report
+   */
+  async getInternalReviewNote(): Promise<{
+    noteId?: number;
+    reportId?: number;
+    text: string;
+    authorName?: string;
+    authorRole?: string;
+    updatedAt?: string;
+  }> {
+    const response = await get<{
+      noteId?: number;
+      reportId?: number;
+      text: string;
+      authorName?: string;
+      authorRole?: string;
+      updatedAt?: string;
+    }>('/evaluator/internal-review-note');
+    return response.data!;
+  },
+
+  /**
+   * Save principal internal review note on draft report
+   */
+  async saveInternalReviewNote(text: string): Promise<{
+    noteId: number;
+    reportId: number;
+    text: string;
+    authorName: string;
+    authorRole: string;
+    updatedAt: string;
+  }> {
+    const response = await post<{
+      noteId: number;
+      reportId: number;
+      text: string;
+      authorName: string;
+      authorRole: string;
+      updatedAt: string;
+    }>('/evaluator/internal-review-note', { text });
+    return response.data!;
+  },
+
+  /**
    * 19. GET /api/v1/evaluator/evidence-inventory
    * Fetch 109 indicators evidence inventory and sufficiency stats
    */
@@ -590,8 +658,35 @@ export const evaluatorApi = {
         suggestedName: s.suggestedName || s.name || `تحسين أداء: ${s.indicatorName || s.indicatorTitle || 'المؤشر'}`,
         isAdopted: Boolean(s.isAdopted || s.isAlreadyAdopted),
         adoptedAreaId: s.adoptedAreaId || s.area_id || null,
+        isExcluded: Boolean(s.isExcluded),
+        excludedAt: s.excludedAt || null,
       };
     });
+  },
+
+  /**
+   * POST /api/v1/evaluator/suggestions/{resultId}/exclude
+   * Exclude an unadopted improvement suggestion
+   */
+  async excludeSuggestion(resultId: number): Promise<void> {
+    await post(`/evaluator/suggestions/${resultId}/exclude`);
+  },
+
+  /**
+   * POST /api/v1/evaluator/suggestions/{resultId}/restore
+   * Restore an excluded improvement suggestion
+   */
+  async restoreSuggestion(resultId: number): Promise<void> {
+    await post(`/evaluator/suggestions/${resultId}/restore`);
+  },
+
+  /**
+   * GET /api/v1/evaluator/discrepancies/audit
+   * Deterministic Discrepancy Auditor for early inconsistency detection (AI Audit Tab)
+   */
+  async getDiscrepanciesAudit(): Promise<DiscrepancyAuditResponse> {
+    const response = await get<any>('/evaluator/discrepancies/audit');
+    return response.data;
   },
 
   /**

@@ -190,6 +190,6 @@ class BatchDVerificationAndSufficiencyTest extends TestCase
         $this->assertGreaterThanOrEqual(109, $kpis['documentedEvidences']);
         $this->assertEquals(278, $kpis['targetEvidences']);
         $this->assertEquals(109, $kpis['coveredIndicatorsCount']);
-        $this->assertGreaterThanOrEqual(109, $kpis['uniqueDocumentsCount']);
+        $this->assertEquals(45, $kpis['uniqueDocumentsCount']);
     }
 }

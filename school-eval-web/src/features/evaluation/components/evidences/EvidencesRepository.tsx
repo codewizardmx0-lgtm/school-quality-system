@@ -1,4 +1,4 @@
-import { exportToExcel, formatExportFilename } from '../../../admin/utils/exportUtils';
+import { exportMultiSheetExcel, formatExportFilename } from '../../../admin/utils/exportUtils';
 import React, { useState, useEffect } from 'react';
 import { useEvidences } from '../../hooks/useEvidences';
 import { evaluatorApi } from '../../api/evaluatorApi';
@@ -29,6 +29,7 @@ import {
   RefreshCw,
   ExternalLink,
   History,
+  ArrowUpDown,
 } from 'lucide-react';
 
 interface EvidencesRepositoryProps {
@@ -60,6 +61,7 @@ export const EvidencesRepository: React.FC<EvidencesRepositoryProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [linkFilter, setLinkFilter] = useState<'all' | 'linked' | 'unlinked'>('all');
   const [documentTypeFilter, setDocumentTypeFilter] = useState<string>('all');
+  const [sortBy, setSortBy] = useState<'standard' | 'date_desc' | 'date_asc' | 'size_desc' | 'size_asc' | 'links_desc' | 'title_asc'>('standard');
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [replaceDocId, setReplaceDocId] = useState<number | undefined>(undefined);
   const [viewMode, setViewMode] = useState<'grid' | 'table'>('table');
@@ -135,6 +137,46 @@ export const EvidencesRepository: React.FC<EvidencesRepositoryProps> = ({
     return matchesSearch && matchesLink && matchesType;
   });
 
+  const sortedEvidences = React.useMemo(() => {
+    return [...filteredEvidences].sort((a, b) => {
+      if (sortBy === 'date_desc') {
+        return new Date(b.uploadedAt || 0).getTime() - new Date(a.uploadedAt || 0).getTime();
+      }
+      if (sortBy === 'date_asc') {
+        return new Date(a.uploadedAt || 0).getTime() - new Date(b.uploadedAt || 0).getTime();
+      }
+      if (sortBy === 'size_desc') {
+        return (b.fileSize || 0) - (a.fileSize || 0);
+      }
+      if (sortBy === 'size_asc') {
+        return (a.fileSize || 0) - (b.fileSize || 0);
+      }
+      if (sortBy === 'links_desc') {
+        const aLinks = (a.linkedIndicators?.length || (a.indicatorId ? 1 : 0));
+        const bLinks = (b.linkedIndicators?.length || (b.indicatorId ? 1 : 0));
+        return bLinks - aLinks;
+      }
+      if (sortBy === 'title_asc') {
+        return a.title.localeCompare(b.title, 'ar');
+      }
+      // 'standard' default: RTL indicator code parsing
+      const parseCodeNumeric = (code?: string): [number, number, number] => {
+        if (!code) return [999, 999, 999];
+        const parts = code.split(/[-._]/).map((p) => parseInt(p.replace(/\D/g, ''), 10)).filter((n) => !isNaN(n));
+        if (parts.length >= 3) {
+          return [parts[2] ?? 999, parts[1] ?? 999, parts[0] ?? 999];
+        }
+        return [parts[0] ?? 999, parts[1] ?? 999, parts[2] ?? 999];
+      };
+      const [sA, subA, iA] = parseCodeNumeric(a.indicatorCode);
+      const [sB, subB, iB] = parseCodeNumeric(b.indicatorCode);
+      if (sA !== sB) return sA - sB;
+      if (subA !== subB) return subA - subB;
+      if (iA !== iB) return iA - iB;
+      return a.id - b.id;
+    });
+  }, [filteredEvidences, sortBy]);
+
   const handleOpenUpload = (docId?: number) => {
     if (readOnly) return;
     setReplaceDocId(docId);
@@ -151,8 +193,12 @@ export const EvidencesRepository: React.FC<EvidencesRepositoryProps> = ({
   };
 
   const handleExportExcel = () => {
-    const headers = ['معرف المستند', 'عنوان الشاهد', 'اسم الملف', 'المعيار', 'المؤشر', 'الإصدار', 'الحالة', 'الحجم', 'تاريخ الرفع'];
-    const rows = filteredEvidences.map((e) => [
+    const schoolName = user?.school?.schoolName || 'مدرسة الفاروق الأساسية للبنين';
+    const schoolCode = user?.school?.schoolCode || (user?.school?.schoolId ? `SCH-${user.school.schoolId}` : 'SCH-TAIZ-2026-001');
+
+    // الورقة 1: الشواهد السارية الفعالة في المستودع
+    const sheet1Headers = ['معرف المستند', 'عنوان الشاهد', 'اسم الملف', 'المعيار', 'المؤشر', 'الإصدار', 'الحالة', 'الحجم', 'تاريخ الرفع'];
+    const sheet1Rows = sortedEvidences.map((e) => [
       e.id,
       e.title,
       e.fileName,
@@ -163,14 +209,65 @@ export const EvidencesRepository: React.FC<EvidencesRepositoryProps> = ({
       e.formattedSize,
       e.uploadedAt,
     ]);
-    const filename = formatExportFilename('مستودع_الشواهد_والأدلة', 'xlsx');
-    const schoolName = user?.school?.schoolName || 'مدرسة الفاروق النموذجية';
-    const schoolCode = String(user?.school?.schoolId || 'SCH-104');
-    exportToExcel(filename, 'مستودع الشواهد', headers, rows, {
-      schoolName,
-      schoolCode,
-      reportTitle: 'سجل مستودع الشواهد والأدلة المدرسية',
+
+    // الورقة 2: سجل الإصدارات والأرشيف التاريخي للشواهد (القرار 1 المعتمد)
+    const sheet2Headers = ['معرف المستند', 'عنوان الشاهد', 'رقم الإصدار', 'الصفة', 'اسم الملف', 'حالة الملف التخزيني', 'الحجم', 'الملاحظات الأرشيفية', 'تاريخ الإيداع'];
+    const sheet2Rows: (string | number | null | undefined)[][] = [];
+
+    const archiveDocs = versionsArchive?.documents || [];
+    archiveDocs.forEach((doc) => {
+      // النسخة الحالية
+      if (doc.currentVersion) {
+        sheet2Rows.push([
+          doc.documentId,
+          doc.title,
+          `v${doc.currentVersion.versionNo}`,
+          'النسخة الحالية الفعالة',
+          doc.currentVersion.fileName,
+          doc.currentVersion.isFilePruned ? 'مشطوب فيزيائياً (الأرشيف محفوظ)' : 'مخزن بالقرص',
+          doc.currentVersion.formattedSize,
+          doc.currentVersion.notes || 'الإصدار المعتمد للشاهد',
+          doc.currentVersion.createdAt,
+        ]);
+      }
+      // النسخ التاريخية السابقة
+      doc.historicalVersions.forEach((ver) => {
+        sheet2Rows.push([
+          doc.documentId,
+          doc.title,
+          `v${ver.versionNo}`,
+          'نسخة أرشيفية سابقة',
+          ver.fileName,
+          ver.isFilePruned ? 'مشطوب فيزيائياً (الأرشيف محفوظ)' : 'مخزن بالقرص',
+          ver.formattedSize,
+          ver.notes || 'نسخة قديمة مؤرشفة',
+          ver.createdAt,
+        ]);
+      });
     });
+
+    const filename = formatExportFilename('مستودع_الشواهد_وسجل_الإصدارات', 'xlsx');
+
+    exportMultiSheetExcel(
+      filename,
+      [
+        {
+          sheetName: 'مستودع الشواهد الحالية',
+          headers: sheet1Headers,
+          rows: sheet1Rows,
+        },
+        {
+          sheetName: 'سجل الإصدارات والأرشيف',
+          headers: sheet2Headers,
+          rows: sheet2Rows.length > 0 ? sheet2Rows : [['-', 'لا توجد إصدارات مؤرشفة', '-', '-', '-', '-', '-', '-', '-']],
+        },
+      ],
+      {
+        schoolName,
+        schoolCode,
+        reportTitle: 'سجل مستودع الشواهد والأدلة والأرشيف المدرسي',
+      }
+    );
   };
 
   return (
@@ -557,6 +654,35 @@ export const EvidencesRepository: React.FC<EvidencesRepositoryProps> = ({
             <option value="image">صورة فوتوغرافية</option>
             <option value="other">أخرى / عام</option>
           </select>
+
+          {/* Sort Dropdown */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <ArrowUpDown size={14} color="#64748B" />
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as any)}
+              style={{
+                padding: '8px 12px',
+                borderRadius: '8px',
+                border: '1px solid #CBD5E1',
+                fontSize: '13px',
+                backgroundColor: '#FFFFFF',
+                color: '#334155',
+                outline: 'none',
+                cursor: 'pointer',
+                fontWeight: 600,
+              }}
+              title="ترتيب وفرز الشواهد"
+            >
+              <option value="standard">الترتيب المعياري (حسب المعيار والمؤشر)</option>
+              <option value="date_desc">الأحدث رفعاً (تاريخ تنازلي)</option>
+              <option value="date_asc">الأقدم رفعاً (تاريخ تصاعدي)</option>
+              <option value="size_desc">حجم الملف (الأكبر أولاً)</option>
+              <option value="size_asc">حجم الملف (الأصغر أولاً)</option>
+              <option value="links_desc">عدد المؤشرات المرتبطة (الأكثر أولاً)</option>
+              <option value="title_asc">أبجدياً (اسم الشاهد أ-ي)</option>
+            </select>
+          </div>
         </div>
 
         {/* View Mode & Actions */}
@@ -701,7 +827,7 @@ export const EvidencesRepository: React.FC<EvidencesRepositoryProps> = ({
                   </td>
                 </tr>
               ) : (
-                filteredEvidences.map((ev) => (
+                sortedEvidences.map((ev) => (
                 
                   <tr
                     key={ev.id}
@@ -1032,7 +1158,7 @@ export const EvidencesRepository: React.FC<EvidencesRepositoryProps> = ({
         </div>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '16px' }}>
-          {filteredEvidences.map((ev) => (
+          {sortedEvidences.map((ev) => (
             <EvidenceCard
               key={ev.id}
               evidence={ev}

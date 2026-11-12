@@ -3,6 +3,7 @@ import { useAiAnalysis } from '../../hooks/useAiAnalysis';
 import { AiRecommendationCard } from './AiRecommendationCard';
 import { TransferToActionModal } from './TransferToActionModal';
 import { FormulaSuggestionsSection } from './FormulaSuggestionsSection';
+import { AiDiscrepancyReviewTab } from './AiDiscrepancyReviewTab';
 import { useToast } from '../../../admin/components/common/useToast';
 import { ToastNotification } from '../../../admin/components/common/ToastNotification';
 import type { AiInitiative, EvaluatorScreen } from '../../api/evaluationTypes';
@@ -11,11 +12,11 @@ import {
   TrendingUp,
   AlertTriangle,
   Target,
-  FileCheck2,
   CheckCircle2,
   ArrowLeft,
   RefreshCw,
   Lightbulb,
+  ShieldAlert,
 } from 'lucide-react';
 
 interface GapAnalysisPageProps {
@@ -28,7 +29,6 @@ export const GapAnalysisPage: React.FC<GapAnalysisPageProps> = ({
   readOnly = false,
 }) => {
   const {
-    analysisData,
     recommendations,
     isAnalyzing,
     selectedInitiativeForTransfer,
@@ -40,7 +40,7 @@ export const GapAnalysisPage: React.FC<GapAnalysisPageProps> = ({
   } = useAiAnalysis();
 
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
-  const [activeView, setActiveView] = useState<'suggestions' | 'ai'>('suggestions');
+  const [activeView, setActiveView] = useState<'suggestions' | 'ai' | 'audit'>('suggestions');
   const { toasts, addToast, dismissToast } = useToast();
 
 
@@ -65,13 +65,14 @@ export const GapAnalysisPage: React.FC<GapAnalysisPageProps> = ({
 
   return (
     <div style={{ padding: '24px', maxWidth: '1440px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '24px' }}>
-            {/* Tab Switcher: Formula Suggestions (FR-SCH-16) vs AI Qualitative Analysis */}
+      {/* Tab Switcher: Formula Suggestions (FR-SCH-16) vs AI Qualitative Analysis vs Discrepancy Auditor */}
       <div
         style={{
           display: 'flex',
           gap: '10px',
           borderBottom: '2px solid #e2e8f0',
           paddingBottom: '12px',
+          flexWrap: 'wrap',
         }}
       >
         <button
@@ -92,7 +93,7 @@ export const GapAnalysisPage: React.FC<GapAnalysisPageProps> = ({
           }}
         >
           <Lightbulb size={16} />
-          💡 الاقتراحات ومجالات التحسين (تبني المبادرات والفجوات)
+          💡 مقترحات إجراءات التحسين (تبني الإجراءات والفجوات)
         </button>
 
         <button
@@ -115,12 +116,38 @@ export const GapAnalysisPage: React.FC<GapAnalysisPageProps> = ({
           <Sparkles size={16} />
           ✨ المساعد الذكي والتحليل النوعي (AI Analysis)
         </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveView('audit')}
+          style={{
+            padding: '8px 18px',
+            borderRadius: '8px',
+            fontSize: '13.5px',
+            fontWeight: 700,
+            cursor: 'pointer',
+            border: activeView === 'audit' ? '2px solid #4338CA' : '1px solid #e2e8f0',
+            backgroundColor: activeView === 'audit' ? '#EEF2FF' : '#ffffff',
+            color: activeView === 'audit' ? '#4338CA' : '#64748b',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+          }}
+        >
+          <ShieldAlert size={16} />
+          🛡️ مراجعة وتدقيق الإدخالات (AI Audit)
+        </button>
       </div>
 
       {activeView === 'suggestions' ? (
         <FormulaSuggestionsSection
           readOnly={readOnly}
           onNavigateToPlans={() => onNavigate('improvement-plan')}
+          onToast={(type, msg) => addToast(type, msg)}
+        />
+      ) : activeView === 'audit' ? (
+        <AiDiscrepancyReviewTab
+          onNavigateToIndicator={() => onNavigate('rubric-assessment')}
           onToast={(type, msg) => addToast(type, msg)}
         />
       ) : (
@@ -211,132 +238,7 @@ export const GapAnalysisPage: React.FC<GapAnalysisPageProps> = ({
         </div>
       )}
 
-      {/* 2. Three Summary Cards */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
-          gap: '16px',
-        }}
-      >
-        {/* Card 1: Average Score */}
-        <div
-          style={{
-            backgroundColor: '#FFFFFF',
-            borderRadius: '12px',
-            padding: '20px',
-            border: '1px solid #E2E8F0',
-            boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: '12.5px', fontWeight: 700, color: '#64748B' }}>
-              متوسط التقدير العام للمدرسة
-            </span>
-            <div
-              style={{
-                width: '36px',
-                height: '36px',
-                borderRadius: '8px',
-                backgroundColor: '#ECFDF5',
-                color: '#059669',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              <TrendingUp size={18} />
-            </div>
-          </div>
-          <div style={{ fontSize: '28px', fontWeight: 900, color: '#0F172A', marginTop: '8px' }}>
-            {analysisData?.averageScore || 2.1}{' '}
-            <span style={{ fontSize: '13px', fontWeight: 600, color: '#64748B' }}>/ 3.0</span>
-          </div>
-          <div style={{ fontSize: '11.5px', color: '#059669', marginTop: '4px', fontWeight: 600 }}>
-            مستوى أداء متوسط متقدم
-          </div>
-        </div>
-
-        {/* Card 2: Evaluated Evidences */}
-        <div
-          style={{
-            backgroundColor: '#FFFFFF',
-            borderRadius: '12px',
-            padding: '20px',
-            border: '1px solid #E2E8F0',
-            boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: '12.5px', fontWeight: 700, color: '#64748B' }}>
-              الشواهد الخاضعة للتحليل والتدقيق
-            </span>
-            <div
-              style={{
-                width: '36px',
-                height: '36px',
-                borderRadius: '8px',
-                backgroundColor: '#EFF6FF',
-                color: '#2563EB',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              <FileCheck2 size={18} />
-            </div>
-          </div>
-          <div style={{ fontSize: '28px', fontWeight: 900, color: '#0F172A', marginTop: '8px' }}>
-            {analysisData?.evaluatedEvidences || 18}{' '}
-            <span style={{ fontSize: '13px', fontWeight: 600, color: '#64748B' }}>
-              من {analysisData?.totalEvidences || 20} عينة مدققة
-            </span>
-          </div>
-          <div style={{ fontSize: '11.5px', color: '#2563EB', marginTop: '4px', fontWeight: 600 }}>
-            نسبة مطابقة شواهد 90%
-          </div>
-        </div>
-
-        {/* Card 3: Suggested Initiatives */}
-        <div
-          style={{
-            backgroundColor: '#FFFFFF',
-            borderRadius: '12px',
-            padding: '20px',
-            border: '1px solid #E2E8F0',
-            boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: '12.5px', fontWeight: 700, color: '#64748B' }}>
-              المبادرات التطويرية المقترحة
-            </span>
-            <div
-              style={{
-                width: '36px',
-                height: '36px',
-                borderRadius: '8px',
-                backgroundColor: '#FFFBEB',
-                color: '#D97706',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              <Lightbulb size={18} />
-            </div>
-          </div>
-          <div style={{ fontSize: '28px', fontWeight: 900, color: '#D97706', marginTop: '8px' }}>
-            {analysisData?.suggestedInitiativesCount || 3}{' '}
-            <span style={{ fontSize: '13px', fontWeight: 600, color: '#64748B' }}>مبادرات استراتيجية</span>
-          </div>
-          <div style={{ fontSize: '11.5px', color: '#B45309', marginTop: '4px', fontWeight: 600 }}>
-            جاهزة للنقل المباشر إلى خطة التحسين
-          </div>
-        </div>
-      </div>
-
-      {/* 3. Observation Highlights: Strengths Green Card & Weaknesses Pink Card */}
+      {/* 2. Observation Highlights: Strengths Green Card & Weaknesses Pink Card */}
       <div
         style={{
           display: 'grid',

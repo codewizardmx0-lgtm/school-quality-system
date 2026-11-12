@@ -1,5 +1,6 @@
 import { exportToExcel, formatExportFilename } from '../../../admin/utils/exportUtils';
 import React, { useState } from 'react';
+import { evaluatorApi } from '../../api/evaluatorApi';
 import { useImprovementPlan } from '../../hooks/useImprovementPlan';
 import { AddActionModal } from './AddActionModal';
 import { AddPlanModal } from './AddPlanModal';
@@ -16,6 +17,7 @@ import {
   Clock,
   AlertCircle,
   Download,
+  FileSpreadsheet,
   Calendar,
   User,
   Edit2,
@@ -50,6 +52,9 @@ export const ImprovementPlanPage: React.FC<ImprovementPlanPageProps> = ({
     refreshPlan,
   } = useImprovementPlan();
 
+  const { user } = useAuth();
+  const { toasts, addToast, dismissToast } = useToast();
+
   const planTypeTabs: { id: PlanType; label: string; desc: string }[] = [
     { id: 'QualityImprovement', label: 'خطة تحسين الجودة المدرسية', desc: 'معالجة الفجوات المعيارية' },
     { id: 'StaffProfessionalDevelopment', label: 'خطة التطوير المهني والتربوي', desc: 'تأهيل وتدريب الكوادر' },
@@ -63,8 +68,7 @@ export const ImprovementPlanPage: React.FC<ImprovementPlanPageProps> = ({
   const [isAttachModalOpen, setIsAttachModalOpen] = useState(false);
   const [newReviewNoteText, setNewReviewNoteText] = useState('');
   const [isSubmittingReviewNote, setIsSubmittingReviewNote] = useState(false);
-  const { toasts, addToast, dismissToast } = useToast();
-
+  const [isExportingWorkbook, setIsExportingWorkbook] = useState(false);
 
   if (isLoading && !planData) {
     return (
@@ -80,8 +84,6 @@ export const ImprovementPlanPage: React.FC<ImprovementPlanPageProps> = ({
     return act.status === filterStatus;
   });
 
-  const { user } = useAuth();
-
   const handleExportPlan = () => {
     const headers = ['رقم الإجراء', 'عنوان الإجراء', 'المعيار', 'المسؤول', 'البداية', 'الاستحقاق', 'الحالة', 'نسبة الإنجاز', 'وصف التقدم'];
     const rows = actions.map((a) => [
@@ -96,13 +98,25 @@ export const ImprovementPlanPage: React.FC<ImprovementPlanPageProps> = ({
       a.progressDescription,
     ]);
     const filename = formatExportFilename('خطة_التحسين_المدرسي', 'xlsx');
-    const schoolName = user?.school?.schoolName || 'مدرسة الفاروق النموذجية';
-    const schoolCode = String(user?.school?.schoolId || 'SCH-104');
+    const schoolName = user?.school?.schoolName || 'مدرسة الفاروق الأساسية للبنين';
+    const schoolCode = user?.school?.schoolCode || (user?.school?.schoolId ? `SCH-${user.school.schoolId}` : 'SCH-TAIZ-2026-001');
     exportToExcel(filename, 'خطة التحسين', headers, rows, {
       schoolName,
       schoolCode,
       reportTitle: 'وثيقة خطة التحسين والتطوير المدرسي',
     });
+  };
+
+  const handleExportUnifiedWorkbook = async () => {
+    setIsExportingWorkbook(true);
+    try {
+      await evaluatorApi.exportImprovementWorkbook();
+      addToast('success', 'تم تصدير المصنف الموحد للخطط والمقترحات (3 أوراق) بنجاح.');
+    } catch (err: any) {
+      addToast('error', 'تعذر تصدير المصنف الموحد: ' + (err?.message || 'خطأ في الخادم'));
+    } finally {
+      setIsExportingWorkbook(false);
+    }
   };
 
   const handleDirectStatusChange = (actionId: number, newStatus: ActionStatus) => {
@@ -257,6 +271,29 @@ export const ImprovementPlanPage: React.FC<ImprovementPlanPageProps> = ({
           >
             <Download size={15} />
             تصدير الخطة
+          </button>
+
+          <button
+            onClick={handleExportUnifiedWorkbook}
+            disabled={isExportingWorkbook}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '9px 16px',
+              borderRadius: '8px',
+              backgroundColor: '#EEF2FF',
+              color: '#4338CA',
+              border: '1px solid #C7D2FE',
+              fontSize: '13px',
+              fontWeight: 700,
+              cursor: isExportingWorkbook ? 'not-allowed' : 'pointer',
+              opacity: isExportingWorkbook ? 0.7 : 1,
+            }}
+            title="تصدير مصنف إكسل رسمي موحد يتضمن 3 أوراق: المقترحات والفجوات، الخطط المدرسية، ومصفوفة الإجراءات التنفيذية"
+          >
+            <FileSpreadsheet size={15} color="#4338CA" />
+            {isExportingWorkbook ? 'جاري التصدير...' : 'تصدير المصنف الموحد (3 أوراق)'}
           </button>
 
           {!readOnly && (

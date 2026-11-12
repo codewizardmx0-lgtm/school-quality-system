@@ -48,7 +48,7 @@ class DemoEvaluationSeeder extends Seeder
         $principalFarouq  = User::where('username', 'principal_farouq')->firstOrFail();
 
         // تحديث كلمات مرور حسابات الاختبار برمز بيئة آمن مخصص للتطوير دون أي بيانات حساسة
-        $devSafePassword = env('SEED_DEFAULT_PASSWORD', 'DevTestPassword2026!');
+        $devSafePassword = env('SEED_DEFAULT_PASSWORD', 'TestingEnv_Seed_Password_2026_Strict!');
         $safeHash = Hash::make($devSafePassword);
 
         foreach ([$evaluatorBelqees, $principalBelqees, $evaluatorFarouq, $principalFarouq] as $u) {
@@ -139,129 +139,150 @@ class DemoEvaluationSeeder extends Seeder
             }
         }
 
-        // ب. إنشاء وثائق مدرسية واقعية تغطي كافة المتطلبات الوطنية الـ 278 عبر الـ 109 مؤشراً (159 وثيقة أصيلة)
+        // ب. إنشاء 45 وثيقة مدرسية واقعية تغطي كافة المعايير والمتطلبات الوطنية الـ 278 (ارتباط ثنائي وثلاثي مدروس)
         $samplePdfContent = "%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n3 0 obj<</Type/Page/MediaBox[0 0 612 792]/Parent 2 0 R/Resources<<>>>>endobj\nxref\n0 4\n0000000000 65535 f\n0000000010 00000 n\n0000000053 00000 n\n0000000102 00000 n\ntrailer<</Size 4/Root 1 0 R>>\nstartxref\n178\n%%EOF\n";
 
-        $docIndex = 0;
+        // تعريف الوثائق المدرسية الـ 45 الموزعة على المعايير السبعة
+        $documentsCatalog = [
+            // المعيار 1: الإدارة المدرسية (24 مؤشراً - 10 وثائق: 4 ثلاثية و 6 ثنائية)
+            ['title' => 'الخطة الاستراتيجية والتطويرية الشاملة لمدرسة الفاروق (2024-2027)', 'type' => 'plan', 'size' => 3],
+            ['title' => 'الخطة التشغيلية السنوية والبرنامج التنفيذي لمدرسة الفاروق (2026/2027)', 'type' => 'plan', 'size' => 3],
+            ['title' => 'الهيكل التنظيمي والوصف الوظيفي للعاملين بالمدرسة', 'type' => 'policy', 'size' => 3],
+            ['title' => 'سجل اجتماعات مجلس إدارة المدرسة والمجالس الإدارية', 'type' => 'minutes', 'size' => 3],
+            ['title' => 'اللائحة التنظيمية المدرسية وسياسات العمل الإداري', 'type' => 'policy', 'size' => 2],
+            ['title' => 'السجل المالي ومستندات المصروفات والإيرادات والميزانية المدرسية', 'type' => 'record', 'size' => 2],
+            ['title' => 'سجل استلام وتوزيع العهد والكتب المدرسية والمستلزمات', 'type' => 'record', 'size' => 2],
+            ['title' => 'التقرير السنوي للتقييم الذاتي وإدارة الجودة المدرسية', 'type' => 'report', 'size' => 2],
+            ['title' => 'سجل المراسلات الإدارية والتعاميم الوزارية الصادرة والواردة', 'type' => 'record', 'size' => 2],
+            ['title' => 'ملف الإشراف والمتابعة الإدارية وسجل الأرشفة والتوثيق الإلكتروني', 'type' => 'record', 'size' => 2],
+
+            // المعيار 2: المعلمون والكوادر الإدارية والخدمية (18 مؤشراً - 7 وثائق: 4 ثلاثية و 3 ثنائية)
+            ['title' => 'سجل حصر الكادر التعليمي والإداري وبيانات المؤهلات والتخصصات', 'type' => 'record', 'size' => 3],
+            ['title' => 'سجل توزيع الجدول المدرسي وأنصبة الحصص للمعلمين', 'type' => 'record', 'size' => 3],
+            ['title' => 'خطة وسجل التنمية المهنية وورش التدريب الداخلي للمعلمين', 'type' => 'plan', 'size' => 3],
+            ['title' => 'سجل الزيارات الإشرافية والتوجيه التربوي والتقويم الصفي', 'type' => 'record', 'size' => 3],
+            ['title' => 'سجل تقييم الأداء الوظيفي السنوي للمعلمين والموظفين', 'type' => 'report', 'size' => 2],
+            ['title' => 'ملف الحوافز والمكافآت ولائحة التكريم والتحفيز المدرسي', 'type' => 'policy', 'size' => 2],
+            ['title' => 'سجل دوام وحضور وغياب الكادر التعليمي والإداري', 'type' => 'record', 'size' => 2],
+
+            // المعيار 3: المتعلمون (13 مؤشراً - 5 وثائق: 3 ثلاثية و 2 ثنائية)
+            ['title' => 'سجل قيد وقبول الطلاب وملفات الإحصاء المدرسي السنوي', 'type' => 'record', 'size' => 3],
+            ['title' => 'لائحة الانضباط المدرسي وقواعد السلوك والمواظبة للطلاب', 'type' => 'policy', 'size' => 3],
+            ['title' => 'سجل متابعة الحالات الخاصة والإرشاد الطلابي والاجتماعي', 'type' => 'record', 'size' => 3],
+            ['title' => 'خطة وبرامج رعاية الموهوبين والمتفوقين والطلاب المتعثرين', 'type' => 'plan', 'size' => 2],
+            ['title' => 'سجل الأنشطة الطلابية والاتحاد الطلابي والمبادرات المدرسية', 'type' => 'record', 'size' => 2],
+
+            // المعيار 4: التعليم والتعلم (21 مؤشراً - 9 وثائق: 3 ثلاثية و 6 ثنائية)
+            ['title' => 'الخطة الفصلية وسجلات تحضير الدروس وتوزيع المناهج الدراسية', 'type' => 'plan', 'size' => 3],
+            ['title' => 'سجل استخدام المعامل والمختبرات العلمية والتجارب العملية', 'type' => 'record', 'size' => 3],
+            ['title' => 'خطة وسجل تفعيل مصادر التعلم والمكتبة المدرسية', 'type' => 'plan', 'size' => 3],
+            ['title' => 'سجل استخدام الوسائل التعليمية والتقنيات الرقمية في التدريس', 'type' => 'record', 'size' => 2],
+            ['title' => 'بنك الأسئلة ونماذج الاختبارات التشخيصية والدورية والنهائية', 'type' => 'record', 'size' => 2],
+            ['title' => 'سجل رصد درجات الطلاب وتقارير التقويم المستمر والنتائج الشهرية', 'type' => 'record', 'size' => 2],
+            ['title' => 'سجل تحليل نتائج الاختبارات واستخراج نسب التحصيل الدراسي', 'type' => 'report', 'size' => 2],
+            ['title' => 'خطة برامج التقوية والخطط العلاجية لرفع التحصيل التعليمي', 'type' => 'plan', 'size' => 2],
+            ['title' => 'سجل المسابقات العلمية والمنهجية والأنشطة الصفية المعززة للتعلم', 'type' => 'record', 'size' => 2],
+
+            // المعيار 5: البيئة المدرسية (21 مؤشراً - 9 وثائق: 3 ثلاثية و 6 ثنائية)
+            ['title' => 'خطة الأمن والسلامة المدرسية ودليل الإخلاء في حالات الطوارئ', 'type' => 'plan', 'size' => 3],
+            ['title' => 'تقارير الصيانة الدورية للمبنى والمرافق المدرسية', 'type' => 'report', 'size' => 3],
+            ['title' => 'سجل فحص وتجهيز طفايات الحريق وحقائب الإسعافات الأولية', 'type' => 'record', 'size' => 3],
+            ['title' => 'سجل النظافة العامة والاشتراطات الصحية لمرافق المدرسة والمقصف', 'type' => 'record', 'size' => 2],
+            ['title' => 'سجل كفاءة غرف التدريس والإضاءة والتهوية والمقاعد الدراسية', 'type' => 'record', 'size' => 2],
+            ['title' => 'سجل صيانة الشبكة الكهربائية وشبكة المياه والصرف الصحي', 'type' => 'record', 'size' => 2],
+            ['title' => 'ملف تجهيزات الملاعب والساحات الرياضية والأنشطة الخارجية', 'type' => 'record', 'size' => 2],
+            ['title' => 'دليل الاستخدام الآمن للأجهزة والمعدات في المعامل المدرسية', 'type' => 'policy', 'size' => 2],
+            ['title' => 'سجل اللوحات الإرشادية وسلامة المداخل ومخارج الطوارئ', 'type' => 'board', 'size' => 2],
+
+            // المعيار 6: الشراكة المجتمعية (6 مؤشرات - وثيقتان ثلاثيتان)
+            ['title' => 'لائحة ومحاضر اجتماعات مجلس الآباء والمعلمين والشراكة المجتمعية', 'type' => 'minutes', 'size' => 3],
+            ['title' => 'سجل برامج التوعية المجتمعية والمبادرات المشتركة مع أولياء الأمور', 'type' => 'record', 'size' => 3],
+
+            // المعيار 7: ضمان الجودة والتحسين المستمر (6 مؤشرات - 3 وثائق ثنائية)
+            ['title' => 'ميثاق الجودة وسياسة التحسين المستمر والتقويم الذاتي لمدرسة الفاروق', 'type' => 'policy', 'size' => 2],
+            ['title' => 'تقرير مراجعة الأداء المؤسسي ومؤشرات قياس الجودة المدرسية', 'type' => 'report', 'size' => 2],
+            ['title' => 'خطة التحسين المدرسي الشاملة ومصفوفة المتابعة الدورية', 'type' => 'plan', 'size' => 2],
+        ];
+
+        // خريطة نتائج التقييم للمؤشرات
+        $resultMap = [];
         foreach ($ratedResults as $item) {
-            $indicator = $item['indicator'];
-            $result = $item['result'];
-            $reqs = $indicator->evidenceRequirements()->orderBy('requirement_id')->get();
-            if ($reqs->isEmpty()) {
-                continue;
-            }
+            $resultMap[$item['indicator']->indicator_id] = $item['result']->result_id;
+        }
 
-            // تقسيم المتطلبات إلى وثيقة أو وثيقتين واقعيتين للمؤشر
-            $primaryReqs = [];
-            $secondaryReqs = [];
+        // تقسيم الـ 109 مؤشراً على الـ 45 وثيقة بدقة تامة
+        $indicatorOffset = 0;
+        foreach ($documentsCatalog as $docIdx => $catalogItem) {
+            $chunkSize = $catalogItem['size'];
+            $chunkIndicators = $allIndicators->slice($indicatorOffset, $chunkSize)->values();
+            $indicatorOffset += $chunkSize;
 
-            if ($reqs->count() === 1) {
-                $primaryReqs = [$reqs[0]];
-            } elseif ($reqs->count() === 2) {
-                $r1 = $reqs[0];
-                $r2 = $reqs[1];
-                $isBoard1 = str_contains($r1->title, 'لوحة') || str_contains($r1->title, 'صورة');
-                $isBoard2 = str_contains($r2->title, 'لوحة') || str_contains($r2->title, 'صورة');
-                if ($isBoard1 !== $isBoard2) {
-                    $primaryReqs = [$r1];
-                    $secondaryReqs = [$r2];
-                } else {
-                    $primaryReqs = [$r1, $r2];
-                }
-            } else {
-                $primaryReqs = [$reqs[0], $reqs[1]];
-                for ($k = 2; $k < $reqs->count(); $k++) {
-                    $secondaryReqs[] = $reqs[$k];
-                }
-            }
+            $docNumber = $docIdx + 1;
+            $doc = SchoolDocument::create([
+                'school_id'          => $schoolFarouq->school_id,
+                'title'              => $catalogItem['title'],
+                'document_type'      => $catalogItem['type'],
+                'description'        => "شاهد توثيقي رسمي معتمد يغطي متطلبات مؤشرات الجودة الوطنية لمدرسة الفاروق الأساسية للبنين لعام 2026.",
+                'created_by_user_id' => $evaluatorFarouq->user_id,
+            ]);
 
-            $docGroups = array_filter([$primaryReqs, $secondaryReqs]);
-
-            foreach ($docGroups as $group) {
-                $docIndex++;
-                $titleParts = array_map(function ($r) {
-                    $t = trim($r->title);
-                    $t = preg_replace('/^وثيقة\s+/u', '', $t);
-                    $t = preg_replace('/^نسخة\s+(من\s+)?/u', '', $t);
-                    return $t;
-                }, $group);
-                $combinedTitle = implode(' و', array_unique($titleParts));
-
-                $cleanTitle = $combinedTitle;
-                if (!preg_match('/^(محضر|سجل|خطة|تقرير|دليل|كشف|لوحة|قائمة|ملف|استمارة|استبانة|مصفوفة|ميثاق|برنامج|جدول)/u', $cleanTitle)) {
-                    $cleanTitle = "ملف وثائقي: " . $cleanTitle;
-                }
-                $cleanTitle .= " لمدرسة الفاروق (2026/2027)";
-
-                $docType = 'record';
-                if (preg_match('/(محضر|اجتماع)/u', $cleanTitle)) {
-                    $docType = 'minutes';
-                } elseif (preg_match('/(خطة|برنامج)/u', $cleanTitle)) {
-                    $docType = 'plan';
-                } elseif (preg_match('/(تقرير|تحليل|استبانة|نتائج)/u', $cleanTitle)) {
-                    $docType = 'report';
-                } elseif (preg_match('/(لوحة|صورة)/u', $cleanTitle)) {
-                    $docType = 'board';
-                } elseif (preg_match('/(دليل|لائحة|ميثاق|سياسة)/u', $cleanTitle)) {
-                    $docType = 'policy';
-                }
-
-                $doc = SchoolDocument::create([
-                    'school_id'          => $schoolFarouq->school_id,
-                    'title'              => $cleanTitle,
-                    'document_type'      => $docType,
-                    'description'        => "شاهد توثيقي رسمي معتمد يغطي متطلبات مؤشر ({$indicator->code}: {$indicator->name}) لمدرسة الفاروق.",
-                    'created_by_user_id' => $evaluatorFarouq->user_id,
-                ]);
-
-                // لأول 3 مستندات: إنشاء نسخة أرشيفية قديمة (v1) لإثبات واختبار تبويب الإصدارات والنسخ القديمة
-                if ($docIndex <= 3) {
-                    $oldFileName = "farouq_doc_{$doc->id}_v1.pdf";
-                    DocumentVersion::create([
-                        'school_document_id' => $doc->id,
-                        'version_no'         => 1,
-                        'school_id'          => $schoolFarouq->school_id,
-                        'is_current'         => false,
-                        'file_name'          => $oldFileName,
-                        'storage_uri'        => "documents/{$schoolFarouq->school_id}/{$oldFileName}",
-                        'file_size'          => 1024 * 1024 * 2, // 2MB
-                        'mime_type'          => 'application/pdf',
-                        'notes'              => 'المسودة الأولى قبل التعديل والاعتماد النهائي (نسخة أرشيفية سابقة)',
-                    ]);
-                    Storage::disk('local')->put("documents/{$schoolFarouq->school_id}/{$oldFileName}", $samplePdfContent);
-
-                    $currentVersionNo = 2;
-                } else {
-                    $currentVersionNo = 1;
-                }
-
-                $cleanCode = str_replace(['-', '.'], '_', $indicator->code);
-                $curFileName = "farouq_ind_{$cleanCode}_doc_{$doc->id}_v{$currentVersionNo}.pdf";
-                $fileSize = 1024 * 512 + (($docIndex * 43) % 2500) * 1024;
-
-                $ver = DocumentVersion::create([
+            // لأول 3 مستندات: إنشاء نسخة أرشيفية قديمة (v1) لاختبار تبويب الإصدارات والنسخ القديمة وسجل التاريخ
+            if ($docNumber <= 3) {
+                $oldFileName = "farouq_doc_{$doc->id}_v1.pdf";
+                DocumentVersion::create([
                     'school_document_id' => $doc->id,
-                    'version_no'         => $currentVersionNo,
+                    'version_no'         => 1,
                     'school_id'          => $schoolFarouq->school_id,
-                    'is_current'         => true,
-                    'file_name'          => $curFileName,
-                    'storage_uri'        => "documents/{$schoolFarouq->school_id}/{$curFileName}",
-                    'file_size'          => $fileSize,
+                    'is_current'         => false,
+                    'file_name'          => $oldFileName,
+                    'storage_uri'        => "documents/{$schoolFarouq->school_id}/{$oldFileName}",
+                    'file_size'          => 1024 * 1024 * 2, // 2MB
                     'mime_type'          => 'application/pdf',
-                    'notes'              => 'الإصدار المعتمد للشاهد التوثيقي لعام 2026',
+                    'notes'              => 'المسودة الأولية قبل مراجعة وإقرار مجلس إدارة المدرسة (نسخة سابقة)',
                 ]);
-                Storage::disk('local')->put("documents/{$schoolFarouq->school_id}/{$curFileName}", $samplePdfContent);
+                Storage::disk('local')->put("documents/{$schoolFarouq->school_id}/{$oldFileName}", $samplePdfContent);
 
-                // ربط الشاهد حصرياً بالمؤشر والمتطلبات المحددة
-                $reqIds = array_map(fn($r) => $r->requirement_id, $group);
+                $currentVersionNo = 2;
+            } else {
+                $currentVersionNo = 1;
+            }
+
+            $curFileName = "farouq_doc_{$doc->id}_v{$currentVersionNo}.pdf";
+            $fileSize = 1024 * 768 + (($docNumber * 57) % 3500) * 1024;
+
+            $ver = DocumentVersion::create([
+                'school_document_id' => $doc->id,
+                'version_no'         => $currentVersionNo,
+                'school_id'          => $schoolFarouq->school_id,
+                'is_current'         => true,
+                'file_name'          => $curFileName,
+                'storage_uri'        => "documents/{$schoolFarouq->school_id}/{$curFileName}",
+                'file_size'          => $fileSize,
+                'mime_type'          => 'application/pdf',
+                'notes'              => 'الإصدار المعتمد والنهائي للشاهد التوثيقي لعام 2026/2027',
+            ]);
+
+            // تخزين الملف الفيزيائي لأول 3 مستندات فقط لتقليل استهلاك القرص وضمان الأداء الخفيف
+            if ($docNumber <= 3) {
+                Storage::disk('local')->put("documents/{$schoolFarouq->school_id}/{$curFileName}", $samplePdfContent);
+            }
+
+            // ربط الشاهد بكافة المؤشرات التابعة لهذه الوثيقة مع تغطية 100% لكافة متطلباتها الإلزامية
+            foreach ($chunkIndicators as $ind) {
+                $mandatoryReqIds = \App\Models\IndicatorEvidenceRequirement::where('indicator_id', $ind->indicator_id)
+                    ->where('required', true)
+                    ->pluck('requirement_id')
+                    ->map(fn($id) => (int)$id)
+                    ->all();
+
                 EvidenceLink::create([
                     'evaluation_id'        => $evalFarouq->evaluation_id,
-                    'indicator_id'         => $indicator->indicator_id,
+                    'indicator_id'         => $ind->indicator_id,
                     'document_version_id'  => $ver->id,
                     'school_id'            => $schoolFarouq->school_id,
-                    'evaluation_result_id' => $result->result_id,
-                    'justification'        => "شاهد توثيقي رسمي معتمد يغطي متطلبات (" . implode('، ', $titleParts) . ") لمؤشر ({$indicator->code}) لعام 2026/2027.",
-                    'covered_requirements' => $reqIds,
+                    'evaluation_result_id' => $resultMap[$ind->indicator_id] ?? null,
+                    'justification'        => "شاهد معتمد وموثق يغطي كافة متطلبات المؤشر ({$ind->code}: {$ind->name}) ضمن وثيقة [{$catalogItem['title']}].",
+                    'covered_requirements' => $mandatoryReqIds,
                     'status'               => 'completed',
                 ]);
             }

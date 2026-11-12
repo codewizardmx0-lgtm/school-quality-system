@@ -53,12 +53,17 @@ class BatchEImprovementPlansAndArchiveTest extends TestCase
         $this->assertTrue($item['isUnlinked']);
         $this->assertEquals('غير مرتبط بأي مؤشر', $item['indicatorTitle']);
 
-        // 3. ربط متعدد باستخدام targetIndicatorIds و indicatorIds
+        // 3. ربط متعدد باستخدام targetIndicatorIds و indicatorIds مع تحديد المتطلبات الإلزامية
+        $req1 = \App\Models\IndicatorEvidenceRequirement::where('indicator_id', $indicators[0]->indicator_id)->where('required', true)->first();
+        $req2 = \App\Models\IndicatorEvidenceRequirement::where('indicator_id', $indicators[1]->indicator_id)->where('required', true)->first();
+        $coveredReqIds = array_values(array_filter([$req1?->requirement_id, $req2?->requirement_id]));
+
         $multiRes = $this->actingAs($evaluator, 'sanctum')
             ->postJson('/api/v1/evaluator/evidence-links/multi', [
                 'documentId' => $docId,
                 'versionId' => $verId,
                 'targetIndicatorIds' => [$indicators[0]->indicator_id, $indicators[1]->indicator_id],
+                'coveredRequirements' => $coveredReqIds,
                 'justification' => 'اختبار ربط متعدد',
             ]);
         $multiRes->assertStatus(200)->assertJsonPath('data.linkedCount', 2);

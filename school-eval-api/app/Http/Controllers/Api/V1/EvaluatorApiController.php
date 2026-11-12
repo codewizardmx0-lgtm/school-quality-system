@@ -16,9 +16,11 @@ use App\Models\EvaluationResultVerificationMethod;
 use App\Models\EvaluationSubmission;
 use App\Models\EvidenceLink;
 use App\Models\ImprovementAction;
+use App\Models\ImprovementArea;
 use App\Models\ImprovementPlan;
 use App\Models\Indicator;
 use App\Models\IndicatorScoreDescriptor;
+use App\Models\InternalReviewNote;
 use App\Models\Note;
 use App\Models\Report;
 use App\Models\School;
@@ -398,7 +400,7 @@ class EvaluatorApiController extends Controller
                     }
                 }
                 $coveredCnt = $mandatoryCnt > 0 ? min($mandatoryCnt, count($explicitIds) + $legacyCnt) : $evCount;
-                return [$evCount, $mandatoryCnt, $coveredCnt];
+                return [$evCount, $mandatoryCnt, $coveredCnt, $explicitIds];
             };
 
             foreach ($allStdIndicators as $indItem) {
@@ -433,7 +435,7 @@ class EvaluatorApiController extends Controller
                         'title' => $sub->name,
                         'indicators' => $sub->indicators->map(function ($ind) use ($results, $computeIndicatorCoverage) {
                             $res = $results->firstWhere('indicator_id', $ind->indicator_id);
-                            [$evCount, $mandatoryCnt, $coveredCnt] = $computeIndicatorCoverage($ind);
+                            [$evCount, $mandatoryCnt, $coveredCnt, $explicitIds] = $computeIndicatorCoverage($ind);
 
                             return [
                                 'indicatorId' => $ind->indicator_id,
@@ -464,6 +466,7 @@ class EvaluatorApiController extends Controller
                                     'title' => $er->title,
                                     'description' => $er->description ?? '',
                                     'required' => (bool)$er->required,
+                                    'isCovered' => isset($explicitIds[(int)$er->requirement_id]),
                                 ]),
                             ];
                         }),
@@ -2373,6 +2376,115 @@ class EvaluatorApiController extends Controller
     }
 
     /**
+     * GET /api/v1/evaluator/export-improvement-workbook
+     * تصدير مصنف Excel موحد بـ 3 أوراق: مقترحات التحسين والفجوات، الخطط المدرسية، ومصفوفة الإجراءات
+     */
+    public function exportImprovementWorkbook(Request $request)
+    {
+        $user = $request->user();
+        if ($user && !$user->hasPermission('evaluations.view') && !$user->hasPermission('reports.view') && !$user->hasRole('admin') && !$user->hasRole('school_evaluator') && !$user->hasRole('school_principal')) {
+            return ApiResponse::forbidden('ليس لديك صلاحية لتصدير خطط ومقترحات التحسين.');
+        }
+
+        $evaluation = $this->getActiveEvaluation($request);
+        if (!$evaluation) {
+            return ApiResponse::notFound('ملف التقييم غير موجود.');
+        }
+
+        $evaluation->loadMissing(['school', 'cycle']);
+
+        $schoolCode = $evaluation->school?->school_code ?? 'SCH';
+        $fileName = 'improvement_workbook_' . $schoolCode . '_' . date('Y-m-d_H-i') . '.xlsx';
+
+        return \Maatwebsite\Excel\Facades\Excel::download(
+            new \App\Exports\UnifiedImprovementWorkbookExport($evaluation),
+            $fileName
+        );
+    }
+
+    /**
+     * GET /api/v1/evaluator/internal-review-note
+     * جلب ملاحظات المراجعة الداخلية لمدير المدرسة
+     */
+    public function getInternalReviewNote(Request $request): JsonResponse
+    {
+        $evaluation = $this->getActiveEvaluation($request);
+        if (!$evaluation) {
+            return ApiResponse::notFound('ملف التقييم غير موجود.');
+        }
+
+        $report = Report::firstOrCreate(
+            ['evaluation_id' => $evaluation->evaluation_id],
+            ['generated_at' => now(), 'status' => 'Draft', 'updated_at' => now()]
+        );
+
+        $note = InternalReviewNote::with('author')
+            ->where('report_id', $report->report_id)
+            ->latest('note_id')
+            ->first();
+
+        return ApiResponse::success([
+            'noteId'     => $note?->note_id,
+            'reportId'   => $report->report_id,
+            'text'       => $note?->text ?? '',
+            'authorName' => $note?->author?->full_name ?? $note?->author?->name ?? null,
+            'authorRole' => 'مدير المدرسة',
+            'createdAt'  => $note?->created_at?->toIso8601String(),
+            'updatedAt'  => $note?->updated_at?->toIso8601String(),
+        ], 'تم جلب ملاحظات المراجعة الداخلية بنجاح.');
+    }
+
+    /**
+     * POST /api/v1/evaluator/internal-review-note
+     * حفظ وتحديث ملاحظات المراجعة الداخلية لمدير المدرسة
+     */
+    public function saveInternalReviewNote(Request $request): JsonResponse
+    {
+        $evaluation = $this->getActiveEvaluation($request);
+        if (!$evaluation) {
+            return ApiResponse::notFound('ملف التقييم غير موجود.');
+        }
+
+        $user = $request->user();
+        $isPrincipal = $user->hasRole('SchoolPrincipal') || $user->hasRole('Principal') || $user->hasRole('school_principal') || $user->hasPermission('evaluations.approve');
+        if (!$isPrincipal && $user->user_type !== 'school' && !$user->hasRole('admin')) {
+            return ApiResponse::forbidden('تدوين وتعديل ملاحظات المراجعة الداخلية محصورة بمدير المدرسة.');
+        }
+
+        $validator = Validator::make($request->all(), [
+            'text' => 'required|string|max:5000',
+        ]);
+
+        if ($validator->fails()) {
+            return ApiResponse::validationError($validator->errors()->toArray());
+        }
+
+        $report = Report::firstOrCreate(
+            ['evaluation_id' => $evaluation->evaluation_id],
+            ['generated_at' => now(), 'status' => 'Draft', 'updated_at' => now()]
+        );
+
+        $note = InternalReviewNote::updateOrCreate(
+            ['report_id' => $report->report_id],
+            [
+                'author_user_id' => $user->user_id,
+                'text'           => $request->input('text'),
+            ]
+        );
+
+        $note->load('author');
+
+        return ApiResponse::success([
+            'noteId'     => $note->note_id,
+            'reportId'   => $report->report_id,
+            'text'       => $note->text,
+            'authorName' => $note->author?->full_name ?? $user->full_name,
+            'authorRole' => 'مدير المدرسة',
+            'updatedAt'  => $note->updated_at?->toIso8601String(),
+        ], 'تم حفظ اعتماد وملاحظات مدير المدرسة بنجاح.');
+    }
+
+    /**
      * GET /api/v1/evaluator/evidence-inventory
      * جرد وحصر الشواهد للمدرسة الحالية
      */
@@ -2400,6 +2512,293 @@ class EvaluatorApiController extends Controller
 
         $suggestionController = app(\App\Http\Controllers\Api\V1\ImprovementSuggestionController::class);
         return $suggestionController->index($request, $evaluation->evaluation_id);
+    }
+
+    /**
+     * POST /api/v1/evaluator/suggestions/{resultId}/exclude
+     * استبعاد مقترح تحسين لمؤشر غير متبنى
+     */
+    public function excludeSuggestion(Request $request, int $resultId): JsonResponse
+    {
+        $evaluation = $this->getActiveEvaluation($request);
+        $result = EvaluationResult::where('evaluation_id', $evaluation->evaluation_id)
+            ->where('result_id', $resultId)
+            ->first();
+
+        if (!$result) {
+            return ApiResponse::notFound('نتيجة المؤشر المطلوب استبعاد مقترحها غير موجودة.');
+        }
+
+        // القيد: لا يمكن استبعاد مقترح تم تبنيه كإجراء تحسين مسبقاً
+        $isAdopted = ImprovementArea::where('result_id', $resultId)->exists();
+        if ($isAdopted) {
+            return ApiResponse::error('لا يمكن استبعاد مقترح تم تبنيه كإجراء تحسين مسبقاً. يجب إلغاء تبني الإجراء أولاً.', 422);
+        }
+
+        $result->update([
+            'is_excluded' => true,
+            'excluded_at' => now(),
+        ]);
+
+        return ApiResponse::success([
+            'resultId' => $result->result_id,
+            'isExcluded' => true,
+            'excludedAt' => $result->excluded_at?->toIso8601String(),
+        ], 'تم استبعاد المقترح من قائمة العمل بنجاح.');
+    }
+
+    /**
+     * POST /api/v1/evaluator/suggestions/{resultId}/restore
+     * استعادة مقترح تحسين مستبعد
+     */
+    public function restoreSuggestion(Request $request, int $resultId): JsonResponse
+    {
+        $evaluation = $this->getActiveEvaluation($request);
+        $result = EvaluationResult::where('evaluation_id', $evaluation->evaluation_id)
+            ->where('result_id', $resultId)
+            ->first();
+
+        if (!$result) {
+            return ApiResponse::notFound('نتيجة المؤشر المطلوب استعادة مقترحها غير موجودة.');
+        }
+
+        $result->update([
+            'is_excluded' => false,
+            'excluded_at' => null,
+        ]);
+
+        return ApiResponse::success([
+            'resultId' => $result->result_id,
+            'isExcluded' => false,
+            'excludedAt' => null,
+        ], 'تمت استعادة المقترح وإعادته لقائمة الاقتراحات النشطة بنجاح.');
+    }
+
+    /**
+     * GET /api/v1/evaluator/discrepancies/audit
+     * محرك التدقيق المنطقي الحتمي للاكتشاف المبكر للمفارقات والتناقضات المنهجية (Deterministic Discrepancy Auditor)
+     * يغطي الحالات الخمس المعتمدة:
+     * 1. درجة عالية بلا شواهد (score >= 2 وعدد الشواهد 0).
+     * 2. درجة 3 بمتطلبات ناقصة (score = 3 ومتطلبات ناقصة عن المتطلبات الإلزامية للمؤشر).
+     * 3. درجة مرتفعة بلا مبرر نصي (score >= 2 والمبرر فارغ أو أقل من 10 أحرف).
+     * 4. ارتباط وثيقة واحدة بـ 10+ مؤشرات (تكرار مستند مفرط).
+     * 5. تناقض أساليب التحقق (اختيار أسلوب فحص وثائق وسجلات دون إرفاق أي وثيقة).
+     */
+    public function auditDiscrepancies(Request $request): JsonResponse
+    {
+        $evaluation = $this->getActiveEvaluation($request);
+        $school = $request->user()?->school ?? School::find($evaluation->school_id);
+
+        // تحميل جميع المؤشرات مع معاييرها ومتطلباتها الإلزامية
+        $indicators = Indicator::with([
+            'subStandard.standard',
+            'evidenceRequirements',
+        ])->orderBy('indicator_id')->get();
+
+        // جلب نتائج التقييم الحالي
+        $results = EvaluationResult::where('evaluation_id', $evaluation->evaluation_id)
+            ->with(['verificationTools'])
+            ->get()
+            ->keyBy('indicator_id');
+
+        // جلب روابط الشواهد مجمعة حسب المؤشر
+        $evidenceLinks = EvidenceLink::where('evaluation_id', $evaluation->evaluation_id)
+            ->with('documentVersion.document')
+            ->get();
+
+        $evidenceCountsByIndicator = $evidenceLinks->groupBy('indicator_id');
+
+        // حساب المتطلبات المغطاة بدقة من خدمة الكفاية أو من روابط الشواهد
+        try {
+            $sufficiencyData = app(\App\Services\EvidenceSufficiencyService::class)->evaluateEvaluation($evaluation);
+            $suffIndMap = collect($sufficiencyData['standards'] ?? [])
+                ->flatMap(fn($s) => $s['indicators'] ?? [])
+                ->keyBy('indicator_id');
+        } catch (\Throwable $e) {
+            $suffIndMap = collect();
+        }
+
+        $case1Items = []; // درجة عالية بلا شواهد
+        $case2Items = []; // درجة 3 بمتطلبات ناقصة
+        $case3Items = []; // درجة مرتفعة بلا مبرر نصي
+        $case5Items = []; // تناقض أساليب التحقق
+
+        foreach ($indicators as $ind) {
+            $res = $results->get($ind->indicator_id);
+            if (!$res || $res->score === null || $res->completion_status === 'Pending') {
+                continue;
+            }
+
+            $score = (int) $res->score;
+            $linksForInd = $evidenceCountsByIndicator->get($ind->indicator_id) ?? collect();
+            $evCount = $linksForInd->count();
+
+            $stdName = $ind->subStandard?->standard?->name ?? 'المعايير الوطنية';
+            $indCode = $ind->code;
+            $indName = $ind->name;
+
+            // الحالة 1: درجة عالية بلا شواهد (درجة >= 2 وعدد الشواهد 0)
+            if ($score >= 2 && $evCount === 0) {
+                $case1Items[] = [
+                    'indicatorId' => $ind->indicator_id,
+                    'standardId' => $ind->subStandard?->standard_id,
+                    'code' => $indCode,
+                    'name' => $indName,
+                    'standardName' => $stdName,
+                    'score' => $score,
+                    'evidenceCount' => 0,
+                    'issue' => "تم رصد التقدير ({$score}) لكن لا يوجد أي شاهد إثبات مرتبط بالمؤشر.",
+                    'recommendation' => 'يرجى إرفاق وثيقة أو شاهد معتمد لإثبات استحقاق هذا التقدير المتقدم.',
+                ];
+            }
+
+            // الحالة 2: درجة 3 بمتطلبات ناقصة (درجة = 3 ومتطلبات ناقصة عن الإلزامية)
+            $indSuff = $suffIndMap->get($ind->indicator_id);
+            $mandatoryCnt = (int) ($indSuff['mandatory_required_count'] ?? $ind->evidenceRequirements->where('is_mandatory', true)->count());
+            $coveredCnt = (int) ($indSuff['effective_covered_count'] ?? $evCount);
+
+            if ($score === 3 && $mandatoryCnt > 0 && $coveredCnt < $mandatoryCnt) {
+                $case2Items[] = [
+                    'indicatorId' => $ind->indicator_id,
+                    'standardId' => $ind->subStandard?->standard_id,
+                    'code' => $indCode,
+                    'name' => $indName,
+                    'standardName' => $stdName,
+                    'score' => 3,
+                    'mandatoryCount' => $mandatoryCnt,
+                    'coveredCount' => $coveredCnt,
+                    'issue' => "تم رصد الدرجة القصوى (3) ولكن تم تغطية ({$coveredCnt}) فقط من أصل ({$mandatoryCnt}) متطلبات إلزامية.",
+                    'recommendation' => 'لاستحقاق المستوى 3 يلزم تغطية 100% من المتطلبات الإلزامية للشواهد.',
+                ];
+            }
+
+            // الحالة 3: درجة مرتفعة بلا مبرر نصي (درجة >= 2 والمبرر فارغ أو أقل من 10 أحرف)
+            $justification = trim((string) ($res->textual_result ?? ''));
+            if ($score >= 2 && mb_strlen($justification) < 10) {
+                $case3Items[] = [
+                    'indicatorId' => $ind->indicator_id,
+                    'standardId' => $ind->subStandard?->standard_id,
+                    'code' => $indCode,
+                    'name' => $indName,
+                    'standardName' => $stdName,
+                    'score' => $score,
+                    'textLength' => mb_strlen($justification),
+                    'issue' => "تم رصد التقدير ({$score}) ولكن المبرر النصي للمقيم " . (empty($justification) ? 'فارغ تماماً' : 'مقتضب جداً (أقل من 10 أحرف)') . ".",
+                    'recommendation' => 'يرجى كتابة تبرير مهني واضح يوضح ممارسات المدرسة التي استند إليها هذا التقدير.',
+                ];
+            }
+
+            // الحالة 5: تناقض أساليب التحقق (اختيار أسلوب وثائق وسجلات دون إرفاق أي وثيقة)
+            $hasDocTool = $res->verificationTools->contains(function ($tool) {
+                $tName = $tool->name ?? '';
+                $tType = $tool->tool_type ?? '';
+                return str_contains($tName, 'وثائق') || str_contains($tName, 'سجلات')
+                    || str_contains($tType, 'وثائق') || str_contains($tType, 'سجلات');
+            });
+
+            if ($hasDocTool && $evCount === 0) {
+                $case5Items[] = [
+                    'indicatorId' => $ind->indicator_id,
+                    'standardId' => $ind->subStandard?->standard_id,
+                    'code' => $indCode,
+                    'name' => $indName,
+                    'standardName' => $stdName,
+                    'score' => $score,
+                    'toolName' => 'فحص الوثائق والسجلات',
+                    'issue' => 'تم تحديد "فحص الوثائق والسجلات" كأداة تحقق معتمدة للمؤشر، ومع ذلك لم يتم ربط أي وثيقة إثبات.',
+                    'recommendation' => 'إما إرفاق الوثيقة المفحوصة أو إلغاء تحديد أداة فحص الوثائق من بطاقة المؤشر.',
+                ];
+            }
+        }
+
+        // الحالة 4: ارتباط وثيقة واحدة بـ 10+ مؤشرات (تكرار مستند مفرط)
+        $case4Items = [];
+        $documentIndicatorCounts = $evidenceLinks
+            ->filter(fn($l) => !empty($l->document_version_id))
+            ->groupBy('document_version_id');
+
+        foreach ($documentIndicatorCounts as $versionId => $links) {
+            $uniqueIndicators = $links->pluck('indicator_id')->unique();
+            if ($uniqueIndicators->count() >= 10) {
+                $firstLink = $links->first();
+                $docVersion = $firstLink?->documentVersion;
+                $doc = $docVersion?->document;
+                $docTitle = $doc?->document_name ?? $docVersion?->file_name ?? "وثيقة #{$versionId}";
+                $linkedCodes = $indicators->whereIn('indicator_id', $uniqueIndicators)->pluck('code')->take(5)->implode('، ');
+
+                $case4Items[] = [
+                    'documentVersionId' => $versionId,
+                    'documentTitle' => $docTitle,
+                    'linkedIndicatorsCount' => $uniqueIndicators->count(),
+                    'sampleIndicatorCodes' => $linkedCodes . ($uniqueIndicators->count() > 5 ? '...' : ''),
+                    'issue' => "الوثيقة '{$docTitle}' مرتبطة بـ ({$uniqueIndicators->count()}) مؤشراً مختلفاً في نفس التقييم.",
+                    'recommendation' => 'توزيع الشاهد على أكثر من 10 مؤشرات يشير لتكرار مفرط؛ يفضل تخصيص شواهد نوعية لكل مؤشر.',
+                ];
+            }
+        }
+
+        $totalIssues = count($case1Items) + count($case2Items) + count($case3Items) + count($case4Items) + count($case5Items);
+        $criticalCount = count($case1Items) + count($case2Items);
+        $mediumCount = count($case3Items) + count($case5Items);
+        $warningCount = count($case4Items);
+
+        return ApiResponse::success([
+            'summary' => [
+                'totalDiscrepancies' => $totalIssues,
+                'criticalCount' => $criticalCount,
+                'mediumCount' => $mediumCount,
+                'warningCount' => $warningCount,
+                'evaluatedIndicatorsCount' => $results->filter(fn($r) => $r->score !== null && $r->completion_status !== 'Pending')->count(),
+                'auditPassed' => $totalIssues === 0,
+            ],
+            'cases' => [
+                [
+                    'caseId' => 'case_1',
+                    'title' => 'درجة عالية بلا شواهد داعمة',
+                    'severity' => 'critical',
+                    'severityLabel' => 'حرجة',
+                    'description' => 'مؤشرات تم رصدها بتقدير متقدم (2 أو 3) دون ربط أي شاهد أو وثيقة إثبات.',
+                    'count' => count($case1Items),
+                    'items' => $case1Items,
+                ],
+                [
+                    'caseId' => 'case_2',
+                    'title' => 'درجة 3 بمتطلبات ناقصة',
+                    'severity' => 'critical',
+                    'severityLabel' => 'حرجة',
+                    'description' => 'مؤشرات تم منحها التقدير 3 (التميز) رغم عدم استيفاء كامل المتطلبات الإلزامية.',
+                    'count' => count($case2Items),
+                    'items' => $case2Items,
+                ],
+                [
+                    'caseId' => 'case_3',
+                    'title' => 'درجة مرتفعة بلا مبرر نصي',
+                    'severity' => 'medium',
+                    'severityLabel' => 'متوسطة',
+                    'description' => 'مؤشرات ذات تقدير 2 أو 3 ولكن المبرر النصي للمقيم فارغ أو مقتضب جداً.',
+                    'count' => count($case3Items),
+                    'items' => $case3Items,
+                ],
+                [
+                    'caseId' => 'case_4',
+                    'title' => 'ارتباط وثيقة واحدة بـ 10+ مؤشرات',
+                    'severity' => 'warning',
+                    'severityLabel' => 'تنبيه',
+                    'description' => 'مستندات تم استخدامها كشاهد في 10 مؤشرات أو أكثر، مما يشير لتعميم مفرط.',
+                    'count' => count($case4Items),
+                    'items' => $case4Items,
+                ],
+                [
+                    'caseId' => 'case_5',
+                    'title' => 'تناقض أساليب التحقق',
+                    'severity' => 'medium',
+                    'severityLabel' => 'متوسطة',
+                    'description' => 'مؤشرات تم تحديد "فحص الوثائق والسجلات" كأداة تحقق لها دون إرفاق أي وثيقة.',
+                    'count' => count($case5Items),
+                    'items' => $case5Items,
+                ],
+            ],
+        ], 'تم إجراء التدقيق المنطقي الحتمي على إدخالات التقييم بنجاح.');
     }
 
     /**
@@ -2491,8 +2890,38 @@ class EvaluatorApiController extends Controller
             }
         }
 
+        $targetIndIds = array_unique(array_map('intval', $indicatorIds));
+
+        // التحقق من إلزامية تحديد متطلب واحد على الأقل لكل مؤشر مستهدف يحتوي على متطلبات إلزامية
+        foreach ($targetIndIds as $tIndId) {
+            $mandatoryReqIds = \App\Models\IndicatorEvidenceRequirement::where('indicator_id', $tIndId)
+                ->where('required', true)
+                ->pluck('requirement_id')
+                ->map(fn($id) => (int)$id)
+                ->all();
+
+            if (!empty($mandatoryReqIds)) {
+                $matching = array_intersect($coveredReqs ?? [], $mandatoryReqIds);
+                if (empty($matching)) {
+                    $indObj = \App\Models\Indicator::find($tIndId);
+                    $code = $indObj?->code ?? (string)$tIndId;
+                    return ApiResponse::error("لا بد أن تحدد متطلباً إلزامياً واحداً على الأقل للمؤشر ({$code}).", 422);
+                }
+            }
+        }
+
         $createdLinks = [];
-        foreach (array_unique(array_map('intval', $indicatorIds)) as $indId) {
+        foreach ($targetIndIds as $indId) {
+            $mandatoryReqIds = \App\Models\IndicatorEvidenceRequirement::where('indicator_id', $indId)
+                ->where('required', true)
+                ->pluck('requirement_id')
+                ->map(fn($id) => (int)$id)
+                ->all();
+
+            $linkReqs = !empty($mandatoryReqIds)
+                ? array_values(array_intersect($coveredReqs ?? [], $mandatoryReqIds))
+                : ($coveredReqs ?? []);
+
             $link = EvidenceLink::firstOrCreate([
                 'evaluation_id' => $evaluation->evaluation_id,
                 'indicator_id' => $indId,
@@ -2500,14 +2929,16 @@ class EvaluatorApiController extends Controller
             ], [
                 'school_id' => $evaluation->school_id,
                 'justification' => $justification,
-                'covered_requirements' => $coveredReqs ?? [],
+                'covered_requirements' => $linkReqs,
                 'status' => 'completed',
             ]);
 
-            if ($coveredReqs !== null) {
-                $link->covered_requirements = $coveredReqs;
-                $link->save();
+            $link->covered_requirements = $linkReqs;
+            if ($justification) {
+                $link->justification = $justification;
             }
+            $link->status = 'completed';
+            $link->save();
 
             $createdLinks[] = $link->id;
         }

@@ -403,7 +403,7 @@ export const EvidenceInventoryPage: React.FC<EvidenceInventoryPageProps> = ({
                       <tr style={{ borderBottom: '1px solid #e2e8f0', color: '#64748b', textAlign: 'right' }}>
                         <th style={{ padding: '10px 8px', width: '90px' }}>الرمز</th>
                         <th style={{ padding: '10px 8px' }}>المؤشر ومجال التحقق</th>
-                        <th style={{ padding: '10px 8px', width: '130px', textAlign: 'center' }}>الشواهد المودعة</th>
+                        <th style={{ padding: '10px 8px', width: '170px', textAlign: 'center' }}>استيفاء المتطلبات الوطنية</th>
                         <th style={{ padding: '10px 8px', width: '110px', textAlign: 'center' }}>الحالة</th>
                         <th style={{ padding: '10px 8px', width: '180px' }}>الشواهد المرتبطة</th>
                       </tr>
@@ -485,10 +485,29 @@ export const EvidenceInventoryPage: React.FC<EvidenceInventoryPageProps> = ({
                             )}
                           </td>
                           <td style={{ padding: '12px 8px', textAlign: 'center' }}>
-                            <span style={{ fontWeight: 700, color: ind.isSufficient ? '#16a34a' : '#dc2626' }}>
-                              {ind.uploadedEvidenceCount}
-                            </span>
-                            <span style={{ color: '#94a3b8' }}> / {ind.mandatoryRequiredCount} إلزامي</span>
+                            {(() => {
+                              const coveredCount = Array.isArray((ind as any).coveredRequirementIds)
+                                ? (ind as any).coveredRequirementIds.length
+                                : (Array.isArray((ind as any).requirements)
+                                    ? (ind as any).requirements.filter((r: any) => r.isCovered).length
+                                    : 0);
+                              const reqCount = ind.mandatoryRequiredCount ?? 0;
+                              const missingCount = Math.max(0, reqCount - coveredCount);
+
+                              return (
+                                <div style={{ fontSize: '11.5px', fontWeight: 700, whiteSpace: 'nowrap' }}>
+                                  <span style={{ color: '#475569' }}>مطلوب {reqCount}</span>
+                                  <span style={{ color: '#CBD5E1', margin: '0 4px' }}>•</span>
+                                  <span style={{ color: coveredCount >= reqCount && reqCount > 0 ? '#16A34A' : '#D97706' }}>
+                                    مغطى {coveredCount}
+                                  </span>
+                                  <span style={{ color: '#CBD5E1', margin: '0 4px' }}>•</span>
+                                  <span style={{ color: missingCount > 0 ? '#DC2626' : '#16A34A' }}>
+                                    ناقص {missingCount}
+                                  </span>
+                                </div>
+                              );
+                            })()}
                           </td>
                           <td style={{ padding: '12px 8px', textAlign: 'center' }}>
                             {ind.isSufficient ? (

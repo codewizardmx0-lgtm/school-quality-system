@@ -91,6 +91,8 @@ class ImprovementSuggestionController extends Controller
                 'suggestedName'     => 'تحسين أداء: ' . ($result->indicator?->name ?? 'المؤشر'),
                 'isAlreadyAdopted'  => isset($adoptedAreaMap[$result->result_id]),
                 'adoptedAreaId'     => $adoptedAreaMap[$result->result_id] ?? null,
+                'isExcluded'        => (bool) ($result->is_excluded ?? false),
+                'excludedAt'        => $result->excluded_at?->toIso8601String(),
             ];
         })->values();
 

@@ -19,16 +19,27 @@ export const DraftReportPreview: React.FC<DraftReportPreviewProps> = ({
   const { user } = useAuth();
   const [dashboardData, setDashboardData] = useState<EvaluatorDashboardData | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [principalNotes, setPrincipalNotes] = useState<string>(() => {
-    return localStorage.getItem('principal_review_notes') ||
-      'اطلعت إدارة المدرسة على نتائج رصد التقييم الذاتي والشواهد المودعة في المستودع ومصفوفة خطة التحسين المرفقة، وتؤكد صحة البيانات المسجلة ومطابقتها لواقع المدرسة تمهيداً للإرسال والاعتماد الوزاري.';
-  });
+  const [principalNotes, setPrincipalNotes] = useState<string>('');
+  const [noteMetadata, setNoteMetadata] = useState<{ authorName?: string; updatedAt?: string } | null>(null);
   const [isSaved, setIsSaved] = useState<boolean>(false);
+  const [isSavingNote, setIsSavingNote] = useState<boolean>(false);
 
-  const handleSaveNotes = () => {
-    localStorage.setItem('principal_review_notes', principalNotes);
-    setIsSaved(true);
-    setTimeout(() => setIsSaved(false), 3000);
+  const handleSaveNotes = async () => {
+    if (!principalNotes.trim()) return;
+    setIsSavingNote(true);
+    try {
+      const res = await evaluatorApi.saveInternalReviewNote(principalNotes.trim());
+      setIsSaved(true);
+      setNoteMetadata({
+        authorName: res.authorName,
+        updatedAt: res.updatedAt,
+      });
+      setTimeout(() => setIsSaved(false), 3000);
+    } catch (err: any) {
+      alert('تعذر حفظ ملاحظات المراجعة: ' + (err?.response?.data?.message || err?.message));
+    } finally {
+      setIsSavingNote(false);
+    }
   };
 
   useEffect(() => {
@@ -44,6 +55,24 @@ export const DraftReportPreview: React.FC<DraftReportPreviewProps> = ({
       .finally(() => {
         if (isMounted) setIsLoading(false);
       });
+
+    evaluatorApi
+      .getInternalReviewNote()
+      .then((res) => {
+        if (isMounted && res) {
+          setPrincipalNotes(res.text || '');
+          if (res.authorName || res.updatedAt) {
+            setNoteMetadata({
+              authorName: res.authorName,
+              updatedAt: res.updatedAt,
+            });
+          }
+        }
+      })
+      .catch((err) => {
+        console.error('Failed to load internal review note:', err);
+      });
+
     return () => {
       isMounted = false;
     };
@@ -253,6 +282,11 @@ export const DraftReportPreview: React.FC<DraftReportPreviewProps> = ({
 
         {isPrincipal ? (
           <div>
+            {noteMetadata && (
+              <div style={{ fontSize: '11px', color: '#047857', marginBottom: '6px', fontWeight: 600 }}>
+                آخر تحديث بواسطة {noteMetadata.authorName || 'مدير المدرسة'} {noteMetadata.updatedAt ? `بتاريخ ${noteMetadata.updatedAt.slice(0, 10)}` : ''}
+              </div>
+            )}
             <textarea
               value={principalNotes}
               onChange={(e) => {
@@ -273,12 +307,13 @@ export const DraftReportPreview: React.FC<DraftReportPreviewProps> = ({
                 resize: 'vertical',
                 boxSizing: 'border-box',
               }}
-              placeholder="اكتب ملاحظات وتوصيات المراجعة الداخلية هنا..."
+              placeholder="اكتب ملاحظات وتوصيات المراجعة والاعتماد الداخلي لمدير المدرسة..."
             />
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '10px' }}>
               <button
                 type="button"
                 onClick={handleSaveNotes}
+                disabled={isSavingNote || !principalNotes.trim()}
                 style={{
                   padding: '7px 16px',
                   borderRadius: '6px',
@@ -287,14 +322,15 @@ export const DraftReportPreview: React.FC<DraftReportPreviewProps> = ({
                   fontSize: '12px',
                   fontWeight: 700,
                   border: 'none',
-                  cursor: 'pointer',
+                  cursor: isSavingNote || !principalNotes.trim() ? 'not-allowed' : 'pointer',
+                  opacity: isSavingNote || !principalNotes.trim() ? 0.6 : 1,
                   display: 'flex',
                   alignItems: 'center',
                   gap: '6px',
                 }}
               >
                 <CheckCircle2 size={14} />
-                <span>حفظ وتثبيت ملاحظات المراجعة الداخلية</span>
+                <span>{isSavingNote ? 'جاري الحفظ...' : 'حفظ وتثبيت ملاحظات المراجعة الداخلية'}</span>
               </button>
               {isSaved && (
                 <span style={{ fontSize: '11.5px', color: '#059669', fontWeight: 700 }}>
@@ -303,10 +339,23 @@ export const DraftReportPreview: React.FC<DraftReportPreviewProps> = ({
               )}
             </div>
           </div>
+        ) : principalNotes ? (
+          <div>
+            <p style={{ fontSize: '12.5px', color: '#166534', margin: 0, lineHeight: 1.6 }}>
+              «{principalNotes}»
+            </p>
+            {noteMetadata && (
+              <div style={{ fontSize: '11px', color: '#047857', marginTop: '6px', fontWeight: 600 }}>
+                — {noteMetadata.authorName || 'مدير المدرسة'} {noteMetadata.updatedAt ? `(${noteMetadata.updatedAt.slice(0, 10)})` : ''}
+              </div>
+            )}
+          </div>
         ) : (
-          <p style={{ fontSize: '12.5px', color: '#166534', margin: 0, lineHeight: 1.6 }}>
-            «{principalNotes}»
-          </p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#92400E', padding: '8px 12px', backgroundColor: '#FEF3C7', borderRadius: '6px', border: '1px solid #FDE68A' }}>
+            <span style={{ fontSize: '12px', fontWeight: 600 }}>
+              لم يتم تدوين ملاحظات المراجعة الداخلية من قبل مدير المدرسة بعد (بانتظار المراجعة والاعتماد).
+            </span>
+          </div>
         )}
       </div>
     </div>

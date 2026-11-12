@@ -162,8 +162,8 @@ class EvaluationEvidencesSheet implements FromCollection, WithHeadings, WithTitl
 
                 $this->evaluation->loadMissing(['school', 'cycle']);
                 $school = $this->evaluation->school;
-                $schoolName = $school?->name ?? 'المدرسة';
-                $schoolCode = $school?->code ?? $school?->school_id ?? 'SCH-001';
+                $schoolName = $school?->school_name ?? $school?->name ?? 'مدرسة الفاروق الأساسية للبنين';
+                $schoolCode = $school?->school_code ?? $school?->code ?? ('SCH-' . str_pad((string)($school?->school_id ?? 1), 3, '0', STR_PAD_LEFT));
                 $academicYear = $this->evaluation->cycle?->academic_year ?? '2025/2026';
                 $dateStr = now()->format('Y-m-d');
 
