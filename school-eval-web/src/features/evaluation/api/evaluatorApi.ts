@@ -16,6 +16,7 @@ import type {
   AiRecommendationsResponse,
   AiRecommendationStatus,
   ImprovementPlanData,
+  ImprovementPlanListItem,
   ImprovementPlanAction,
   PlanType,
   EvaluationCycleArchiveItem,
@@ -274,12 +275,33 @@ export const evaluatorApi = {
 
   /**
    * 10. GET /api/v1/improvement-plans/current
-   * Fetch active improvement plan with summary and actions (supports plan_type tabs)
+   * Fetch active improvement plan with summary and actions (supports plan_type tabs and plan_id)
    */
-  async getCurrentImprovementPlan(planType?: PlanType): Promise<ImprovementPlanData> {
+  async getCurrentImprovementPlan(planType?: PlanType, planId?: number): Promise<ImprovementPlanData> {
     const params: Record<string, string> = {};
     if (planType) params.plan_type = planType;
+    if (planId) params.plan_id = String(planId);
     const response = await get<ImprovementPlanData>('/improvement-plans/current', { params });
+    return response.data!;
+  },
+
+  /**
+   * 10.b GET /api/v1/evaluator/improvement-plans
+   * Fetch all improvement plans for the school/cycle (Master Plans List & Version history)
+   */
+  async getSchoolImprovementPlans(planType?: PlanType): Promise<ImprovementPlanListItem[]> {
+    const params: Record<string, string> = {};
+    if (planType) params.plan_type = planType;
+    const response = await get<ImprovementPlanListItem[]>('/evaluator/improvement-plans', { params });
+    return response.data!;
+  },
+
+  /**
+   * 10.c POST /api/v1/evaluator/improvement-plans/{id}/clone-version
+   * Smart version cloning (v1 -> v2) upon supervisor completion request
+   */
+  async clonePlanVersion(planId: number): Promise<any> {
+    const response = await post<any>(`/evaluator/improvement-plans/${planId}/clone-version`);
     return response.data!;
   },
 
@@ -699,6 +721,7 @@ export const evaluatorApi = {
     description?: string;
     priority?: PriorityLevel;
     targetScore?: number;
+    planId?: number;
   }): Promise<void> {
     await post('/improvement-areas', {
       resultId: payload.resultId,
@@ -706,6 +729,7 @@ export const evaluatorApi = {
       description: payload.description,
       priority: payload.priority || 'High',
       targetScore: payload.targetScore,
+      planId: payload.planId,
     });
   },
 

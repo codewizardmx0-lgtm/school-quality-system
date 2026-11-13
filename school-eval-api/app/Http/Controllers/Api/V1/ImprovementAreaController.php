@@ -108,6 +108,42 @@ class ImprovementAreaController extends Controller
             'target_score' => (int) $targetScore,
         ]);
 
+        // ربط المجال بالخطة المحددة أو الخطة النشطة الافتراضية للدورة
+        $targetPlanId = $request->input('planId') ?? $request->input('plan_id');
+        if ($targetPlanId) {
+            $targetPlan = \App\Models\ImprovementPlan::where('plan_id', (int) $targetPlanId)
+                ->where('school_id', $result->evaluation->school_id)
+                ->first();
+            if ($targetPlan) {
+                \App\Models\PlanImprovementArea::firstOrCreate([
+                    'plan_id' => $targetPlan->plan_id,
+                    'area_id' => $area->area_id,
+                ], [
+                    'created_at' => now(),
+                ]);
+            }
+        } else {
+            $defaultPlan = \App\Models\ImprovementPlan::where('school_id', $result->evaluation->school_id)
+                ->where('cycle_id', $result->evaluation->cycle_id)
+                ->where('status', 'Active')
+                ->orderBy('plan_id', 'desc')
+                ->first()
+                ?? \App\Models\ImprovementPlan::where('school_id', $result->evaluation->school_id)
+                    ->where('cycle_id', $result->evaluation->cycle_id)
+                    ->where('status', 'Draft')
+                    ->orderBy('plan_id', 'desc')
+                    ->first();
+
+            if ($defaultPlan) {
+                \App\Models\PlanImprovementArea::firstOrCreate([
+                    'plan_id' => $defaultPlan->plan_id,
+                    'area_id' => $area->area_id,
+                ], [
+                    'created_at' => now(),
+                ]);
+            }
+        }
+
         $area->load(['result.evaluation', 'indicator', 'plans']);
 
         return ApiResponse::success(

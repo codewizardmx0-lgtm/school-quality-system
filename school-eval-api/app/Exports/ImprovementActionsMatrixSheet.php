@@ -71,8 +71,9 @@ class ImprovementActionsMatrixSheet implements FromCollection, WithHeadings, Wit
             $indicatorStr = $indName ? "({$indCode}) {$indName}" : $indCode;
 
             $statusLabel = match ($action->status) {
-                'Completed' => 'مكتمل',
-                'InProgress' => 'قيد التنفيذ',
+                'Done', 'Completed' => 'مكتمل ومنجز',
+                'InProgress' => 'قيد التنفيذ والمتابعة',
+                'Pending' => 'معلق / بانتظار البدء',
                 'Cancelled' => 'ملغي',
                 default => 'مجدول / لم يبدأ',
             };

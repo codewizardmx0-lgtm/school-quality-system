@@ -64,14 +64,31 @@ class ImprovementSuggestionController extends Controller
             ->orderBy('score', 'asc')
             ->get();
 
-        // مجالات التحسين المتبناة مسبقاً في جدول improvement_areas
+        // مجالات التحسين المتبناة مسبقاً في جدول improvement_areas مع خططها المرتبطة
         $adoptedAreas = ImprovementArea::query()
             ->whereIn('result_id', $lowResults->pluck('result_id'))
+            ->with(['plans' => function ($q) {
+                $q->orderBy('version_number', 'desc')->orderBy('plan_id', 'desc');
+            }])
             ->get(['area_id', 'result_id']);
 
-        $adoptedAreaMap = $adoptedAreas->pluck('area_id', 'result_id')->toArray();
+        $adoptedAreaMap = [];
+        $adoptedPlanMap = [];
+        foreach ($adoptedAreas as $area) {
+            $adoptedAreaMap[$area->result_id] = $area->area_id;
+            $plan = $area->plans->first();
+            if ($plan) {
+                $adoptedPlanMap[$area->result_id] = [
+                    'planId'        => (int) $plan->plan_id,
+                    'planTitle'     => $plan->title,
+                    'planType'      => $plan->plan_type,
+                    'versionNumber' => (int) ($plan->version_number ?? 1),
+                    'versionTag'    => $plan->version_tag,
+                ];
+            }
+        }
 
-        $suggestions = $lowResults->map(function ($result) use ($targetScore, $adoptedAreaMap) {
+        $suggestions = $lowResults->map(function ($result) use ($targetScore, $adoptedAreaMap, $adoptedPlanMap) {
             $isHigh = ($result->score <= 1);
             $suggestedPriority = $isHigh ? 'High' : 'Medium';
             $priorityLabel = $isHigh ? 'عالية' : 'متوسطة';
@@ -91,6 +108,7 @@ class ImprovementSuggestionController extends Controller
                 'suggestedName'     => 'تحسين أداء: ' . ($result->indicator?->name ?? 'المؤشر'),
                 'isAlreadyAdopted'  => isset($adoptedAreaMap[$result->result_id]),
                 'adoptedAreaId'     => $adoptedAreaMap[$result->result_id] ?? null,
+                'adoptedPlan'       => $adoptedPlanMap[$result->result_id] ?? null,
                 'isExcluded'        => (bool) ($result->is_excluded ?? false),
                 'excludedAt'        => $result->excluded_at?->toIso8601String(),
             ];

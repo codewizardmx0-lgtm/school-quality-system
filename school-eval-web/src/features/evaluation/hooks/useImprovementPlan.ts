@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { evaluatorApi } from '../api/evaluatorApi';
 import type {
   ImprovementPlanData,
+  ImprovementPlanListItem,
   ImprovementPlanAction,
   PlanType,
   CreateImprovementActionPayload,
@@ -11,26 +12,70 @@ import type {
 
 export function useImprovementPlan() {
   const [selectedPlanType, setSelectedPlanType] = useState<PlanType>('QualityImprovement');
+  const [selectedPlanId, setSelectedPlanId] = useState<number | null>(null);
+  const [plansList, setPlansList] = useState<ImprovementPlanListItem[]>([]);
   const [planData, setPlanData] = useState<ImprovementPlanData | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isLoadingPlansList, setIsLoadingPlansList] = useState<boolean>(false);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [editingAction, setEditingAction] = useState<ImprovementPlanAction | null>(null);
+
+  const fetchPlansList = useCallback(async () => {
+    setIsLoadingPlansList(true);
+    try {
+      const list = await evaluatorApi.getSchoolImprovementPlans();
+      setPlansList(list);
+    } catch (err) {
+      console.error('Failed to load improvement plans list:', err);
+    } finally {
+      setIsLoadingPlansList(false);
+    }
+  }, []);
 
   const fetchPlan = useCallback(async () => {
     setIsLoading(true);
     try {
-      const data = await evaluatorApi.getCurrentImprovementPlan(selectedPlanType);
+      const data = await evaluatorApi.getCurrentImprovementPlan(selectedPlanType, selectedPlanId || undefined);
       setPlanData(data);
     } catch (err) {
       console.error('Failed to load improvement plan:', err);
     } finally {
       setIsLoading(false);
     }
-  }, [selectedPlanType]);
+  }, [selectedPlanType, selectedPlanId]);
+
+  useEffect(() => {
+    fetchPlansList();
+  }, [fetchPlansList]);
 
   useEffect(() => {
     fetchPlan();
   }, [fetchPlan]);
+
+  const selectPlan = useCallback((planId: number | null) => {
+    setSelectedPlanId(planId);
+  }, []);
+
+  const cloneVersion = useCallback(
+    async (planId: number) => {
+      setIsSubmitting(true);
+      try {
+        const res = await evaluatorApi.clonePlanVersion(planId);
+        await fetchPlansList();
+        if (res?.data?.planId) {
+          setSelectedPlanId(res.data.planId);
+          if (res.data.planType) {
+            setSelectedPlanType(res.data.planType);
+          }
+        }
+        await fetchPlan();
+        return res;
+      } finally {
+        setIsSubmitting(false);
+      }
+    },
+    [fetchPlansList, fetchPlan]
+  );
 
   // حساب مؤشرات الخطة ديناميكياً بناءً على مصفوفة الإجراءات
   const dynamicSummary = useMemo(() => {
@@ -162,6 +207,12 @@ export function useImprovementPlan() {
   return {
     selectedPlanType,
     setSelectedPlanType,
+    selectedPlanId,
+    selectPlan,
+    plansList,
+    isLoadingPlansList,
+    refreshPlansList: fetchPlansList,
+    cloneVersion,
     planData,
     summary: dynamicSummary,
     isLoading,

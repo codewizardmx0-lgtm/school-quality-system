@@ -2,11 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { Target, CheckCircle2, ArrowRight, RefreshCw, Trash2, Search, ArrowUpDown, EyeOff, RotateCcw } from 'lucide-react';
 import { evaluatorApi } from '../../api/evaluatorApi';
 import type { ImprovementSuggestion, PriorityLevel } from '../../api/evaluationTypes';
-import { AdoptSuggestionModal } from './AdoptSuggestionModal';
+import { AdoptSuggestionModal, getRecommendedPlanType } from './AdoptSuggestionModal';
 
 interface FormulaSuggestionsSectionProps {
   readOnly?: boolean;
-  onNavigateToPlans?: () => void;
+  onNavigateToPlans?: (planId?: number) => void;
   onToast: (type: 'success' | 'error', msg: string) => void;
 }
 
@@ -24,6 +24,7 @@ export const FormulaSuggestionsSection: React.FC<FormulaSuggestionsSectionProps>
   const [scorePriorityFilter, setScorePriorityFilter] = useState<'all' | 'score_0' | 'score_1' | 'score_2' | 'score_3'>('all');
   const [adoptionFilter, setAdoptionFilter] = useState<'all' | 'unadopted' | 'adopted'>('all');
   const [exclusionFilter, setExclusionFilter] = useState<'active' | 'excluded' | 'all'>('active');
+  const [planTypeFilter, setPlanTypeFilter] = useState<'all' | 'QualityImprovement' | 'StaffProfessionalDevelopment' | 'AnnualOperational'>('all');
   
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [standardFilter, setStandardFilter] = useState<string>('all');
@@ -102,7 +103,13 @@ export const FormulaSuggestionsSection: React.FC<FormulaSuggestionsSectionProps>
       if (standardFilter !== 'all' && s.standardName !== standardFilter) return false;
       return true;
     })
-    // 5. Search query
+    // 5. Recommended Plan Type filter
+    .filter((s) => {
+      if (planTypeFilter === 'all') return true;
+      const rec = getRecommendedPlanType(s);
+      return rec.type === planTypeFilter;
+    })
+    // 6. Search query
     .filter((s) => {
       if (!searchTerm.trim()) return true;
       const term = searchTerm.trim().toLowerCase();
@@ -379,7 +386,7 @@ export const FormulaSuggestionsSection: React.FC<FormulaSuggestionsSectionProps>
           {onNavigateToPlans && (
             <button
               type="button"
-              onClick={onNavigateToPlans}
+              onClick={() => onNavigateToPlans()}
               style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -523,6 +530,28 @@ export const FormulaSuggestionsSection: React.FC<FormulaSuggestionsSectionProps>
                 {std}
               </option>
             ))}
+          </select>
+
+          {/* Recommended Plan Type Filter */}
+          <select
+            value={planTypeFilter}
+            onChange={(e) => setPlanTypeFilter(e.target.value as any)}
+            style={{
+              padding: '8px 12px',
+              borderRadius: '8px',
+              border: '1px solid #CBD5E1',
+              fontSize: '12.5px',
+              backgroundColor: '#FFFFFF',
+              color: '#334155',
+              cursor: 'pointer',
+              outline: 'none',
+              fontWeight: planTypeFilter !== 'all' ? 700 : 500,
+            }}
+          >
+            <option value="all">كافة مسارات الخطط الموصى بها</option>
+            <option value="QualityImprovement">خطة تحسين الجودة المدرسية</option>
+            <option value="StaffProfessionalDevelopment">خطة التطوير المهني للكوادر</option>
+            <option value="AnnualOperational">الخطة التشغيلية السنوية</option>
           </select>
         </div>
 
@@ -713,21 +742,68 @@ export const FormulaSuggestionsSection: React.FC<FormulaSuggestionsSectionProps>
                       {/* Adoption Status */}
                       <td style={{ padding: '12px 14px', textAlign: 'center' }}>
                         {sugg.isAdopted ? (
-                          <span
-                            style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '4px',
-                              color: '#059669',
-                              fontSize: '12px',
-                              fontWeight: 700,
-                            }}
-                          >
-                            <CheckCircle2 size={14} />
-                            متبنى
-                          </span>
+                          <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+                            <span
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                color: '#059669',
+                                fontSize: '12px',
+                                fontWeight: 800,
+                              }}
+                            >
+                              <CheckCircle2 size={14} />
+                              متبنى
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (sugg.adoptedPlan?.planId) {
+                                  sessionStorage.setItem('selectedImprovementPlanId', String(sugg.adoptedPlan.planId));
+                                  onNavigateToPlans?.(sugg.adoptedPlan.planId);
+                                } else {
+                                  onNavigateToPlans?.();
+                                }
+                              }}
+                              style={{
+                                fontSize: '11px',
+                                padding: '3px 8px',
+                                borderRadius: '6px',
+                                backgroundColor: '#F0FDF4',
+                                border: '1px solid #BBF7D0',
+                                color: '#15803D',
+                                fontWeight: 700,
+                                maxWidth: '180px',
+                                whiteSpace: 'nowrap',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                cursor: 'pointer',
+                                transition: 'all 0.15s ease',
+                              }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.backgroundColor = '#DCFCE7';
+                                e.currentTarget.style.borderColor = '#86EFAC';
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.backgroundColor = '#F0FDF4';
+                                e.currentTarget.style.borderColor = '#BBF7D0';
+                              }}
+                              title={
+                                sugg.adoptedPlan
+                                  ? `انتقال مباشر إلى الخطة: ${sugg.adoptedPlan.planTitle} (${sugg.adoptedPlan.versionTag || `v${sugg.adoptedPlan.versionNumber || 1}`})`
+                                  : 'انتقال إلى خطة التحسين المعتمدة'
+                              }
+                            >
+                              <span>متبناة في: {sugg.adoptedPlan?.planTitle || 'خطة التحسين'}</span>
+                              <ArrowRight size={11} style={{ flexShrink: 0 }} />
+                            </button>
+                          </div>
                         ) : (
-                          <span style={{ color: '#94a3b8', fontSize: '12px' }}>بانتظار التبني</span>
+                          <span style={{ color: '#94a3b8', fontSize: '12px', fontWeight: 500 }}>بانتظار التبني</span>
                         )}
                       </td>
 

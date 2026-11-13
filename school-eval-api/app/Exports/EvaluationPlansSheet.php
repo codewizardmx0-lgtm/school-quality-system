@@ -82,8 +82,9 @@ class EvaluationPlansSheet implements FromCollection, WithHeadings, WithTitle, S
 
             foreach ($plan->actions as $action) {
                 $statusLabel = match ($action->status) {
-                    'Done' => 'مكتمل ومنجز',
-                    'InProgress' => 'قيد التنفيذ',
+                    'Done', 'Completed' => 'مكتمل ومنجز',
+                    'InProgress' => 'قيد التنفيذ والمتابعة',
+                    'Pending' => 'معلق / بانتظار البدء',
                     'Cancelled' => 'ملغي',
                     default => 'مسودة',
                 };

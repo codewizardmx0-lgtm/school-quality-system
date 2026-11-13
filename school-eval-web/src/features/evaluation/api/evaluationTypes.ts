@@ -6,7 +6,7 @@
 export type SubmissionStatus = 'Draft' | 'Submitted' | 'UnderReview' | 'NeedsCompletion' | 'Completed';
 export type CompletionStatus = 'Pending' | 'Completed';
 export type PriorityLevel = 'Low' | 'Medium' | 'High';
-export type PlanStatus = 'Draft' | 'Active' | 'Completed' | 'Cancelled';
+export type PlanStatus = 'Draft' | 'Active' | 'Submitted' | 'Archived' | 'Completed' | 'Cancelled';
 export type ActionStatus = 'Pending' | 'InProgress' | 'Done' | 'Cancelled';
 export type RequestStatus = 'Open' | 'Resolved';
 export type ItemStatus = 'Pending' | 'Resolved';
@@ -377,6 +377,34 @@ export interface ImprovementAreaBrief {
   name: string;
   priority: PriorityLevel;
   targetScore?: number;
+  indicatorId?: number;
+  indicatorCode?: string;
+  indicatorName?: string;
+  standardCode?: string;
+  standardName?: string;
+}
+
+export interface ImprovementPlanListItem {
+  planId: number;
+  planType: PlanType;
+  planTypeLabel: string;
+  title: string;
+  versionNumber: number;
+  parentPlanId: number | null;
+  versionTag: string | null;
+  academicYear: string;
+  startDate: string | null;
+  endDate: string | null;
+  status: PlanStatus;
+  statusArabic: string;
+  overallProgressPercentage: number;
+  areasCount: number;
+  totalActions: number;
+  doneActions: number;
+  inProgressActions: number;
+  pendingActions: number;
+  delayedActions: number;
+  createdAt: string;
 }
 
 export interface EvaluationCycleArchiveItem {
@@ -403,6 +431,7 @@ export interface ImprovementPlanAction {
   statusArabic: string;
   completionPercentage: number;
   progressDescription: string;
+  isNewInVersion?: boolean;
   evidences?: { evidenceId: number; title: string; fileName: string }[];
 }
 
@@ -435,6 +464,9 @@ export interface CreateImprovementPlanPayload {
 export interface ImprovementPlanData {
   planId: number;
   planType?: PlanType;
+  versionNumber?: number;
+  parentPlanId?: number | null;
+  versionTag?: string | null;
   title: string;
   status: PlanStatus;
   startDate: string;
@@ -566,6 +598,13 @@ export interface ImprovementSuggestion {
   suggestedName: string;
   isAdopted: boolean;
   adoptedAreaId?: number | null;
+  adoptedPlan?: {
+    planId: number;
+    planTitle: string;
+    planType?: string;
+    versionNumber?: number;
+    versionTag?: string | null;
+  } | null;
   isExcluded?: boolean;
   excludedAt?: string | null;
 }

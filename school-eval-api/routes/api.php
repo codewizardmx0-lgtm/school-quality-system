@@ -170,6 +170,8 @@ Route::prefix('v1')->group(function () {
         });
 
         Route::get('/improvement-plans/current', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'getCurrentImprovementPlan'])->name('api.v1.improvement-plans.current');
+        Route::get('/evaluator/improvement-plans', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'getSchoolImprovementPlans'])->name('api.v1.evaluator.improvement-plans.index');
+        Route::post('/evaluator/improvement-plans/{id}/clone-version', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'clonePlanVersion'])->name('api.v1.evaluator.improvement-plans.clone-version');
         Route::post('/evaluator/suggestions/{resultId}/exclude', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'excludeSuggestion'])->name('api.v1.evaluator.suggestions.exclude');
         Route::post('/evaluator/suggestions/{resultId}/restore', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'restoreSuggestion'])->name('api.v1.evaluator.suggestions.restore');
         Route::post('/evaluator/improvement-plans', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'createImprovementPlan'])->name('api.v1.evaluator.improvement-plans.store');

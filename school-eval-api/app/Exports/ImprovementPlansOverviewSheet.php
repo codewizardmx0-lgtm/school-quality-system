@@ -36,6 +36,8 @@ class ImprovementPlansOverviewSheet implements FromCollection, WithHeadings, Wit
         return [
             'نوع الخطة',
             'عنوان الخطة',
+            'الإصدار',
+            'وسم الإصدار',
             'حالة الخطة',
             'تاريخ البدء',
             'تاريخ الانتهاء',
@@ -66,11 +68,11 @@ class ImprovementPlansOverviewSheet implements FromCollection, WithHeadings, Wit
             };
 
             $statusLabel = match ($plan->status) {
-                'Draft' => 'مسودة قيد الإعداد',
-                'Approved' => 'معتمدة وفعالة',
+                'Active', 'Approved' => 'نشطة ومعتمدة للمتابعة',
+                'Submitted', 'UnderReview' => 'مرفوعة للمراجعة الوزارية',
+                'Archived' => 'نسخة سابقة مؤرشفة',
                 'Completed' => 'مكتملة الإنجاز',
-                'UnderReview' => 'قيد المراجعة والاعتماد',
-                default => $plan->status ?? 'مسودة',
+                default => 'مسودة قيد الإعداد',
             };
 
             $areasCount = $plan->areas->count();
@@ -80,6 +82,8 @@ class ImprovementPlansOverviewSheet implements FromCollection, WithHeadings, Wit
             $rows[] = [
                 'type'         => $planTypeLabel,
                 'title'        => $plan->title,
+                'version'      => 'v' . ($plan->version_number ?? 1),
+                'version_tag'  => $plan->version_tag ?? '—',
                 'status'       => $statusLabel,
                 'start_date'   => $plan->start_date ? (string)$plan->start_date : '—',
                 'end_date'     => $plan->end_date ? (string)$plan->end_date : '—',
