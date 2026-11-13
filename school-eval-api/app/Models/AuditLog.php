@@ -86,6 +86,58 @@ class AuditLog extends Model
     }
 
     /**
+     * الوصف العربي الدقيق للعملية مع معالجة أي سجلات قديمة أو فارغة وتوليد شروحات ثرية وشاملة.
+     *
+     * @param string|null $value
+     * @return string
+     */
+    public function getDescriptionArAttribute(?string $value): string
+    {
+        $genericDescriptions = [
+            'إسناد مدير معتمد للمدرسة',
+            'إسناد مقيم جودة للمدرسة',
+            'فك ارتباط مدير المدرسة',
+            'فك ارتباط مقيم الجودة عن المدرسة',
+            'رصد درجة تقييم لمؤشر معايير الجودة',
+            'إصدار طلب استكمال نواقص وشواهد المدرسة',
+            'تمديد المهلة الزمنية لطلب الاستكمال',
+            'إعادة تسليم متطلبات الاستكمال من مسؤول الجودة',
+            'إغلاق واعتماد ملف الاستكمال بعد التدقيق',
+            'رفع ملف التقييم الذاتي للاعتماد الوزاري',
+            'إغلاق واعتماد التقييم مباشرة من المشرف الوزاري',
+            'فك ارتباط وثيقة شاهد عن مؤشر المعايير',
+            'تسجيل دخول ناجح إلى المنصة',
+            'تسجيل خروج نظامي من الحساب',
+            'محاولة دخول غير مصرح بها أو كلمة مرور خاطئة',
+            'تغيير كلمة المرور الخاصة بالمستخدم',
+            'تحديث البيانات الأساسية للمدرسة',
+            'تفعيل وسريان وثيقة المعايير الوطنية رسمياً',
+            'أرشفة تلقائية لإصدار معايير سابق',
+        ];
+
+        $isCorruptedLogin = $this->action === 'auth.login_success' && str_contains($value ?? '', 'تغيير كلمة المرور');
+
+        if (!empty($value) && !$isCorruptedLogin && !in_array(trim($value), $genericDescriptions, true)) {
+            return $value;
+        }
+
+        $service = app(\App\Services\AuditLoggerService::class);
+        $user = $this->relationLoaded('user') ? $this->user : $this->user()->first();
+        $school = $this->relationLoaded('school') ? $this->school : $this->school()->first();
+
+        return $service->buildDetailedDescription(
+            $this->action ?? '',
+            $user,
+            $school,
+            $this->new_values,
+            $this->old_values,
+            $this->target_type,
+            $this->target_id,
+            $value
+        );
+    }
+
+    /**
      * المستخدم المنفذ للعملية.
      *
      * @return BelongsTo<User, AuditLog>

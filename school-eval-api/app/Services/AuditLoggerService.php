@@ -3,6 +3,9 @@
 namespace App\Services;
 
 use App\Models\AuditLog;
+use App\Models\User;
+use App\Models\School;
+use App\Models\Indicator;
 use Illuminate\Support\Facades\Request;
 
 /**
@@ -101,6 +104,160 @@ class AuditLoggerService
     }
 
     /**
+     * بناء وصف تفصيلي دقيق وشامل للعملية يجيب عن: (من، ماذا، على أي كيان، كيف، لماذا).
+     *
+     * @param string $action
+     * @param User|null $actor
+     * @param School|null $school
+     * @param array<string, mixed>|null $newValues
+     * @param array<string, mixed>|null $oldValues
+     * @param string|null $targetType
+     * @param int|null $targetId
+     * @param string|null $existingDesc
+     * @return string
+     */
+    public function buildDetailedDescription(
+        string $action,
+        ?User $actor = null,
+        ?School $school = null,
+        ?array $newValues = null,
+        ?array $oldValues = null,
+        ?string $targetType = null,
+        ?int $targetId = null,
+        ?string $existingDesc = null
+    ): string {
+        $actorName = $actor ? $actor->full_name : 'النظام';
+        $schoolCode = '';
+        if ($school) {
+            $ident = $school->identification_data;
+            $schoolCode = is_string($ident) ? $ident : ($ident['code'] ?? $ident['moe_code'] ?? "SCH-{$school->school_id}");
+        }
+        $schoolName = $school ? "{$school->school_name}" : 'المدرسة';
+        $schoolFull = $school ? "{$schoolName} [{$schoolCode}]" : 'المدرسة';
+
+        $new = $newValues ?? [];
+        $old = $oldValues ?? [];
+        $existing = $existingDesc ?? '';
+
+        switch ($action) {
+            case 'school.assigned_principal':
+                $targetUser = $targetId ? User::find($targetId) : null;
+                $principalName = $targetUser ? $targetUser->full_name : ($new['principal_name'] ?? 'مدير المدرسة');
+                return "قام مسؤول النظام ({$actorName}) بإسناد الأستاذ ({$principalName}) كمدير معتمد لـ {$schoolFull} وتفعيل صلاحيات الإدارة المدرسية";
+
+            case 'school.assigned_evaluator':
+                $targetUser = $targetId ? User::find($targetId) : null;
+                $evaluatorName = $targetUser ? $targetUser->full_name : ($new['evaluator_name'] ?? 'مقيم الجودة');
+                return "قام مسؤول النظام ({$actorName}) بإسناد مقيم الجودة والاعتماد ({$evaluatorName}) لمتابعة وتقييم {$schoolFull} وتفعيل صلاحيات التقييم";
+
+            case 'school.unassigned_principal':
+                $targetUser = $targetId ? User::find($targetId) : null;
+                $principalName = $targetUser ? $targetUser->full_name : 'مدير المدرسة';
+                return "قام مسؤول النظام ({$actorName}) بفك ارتباط مدير المدرسة ({$principalName}) عن {$schoolFull}";
+
+            case 'school.unassigned_evaluator':
+                $targetUser = $targetId ? User::find($targetId) : null;
+                $evaluatorName = $targetUser ? $targetUser->full_name : 'مقيم الجودة';
+                return "قام مسؤول النظام ({$actorName}) بفك ارتباط مقيم الجودة ({$evaluatorName}) عن {$schoolFull}";
+
+            case 'evaluation.scored':
+                $indId = $new['indicator_id'] ?? null;
+                $ind = $indId ? Indicator::find($indId) : null;
+                $indText = $ind ? "المؤشر المعياري ({$ind->code})" : "مؤشر معايير الجودة";
+                $score = $new['score'] ?? 0;
+                $oldScoreText = isset($old['score']) ? " (التقدير السابق: {$old['score']})" : '';
+                return "قام مقيم الجودة ({$actorName}) برصد التقدير ({$score}/3) لـ {$indText} في تقييم {$schoolFull}{$oldScoreText}";
+
+            case 'completion.created':
+                $reason = $new['reason'] ?? 'استيفاء الشواهد والمتطلبات الناقصة';
+                $deadline = $new['deadline'] ?? 'غير محدد';
+                return "قام المشرف الوزاري ({$actorName}) بإصدار طلب استكمال نواقص وشواهد لـ {$schoolFull} - المطلوب: ({$reason}) مع مهلة إنجاز حتى ({$deadline})";
+
+            case 'completion.deadline_extended':
+                $oldDeadline = $old['deadline'] ?? '';
+                $newDeadline = $new['deadline'] ?? '';
+                $diffText = $oldDeadline ? " حتى تاريخ ({$newDeadline}) بعد أن كانت ({$oldDeadline})" : " حتى تاريخ ({$newDeadline})";
+                return "قام المشرف الوزاري ({$actorName}) بالموافقة على تمديد مهلة استكمال النواقص لـ {$schoolFull}{$diffText}";
+
+            case 'completion.resubmitted':
+                return "قام مسؤول الجودة والتقييم ({$actorName}) بإعادة تسليم ملف متطلبات الاستكمال لـ {$schoolFull} بعد استيفاء الشواهد المطلوبة";
+
+            case 'completion.closed':
+                return "قام المشرف الوزاري ({$actorName}) باعتماد الشواهد المستكملة وإغلاق ملف الاستكمال بنجاح لـ {$schoolFull}";
+
+            case 'evaluation.direct_closed':
+                return "قام المشرف الوزاري ({$actorName}) باعتماد التقييم الذاتي وإغلاقه مباشرة لـ {$schoolFull}";
+
+            case 'evaluation.submitted':
+                return "قام مسؤول التقييم ({$actorName}) برفع وتسليم ملف التقييم الذاتي لـ {$schoolFull} للاعتماد النهائي من الإدارة العامة للجودة";
+
+            case 'evidence.unlinked':
+                $indId = $old['indicator_id'] ?? null;
+                $ind = $indId ? Indicator::find($indId) : null;
+                $indText = $ind ? "المؤشر المعياري ({$ind->code})" : "مؤشر المعايير";
+                return "قام مسؤول التقييم ({$actorName}) بفك ارتباط وثيقة شاهد عن {$indText} في تقييم {$schoolFull}";
+
+            case 'auth.login_success':
+                return "تسجيل دخول ناجح للمستخدم ({$actorName}) إلى المنصة عبر المتصفح";
+
+            case 'auth.logout':
+                return "تسجيل خروج نظامي للمستخدم ({$actorName}) وإنهاء جلسة العمل";
+
+            case 'auth.login_failed':
+                $attempted = $new['attempted_username'] ?? 'مجهول';
+                return "محاولة دخول فاشلة باسم المستخدم ({$attempted}) - بيانات الاعتماد غير صحيحة أو الحساب غير مصرح له";
+
+            case 'auth.password_changed':
+                return "قام المستخدم ({$actorName}) بتحديث كلمة المرور لحسابه بنجاح وإلغاء الجلسات الأخرى النشطة";
+
+            case 'system.maintenance_mode_toggled':
+                $isMaint = !empty($new['maintenanceMode']);
+                return $isMaint
+                    ? "قام مسؤول النظام ({$actorName}) بتفعيل وضع الصيانة المجدولة وتعليق وصول المستخدمين العاديين"
+                    : "قام مسؤول النظام ({$actorName}) بإلغاء وضع الصيانة وإعادة إتاحة المنظومة لكافة المدارس والمشرفين";
+
+            case 'school.created':
+                $name = $new['name'] ?? $new['school_name'] ?? 'مدرسة جديدة';
+                return "قام مسؤول النظام ({$actorName}) بتسجيل مدرسة جديدة ({$name}) وتحديد نطاقها التعليمي";
+
+            case 'school.updated':
+                return "قام مسؤول النظام ({$actorName}) بتحديث البيانات الأساسية لـ {$schoolFull}";
+
+            case 'school.status_toggled':
+                if ($existing && !str_starts_with($existing, 'تعديل حالة')) {
+                    return $existing;
+                }
+                $st = ($new['status'] ?? '') === 'Active' ? 'تفعيل' : 'تعطيل';
+                return "قام مسؤول النظام ({$actorName}) بـ{$st} مدرسة ({$schoolName})";
+
+            case 'school.deleted':
+                return $existing ?: "قام مسؤول النظام ({$actorName}) بحذف مدرسة نهائياً لعدم وجود ارتباطات تشغيلية";
+
+            case 'standard_version.activated':
+                $ver = $new['version'] ?? '3.0';
+                return "قام مسؤول المعايير ({$actorName}) بتفعيل واعتماد وثيقة المعايير الوطنية (الإصدار {$ver}) رسمياً على مستوى الجمهورية";
+
+            case 'standard_version.auto_archived':
+                $ver = $old['version'] ?? '2.0';
+                return "أرشفة تلقائية ذرية لوثيقة المعايير الوطنية السابقة (الإصدار {$ver}) بعد اعتماد وسريان الإصدار الأحدث";
+
+            case 'user.created':
+                return $existing ?: "قام مسؤول النظام ({$actorName}) بإنشاء حساب مستخدم جديد وتحديد أدواره";
+
+            case 'directorate.created':
+                $name = $new['name'] ?? 'جديدة';
+                return "قام مسؤول النظام ({$actorName}) بإنشاء مديرية تعليمية جديدة ({$name}) في المنظومة";
+
+            case 'directorate.deleted':
+                $name = $old['name'] ?? 'المديرية';
+                return "قام مسؤول النظام ({$actorName}) بحذف المديرية التعليمية ({$name}) من المنظومة";
+
+            default:
+                return $existing ?: $this->resolveActionDescription($action);
+        }
+    }
+
+    /**
      * تسجيل عملية في سجل التدقيق.
      *
      * @param string $action
@@ -131,7 +288,18 @@ class AuditLoggerService
         $sanitizedOld = $oldValues !== null ? $this->sanitizeData($oldValues) : null;
         $sanitizedNew = $newValues !== null ? $this->sanitizeData($newValues) : null;
 
-        $desc = $descriptionAr ?: $this->resolveActionDescription($action);
+        $actor = $resolvedUserId ? User::find($resolvedUserId) : $currentUser;
+        $school = $resolvedSchoolId ? School::find($resolvedSchoolId) : null;
+
+        $desc = $descriptionAr ?: $this->buildDetailedDescription(
+            $action,
+            $actor,
+            $school,
+            $sanitizedNew,
+            $sanitizedOld,
+            $targetType,
+            $targetId
+        );
 
         return AuditLog::create([
             'user_id'        => $resolvedUserId,

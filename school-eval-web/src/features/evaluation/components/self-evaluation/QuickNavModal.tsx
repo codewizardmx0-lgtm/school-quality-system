@@ -478,9 +478,6 @@ export const QuickNavModal: React.FC<QuickNavModalProps> = ({
             overflowY: 'auto',
             overflowX: 'hidden',
             padding: '20px 24px',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '14px',
             backgroundColor: '#F8FAFC',
             scrollbarWidth: 'thin',
             scrollbarColor: '#CBD5E1 transparent',
@@ -494,7 +491,6 @@ export const QuickNavModal: React.FC<QuickNavModalProps> = ({
                 backgroundColor: '#FFFFFF',
                 borderRadius: '12px',
                 border: '1px dashed #CBD5E1',
-                flexShrink: 0,
               }}
             >
               <Compass size={36} color="#94A3B8" style={{ margin: '0 auto 12px' }} />
@@ -521,8 +517,7 @@ export const QuickNavModal: React.FC<QuickNavModalProps> = ({
                     border: isStdActive ? '1.5px solid #6366F1' : '1px solid #E2E8F0',
                     boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
                     overflow: 'hidden',
-                    flexShrink: 0,
-                    minHeight: 'fit-content',
+                    marginBottom: '14px',
                     width: '100%',
                     boxSizing: 'border-box',
                   }}
@@ -539,7 +534,6 @@ export const QuickNavModal: React.FC<QuickNavModalProps> = ({
                       cursor: 'pointer',
                       borderBottom: isExpanded ? '1px solid #F1F5F9' : 'none',
                       userSelect: 'none',
-                      flexShrink: 0,
                       minHeight: '48px',
                       boxSizing: 'border-box',
                     }}

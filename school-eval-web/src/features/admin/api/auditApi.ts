@@ -10,6 +10,7 @@ import type { AuditLogEntry, BlockedIp } from '../types/admin.types';
 
 export interface AuditQueryParams {
   actionType?: string;
+  actions?: string[] | string;
   userId?: number;
   timeRange?: string;
   timeScope?: string;
@@ -116,7 +117,12 @@ function normalizeAuditLog(raw: any): AuditLogEntry {
     }
   }
 
-  const descAr = raw.descriptionAr ?? raw.description_ar ?? raw.description;
+  let descAr = raw.descriptionAr ?? raw.description_ar ?? raw.description;
+  if (rawAction === 'auth.login_success' && typeof descAr === 'string' && descAr.includes('تغيير كلمة المرور')) {
+    descAr = actorName ? `تسجيل دخول ناجح للمستخدم (${actorName}) إلى المنصة` : 'تسجيل دخول ناجح إلى المنصة';
+  } else if (rawAction === 'auth.logout' && typeof descAr === 'string' && descAr.includes('تغيير كلمة المرور')) {
+    descAr = actorName ? `تسجيل خروج نظامي للمستخدم (${actorName}) من الحساب` : 'تسجيل خروج نظامي من الحساب';
+  }
   const description = descAr || `عملية [${eventType}] موثقة في سجل النظام`;
 
   const ipAddress = String(raw.ipAddress ?? raw.ip_address ?? '127.0.0.1');
