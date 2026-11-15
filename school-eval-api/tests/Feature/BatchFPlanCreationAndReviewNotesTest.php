@@ -35,6 +35,11 @@ class BatchFPlanCreationAndReviewNotesTest extends TestCase
         $evaluator = User::where('username', 'quality_farouq')->firstOrFail();
         $school = School::where('identification_data', 'SCH-TAIZ-2026-001')->firstOrFail();
 
+        // تنظيف أي خطة سابقة من نفس النوع للمدرسة حتى يسمح النظام بإنشاء خطة جديدة وفق القيد الوزاري (خطة نشطة واحدة لكل نوع)
+        \App\Models\ImprovementPlan::where('school_id', $school->school_id)
+            ->where('plan_type', 'StaffProfessionalDevelopment')
+            ->delete();
+
         // 1. إنشاء خطة تطوير مهني جديدة
         $response = $this->actingAs($evaluator, 'sanctum')
             ->postJson('/api/v1/evaluator/improvement-plans', [

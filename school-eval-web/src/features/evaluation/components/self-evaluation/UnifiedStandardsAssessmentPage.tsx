@@ -8,6 +8,7 @@ import {
   ClipboardList,
   SlidersHorizontal,
   AlertCircle,
+  ArrowRight,
 } from 'lucide-react';
 
 interface UnifiedStandardsAssessmentPageProps {
@@ -28,6 +29,19 @@ export const UnifiedStandardsAssessmentPage: React.FC<UnifiedStandardsAssessment
   const [activeTab, setActiveTab] = useState<'tree' | 'rubric' | 'pending'>(initialTab);
   const [currentIndicatorId, setCurrentIndicatorId] = useState<number | null>(selectedIndicatorId ?? null);
 
+  const targetPlanIndicatorId = typeof window !== 'undefined'
+    ? sessionStorage.getItem('navigated_from_improvement_plan_indicator_id')
+    : null;
+  const isFromImprovementPlan = Boolean(
+    targetPlanIndicatorId && currentIndicatorId && Number(targetPlanIndicatorId) === currentIndicatorId
+  );
+
+  const handleReturnToImprovementPlan = () => {
+    sessionStorage.removeItem('navigated_from_improvement_plan');
+    sessionStorage.removeItem('navigated_from_improvement_plan_indicator_id');
+    onNavigate('improvement-plan');
+  };
+
   const { dashboardData, refreshDashboard } = useEvaluatorDashboard();
 
   useEffect(() => {
@@ -45,6 +59,10 @@ export const UnifiedStandardsAssessmentPage: React.FC<UnifiedStandardsAssessment
   const handleIndicatorSelect = (id: number) => {
     setCurrentIndicatorId(id);
     onSelectIndicator(id);
+    if (targetPlanIndicatorId && Number(targetPlanIndicatorId) !== id) {
+      sessionStorage.removeItem('navigated_from_improvement_plan');
+      sessionStorage.removeItem('navigated_from_improvement_plan_indicator_id');
+    }
     setActiveTab('rubric');
   };
 
@@ -156,6 +174,41 @@ export const UnifiedStandardsAssessmentPage: React.FC<UnifiedStandardsAssessment
             )}
           </button>
         </div>
+
+        {/* زر العودة إلى خطة التحسين إذا تم الدخول عبر زر الاختصار في الخطة */}
+        {isFromImprovementPlan && (
+          <button
+            type="button"
+            onClick={handleReturnToImprovementPlan}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '7px 14px',
+              borderRadius: '8px',
+              backgroundColor: '#ECFDF5',
+              color: '#065F46',
+              border: '1.5px solid #10B981',
+              fontSize: '12px',
+              fontWeight: 800,
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+              boxShadow: '0 1px 3px rgba(5,150,105,0.15)',
+              transition: 'all 0.15s ease',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = '#D1FAE5';
+              e.currentTarget.style.borderColor = '#059669';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = '#ECFDF5';
+              e.currentTarget.style.borderColor = '#10B981';
+            }}
+          >
+            <ArrowRight size={14} />
+            <span>العودة إلى خطة التحسين</span>
+          </button>
+        )}
       </div>
 
       {/* 3. Main Content Rendering */}
@@ -172,6 +225,14 @@ export const UnifiedStandardsAssessmentPage: React.FC<UnifiedStandardsAssessment
         {activeTab === 'rubric' && (
           <RubricAssessmentPage
             selectedIndicatorId={currentIndicatorId}
+            onSelectIndicator={(newId) => {
+              setCurrentIndicatorId(newId);
+              onSelectIndicator(newId);
+              if (targetPlanIndicatorId && Number(targetPlanIndicatorId) !== newId) {
+                sessionStorage.removeItem('navigated_from_improvement_plan');
+                sessionStorage.removeItem('navigated_from_improvement_plan_indicator_id');
+              }
+            }}
             onNavigate={onNavigate}
             isLocked={isLocked}
             onResetSuccess={refreshDashboard}

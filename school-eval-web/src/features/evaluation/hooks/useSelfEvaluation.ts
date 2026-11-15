@@ -11,6 +11,10 @@ import type {
 
 export type SaveStatus = 'idle' | 'saving' | 'saved_server' | 'error';
 
+// ذاكرة كاش على مستوى الموديول للتنقل الفوري بين الشاشات دون وميض أو تأخير (0ms delay)
+let cachedTreeData: StandardsTreeData | null = null;
+const cachedResultsByIndicator = new Map<number, EvaluationResultData>();
+
 export function useSelfEvaluation(
   initialIndicatorId?: number,
   isLocked: boolean = false,
@@ -18,11 +22,25 @@ export function useSelfEvaluation(
 ) {
   const effectiveEvalId = evaluationId ?? 1;
 
-  const [treeData, setTreeData] = useState<StandardsTreeData | null>(null);
-  const [selectedStandardId, setSelectedStandardId] = useState<number | null>(null);
-  const [selectedIndicatorId, setSelectedIndicatorId] = useState<number | null>(initialIndicatorId ?? null);
-  const [currentResult, setCurrentResult] = useState<EvaluationResultData | null>(null);
-  const [isLoadingTree, setIsLoadingTree] = useState<boolean>(true);
+  const [treeData, setTreeData] = useState<StandardsTreeData | null>(() => cachedTreeData);
+  const [selectedStandardId, setSelectedStandardId] = useState<number | null>(() => {
+    if (cachedTreeData && cachedTreeData.standards.length > 0) {
+      return cachedTreeData.standards[0].standardId;
+    }
+    return null;
+  });
+  const [selectedIndicatorId, setSelectedIndicatorId] = useState<number | null>(() => {
+    if (initialIndicatorId) return initialIndicatorId;
+    if (cachedTreeData && cachedTreeData.standards.length > 0) {
+      return cachedTreeData.standards[0]?.subStandards[0]?.indicators[0]?.indicatorId ?? null;
+    }
+    return null;
+  });
+  const [currentResult, setCurrentResult] = useState<EvaluationResultData | null>(() => {
+    const initId = initialIndicatorId || (cachedTreeData?.standards[0]?.subStandards[0]?.indicators[0]?.indicatorId);
+    return initId ? cachedResultsByIndicator.get(initId) || null : null;
+  });
+  const [isLoadingTree, setIsLoadingTree] = useState<boolean>(() => !cachedTreeData);
   const [isLoadingResult, setIsLoadingResult] = useState<boolean>(false);
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
@@ -31,9 +49,12 @@ export function useSelfEvaluation(
 
   // تحميل شجرة المعايير الكاملة من الخادم
   const loadTree = useCallback(async () => {
-    setIsLoadingTree(true);
+    if (!cachedTreeData) {
+      setIsLoadingTree(true);
+    }
     try {
       const data = await evaluatorApi.getActiveStandardsTree();
+      cachedTreeData = data;
       setTreeData(data);
 
       if (!selectedStandardId && data.standards.length > 0) {
@@ -82,18 +103,42 @@ export function useSelfEvaluation(
     return allIndicators.find((item) => item.indicator.indicatorId === selectedIndicatorId) || null;
   }, [selectedIndicatorId, allIndicators]);
 
-  // تحميل نتيجة المؤشر المحدد مباشرة من الخادم (Direct Server-First)
+  useEffect(() => {
+    if (initialIndicatorId && initialIndicatorId !== selectedIndicatorId) {
+      setSelectedIndicatorId(initialIndicatorId);
+    }
+  }, [initialIndicatorId]);
+
+  // مزامنة المعيار الرئيسي عند تغير المؤشر
+  useEffect(() => {
+    if (currentIndicatorInfo?.standard?.standardId && selectedStandardId !== currentIndicatorInfo.standard.standardId) {
+      setSelectedStandardId(currentIndicatorInfo.standard.standardId);
+    }
+  }, [currentIndicatorInfo, selectedStandardId]);
+
+  // تحميل نتيجة المؤشر المحدد مباشرة من الخادم مع كاش فوري
   const loadIndicatorResult = useCallback(
     async (indicatorId: number) => {
-      setIsLoadingResult(true);
+      const cached = cachedResultsByIndicator.get(indicatorId);
+      if (cached) {
+        setCurrentResult(cached);
+        setSaveStatus(cached.score !== null && cached.score !== undefined ? 'saved_server' : 'idle');
+      } else {
+        // تفريغ البيانات السابقة فوراً لمنع بقاء بيانات المؤشر القديم مجمدة أثناء التحميل
+        setCurrentResult(null);
+        setIsLoadingResult(true);
+      }
       try {
         const res = await evaluatorApi.getEvaluationResult(indicatorId);
+        cachedResultsByIndicator.set(indicatorId, res);
         setCurrentResult(res);
         setSaveStatus(res.score !== null && res.score !== undefined ? 'saved_server' : 'idle');
       } catch (err) {
         console.error(`Failed to load indicator result for ${indicatorId}:`, err);
-        setSaveStatus('error');
-        setSaveSuccessMessage('تعذر تحميل نتيجة التقييم من الخادم.');
+        if (!cached) {
+          setSaveStatus('error');
+          setSaveSuccessMessage('تعذر تحميل نتيجة التقييم من الخادم.');
+        }
       } finally {
         setIsLoadingResult(false);
       }
@@ -162,6 +207,7 @@ export function useSelfEvaluation(
           indicatorId: selectedIndicatorId,
           ...sanitizedPayload,
         });
+        cachedResultsByIndicator.set(selectedIndicatorId, saved);
         setCurrentResult(saved);
         setSaveStatus('saved_server');
         setSaveSuccessMessage('تم الحفظ بنجاح على الخادم');

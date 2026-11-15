@@ -1344,6 +1344,56 @@ class EvaluatorApiController extends Controller
     }
 
     /**
+     * DELETE /api/v1/evidences/documents/{documentId}
+     * حذف الشاهد نهائياً إذا لم يكن مرتبطاً بأي مؤشر (رفع بالخطأ أو مفكوك الارتباط)
+     */
+    public function deleteUnlinkedDocument(Request $request, int $documentId): JsonResponse
+    {
+        $user = $request->user();
+        if ($user && !$user->hasPermission('evidence.manage')) {
+            return ApiResponse::forbidden('ليس لديك صلاحية إدارة وحذف الشواهد.');
+        }
+
+        $evaluation = $this->getActiveEvaluation($request);
+        $schoolId = $evaluation->school_id;
+
+        $document = SchoolDocument::where('school_id', $schoolId)->where('id', $documentId)->first();
+        if (!$document) {
+            return ApiResponse::notFound('المستند غير موجود في ملف المدرسة.');
+        }
+
+        $versionIds = DocumentVersion::where('school_document_id', $document->id)->pluck('id');
+
+        // التحقق الدقيق مما إذا كان الشاهد مرتبطاً بأي مؤشر في أي تقييم
+        $linkedCount = EvidenceLink::whereIn('document_version_id', $versionIds)->count();
+        if ($linkedCount > 0) {
+            return ApiResponse::validationError([
+                'documentId' => ["لا يمكن حذف هذا الشاهد لأنه مرتبط بـ {$linkedCount} مؤشر/مؤشرات. يرجى فك ارتباطه من كافة المؤشرات أولاً قبل الحذف."],
+            ], 'لا يمكن حذف الشاهد المرتبط بمؤشرات.');
+        }
+
+        // حذف الملفات الفيزيائية إن وجدت
+        $versions = DocumentVersion::where('school_document_id', $document->id)->get();
+        foreach ($versions as $v) {
+            if ($v->file_path && \Illuminate\Support\Facades\Storage::disk('local')->exists($v->file_path)) {
+                try {
+                    \Illuminate\Support\Facades\Storage::disk('local')->delete($v->file_path);
+                } catch (\Throwable) {
+                    // تجاهل أخطاء الملفات المفقودة
+                }
+            }
+        }
+
+        DocumentVersion::where('school_document_id', $document->id)->delete();
+        $documentTitle = $document->title;
+        $document->delete();
+
+        return ApiResponse::success([
+            'documentId' => $documentId,
+        ], "تم حذف الشاهد غير المرتبط «{$documentTitle}» نهائياً من مستودع المدرسة.");
+    }
+
+    /**
      * POST /api/v1/ai/analyses
      * Trigger automated dynamic gap analysis based on actual school scores (No external API)
      */
@@ -1595,11 +1645,14 @@ class EvaluatorApiController extends Controller
                 ->first();
         }
 
-        // جلب كافة مجالات التحسين المعتمدة لهذا التقييم/المدرسة مع المؤشرات والمعايير
+        // جلب كافة مجالات التحسين المعتمدة لهذا التقييم/المدرسة مع المؤشرات والمعايير وحالة التبني السابقة
         $evalResultIds = \App\Models\EvaluationResult::where('evaluation_id', $evaluation->evaluation_id)->pluck('result_id');
-        $availableAreas = \App\Models\ImprovementArea::where(function ($q) use ($evalResultIds) {
-            $q->whereIn('result_id', $evalResultIds);
-        })->with(['indicator.subStandard.standard'])->orderBy('area_id', 'desc')->get();
+        $availableAreas = \App\Models\ImprovementArea::where(function ($q) use ($evalResultIds, $evaluation) {
+            $q->whereIn('result_id', $evalResultIds)
+              ->orWhereHas('plans', function ($pq) use ($evaluation) {
+                  $pq->where('school_id', $evaluation->school_id)->where('cycle_id', $evaluation->cycle_id);
+              });
+        })->with(['indicator.subStandard.standard', 'result', 'plans', 'actions.plan'])->orderBy('area_id', 'desc')->get();
 
         if (!$plan) {
             if (in_array($evaluation->status, ['Submitted', 'UnderReview', 'Completed'], true) || $evaluation->cycle?->status === 'Closed') {
@@ -1636,21 +1689,11 @@ class EvaluatorApiController extends Controller
                 'status' => 'Draft',
                 'created_by_user_id' => $request->user()?->user_id ?? 1,
             ]);
-
-            // ربط المجالات المتوفرة تلقائياً بالخطة الجديدة لتمكين إضافة الإجراءات ضمن قيد المفتاح المركب
-            foreach ($availableAreas as $avArea) {
-                \App\Models\PlanImprovementArea::firstOrCreate([
-                    'plan_id' => $plan->plan_id,
-                    'area_id' => $avArea->area_id,
-                ], [
-                    'created_at' => now(),
-                ]);
-            }
         }
 
         $planAreaIds = \App\Models\PlanImprovementArea::where('plan_id', $plan->plan_id)->pluck('area_id');
         $planAreas = \App\Models\ImprovementArea::whereIn('area_id', $planAreaIds)
-            ->with(['indicator.subStandard.standard'])
+            ->with(['indicator.subStandard.standard', 'result'])
             ->get()->map(fn ($a) => [
                 'areaId' => $a->area_id,
                 'name' => $a->name,
@@ -1664,7 +1707,7 @@ class EvaluatorApiController extends Controller
             ])->values();
 
         $actions = ImprovementAction::where('plan_id', $plan->plan_id)
-            ->with(['area'])
+            ->with(['area.indicator.subStandard.standard', 'area.result'])
             ->orderBy('action_id', 'desc')
             ->get();
 
@@ -1679,13 +1722,43 @@ class EvaluatorApiController extends Controller
                 $isNewInVersion = $act->created_at->gt($plan->created_at->addSeconds(2));
             }
 
+            $area = $act->area;
+            $indicator = $area?->indicator;
+            $subStandard = $indicator?->subStandard;
+            $standard = $subStandard?->standard;
+            $currentScore = $area?->result?->score;
+            if ($currentScore === null && ($indicator?->indicator_id || $area?->indicator_id) && $evaluation) {
+                $indId = $indicator?->indicator_id ?? $area?->indicator_id;
+                $currentScore = \App\Models\EvaluationResult::where('evaluation_id', $evaluation->evaluation_id)
+                    ->where('indicator_id', $indId)
+                    ->value('score');
+            }
+            $targetScore = $area?->target_score ?? 3;
+            $gap = $currentScore !== null ? max(0, (int) $targetScore - (int) $currentScore) : null;
+            $priority = $area?->priority ?? 'High';
+            $priorityMap = ['High' => 'عالية', 'Medium' => 'متوسطة', 'Low' => 'منخفضة'];
+
             return [
                 'actionId' => $act->action_id,
                 'planId' => $act->plan_id,
                 'areaId' => $act->area_id,
-                'areaName' => $act->area?->name ?? 'مجال عام',
+                'areaName' => $area?->name ?? 'مجال عام',
                 'title' => $act->title,
-                'standardName' => $act->area?->name ?? 'معيار التطوير والجودة',
+                'standardCode' => $standard?->code ?? '',
+                'standardName' => $standard?->name ?? ($area?->name ?? 'معيار التطوير والجودة'),
+                'subStandardCode' => $subStandard?->code ?? '',
+                'subStandardName' => $subStandard?->name ?? '',
+                'indicatorId' => $indicator?->indicator_id ?? $area?->indicator_id,
+                'indicatorCode' => $indicator?->code ?? '',
+                'indicatorName' => $indicator?->name ?? '',
+                'score' => $currentScore,
+                'targetScore' => $targetScore,
+                'gap' => $gap,
+                'baselineScore' => $act->baseline_score ?? $currentScore,
+                'baselineTargetScore' => $act->baseline_target_score ?? $targetScore,
+                'baselineGap' => $act->baseline_gap ?? $gap,
+                'priority' => $priority,
+                'priorityArabic' => $priorityMap[$priority] ?? 'عالية',
                 'leader' => $act->responsible_person_description ?: 'فريق التطوير والتحسين',
                 'startDate' => $act->start_date?->toDateString() ?? $plan->start_date?->toDateString(),
                 'dueDate' => $act->due_date?->toDateString() ?? $plan->end_date?->toDateString(),
@@ -1722,17 +1795,53 @@ class EvaluatorApiController extends Controller
             'startDate' => $plan->start_date?->toDateString(),
             'endDate' => $plan->end_date?->toDateString(),
             'areas' => $planAreas,
-            'availableAreas' => $availableAreas->map(fn ($a) => [
-                'areaId' => $a->area_id,
-                'name' => $a->name,
-                'priority' => $a->priority,
-                'targetScore' => $a->target_score ?? 3,
-                'indicatorId' => $a->indicator_id,
-                'indicatorCode' => $a->indicator?->code ?? '',
-                'indicatorName' => $a->indicator?->name ?? '',
-                'standardCode' => $a->indicator?->subStandard?->standard?->code ?? '',
-                'standardName' => $a->indicator?->subStandard?->standard?->name ?? '',
-            ])->values(),
+            'availableAreas' => $availableAreas->map(function ($a) use ($evaluation) {
+                $existingLinks = [];
+                // كافة الإجراءات المرتبطة بهذا المجال في أي خطة نشطة لهذه المدرسة والدورة
+                foreach ($a->actions as $action) {
+                    if (!$action->plan_id) continue;
+                    $actPlan = $action->plan;
+                    if ($actPlan && $actPlan->school_id === $evaluation->school_id && $actPlan->cycle_id === $evaluation->cycle_id && $actPlan->status !== 'Cancelled') {
+                        $leaderName = $action->responsible_person_description;
+                        if ($leaderName === 'قيد التعيين' || empty(trim($leaderName ?? ''))) {
+                            $leaderName = null;
+                        }
+                        $existingLinks[] = [
+                            'planId' => $action->plan_id,
+                            'planTitle' => $actPlan->title,
+                            'planType' => $actPlan->plan_type,
+                            'person' => $leaderName,
+                        ];
+                    }
+                }
+
+                $firstValidLink = !empty($existingLinks) ? $existingLinks[0] : null;
+
+                $currentScore = $a->result?->score;
+                if ($currentScore === null && $a->indicator_id && $evaluation) {
+                    $currentScore = \App\Models\EvaluationResult::where('evaluation_id', $evaluation->evaluation_id)
+                        ->where('indicator_id', $a->indicator_id)
+                        ->value('score');
+                }
+
+                return [
+                    'areaId' => $a->area_id,
+                    'name' => $a->name,
+                    'priority' => $a->priority,
+                    'score' => $currentScore,
+                    'targetScore' => $a->target_score ?? 3,
+                    'indicatorId' => $a->indicator_id,
+                    'indicatorCode' => $a->indicator?->code ?? '',
+                    'indicatorName' => $a->indicator?->name ?? '',
+                    'standardCode' => $a->indicator?->subStandard?->standard?->code ?? '',
+                    'standardName' => $a->indicator?->subStandard?->standard?->name ?? '',
+                    'alreadyAdoptedPlanTitle' => $firstValidLink ? $firstValidLink['planTitle'] : null,
+                    'alreadyAdoptedPlanType' => $firstValidLink ? $firstValidLink['planType'] : null,
+                    'alreadyAdoptedPerson' => $firstValidLink ? $firstValidLink['person'] : null,
+                    'existingLinks' => $existingLinks,
+                    'hasAction' => !empty($existingLinks),
+                ];
+            })->values(),
             'summary' => [
                 'totalActions' => $totalActions,
                 'inProgressActions' => $inProgressActions,
@@ -1777,15 +1886,23 @@ class EvaluatorApiController extends Controller
         $schoolId = $evaluation->school_id;
         $planType = $request->input('planType') ?? ImprovementPlan::TYPE_QUALITY_IMPROVEMENT;
 
-        // قاعدة: خطة نشطة واحدة لكل نوع في الدورة - أرشفة أي خطة سابقة من نفس النوع
-        ImprovementPlan::where('school_id', $schoolId)
+        // قاعدة الحوكمة الوزارية: منع إنشاء خطة جديدة من نفس النوع إذا وُجدت خطة نشطة قائمة
+        $existingActivePlan = ImprovementPlan::where('school_id', $schoolId)
             ->where('cycle_id', $evaluation->cycle_id)
             ->where('plan_type', $planType)
-            ->whereIn('status', ['Draft', 'Active'])
-            ->update([
-                'status' => 'Archived',
-                'version_tag' => 'مؤرشفة لاستبدالها بخطة جديدة',
-            ]);
+            ->where('status', 'Active')
+            ->first();
+
+        if ($existingActivePlan) {
+            $typeLabel = match ($planType) {
+                ImprovementPlan::TYPE_STAFF_DEVELOPMENT => 'خطة التطوير المهني للكوادر',
+                ImprovementPlan::TYPE_ANNUAL_OPERATIONAL => 'الخطة التشغيلية السنوية',
+                default => 'خطة تحسين الجودة المدرسية',
+            };
+            return ApiResponse::validationError([
+                'planType' => ["توجد خطة نشطة ومعتمدة بالفعل لهذا المسار ({$typeLabel}). وفق القواعد الوزارية، يُسمح بخطة نشطة واحدة فقط لكل نوع في الدورة، ويمكنك تعديل الخطة الحالية أو استنساخ إصدار جديد (v2) عند طلب الاستكمال."],
+            ], 'توجد خطة نشطة قائمة بالفعل لهذا المسار في الدورة الحالية.');
+        }
 
         $maxVer = ImprovementPlan::where('school_id', $schoolId)
             ->where('cycle_id', $evaluation->cycle_id)
@@ -1798,10 +1915,10 @@ class EvaluatorApiController extends Controller
             'title'              => $request->input('title'),
             'plan_type'          => $planType,
             'version_number'     => $maxVer + 1,
-            'version_tag'        => $maxVer === 0 ? 'خطة أساسية' : 'إصدار جديد',
+            'version_tag'        => $maxVer === 0 ? 'خطة أساسية معتمدة' : 'إصدار جديد',
             'start_date'         => $request->input('startDate') ?? now()->toDateString(),
             'end_date'           => $request->input('endDate') ?? now()->addMonths(6)->toDateString(),
-            'status'             => 'Draft',
+            'status'             => 'Active',
             'created_by_user_id' => $request->user()?->user_id ?? 1,
         ]);
 
@@ -1949,7 +2066,7 @@ class EvaluatorApiController extends Controller
                 'status'                    => $p->status,
                 'statusArabic'              => $statusLabelMap[$p->status] ?? $p->status,
                 'overallProgressPercentage' => $progressPct,
-                'areasCount'                => $p->planImprovementAreas->count(),
+                'areasCount'                => $p->actions->pluck('area_id')->filter()->unique()->count(),
                 'totalActions'              => $totalActions,
                 'doneActions'               => $doneActions,
                 'inProgressActions'         => $inProgressActions,
@@ -2042,6 +2159,9 @@ class EvaluatorApiController extends Controller
                 'status' => $action->status === 'Done' ? 'Done' : 'InProgress',
                 'completion_percentage' => $action->completion_percentage ?? 0,
                 'progress_description' => $action->progress_description,
+                'baseline_score' => $action->baseline_score,
+                'baseline_target_score' => $action->baseline_target_score,
+                'baseline_gap' => $action->baseline_gap,
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);
@@ -2058,7 +2178,7 @@ class EvaluatorApiController extends Controller
             'startDate'     => $newPlan->start_date?->toDateString(),
             'endDate'       => $newPlan->end_date?->toDateString(),
             'actionsCount'  => $sourcePlan->actions->count(),
-            'areasCount'    => $sourcePlan->planImprovementAreas->count(),
+            'areasCount'    => $sourcePlan->actions->pluck('area_id')->filter()->unique()->count(),
         ], "تم استنساخ الخطة بنجاح وإنشاء الإصدار الجديد (v{$nextVersion}) القابل للتعديل.");
     }
 
@@ -2174,6 +2294,16 @@ class EvaluatorApiController extends Controller
             }
         }
 
+        $targetArea = ImprovementArea::with('result')->find($areaId);
+        $baselineCurrentScore = $targetArea?->result?->score;
+        if ($baselineCurrentScore === null && $targetArea?->indicator_id && $evaluation) {
+            $baselineCurrentScore = \App\Models\EvaluationResult::where('evaluation_id', $evaluation->evaluation_id)
+                ->where('indicator_id', $targetArea->indicator_id)
+                ->value('score');
+        }
+        $baselineTarget = $targetArea?->target_score ?? 3;
+        $baselineGap = $baselineCurrentScore !== null ? max(0, (int) $baselineTarget - (int) $baselineCurrentScore) : null;
+
         $action = ImprovementAction::create([
             'plan_id' => $plan->plan_id,
             'area_id' => (int) $areaId,
@@ -2184,6 +2314,9 @@ class EvaluatorApiController extends Controller
             'status' => $request->input('status', 'InProgress'),
             'completion_percentage' => $request->input('completionPercentage', 10),
             'progress_description' => $request->input('progressDescription', 'تم إدراج الإجراء ضمن خطة التحسين وبدء التنسيق للتنفيذ.'),
+            'baseline_score' => $baselineCurrentScore,
+            'baseline_target_score' => $baselineTarget,
+            'baseline_gap' => $baselineGap,
         ]);
 
         // إذا تم النقل من توصية ذكاء اصطناعي
@@ -2208,6 +2341,9 @@ class EvaluatorApiController extends Controller
             'status' => $action->status,
             'completionPercentage' => $action->completion_percentage,
             'progressDescription' => $action->progress_description,
+            'baselineScore' => $action->baseline_score,
+            'baselineTargetScore' => $action->baseline_target_score,
+            'baselineGap' => $action->baseline_gap,
         ], 'تمت إضافة إجراء التحسين إلى الخطة بنجاح');
     }
 
@@ -2225,6 +2361,8 @@ class EvaluatorApiController extends Controller
             'status' => 'nullable|in:Pending,InProgress,Done,Cancelled',
             'progressDescription' => 'nullable|string',
             'completionPercentage' => 'nullable|integer|min:0|max:100',
+            'priority' => 'nullable|in:Low,Medium,High',
+            'targetScore' => 'nullable|integer|between:1,3',
         ]);
 
         if ($validator->fails()) {
@@ -2236,7 +2374,7 @@ class EvaluatorApiController extends Controller
             return ApiResponse::forbidden('ليس لديك صلاحية تعديل إجراءات خطة التحسين.');
         }
 
-        $action = ImprovementAction::find($id);
+        $action = ImprovementAction::with('area')->find($id);
         if (!$action) {
             return ApiResponse::success(null, 'تم حفظ التحديث (وضع التجربة)');
         }
@@ -2251,6 +2389,19 @@ class EvaluatorApiController extends Controller
 
         $action->save();
 
+        if ($action->area) {
+            $areaUpdates = [];
+            if ($request->filled('priority')) {
+                $areaUpdates['priority'] = $request->input('priority');
+            }
+            if ($request->filled('targetScore')) {
+                $areaUpdates['target_score'] = (int) $request->input('targetScore');
+            }
+            if (!empty($areaUpdates)) {
+                $action->area->update($areaUpdates);
+            }
+        }
+
         return ApiResponse::success([
             'actionId' => $action->action_id,
             'planId' => $action->plan_id,
@@ -2259,6 +2410,8 @@ class EvaluatorApiController extends Controller
             'startDate' => $action->start_date?->toDateString(),
             'dueDate' => $action->due_date?->toDateString(),
             'status' => $action->status,
+            'priority' => $action->area?->priority,
+            'targetScore' => $action->area?->target_score,
             'completionPercentage' => $action->completion_percentage,
             'progressDescription' => $action->progress_description,
         ], 'تم تحديث إجراء التحسين بنجاح');

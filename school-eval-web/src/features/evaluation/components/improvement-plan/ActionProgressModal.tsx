@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import type { ActionStatus, ImprovementPlanAction, UpdateImprovementActionPayload } from '../../api/evaluationTypes';
+import type { ActionStatus, ImprovementPlanAction, PriorityLevel, UpdateImprovementActionPayload } from '../../api/evaluationTypes';
 import { X, Check } from 'lucide-react';
 
 interface ActionProgressModalProps {
@@ -21,21 +21,31 @@ export const ActionProgressModal: React.FC<ActionProgressModalProps> = ({
 }) => {
   if (!isOpen || !action) return null;
 
+  const [title, setTitle] = useState<string>(action.title);
+  const [leader, setLeader] = useState<string>(action.leader || '');
+  const [startDate, setStartDate] = useState<string>(action.startDate || '');
+  const [dueDate, setDueDate] = useState<string>(action.dueDate || '');
   const [status, setStatus] = useState<ActionStatus>(action.status);
+  const [priority, setPriority] = useState<PriorityLevel>(action.priority || 'High');
+  const [targetScore, setTargetScore] = useState<number>(action.targetScore || 3);
   const [completionPercentage, setCompletionPercentage] = useState<number>(action.completionPercentage);
   const [progressDescription, setProgressDescription] = useState<string>(action.progressDescription);
-  const [dueDate, setDueDate] = useState<string>(action.dueDate);
 
   useEffect(() => {
     if (action) {
+      setTitle(action.title);
+      setLeader(action.leader || '');
+      setStartDate(action.startDate || '');
+      setDueDate(action.dueDate || '');
       setStatus(action.status);
+      setPriority(action.priority || 'High');
+      setTargetScore(action.targetScore || 3);
       setCompletionPercentage(action.completionPercentage);
       setProgressDescription(action.progressDescription);
-      setDueDate(action.dueDate);
     }
   }, [action]);
 
-    const handleClose = () => {
+  const handleClose = () => {
     if (isSubmitting) return;
     onClose();
   };
@@ -43,10 +53,15 @@ export const ActionProgressModal: React.FC<ActionProgressModalProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     await onUpdateAction(action.actionId, {
+      title: title.trim(),
+      leader: leader.trim(),
+      startDate: startDate || undefined,
+      dueDate: dueDate || undefined,
       status,
+      priority,
+      targetScore,
       completionPercentage: status === 'Done' ? 100 : completionPercentage,
       progressDescription,
-      dueDate,
     });
     onClose();
   };
@@ -80,7 +95,8 @@ export const ActionProgressModal: React.FC<ActionProgressModalProps> = ({
           backgroundColor: '#FFFFFF',
           borderRadius: '16px',
           width: '100%',
-          maxWidth: '520px',
+          maxWidth: '620px',
+          maxHeight: '90vh',
           boxShadow: '0 20px 40px rgba(0,0,0,0.2)',
           overflow: 'hidden',
           display: 'flex',
@@ -95,14 +111,15 @@ export const ActionProgressModal: React.FC<ActionProgressModalProps> = ({
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
+            backgroundColor: '#F8FAFC',
           }}
         >
           <div>
             <h3 style={{ fontSize: '16px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
-              تحديث تقدم الإجراء التنفيذي
+              تعديل وتحديث الإجراء التنفيذي
             </h3>
             <p style={{ fontSize: '12px', color: '#64748B', margin: '2px 0 0 0' }}>
-              تسجيل التطورات الميدانية وتحديث نسبة الإنجاز وحالة الإجراء
+              تعديل تفاصيل الإجراء، المسؤول، التواريخ، ومتابعة نسبة الإنجاز الميداني
             </p>
           </div>
           <button
@@ -111,8 +128,8 @@ export const ActionProgressModal: React.FC<ActionProgressModalProps> = ({
               width: '32px',
               height: '32px',
               borderRadius: '8px',
-              backgroundColor: '#F1F5F9',
-              border: 'none',
+              backgroundColor: '#FFFFFF',
+              border: '1px solid #E2E8F0',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -124,24 +141,190 @@ export const ActionProgressModal: React.FC<ActionProgressModalProps> = ({
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          {/* Action Title Preview */}
+        <form onSubmit={handleSubmit} style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px', overflowY: 'auto' }}>
+          {/* Indicator & Evaluation Context Badge */}
           <div
             style={{
-              padding: '12px 14px',
-              borderRadius: '8px',
-              backgroundColor: '#F8FAFC',
-              border: '1px solid #E2E8F0',
+              padding: '12px 16px',
+              borderRadius: '10px',
+              backgroundColor: '#EFF6FF',
+              border: '1px solid #BFDBFE',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '6px',
+              fontSize: '12.5px',
             }}
           >
-            <div style={{ fontSize: '11px', color: '#059669', fontWeight: 700 }}>
-              الإجراء المحدد:
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '6px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontWeight: 800, color: '#1D4ED8', backgroundColor: '#DBEAFE', padding: '2px 8px', borderRadius: '6px' }}>
+                  {action.indicatorCode || 'المؤشر المرتبط'}
+                </span>
+                <span style={{ fontWeight: 700, color: '#1E293B' }}>
+                  {action.indicatorName || action.standardName}
+                </span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px' }}>
+                <span style={{ color: '#64748B' }}>الدرجة الحالية:</span>
+                <strong style={{ color: '#2563EB' }}>{action.score !== undefined && action.score !== null ? `${action.score}★` : 'غير مرصودة'}</strong>
+                <span style={{ color: '#CBD5E1' }}>|</span>
+                <span style={{ color: '#64748B' }}>المستهدف:</span>
+                <strong style={{ color: '#059669' }}>{action.targetScore || 3}★</strong>
+                <span style={{ color: '#CBD5E1' }}>|</span>
+                <span style={{ color: '#64748B' }}>الفجوة:</span>
+                <strong style={{ color: '#DC2626' }}>{action.gap !== undefined && action.gap !== null ? `${action.gap} درجات` : '-'}</strong>
+              </div>
             </div>
-            <div style={{ fontSize: '13.5px', fontWeight: 800, color: '#0F172A', marginTop: '2px' }}>
-              {action.title}
+            {action.standardName && action.indicatorName && (
+              <div style={{ fontSize: '11.5px', color: '#64748B' }}>
+                المعيار: {action.standardCode ? `${action.standardCode} — ` : ''}{action.standardName}
+              </div>
+            )}
+          </div>
+
+          {/* Action Title Input */}
+          <div>
+            <label style={{ fontSize: '13px', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '6px' }}>
+              عنوان الإجراء التنفيذي <span style={{ color: '#EF4444' }}>*</span>
+            </label>
+            <input
+              type="text"
+              value={title}
+              disabled={readOnly}
+              onChange={(e) => setTitle(e.target.value)}
+              required
+              style={{
+                width: '100%',
+                padding: '9px 12px',
+                borderRadius: '8px',
+                border: '1px solid #CBD5E1',
+                fontSize: '13px',
+                outline: 'none',
+                boxSizing: 'border-box',
+                fontWeight: 600,
+              }}
+            />
+          </div>
+
+          {/* Leader Input */}
+          <div>
+            <label style={{ fontSize: '13px', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '6px' }}>
+              المسؤول عن التنفيذ (قائد الإجراء)
+            </label>
+            <input
+              type="text"
+              value={leader}
+              disabled={readOnly}
+              onChange={(e) => setLeader(e.target.value)}
+              placeholder="مثال: أ. أحمد العريقي — مسؤول التطوير المهني"
+              style={{
+                width: '100%',
+                padding: '9px 12px',
+                borderRadius: '8px',
+                border: '1px solid #CBD5E1',
+                fontSize: '13px',
+                outline: 'none',
+                boxSizing: 'border-box',
+              }}
+            />
+          </div>
+
+          {/* Timeline Dates */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+            <div>
+              <label style={{ fontSize: '12.5px', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '6px' }}>
+                تاريخ البدء
+              </label>
+              <input
+                type="date"
+                value={startDate}
+                disabled={readOnly}
+                onChange={(e) => setStartDate(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '8px 12px',
+                  borderRadius: '8px',
+                  border: '1px solid #CBD5E1',
+                  fontSize: '12.5px',
+                  outline: 'none',
+                  boxSizing: 'border-box',
+                }}
+              />
             </div>
-            <div style={{ fontSize: '11.5px', color: '#64748B', marginTop: '4px' }}>
-              القائد المسؤول: {action.leader}
+            <div>
+              <label style={{ fontSize: '12.5px', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '6px' }}>
+                الموعد النهائي المستهدف
+              </label>
+              <input
+                type="date"
+                value={dueDate}
+                disabled={readOnly}
+                onChange={(e) => setDueDate(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '8px 12px',
+                  borderRadius: '8px',
+                  border: '1px solid #CBD5E1',
+                  fontSize: '12.5px',
+                  outline: 'none',
+                  boxSizing: 'border-box',
+                }}
+              />
+            </div>
+          </div>
+
+          {/* Priority & Target Score */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+            <div>
+              <label style={{ fontSize: '12.5px', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '6px' }}>
+                مستوى الأولوية والأهمية
+              </label>
+              <select
+                value={priority}
+                disabled={readOnly}
+                onChange={(e) => setPriority(e.target.value as PriorityLevel)}
+                style={{
+                  width: '100%',
+                  padding: '9px 12px',
+                  borderRadius: '8px',
+                  border: '1px solid #CBD5E1',
+                  fontSize: '12.5px',
+                  outline: 'none',
+                  backgroundColor: '#FFFFFF',
+                  boxSizing: 'border-box',
+                  fontWeight: 600,
+                }}
+              >
+                <option value="High">عالية (High)</option>
+                <option value="Medium">متوسطة (Medium)</option>
+                <option value="Low">منخفضة (Low)</option>
+              </select>
+            </div>
+
+            <div>
+              <label style={{ fontSize: '12.5px', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '6px' }}>
+                التقدير المستهدف (الهدف)
+              </label>
+              <select
+                value={targetScore}
+                disabled={readOnly}
+                onChange={(e) => setTargetScore(Number(e.target.value))}
+                style={{
+                  width: '100%',
+                  padding: '9px 12px',
+                  borderRadius: '8px',
+                  border: '1px solid #CBD5E1',
+                  fontSize: '12.5px',
+                  outline: 'none',
+                  backgroundColor: '#FFFFFF',
+                  boxSizing: 'border-box',
+                  fontWeight: 600,
+                }}
+              >
+                <option value={3}>المستوى 3 (متحقق كلياً / التميز)</option>
+                <option value={2}>المستوى 2 (متحقق بدرجة متوسطة)</option>
+                <option value={1}>المستوى 1 (مقبول / الحد الأدنى)</option>
+              </select>
             </div>
           </div>
 
@@ -203,27 +386,6 @@ export const ActionProgressModal: React.FC<ActionProgressModalProps> = ({
             />
           </div>
 
-          {/* Due Date */}
-          <div>
-            <label style={{ fontSize: '13px', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '6px' }}>
-              الموعد النهائي المستهدف
-            </label>
-            <input
-              type="date"
-              value={dueDate}
-              onChange={(e) => setDueDate(e.target.value)}
-              style={{
-                width: '100%',
-                padding: '9px 12px',
-                borderRadius: '8px',
-                border: '1px solid #CBD5E1',
-                fontSize: '13px',
-                outline: 'none',
-                boxSizing: 'border-box',
-              }}
-            />
-          </div>
-
           {/* Progress Notes */}
           <div>
             <label style={{ fontSize: '13px', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '6px' }}>
@@ -231,6 +393,7 @@ export const ActionProgressModal: React.FC<ActionProgressModalProps> = ({
             </label>
             <textarea
               value={progressDescription}
+              disabled={readOnly}
               onChange={(e) => setProgressDescription(e.target.value)}
               rows={3}
               style={{
@@ -286,7 +449,7 @@ export const ActionProgressModal: React.FC<ActionProgressModalProps> = ({
                 }}
               >
                 <Check size={16} />
-                <span>{isSubmitting ? 'جاري الحفظ...' : 'تحديث التقدم'}</span>
+                <span>{isSubmitting ? 'جاري الحفظ...' : 'حفظ كافة التعديلات'}</span>
               </button>
             )}
           </div>

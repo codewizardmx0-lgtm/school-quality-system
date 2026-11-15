@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import type { EvidenceItem, EvaluatorScreen } from '../../api/evaluationTypes';
-import { File, Download, RefreshCw, Clock, Link2, Pencil, ExternalLink, History } from 'lucide-react';
+import { File, Download, RefreshCw, Clock, Link2, Pencil, ExternalLink, History, Trash2 } from 'lucide-react';
 
 interface EvidenceCardProps {
   evidence: EvidenceItem;
@@ -9,6 +9,7 @@ interface EvidenceCardProps {
   onManageLinks?: (evidence: EvidenceItem) => void;
   onEditMetadata?: (evidence: EvidenceItem) => void;
   onViewVersions?: (evidence: EvidenceItem) => void;
+  onDeleteUnlinked?: (evidence: EvidenceItem) => void;
   onNavigate?: (screen: EvaluatorScreen, param?: number) => void;
   readOnly?: boolean;
 }
@@ -20,6 +21,7 @@ export const EvidenceCard: React.FC<EvidenceCardProps> = ({
   onManageLinks,
   onEditMetadata,
   onViewVersions,
+  onDeleteUnlinked,
   onNavigate,
   readOnly = false,
 }) => {
@@ -409,6 +411,29 @@ export const EvidenceCard: React.FC<EvidenceCardProps> = ({
             >
               <History size={11} />
               الإصدارات
+            </button>
+          )}
+
+          {!readOnly && onDeleteUnlinked && (evidence.isUnlinked || !evidence.linkedIndicators || evidence.linkedIndicators.length === 0) && (
+            <button
+              onClick={() => onDeleteUnlinked(evidence)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '3px',
+                padding: '5px 8px',
+                borderRadius: '6px',
+                backgroundColor: '#FEF2F2',
+                border: '1px solid #FECACA',
+                color: '#DC2626',
+                fontSize: '11px',
+                fontWeight: 700,
+                cursor: 'pointer',
+              }}
+              title="حذف هذا الشاهد غير المرتبط نهائياً من مستودع المدرسة"
+            >
+              <Trash2 size={11} />
+              حذف
             </button>
           )}
         </div>

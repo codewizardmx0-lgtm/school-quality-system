@@ -161,6 +161,7 @@ Route::prefix('v1')->group(function () {
         Route::delete('/evidences/versions/{versionId}/file', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'pruneVersionPhysicalFile'])->name('api.v1.evidences.versions.prune-file');
         Route::get('/evidences/documents/{documentId}/versions', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'getDocumentVersions'])->name('api.v1.evidences.documents.versions');
         Route::patch('/evidences/documents/{documentId}', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'updateDocumentMetadata'])->name('api.v1.evidences.documents.update');
+        Route::delete('/evidences/documents/{documentId}', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'deleteUnlinkedDocument'])->name('api.v1.evidences.documents.delete');
         Route::patch('/evidence-links/{id}/covered-requirements', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'updateLinkCoveredRequirements'])->name('api.v1.evidence-links.covered-requirements');
 
         Route::prefix('ai')->group(function () {

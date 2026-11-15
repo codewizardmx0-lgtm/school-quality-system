@@ -555,29 +555,63 @@ export const FormulaSuggestionsSection: React.FC<FormulaSuggestionsSectionProps>
           </select>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <ArrowUpDown size={15} color="#64748B" />
-          <span style={{ fontSize: '12px', color: '#64748B', fontWeight: 600 }}>ترتيب حسب:</span>
-          <select
-            value={sortBy}
-            onChange={(e) => setSortBy(e.target.value as any)}
-            style={{
-              padding: '8px 12px',
-              borderRadius: '8px',
-              border: '1px solid #CBD5E1',
-              fontSize: '12.5px',
-              backgroundColor: '#FFFFFF',
-              color: '#334155',
-              cursor: 'pointer',
-              outline: 'none',
-            }}
-          >
-            <option value="gap_desc">حجم الفجوة (من الأكبر للأصغر)</option>
-            <option value="gap_asc">حجم الفجوة (من الأصغر للأكبر)</option>
-            <option value="code">رمز المؤشر</option>
-            <option value="priority">الأولوية المحددة</option>
-          </select>
-        </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+            <ArrowUpDown size={15} color="#64748B" />
+            <span style={{ fontSize: '12px', color: '#64748B', fontWeight: 600 }}>ترتيب حسب:</span>
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as any)}
+              style={{
+                padding: '8px 12px',
+                borderRadius: '8px',
+                border: '1px solid #CBD5E1',
+                fontSize: '12.5px',
+                backgroundColor: '#FFFFFF',
+                color: '#334155',
+                cursor: 'pointer',
+                outline: 'none',
+              }}
+            >
+              <option value="gap_desc">حجم الفجوة (من الأكبر للأصغر)</option>
+              <option value="gap_asc">حجم الفجوة (من الأصغر للأكبر)</option>
+              <option value="code">رمز المؤشر</option>
+              <option value="priority">الأولوية المحددة</option>
+            </select>
+
+            {/* زر إعادة ضبط الفلاتر */}
+            {(searchTerm || scorePriorityFilter !== 'all' || adoptionFilter !== 'all' || exclusionFilter !== 'active' || standardFilter !== 'all' || planTypeFilter !== 'all' || sortBy !== 'gap_desc') && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchTerm('');
+                  setScorePriorityFilter('all');
+                  setAdoptionFilter('all');
+                  setExclusionFilter('active');
+                  setStandardFilter('all');
+                  setPlanTypeFilter('all');
+                  setSortBy('gap_desc');
+                }}
+                style={{
+                  padding: '7px 12px',
+                  borderRadius: '8px',
+                  backgroundColor: '#FEF2F2',
+                  border: '1px solid #FECACA',
+                  color: '#DC2626',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  transition: 'all 0.15s ease',
+                }}
+                title="إعادة ضبط كافة الفلاتر والبحث"
+              >
+                <RotateCcw size={13} />
+                <span>إعادة ضبط الفلاتر</span>
+              </button>
+            )}
+          </div>
       </div>
 
       {/* Suggestions Table */}
@@ -670,11 +704,19 @@ export const FormulaSuggestionsSection: React.FC<FormulaSuggestionsSectionProps>
                       </td>
                       <td style={{ padding: '12px 14px', textAlign: 'center' }}>
                         <select
-                          disabled={sugg.isAdopted || readOnly}
+                          disabled={readOnly}
                           value={effectiveTarget}
-                          onChange={(e) => {
+                          onChange={async (e) => {
                             const val = Number(e.target.value);
                             setCustomTargetScores((prev) => ({ ...prev, [sugg.resultId]: val }));
+                            if (sugg.isAdopted && sugg.adoptedAreaId) {
+                              try {
+                                await evaluatorApi.updateImprovementArea(sugg.adoptedAreaId, { targetScore: val });
+                                onToast('success', 'تم تحديث التقدير المستهدف للإجراء المتبنى بنجاح.');
+                              } catch {
+                                onToast('error', 'تعذر تحديث المستهدف في قاعدة البيانات.');
+                              }
+                            }
                           }}
                           style={{
                             padding: '4px 6px',
@@ -684,7 +726,7 @@ export const FormulaSuggestionsSection: React.FC<FormulaSuggestionsSectionProps>
                             fontWeight: 700,
                             backgroundColor: '#ffffff',
                             color: '#16a34a',
-                            cursor: sugg.isAdopted || readOnly ? 'default' : 'pointer',
+                            cursor: readOnly ? 'default' : 'pointer',
                           }}
                         >
                           <option value={1}>1 (مقبول)</option>
@@ -699,11 +741,19 @@ export const FormulaSuggestionsSection: React.FC<FormulaSuggestionsSectionProps>
                       {/* Priority Control Directly from Table */}
                       <td style={{ padding: '12px 14px', textAlign: 'center' }}>
                         <select
-                          disabled={sugg.isAdopted || readOnly}
+                          disabled={readOnly}
                           value={effectivePriority}
-                          onChange={(e) => {
+                          onChange={async (e) => {
                             const val = e.target.value as PriorityLevel;
                             setCustomPriorities((prev) => ({ ...prev, [sugg.resultId]: val }));
+                            if (sugg.isAdopted && sugg.adoptedAreaId) {
+                              try {
+                                await evaluatorApi.updateImprovementArea(sugg.adoptedAreaId, { priority: val });
+                                onToast('success', 'تم تحديث أولوية الإجراء المتبنى بنجاح.');
+                              } catch {
+                                onToast('error', 'تعذر تحديث الأولوية في قاعدة البيانات.');
+                              }
+                            }
                           }}
                           style={{
                             padding: '4px 8px',
@@ -729,7 +779,7 @@ export const FormulaSuggestionsSection: React.FC<FormulaSuggestionsSectionProps>
                                 ? '#fde68a'
                                 : '#bbf7d0'
                             }`,
-                            cursor: sugg.isAdopted || readOnly ? 'default' : 'pointer',
+                            cursor: readOnly ? 'default' : 'pointer',
                             outline: 'none',
                           }}
                         >

@@ -8,6 +8,7 @@ import {
   ChevronUp,
   Link2,
   ExternalLink,
+  RotateCcw,
 } from 'lucide-react';
 import { evaluatorApi } from '../../api/evaluatorApi';
 import type {
@@ -298,6 +299,35 @@ export const EvidenceInventoryPage: React.FC<EvidenceInventoryPageProps> = ({
               }}
             />
           </div>
+          {/* زر إعادة ضبط الفلاتر */}
+          {(filterType !== 'all' || searchTerm.trim()) && (
+            <button
+              type="button"
+              onClick={() => {
+                setFilterType('all');
+                setSearchTerm('');
+              }}
+              style={{
+                padding: '6px 12px',
+                borderRadius: '8px',
+                backgroundColor: '#FEF2F2',
+                border: '1px solid #FECACA',
+                color: '#DC2626',
+                fontSize: '12px',
+                fontWeight: 700,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                whiteSpace: 'nowrap',
+              }}
+              title="إعادة ضبط الفلاتر والبحث"
+            >
+              <RotateCcw size={13} />
+              <span>إعادة ضبط الفلاتر</span>
+            </button>
+          )}
+
           <button
             type="button"
             onClick={fetchInventory}
@@ -426,6 +456,37 @@ export const EvidenceInventoryPage: React.FC<EvidenceInventoryPageProps> = ({
                             </div>
                             {ind.domainName && (
                               <div style={{ fontSize: '11.5px', color: '#64748b' }}>المجال: {ind.domainName}</div>
+                            )}
+                            {ind.adoptedPlanTitle && (
+                              <button
+                                type="button"
+                                onClick={() => onNavigate?.('improvement-plan')}
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  marginTop: '5px',
+                                  padding: '2px 8px',
+                                  borderRadius: '6px',
+                                  backgroundColor: '#EFF6FF',
+                                  color: '#1D4ED8',
+                                  border: '1px solid #BFDBFE',
+                                  fontSize: '11px',
+                                  fontWeight: 700,
+                                  cursor: 'pointer',
+                                  width: 'fit-content',
+                                  transition: 'all 0.2s',
+                                }}
+                                onMouseEnter={(e) => {
+                                  e.currentTarget.style.backgroundColor = '#DBEAFE';
+                                }}
+                                onMouseLeave={(e) => {
+                                  e.currentTarget.style.backgroundColor = '#EFF6FF';
+                                }}
+                                title="الانتقال إلى خطة التحسين"
+                              >
+                                📋 متبنى في: {ind.adoptedPlanTitle}
+                              </button>
                             )}
 
                             {/* تفصيل متطلبات المؤشر والشواهد المغطية لكل متطلب */}

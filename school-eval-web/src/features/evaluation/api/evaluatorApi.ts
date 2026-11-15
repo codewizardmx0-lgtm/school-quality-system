@@ -180,6 +180,14 @@ export const evaluatorApi = {
   },
 
   /**
+   * DELETE /api/v1/evidences/documents/{documentId}
+   * حذف الشاهد نهائياً إذا لم يكن مرتبطاً بأي مؤشر (رفع بالخطأ أو مفكوك الارتباط)
+   */
+  async deleteUnlinkedDocument(documentId: number): Promise<void> {
+    await del(`/evidences/documents/${documentId}`);
+  },
+
+  /**
    * 6c. GET /api/v1/evidences/documents/{documentId}/versions
    * استرجاع سجل الإصدارات التاريخية للشاهد
    */
@@ -344,6 +352,13 @@ export const evaluatorApi = {
    */
   async updateImprovementAction(actionId: number, payload: UpdateImprovementActionPayload): Promise<void> {
     await put(`/improvement-actions/${actionId}`, payload);
+  },
+
+  /**
+   * Update priority or target score of an adopted improvement area
+   */
+  async updateImprovementArea(areaId: number, payload: { priority?: PriorityLevel; targetScore?: number; name?: string }): Promise<void> {
+    await patch(`/improvement-areas/${areaId}`, payload);
   },
 
   /**
@@ -713,11 +728,15 @@ export const evaluatorApi = {
 
   /**
    * 24. POST /api/v1/improvement-areas
-   * Adopt a suggestion and create an approved improvement area
+   * Adopt a suggestion and create an approved improvement area with its executable action
    */
   async adoptSuggestion(payload: {
     resultId: number;
     name?: string;
+    actionTitle?: string;
+    leader?: string;
+    startDate?: string;
+    dueDate?: string;
     description?: string;
     priority?: PriorityLevel;
     targetScore?: number;
@@ -725,7 +744,11 @@ export const evaluatorApi = {
   }): Promise<void> {
     await post('/improvement-areas', {
       resultId: payload.resultId,
-      name: payload.name || 'مجال تحسين معتمد لمؤشر الفجوة',
+      name: payload.name || payload.actionTitle || 'مجال تحسين معتمد لمؤشر الفجوة',
+      actionTitle: payload.actionTitle || payload.name,
+      leader: payload.leader,
+      startDate: payload.startDate,
+      dueDate: payload.dueDate,
       description: payload.description,
       priority: payload.priority || 'High',
       targetScore: payload.targetScore,

@@ -248,4 +248,32 @@ class PlanVersionLifecycleTest extends TestCase
         $this->assertNotNull($adoptedItem['adoptedPlan']);
         $this->assertEquals($plan->plan_id, $adoptedItem['adoptedPlan']['planId']);
     }
+
+    public function test_cannot_create_duplicate_active_plan_of_same_type_in_cycle(): void
+    {
+        // 1. ضمان وجود خطة نشطة لنوع QualityImprovement
+        ImprovementPlan::firstOrCreate([
+            'school_id' => $this->school->school_id,
+            'cycle_id' => $this->cycle->cycle_id,
+            'plan_type' => ImprovementPlan::TYPE_QUALITY_IMPROVEMENT,
+            'status' => 'Active',
+        ], [
+            'title' => 'خطة تحسين الجودة المدرسية النشطة',
+            'version_number' => 1,
+            'version_tag' => 'خطة أساسية معتمدة',
+            'created_by_user_id' => $this->evaluator->user_id,
+            'start_date' => now()->toDateString(),
+            'end_date' => now()->addMonths(6)->toDateString(),
+        ]);
+
+        // 2. محاولة إنشاء خطة جديدة من نفس النوع يجب أن تُرفض بكود 422
+        $res = $this->actingAs($this->evaluator, 'sanctum')
+            ->postJson('/api/v1/evaluator/improvement-plans', [
+                'title' => 'خطة مكررة غير مسموح بها',
+                'planType' => ImprovementPlan::TYPE_QUALITY_IMPROVEMENT,
+            ]);
+
+        $res->assertStatus(422);
+        $res->assertJsonValidationErrors(['planType']);
+    }
 }

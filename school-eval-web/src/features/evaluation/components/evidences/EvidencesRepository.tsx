@@ -22,11 +22,13 @@ import {
   Search,
   Download,
   FileText,
+  Trash2,
   Table as TableIcon,
   LayoutGrid,
   Link2,
   Pencil,
   RefreshCw,
+  RotateCcw,
   ExternalLink,
   History,
   ArrowUpDown,
@@ -209,6 +211,24 @@ export const EvidencesRepository: React.FC<EvidencesRepositoryProps> = ({
       addToast('success', `تم بدء تحميل الملف: ${evidence.fileName}`);
     } catch (err: unknown) {
       addToast('error', (err as Error)?.message || 'تعذر تحميل الملف من الخادم.');
+    }
+  };
+
+  const handleDeleteUnlinked = async (evidence: EvidenceItem) => {
+    if (readOnly) return;
+    const confirmed = window.confirm(
+      `هل أنت متأكد من حذف الشاهد غير المرتبط «${evidence.title}» نهائياً من مستودع المدرسة؟\nلا يمكن التراجع عن هذا الإجراء.`
+    );
+    if (!confirmed) return;
+
+    try {
+      await evaluatorApi.deleteUnlinkedDocument(evidence.documentId);
+      addToast('success', `تم حذف الشاهد «${evidence.title}» نهائياً بنجاح.`);
+      await fetchEvidences();
+    } catch (err: any) {
+      console.error('Failed to delete unlinked evidence:', err);
+      const msg = err?.response?.data?.message || err?.message || 'فشل حذف الشاهد.';
+      addToast('error', msg);
     }
   };
 
@@ -705,6 +725,39 @@ export const EvidencesRepository: React.FC<EvidencesRepositoryProps> = ({
               <option value="title_asc">أبجدياً (اسم الشاهد أ-ي)</option>
             </select>
           </div>
+
+          {/* زر إعادة ضبط الفلاتر إن كانت نشطة */}
+          {(searchTerm || selectedStandardFilter !== undefined || selectedFormatFilter !== '' || linkFilter !== 'all' || documentTypeFilter !== 'all' || sortBy !== 'standard') && (
+            <button
+              type="button"
+              onClick={() => {
+                setSearchTerm('');
+                setSelectedStandardFilter(undefined);
+                setSelectedFormatFilter('');
+                setLinkFilter('all');
+                setDocumentTypeFilter('all');
+                setSortBy('standard');
+              }}
+              style={{
+                padding: '7px 12px',
+                borderRadius: '8px',
+                backgroundColor: '#FEF2F2',
+                border: '1px solid #FECACA',
+                color: '#DC2626',
+                fontSize: '12px',
+                fontWeight: 700,
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px',
+                transition: 'all 0.15s ease',
+              }}
+              title="مسح كافة معايير الفلترة والبحث والفرز"
+            >
+              <RotateCcw size={13} />
+              <span>إعادة ضبط الفلاتر</span>
+            </button>
+          )}
         </div>
 
         {/* View Mode & Actions */}
@@ -1169,6 +1222,28 @@ export const EvidencesRepository: React.FC<EvidencesRepositoryProps> = ({
                           <History size={12} />
                           الإصدارات
                         </button>
+                        {!readOnly && (ev.isUnlinked || !ev.linkedIndicators || ev.linkedIndicators.length === 0) && (
+                          <button
+                            onClick={() => handleDeleteUnlinked(ev)}
+                            style={{
+                              padding: '5px 8px',
+                              borderRadius: '6px',
+                              backgroundColor: '#FEF2F2',
+                              border: '1px solid #FECACA',
+                              color: '#DC2626',
+                              fontSize: '11.5px',
+                              fontWeight: 700,
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                            }}
+                            title="حذف هذا الشاهد غير المرتبط نهائياً من مستودع المدرسة"
+                          >
+                            <Trash2 size={12} />
+                            حذف
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -1190,6 +1265,7 @@ export const EvidencesRepository: React.FC<EvidencesRepositoryProps> = ({
               onManageLinks={handleOpenLinkModal}
               onEditMetadata={handleOpenEditMetadata}
               onViewVersions={(evidence) => setVersionsModalEvidence(evidence)}
+              onDeleteUnlinked={handleDeleteUnlinked}
               onNavigate={onNavigate}
             />
           ))}

@@ -34,11 +34,12 @@ export * from './components/evidences/UploadEvidenceModal';
 
 export * from './components/ai-assistant/GapAnalysisPage';
 export * from './components/ai-assistant/AiRecommendationCard';
-export * from './components/ai-assistant/TransferToActionModal';
+export * from './components/ai-assistant/AdoptSuggestionModal';
 
 export * from './components/improvement-plan/ImprovementPlanPage';
 export * from './components/improvement-plan/AddActionModal';
 export * from './components/improvement-plan/ActionProgressModal';
+export * from './components/improvement-plan/EditActionModal';
 
 export * from './components/final-review/InternalReviewPage';
 export * from './components/final-review/DraftReportPreview';

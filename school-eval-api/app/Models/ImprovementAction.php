@@ -51,6 +51,9 @@ class ImprovementAction extends Model
         'status',
         'completion_percentage',
         'progress_description',
+        'baseline_score',
+        'baseline_target_score',
+        'baseline_gap',
     ];
 
     /**
@@ -64,6 +67,9 @@ class ImprovementAction extends Model
             'start_date'            => 'date',
             'due_date'              => 'date',
             'completion_percentage' => 'integer',
+            'baseline_score'        => 'integer',
+            'baseline_target_score' => 'integer',
+            'baseline_gap'          => 'integer',
             'created_at'            => 'datetime',
             'updated_at'            => 'datetime',
         ];

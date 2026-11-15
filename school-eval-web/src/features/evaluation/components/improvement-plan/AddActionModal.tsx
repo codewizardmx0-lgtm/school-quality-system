@@ -31,6 +31,8 @@ export const AddActionModal: React.FC<AddActionModalProps> = ({
   const [isPopoverOpen, setIsPopoverOpen] = useState(false);
   const [areaSearch, setAreaSearch] = useState('');
   const [priorityFilter, setPriorityFilter] = useState<'ALL' | 'High' | 'Medium' | 'Low'>('ALL');
+  const [currentScoreFilter, setCurrentScoreFilter] = useState<string>('ALL');
+  const [targetScoreFilter, setTargetScoreFilter] = useState<string>('ALL');
   const popoverRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -63,6 +65,18 @@ export const AddActionModal: React.FC<AddActionModalProps> = ({
       if (priorityFilter !== 'ALL' && area.priority !== priorityFilter) {
         return false;
       }
+      if (currentScoreFilter !== 'ALL') {
+        const areaScore = area.score !== undefined && area.score !== null ? Math.round(Number(area.score)) : 0;
+        if (areaScore !== Number(currentScoreFilter)) {
+          return false;
+        }
+      }
+      if (targetScoreFilter !== 'ALL') {
+        const areaTarget = area.targetScore !== undefined && area.targetScore !== null ? Math.round(Number(area.targetScore)) : 0;
+        if (areaTarget !== Number(targetScoreFilter)) {
+          return false;
+        }
+      }
       if (!areaSearch.trim()) return true;
       const q = areaSearch.toLowerCase().trim();
       const nameMatch = area.name.toLowerCase().includes(q);
@@ -71,7 +85,7 @@ export const AddActionModal: React.FC<AddActionModalProps> = ({
       const stdNameMatch = area.standardName ? area.standardName.toLowerCase().includes(q) : false;
       return nameMatch || codeMatch || indNameMatch || stdNameMatch;
     });
-  }, [areas, areaSearch, priorityFilter]);
+  }, [areas, areaSearch, priorityFilter, currentScoreFilter, targetScoreFilter]);
 
   if (!isOpen) return null;
 
@@ -314,6 +328,37 @@ export const AddActionModal: React.FC<AddActionModalProps> = ({
                       ? 'أولوية متوسطة'
                       : 'أولوية منخفضة'}
                   </span>
+                  {selectedArea.existingLinks && selectedArea.existingLinks.length > 0 ? (
+                    <span
+                      style={{
+                        fontSize: '11px',
+                        padding: '2px 7px',
+                        borderRadius: '6px',
+                        backgroundColor: '#EFF6FF',
+                        color: '#1D4ED8',
+                        fontWeight: 700,
+                        flexShrink: 0,
+                        border: '1px solid #BFDBFE',
+                      }}
+                    >
+                      🏷️ مضاف في: {selectedArea.existingLinks.map(l => l.planTitle).join(' | ')}
+                    </span>
+                  ) : selectedArea.alreadyAdoptedPlanTitle ? (
+                    <span
+                      style={{
+                        fontSize: '11px',
+                        padding: '2px 7px',
+                        borderRadius: '6px',
+                        backgroundColor: '#EFF6FF',
+                        color: '#1D4ED8',
+                        fontWeight: 700,
+                        flexShrink: 0,
+                        border: '1px solid #BFDBFE',
+                      }}
+                    >
+                      🏷️ في: {selectedArea.alreadyAdoptedPlanTitle}
+                    </span>
+                  ) : null}
                 </div>
               ) : (
                 <span style={{ fontSize: '13px', color: '#94A3B8' }}>
@@ -342,7 +387,7 @@ export const AddActionModal: React.FC<AddActionModalProps> = ({
                   gap: '10px',
                 }}
               >
-                {/* Search Bar & Priority Filter Pills */}
+                {/* Search Bar */}
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                   <div
                     style={{
@@ -380,20 +425,36 @@ export const AddActionModal: React.FC<AddActionModalProps> = ({
                       </button>
                     )}
                   </div>
-                  {/* Priority Pills */}
-                  <div style={{ display: 'flex', gap: '4px' }}>
+                </div>
+
+                {/* Filter Controls Row: Priority, Current Score, Target Score */}
+                <div
+                  style={{
+                    display: 'flex',
+                    flexWrap: 'wrap',
+                    gap: '10px',
+                    alignItems: 'center',
+                    padding: '8px 10px',
+                    backgroundColor: '#F8FAFC',
+                    borderRadius: '8px',
+                    border: '1px solid #E2E8F0',
+                  }}
+                >
+                  {/* Priority Filter */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <span style={{ fontSize: '11px', fontWeight: 700, color: '#475569' }}>الأولوية:</span>
                     {(['ALL', 'High', 'Medium', 'Low'] as const).map((lvl) => (
                       <button
                         key={lvl}
                         type="button"
                         onClick={() => setPriorityFilter(lvl)}
                         style={{
-                          padding: '5px 9px',
-                          borderRadius: '6px',
-                          border: priorityFilter === lvl ? '1px solid #059669' : '1px solid #E2E8F0',
+                          padding: '3px 7px',
+                          borderRadius: '5px',
+                          border: priorityFilter === lvl ? '1px solid #059669' : '1px solid #CBD5E1',
                           backgroundColor: priorityFilter === lvl ? '#ECFDF5' : '#FFFFFF',
                           color: priorityFilter === lvl ? '#065F46' : '#64748B',
-                          fontSize: '11px',
+                          fontSize: '10.5px',
                           fontWeight: 700,
                           cursor: 'pointer',
                         }}
@@ -408,13 +469,61 @@ export const AddActionModal: React.FC<AddActionModalProps> = ({
                       </button>
                     ))}
                   </div>
+
+                  {/* Current Score Filter */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <span style={{ fontSize: '11px', fontWeight: 700, color: '#475569' }}>الحالية:</span>
+                    {(['ALL', '0', '1', '2', '3'] as const).map((sc) => (
+                      <button
+                        key={sc}
+                        type="button"
+                        onClick={() => setCurrentScoreFilter(sc)}
+                        style={{
+                          padding: '3px 7px',
+                          borderRadius: '5px',
+                          border: currentScoreFilter === sc ? '1px solid #2563EB' : '1px solid #CBD5E1',
+                          backgroundColor: currentScoreFilter === sc ? '#EFF6FF' : '#FFFFFF',
+                          color: currentScoreFilter === sc ? '#1E40AF' : '#64748B',
+                          fontSize: '10.5px',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        {sc === 'ALL' ? 'الكل' : `${sc}★`}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Target Score Filter */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <span style={{ fontSize: '11px', fontWeight: 700, color: '#475569' }}>المستهدف:</span>
+                    {(['ALL', '1', '2', '3'] as const).map((sc) => (
+                      <button
+                        key={sc}
+                        type="button"
+                        onClick={() => setTargetScoreFilter(sc)}
+                        style={{
+                          padding: '3px 7px',
+                          borderRadius: '5px',
+                          border: targetScoreFilter === sc ? '1px solid #D97706' : '1px solid #CBD5E1',
+                          backgroundColor: targetScoreFilter === sc ? '#FFFBEB' : '#FFFFFF',
+                          color: targetScoreFilter === sc ? '#B45309' : '#64748B',
+                          fontSize: '10.5px',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        {sc === 'ALL' ? 'الكل' : `${sc}★`}
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
                 {/* Items List */}
                 <div style={{ maxHeight: '240px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '6px' }}>
                   {filteredAreas.length === 0 ? (
                     <div style={{ padding: '24px', textAlign: 'center', color: '#94A3B8', fontSize: '12.5px' }}>
-                      لا توجد إجراءات متبناة تطابق البحث.
+                      لا توجد إجراءات متبناة تطابق البحث والفلترة.
                     </div>
                   ) : (
                     filteredAreas.map((area) => {
@@ -474,8 +583,81 @@ export const AddActionModal: React.FC<AddActionModalProps> = ({
                                 {area.standardName || area.indicatorName}
                               </span>
                             )}
+                            {/* Repeating links for all plans and persons */}
+                            {area.existingLinks && area.existingLinks.length > 0 ? (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', marginTop: '4px' }}>
+                                {area.existingLinks.map((link, idx) => (
+                                  <span
+                                    key={idx}
+                                    style={{
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '4px',
+                                      padding: '2px 7px',
+                                      borderRadius: '5px',
+                                      backgroundColor: '#EFF6FF',
+                                      color: '#1D4ED8',
+                                      border: '1px solid #BFDBFE',
+                                      fontSize: '11px',
+                                      fontWeight: 700,
+                                      width: 'fit-content',
+                                    }}
+                                  >
+                                    <span>🏷️ مضاف بالفعل في:</span>
+                                    <strong style={{ color: '#1E40AF' }}>{link.planTitle}</strong>
+                                    {link.person && link.person !== 'قيد التعيين' && (
+                                      <span style={{ color: '#4338CA', marginRight: '4px' }}>
+                                        مع <strong>{link.person}</strong>
+                                      </span>
+                                    )}
+                                  </span>
+                                ))}
+                              </div>
+                            ) : area.alreadyAdoptedPlanTitle ? (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', marginTop: '4px' }}>
+                                <span
+                                  style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '4px',
+                                    padding: '2px 7px',
+                                    borderRadius: '5px',
+                                    backgroundColor: '#EFF6FF',
+                                    color: '#1D4ED8',
+                                    border: '1px solid #BFDBFE',
+                                    fontSize: '11px',
+                                    fontWeight: 700,
+                                    width: 'fit-content',
+                                  }}
+                                >
+                                  <span>🏷️ مضاف بالفعل في:</span>
+                                  <strong style={{ color: '#1E40AF' }}>{area.alreadyAdoptedPlanTitle}</strong>
+                                  {area.alreadyAdoptedPerson && area.alreadyAdoptedPerson !== 'قيد التعيين' && (
+                                    <span style={{ color: '#4338CA', marginRight: '4px' }}>
+                                      مع <strong>{area.alreadyAdoptedPerson}</strong>
+                                    </span>
+                                  )}
+                                </span>
+                              </div>
+                            ) : null}
                           </div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+                            <span
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '3px',
+                                padding: '2px 7px',
+                                borderRadius: '6px',
+                                backgroundColor: '#F8FAFC',
+                                border: '1px solid #E2E8F0',
+                                color: '#334155',
+                                fontSize: '11px',
+                                fontWeight: 600,
+                              }}
+                            >
+                              الحالية: {area.score !== undefined && area.score !== null ? area.score : 0}★
+                            </span>
                             {area.targetScore && (
                               <span
                                 style={{
@@ -484,11 +666,11 @@ export const AddActionModal: React.FC<AddActionModalProps> = ({
                                   gap: '3px',
                                   padding: '2px 7px',
                                   borderRadius: '6px',
-                                  backgroundColor: '#F8FAFC',
-                                  border: '1px solid #E2E8F0',
-                                  color: '#334155',
+                                  backgroundColor: '#FFFBEB',
+                                  border: '1px solid #FEF3C7',
+                                  color: '#B45309',
                                   fontSize: '11px',
-                                  fontWeight: 600,
+                                  fontWeight: 700,
                                 }}
                               >
                                 <Award size={12} style={{ color: '#D97706' }} />
@@ -528,6 +710,29 @@ export const AddActionModal: React.FC<AddActionModalProps> = ({
                     })
                   )}
                 </div>
+              </div>
+            )}
+
+            {/* إشعار عند اختيار إجراء متبنى مسبقاً في خطة أخرى */}
+            {selectedArea?.alreadyAdoptedPlanTitle && (
+              <div
+                style={{
+                  marginTop: '8px',
+                  padding: '8px 12px',
+                  borderRadius: '8px',
+                  backgroundColor: '#EFF6FF',
+                  border: '1px solid #BFDBFE',
+                  color: '#1E40AF',
+                  fontSize: '11.5px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                }}
+              >
+                <span style={{ fontSize: '14px' }}>ℹ️</span>
+                <span>
+                  هذا الإجراء مسند حالياً إلى: <strong>{selectedArea.alreadyAdoptedPlanTitle}</strong>. يمكنك إضافة إجراء تنفيذي إضافي له أو إسناده لمسؤول تنفيذي آخر.
+                </span>
               </div>
             )}
           </div>

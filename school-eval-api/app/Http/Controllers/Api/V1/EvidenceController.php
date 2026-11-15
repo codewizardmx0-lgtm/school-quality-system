@@ -81,15 +81,29 @@ class EvidenceController extends Controller
         $sufficiencyService = app(\App\Services\EvidenceSufficiencyService::class);
         $sufficiency = $sufficiencyService->evaluateEvaluation($evaluation);
 
+        // جلب الخطط النشطة المتبناة لمؤشرات التقييم الحالي (لربط جرد الشواهد بخطة التحسين دون تداخل)
+        $adoptedPlansMap = \Illuminate\Support\Facades\DB::table('improvement_areas as ia')
+            ->join('evaluation_results as er', 'er.result_id', '=', 'ia.result_id')
+            ->join('plan_improvement_areas as pia', 'pia.area_id', '=', 'ia.area_id')
+            ->join('improvement_plans as ip', 'ip.plan_id', '=', 'pia.plan_id')
+            ->where('er.evaluation_id', $evaluation->evaluation_id)
+            ->where('ip.status', 'Active')
+            ->select('ia.indicator_id', 'ip.title as plan_title', 'ip.version_number', 'ip.plan_type')
+            ->get()
+            ->keyBy('indicator_id');
+
         $standardsBreakdown = [];
         foreach ($sufficiency['standards'] as $std) {
             $stdIndicatorsList = [];
             foreach ($std['indicators'] as $ind) {
+                $adoptedPlan = $adoptedPlansMap->get($ind['indicator_id']);
                 $stdIndicatorsList[] = [
                     'indicatorId'            => $ind['indicator_id'],
                     'indicatorCode'          => $ind['code'],
                     'indicatorName'          => $ind['name'],
                     'domainName'             => $ind['domain_name'],
+                    'adoptedPlanTitle'       => $adoptedPlan ? "{$adoptedPlan->plan_title} (v{$adoptedPlan->version_number})" : null,
+                    'adoptedPlanType'        => $adoptedPlan ? $adoptedPlan->plan_type : null,
                     'mandatoryRequiredCount' => $ind['mandatory_required_count'],
                     'totalRequiredCount'     => $ind['total_required_count'],
                     'uploadedEvidenceCount'  => $ind['uploaded_evidence_count'],

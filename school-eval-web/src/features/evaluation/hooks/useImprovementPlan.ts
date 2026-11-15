@@ -56,6 +56,11 @@ export function useImprovementPlan() {
     setSelectedPlanId(planId);
   }, []);
 
+  const switchPlan = useCallback((planType: PlanType, planId: number | null = null) => {
+    setSelectedPlanId(planId);
+    setSelectedPlanType(planType);
+  }, []);
+
   const cloneVersion = useCallback(
     async (planId: number) => {
       setIsSubmitting(true);
@@ -149,6 +154,20 @@ export function useImprovementPlan() {
                   : act.completionPercentage,
               progressDescription:
                 payload.progressDescription !== undefined ? payload.progressDescription : act.progressDescription,
+              priority: payload.priority || act.priority,
+              priorityArabic:
+                payload.priority === 'High'
+                  ? 'عالية'
+                  : payload.priority === 'Medium'
+                  ? 'متوسطة'
+                  : payload.priority === 'Low'
+                  ? 'منخفضة'
+                  : act.priorityArabic,
+              targetScore: payload.targetScore !== undefined ? payload.targetScore : act.targetScore,
+              gap:
+                payload.targetScore !== undefined && act.score !== undefined && act.score !== null
+                  ? Math.max(0, payload.targetScore - act.score)
+                  : act.gap,
             };
           }),
         };
@@ -156,13 +175,15 @@ export function useImprovementPlan() {
 
       try {
         await evaluatorApi.updateImprovementAction(actionId, payload);
+        await fetchPlan();
+        await fetchPlansList();
       } catch (err) {
         console.error(`Failed to update action ${actionId}:`, err);
       } finally {
         setIsSubmitting(false);
       }
     },
-    []
+    [fetchPlan, fetchPlansList]
   );
 
   // إنشاء خطة تحسين جديدة وربطها بالمجالات
@@ -209,6 +230,7 @@ export function useImprovementPlan() {
     setSelectedPlanType,
     selectedPlanId,
     selectPlan,
+    switchPlan,
     plansList,
     isLoadingPlansList,
     refreshPlansList: fetchPlansList,

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useAiAnalysis } from '../../hooks/useAiAnalysis';
 import { AiRecommendationCard } from './AiRecommendationCard';
-import { TransferToActionModal } from './TransferToActionModal';
+import { AdoptSuggestionModal } from './AdoptSuggestionModal';
 import { FormulaSuggestionsSection } from './FormulaSuggestionsSection';
 import { AiDiscrepancyReviewTab } from './AiDiscrepancyReviewTab';
 import { useToast } from '../../../admin/components/common/useToast';
@@ -17,6 +17,8 @@ import {
   RefreshCw,
   Lightbulb,
   ShieldAlert,
+  Table,
+  LayoutGrid,
 } from 'lucide-react';
 
 interface GapAnalysisPageProps {
@@ -41,6 +43,7 @@ export const GapAnalysisPage: React.FC<GapAnalysisPageProps> = ({
 
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
   const [activeView, setActiveView] = useState<'suggestions' | 'ai' | 'audit'>('suggestions');
+  const [aiViewMode, setAiViewMode] = useState<'table' | 'cards'>('table');
   const { toasts, addToast, dismissToast } = useToast();
 
 
@@ -374,79 +377,290 @@ export const GapAnalysisPage: React.FC<GapAnalysisPageProps> = ({
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '18px', flexWrap: 'wrap', gap: '12px' }}>
           <div>
             <h3 style={{ fontSize: '16px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
-              المبادرات والإجراءات التنفيذية المقترحة للخطة
+              المبادرات والإجراءات التنفيذية المقترحة للخطة ({recommendations?.initiatives.length || 0})
             </h3>
             <p style={{ fontSize: '12px', color: '#64748B', margin: '3px 0 0 0' }}>
-              راجع المقترحات وعدلها أو انقلها مباشرة لتصبح إجراءات تنفيذية في خطة التحسين المدرسية
+              توصيات نوعية ومشاريع تحسين مؤسسية مستخرجة عبر الذكاء الاصطناعي من تحليل المعايير والشواهد
             </p>
           </div>
 
-          {!readOnly && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+            {/* View Mode Toggle: Table vs Cards */}
+            <div style={{ display: 'flex', border: '1px solid #CBD5E1', borderRadius: '8px', overflow: 'hidden' }}>
               <button
-                onClick={handleBatchTransferAll}
+                type="button"
+                onClick={() => setAiViewMode('table')}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '6px',
-                  padding: '9px 18px',
-                  borderRadius: '8px',
-                  backgroundColor: '#059669',
-                  color: '#FFFFFF',
-                  fontSize: '13px',
-                  fontWeight: 800,
+                  gap: '4px',
+                  padding: '6px 12px',
+                  fontSize: '12px',
+                  fontWeight: 700,
                   border: 'none',
                   cursor: 'pointer',
-                  boxShadow: '0 2px 8px rgba(5, 150, 105, 0.25)',
+                  backgroundColor: aiViewMode === 'table' ? '#8B5CF6' : '#FFFFFF',
+                  color: aiViewMode === 'table' ? '#FFFFFF' : '#64748B',
+                  transition: 'all 0.15s ease',
                 }}
               >
-                <Target size={16} />
-                <span>نقل التوصيات المحددة إلى مسودة الخطة</span>
+                <Table size={13} />
+                <span>عرض كجدول</span>
               </button>
-
               <button
-                onClick={() => onNavigate('improvement-plan')}
+                type="button"
+                onClick={() => setAiViewMode('cards')}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '6px',
-                  padding: '9px 16px',
-                  borderRadius: '8px',
-                  backgroundColor: '#F8FAFC',
-                  color: '#334155',
-                  border: '1px solid #CBD5E1',
-                  fontSize: '12.5px',
-                  fontWeight: 600,
+                  gap: '4px',
+                  padding: '6px 12px',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  border: 'none',
                   cursor: 'pointer',
+                  backgroundColor: aiViewMode === 'cards' ? '#8B5CF6' : '#FFFFFF',
+                  color: aiViewMode === 'cards' ? '#FFFFFF' : '#64748B',
+                  transition: 'all 0.15s ease',
                 }}
               >
-                <span>استعراض الخطة</span>
-                <ArrowLeft size={14} />
+                <LayoutGrid size={13} />
+                <span>عرض كبطاقات</span>
               </button>
             </div>
-          )}
+
+            {!readOnly && (
+              <>
+                <button
+                  onClick={handleBatchTransferAll}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '8px 16px',
+                    borderRadius: '8px',
+                    backgroundColor: '#059669',
+                    color: '#FFFFFF',
+                    fontSize: '12.5px',
+                    fontWeight: 800,
+                    border: 'none',
+                    cursor: 'pointer',
+                    boxShadow: '0 2px 8px rgba(5, 150, 105, 0.25)',
+                  }}
+                >
+                  <Target size={15} />
+                  <span>نقل التوصيات المحددة إلى مسودة الخطة</span>
+                </button>
+
+                <button
+                  onClick={() => onNavigate('improvement-plan')}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '8px 14px',
+                    borderRadius: '8px',
+                    backgroundColor: '#F8FAFC',
+                    color: '#334155',
+                    border: '1px solid #CBD5E1',
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                  }}
+                >
+                  <span>استعراض الخطة</span>
+                  <ArrowLeft size={14} />
+                </button>
+              </>
+            )}
+          </div>
         </div>
 
-        {/* Initiatives Grid */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '16px' }}>
-          {recommendations?.initiatives.map((init) => (
-            <AiRecommendationCard
-              key={init.id}
-              initiative={init}
-              onUpdateStatus={updateRecommendationStatus}
-              onOpenTransferModal={handleOpenTransfer}
-              readOnly={readOnly}
-            />
-          ))}
-        </div>
+        {/* Initiatives View: Table or Cards */}
+        {aiViewMode === 'table' ? (
+          <div style={{ overflowX: 'auto', border: '1px solid #E2E8F0', borderRadius: '10px' }}>
+            <table style={{ width: '100%', minWidth: '950px', borderCollapse: 'collapse', textAlign: 'right' }}>
+              <thead>
+                <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '2px solid #F1F5F9' }}>
+                  <th style={{ padding: '12px 14px', fontSize: '12px', fontWeight: 700, color: '#475569', width: '45px', textAlign: 'center' }}>#</th>
+                  <th style={{ padding: '12px 14px', fontSize: '12px', fontWeight: 700, color: '#475569', minWidth: '280px' }}>المبادرة الاستراتيجية المقترحة</th>
+                  <th style={{ padding: '12px 12px', fontSize: '12px', fontWeight: 700, color: '#475569', width: '90px', textAlign: 'center' }}>الأولوية</th>
+                  <th style={{ padding: '12px 12px', fontSize: '12px', fontWeight: 700, color: '#475569', width: '110px', textAlign: 'center' }}>الحالة</th>
+                  <th style={{ padding: '12px 14px', fontSize: '12px', fontWeight: 700, color: '#475569', width: '220px' }}>التعديل والتخصيص البشري</th>
+                  <th style={{ padding: '12px 14px', fontSize: '12px', fontWeight: 700, color: '#475569', textAlign: 'center', width: '170px' }}>الإجراءات</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(!recommendations?.initiatives || recommendations.initiatives.length === 0) ? (
+                  <tr>
+                    <td colSpan={6} style={{ padding: '40px', textAlign: 'center', color: '#64748B', fontSize: '13px' }}>
+                      لا توجد مبادرات مقترحة حالياً. اضغط على «إعادة تشغيل التحليل الذكي».
+                    </td>
+                  </tr>
+                ) : (
+                  recommendations.initiatives.map((init, idx) => {
+                    const isAccepted = init.status === 'Accepted';
+                    const isIgnored = init.status === 'Ignored';
+                    return (
+                      <tr
+                        key={init.id}
+                        style={{
+                          borderBottom: '1px solid #F1F5F9',
+                          backgroundColor: isAccepted ? '#F0FDF4' : isIgnored ? '#F8FAFC' : 'transparent',
+                          opacity: isIgnored ? 0.65 : 1,
+                        }}
+                      >
+                        <td style={{ padding: '14px 12px', textAlign: 'center', fontSize: '12px', fontWeight: 700, color: '#94A3B8' }}>
+                          {idx + 1}
+                        </td>
+                        <td style={{ padding: '14px' }}>
+                          <div style={{ fontSize: '13.5px', fontWeight: 700, color: '#0F172A', marginBottom: '4px' }}>
+                            {init.title}
+                          </div>
+                          <div style={{ fontSize: '12px', color: '#64748B', lineHeight: 1.5 }}>
+                            {init.description}
+                          </div>
+                        </td>
+                        <td style={{ padding: '14px 10px', textAlign: 'center' }}>
+                          <span
+                            style={{
+                              display: 'inline-block',
+                              padding: '3px 8px',
+                              borderRadius: '6px',
+                              fontSize: '11px',
+                              fontWeight: 800,
+                              backgroundColor: init.priority === 'High' ? '#FEE2E2' : '#EFF6FF',
+                              color: init.priority === 'High' ? '#DC2626' : '#2563EB',
+                              border: `1px solid ${init.priority === 'High' ? '#FECACA' : '#BFDBFE'}`,
+                            }}
+                          >
+                            {init.priority === 'High' ? 'عالية' : 'متوسطة'}
+                          </span>
+                        </td>
+                        <td style={{ padding: '14px 10px', textAlign: 'center' }}>
+                          <span
+                            style={{
+                              display: 'inline-block',
+                              padding: '3px 10px',
+                              borderRadius: '12px',
+                              fontSize: '11px',
+                              fontWeight: 700,
+                              backgroundColor:
+                                init.status === 'Accepted'
+                                  ? '#ECFDF5'
+                                  : init.status === 'Modified'
+                                  ? '#EFF6FF'
+                                  : init.status === 'Ignored'
+                                  ? '#F1F5F9'
+                                  : '#FFFBEB',
+                              color:
+                                init.status === 'Accepted'
+                                  ? '#059669'
+                                  : init.status === 'Modified'
+                                  ? '#2563EB'
+                                  : init.status === 'Ignored'
+                                  ? '#64748B'
+                                  : '#D97706',
+                            }}
+                          >
+                            {init.status === 'Accepted'
+                              ? 'معتمدة بالخطة'
+                              : init.status === 'Modified'
+                              ? 'معدلة'
+                              : init.status === 'Ignored'
+                              ? 'مستبعدة'
+                              : 'قيد المراجعة'}
+                          </span>
+                        </td>
+                        <td style={{ padding: '14px', fontSize: '12px', color: '#334155' }}>
+                          {init.humanModifications ? (
+                            <div style={{ fontStyle: 'italic', color: '#1E293B', backgroundColor: '#F8FAFC', padding: '6px 10px', borderRadius: '6px', border: '1px solid #E2E8F0' }}>
+                              "{init.humanModifications}"
+                            </div>
+                          ) : (
+                            <span style={{ color: '#94A3B8' }}>لم يتم تعديلها بعد</span>
+                          )}
+                        </td>
+                        <td style={{ padding: '14px', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                            <button
+                              type="button"
+                              onClick={() => handleOpenTransfer(init)}
+                              disabled={readOnly}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                padding: '6px 12px',
+                                borderRadius: '6px',
+                                backgroundColor: isAccepted ? '#ECFDF5' : '#059669',
+                                color: isAccepted ? '#065F46' : '#FFFFFF',
+                                border: isAccepted ? '1px solid #A7F3D0' : 'none',
+                                fontSize: '11.5px',
+                                fontWeight: 700,
+                                cursor: readOnly ? 'not-allowed' : 'pointer',
+                              }}
+                              title="تبني المبادرة ونقلها إلى خطة التحسين المحددة"
+                            >
+                              <Target size={13} />
+                              <span>{isAccepted ? 'إعادة الإدراج' : 'تبنّي وإدراج'}</span>
+                            </button>
+                            {!readOnly && (
+                              <button
+                                type="button"
+                                onClick={() => updateRecommendationStatus(init.id, isIgnored ? 'PendingReview' : 'Ignored')}
+                                style={{
+                                  padding: '6px 10px',
+                                  borderRadius: '6px',
+                                  backgroundColor: '#F1F5F9',
+                                  color: '#64748B',
+                                  border: '1px solid #CBD5E1',
+                                  fontSize: '11px',
+                                  fontWeight: 600,
+                                  cursor: 'pointer',
+                                }}
+                                title={isIgnored ? 'استعادة المبادرة' : 'استبعاد المبادرة'}
+                              >
+                                {isIgnored ? 'استعادة' : 'استبعاد'}
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          /* Initiatives Grid */
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '16px' }}>
+            {recommendations?.initiatives.map((init) => (
+              <AiRecommendationCard
+                key={init.id}
+                initiative={init}
+                onUpdateStatus={updateRecommendationStatus}
+                onOpenTransferModal={handleOpenTransfer}
+                readOnly={readOnly}
+              />
+            ))}
+          </div>
+        )}
       </div>
 
-      {/* Transfer Modal */}
-      <TransferToActionModal
+      {/* Unified Adoption Modal */}
+      <AdoptSuggestionModal
         isOpen={isTransferModalOpen}
-        onClose={() => setIsTransferModalOpen(false)}
+        onClose={() => {
+          setIsTransferModalOpen(false);
+          setSelectedInitiativeForTransfer(null);
+        }}
         initiative={selectedInitiativeForTransfer}
-        onConfirmTransfer={transferInitiativeToPlan}
+        onSuccess={(msg) => {
+          addToast('success', msg);
+          runAiAnalysis();
+        }}
       />
         </>
       )}

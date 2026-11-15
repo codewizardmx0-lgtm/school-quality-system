@@ -1,20 +1,17 @@
-import { exportToExcel, formatExportFilename } from '../../../admin/utils/exportUtils';
 import React, { useState, useEffect } from 'react';
 import { evaluatorApi } from '../../api/evaluatorApi';
 import { useImprovementPlan } from '../../hooks/useImprovementPlan';
 import { AddActionModal } from './AddActionModal';
 import { AddPlanModal } from './AddPlanModal';
 import { ActionProgressModal } from './ActionProgressModal';
-import { AttachActionEvidenceModal } from './AttachActionEvidenceModal';
 import { useToast } from '../../../admin/components/common/useToast';
 import { ToastNotification } from '../../../admin/components/common/ToastNotification';
-import { useAuth } from '../../../auth/AuthContext';
 import type {
   ImprovementPlanAction,
-  ActionStatus,
   EvaluatorScreen,
   PlanType,
   CompletionRequestData,
+  PriorityLevel,
 } from '../../api/evaluationTypes';
 import {
   Target,
@@ -22,12 +19,10 @@ import {
   CheckCircle2,
   Clock,
   AlertCircle,
-  Download,
   FileSpreadsheet,
   Calendar,
   User,
   Edit2,
-  Paperclip,
   FolderPlus,
   MessageSquare,
   Send,
@@ -41,20 +36,23 @@ import {
   Search,
   Filter,
   X,
+  ExternalLink,
+  ArrowUpDown,
 } from 'lucide-react';
 
 interface ImprovementPlanPageProps {
-  onNavigate?: (screen: EvaluatorScreen) => void;
+  onNavigate?: (screen: EvaluatorScreen, param?: number) => void;
   readOnly?: boolean;
 }
 
 export const ImprovementPlanPage: React.FC<ImprovementPlanPageProps> = ({
+  onNavigate,
   readOnly = false,
 }) => {
   const {
     selectedPlanType,
-    setSelectedPlanType,
     selectPlan,
+    switchPlan,
     plansList,
     refreshPlansList,
     cloneVersion,
@@ -71,7 +69,6 @@ export const ImprovementPlanPage: React.FC<ImprovementPlanPageProps> = ({
     refreshPlan,
   } = useImprovementPlan();
 
-  const { user } = useAuth();
   const { toasts, addToast, dismissToast } = useToast();
 
   const planTypeTabs: { id: PlanType; label: string; desc: string }[] = [
@@ -84,10 +81,12 @@ export const ImprovementPlanPage: React.FC<ImprovementPlanPageProps> = ({
   const [isAddPlanModalOpen, setIsAddPlanModalOpen] = useState(false);
   const [filterStatus, setFilterStatus] = useState<string>('ALL');
   const [filterAreaId, setFilterAreaId] = useState<string>('ALL');
+  const [filterPriority, setFilterPriority] = useState<string>('ALL');
+  const [filterGap, setFilterGap] = useState<string>('ALL');
+  const [filterTimeRemaining, setFilterTimeRemaining] = useState<string>('ALL');
+  const [sortBy, setSortBy] = useState<string>('default');
   const [searchActionTerm, setSearchActionTerm] = useState<string>('');
-  const [isMasterTableExpanded, setIsMasterTableExpanded] = useState<boolean>(true);
-  const [selectedActionForEvidence, setSelectedActionForEvidence] = useState<ImprovementPlanAction | null>(null);
-  const [isAttachModalOpen, setIsAttachModalOpen] = useState(false);
+  const [isMasterTableExpanded, setIsMasterTableExpanded] = useState<boolean>(false);
   const [newReviewNoteText, setNewReviewNoteText] = useState('');
   const [isSubmittingReviewNote, setIsSubmittingReviewNote] = useState(false);
   const [isExportingWorkbook, setIsExportingWorkbook] = useState(false);
@@ -95,28 +94,66 @@ export const ImprovementPlanPage: React.FC<ImprovementPlanPageProps> = ({
   const [showExplanations, setShowExplanations] = useState(false);
   const [completionRequest, setCompletionRequest] = useState<CompletionRequestData | null>(null);
 
+  // قائمة خطط النوع المحدد بالتبويب فقط للسجل الماستر
+  const tabPlansList = React.useMemo(() => {
+    return plansList.filter((p) => p.planType === selectedPlanType);
+  }, [plansList, selectedPlanType]);
+
+  // دالة مساعدة لتنسيق التاريخ بالعربية مع اسم اليوم
+  const formatArabicDateWithDay = (dateStr?: string | null): string => {
+    if (!dateStr) return '-';
+    try {
+      const d = new Date(dateStr);
+      if (isNaN(d.getTime())) return dateStr;
+      const dayNames = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
+      const dayName = dayNames[d.getDay()];
+      const yyyy = d.getFullYear();
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const dd = String(d.getDate()).padStart(2, '0');
+      return `${dayName}، ${yyyy}-${mm}-${dd}`;
+    } catch {
+      return dateStr;
+    }
+  };
+
+  // دالة حساب المهلة والوقت المتبقي بدقة
+  const getRemainingDaysInfo = (dueDateStr?: string | null, status?: string) => {
+    if (!dueDateStr) return null;
+    if (status === 'Done') {
+      return { text: 'مكتمل', isOverdue: false, isToday: false, days: 0 };
+    }
+    const due = new Date(dueDateStr);
+    if (isNaN(due.getTime())) return null;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    due.setHours(0, 0, 0, 0);
+    const diffMs = due.getTime() - today.getTime();
+    const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+    if (diffDays < 0) {
+      return { text: `متأخر (${Math.abs(diffDays)} يوم)`, isOverdue: true, isToday: false, days: diffDays };
+    } else if (diffDays === 0) {
+      return { text: 'يستحق اليوم', isOverdue: false, isToday: true, days: 0 };
+    } else {
+      return { text: `متبقي ${diffDays} يوم`, isOverdue: false, isToday: false, days: diffDays };
+    }
+  };
+
   // التنقل المباشر وتحديد الخطة تلقائياً إذا تم التوجيه من شاشة المقترحات
   useEffect(() => {
     const savedPlanId = sessionStorage.getItem('selectedImprovementPlanId');
     if (savedPlanId) {
       const pId = Number(savedPlanId);
       if (!isNaN(pId)) {
-        selectPlan(pId);
         const matching = plansList.find((p) => p.planId === pId);
         if (matching) {
-          setSelectedPlanType(matching.planType);
+          switchPlan(matching.planType, pId);
+          sessionStorage.removeItem('selectedImprovementPlanId');
+        } else {
+          selectPlan(pId);
         }
       }
-      sessionStorage.removeItem('selectedImprovementPlanId');
     }
-  }, [selectPlan, plansList, setSelectedPlanType]);
-
-  // مزامنة نوع الخطة مع نوع الخطة المحملة
-  useEffect(() => {
-    if (planData?.planType && planData.planType !== selectedPlanType) {
-      setSelectedPlanType(planData.planType);
-    }
-  }, [planData?.planType, selectedPlanType, setSelectedPlanType]);
+  }, [selectPlan, switchPlan, plansList]);
 
   // فحص طلبات الاستكمال المفتوحة من المشرف
   useEffect(() => {
@@ -137,17 +174,20 @@ export const ImprovementPlanPage: React.FC<ImprovementPlanPageProps> = ({
     if (planData?.availableAreas && planData.availableAreas.length > 0) {
       return planData.availableAreas;
     }
-    const map = new Map<number, string>();
+    const map = new Map<number, { areaId: number; name: string; indicatorCode?: string; standardCode?: string; standardName?: string; priority: PriorityLevel }>();
     actions.forEach((a) => {
-      if (a.areaId && a.areaName) {
-        map.set(a.areaId, a.areaName);
+      if (a.areaId) {
+        map.set(a.areaId, {
+          areaId: a.areaId,
+          name: a.indicatorName || a.areaName || `مجال #${a.areaId}`,
+          indicatorCode: a.indicatorCode,
+          standardCode: a.standardCode,
+          standardName: a.standardName,
+          priority: a.priority || 'High',
+        });
       }
     });
-    return Array.from(map.entries()).map(([areaId, name]) => ({
-      areaId,
-      name,
-      priority: 'High' as const,
-    }));
+    return Array.from(map.values());
   }, [planData?.availableAreas, actions]);
 
   // فحص ما إذا كان الإجراء متأخراً عن تاريخ الاستحقاق
@@ -167,7 +207,30 @@ export const ImprovementPlanPage: React.FC<ImprovementPlanPageProps> = ({
     // 2. فلتر المجال
     if (filterAreaId !== 'ALL' && act.areaId !== Number(filterAreaId)) return false;
 
-    // 3. فلتر البحث النصي
+    // 3. فلتر الأولوية
+    if (filterPriority !== 'ALL' && act.priority !== filterPriority) return false;
+
+    // 4. فلتر الفجوة
+    if (filterGap !== 'ALL') {
+      const g = act.gap ?? (act.targetScore && act.score !== undefined && act.score !== null ? Math.max(0, act.targetScore - act.score) : 0);
+      if (filterGap === 'has_gap' && g <= 0) return false;
+      if (filterGap === 'gap_1' && g !== 1) return false;
+      if (filterGap === 'gap_2' && g !== 2) return false;
+      if (filterGap === 'gap_3' && g < 3) return false;
+    }
+
+    // 5. فلتر المهلة والوقت المتبقي
+    if (filterTimeRemaining !== 'ALL') {
+      const rem = getRemainingDaysInfo(act.dueDate, act.status);
+      if (!rem) return false;
+      if (filterTimeRemaining === 'overdue' && !rem.isOverdue) return false;
+      if (filterTimeRemaining === 'today' && !rem.isToday) return false;
+      if (filterTimeRemaining === 'this_week' && (rem.isOverdue || rem.days > 7)) return false;
+      if (filterTimeRemaining === 'this_month' && (rem.isOverdue || rem.days > 30)) return false;
+      if (filterTimeRemaining === 'more' && (rem.isOverdue || rem.days <= 30)) return false;
+    }
+
+    // 6. فلتر البحث النصي
     if (searchActionTerm.trim()) {
       const term = searchActionTerm.trim().toLowerCase();
       const matchTitle = (act.title || '').toLowerCase().includes(term);
@@ -175,13 +238,60 @@ export const ImprovementPlanPage: React.FC<ImprovementPlanPageProps> = ({
       const matchStandard = (act.standardName || '').toLowerCase().includes(term);
       const matchProgress = (act.progressDescription || '').toLowerCase().includes(term);
       const matchArea = (act.areaName || '').toLowerCase().includes(term);
-      if (!matchTitle && !matchLeader && !matchStandard && !matchProgress && !matchArea) {
+      const matchIndicatorCode = (act.indicatorCode || '').toLowerCase().includes(term);
+      const matchIndicatorName = (act.indicatorName || '').toLowerCase().includes(term);
+      if (!matchTitle && !matchLeader && !matchStandard && !matchProgress && !matchArea && !matchIndicatorCode && !matchIndicatorName) {
         return false;
       }
     }
 
     return true;
   });
+
+  // فرز الإجراءات حسب الأولوية، الفجوة، المهلة المتبقية، أو تاريخ البدء
+  const sortedActions = React.useMemo(() => {
+    const list = [...filteredActions];
+    if (sortBy === 'default') return list;
+
+    const priorityWeight: Record<string, number> = { High: 3, Medium: 2, Low: 1 };
+
+    list.sort((a, b) => {
+      if (sortBy === 'priority_desc') {
+        return (priorityWeight[b.priority || 'Low'] || 0) - (priorityWeight[a.priority || 'Low'] || 0);
+      }
+      if (sortBy === 'priority_asc') {
+        return (priorityWeight[a.priority || 'Low'] || 0) - (priorityWeight[b.priority || 'Low'] || 0);
+      }
+      if (sortBy === 'gap_desc') {
+        const gapA = a.gap ?? 0;
+        const gapB = b.gap ?? 0;
+        return gapB - gapA;
+      }
+      if (sortBy === 'gap_asc') {
+        const gapA = a.gap ?? 0;
+        const gapB = b.gap ?? 0;
+        return gapA - gapB;
+      }
+      if (sortBy === 'time_remaining_asc') {
+        const daysA = getRemainingDaysInfo(a.dueDate, a.status)?.days ?? 99999;
+        const daysB = getRemainingDaysInfo(b.dueDate, b.status)?.days ?? 99999;
+        return daysA - daysB;
+      }
+      if (sortBy === 'time_remaining_desc') {
+        const daysA = getRemainingDaysInfo(a.dueDate, a.status)?.days ?? -99999;
+        const daysB = getRemainingDaysInfo(b.dueDate, b.status)?.days ?? -99999;
+        return daysB - daysA;
+      }
+      if (sortBy === 'start_date_asc') {
+        return (a.startDate || '').localeCompare(b.startDate || '');
+      }
+      if (sortBy === 'start_date_desc') {
+        return (b.startDate || '').localeCompare(a.startDate || '');
+      }
+      return 0;
+    });
+    return list;
+  }, [filteredActions, sortBy]);
 
   if (isLoading && !planData) {
     return (
@@ -190,29 +300,6 @@ export const ImprovementPlanPage: React.FC<ImprovementPlanPageProps> = ({
       </div>
     );
   }
-
-  const handleExportPlan = () => {
-    const headers = ['رقم الإجراء', 'عنوان الإجراء', 'المعيار', 'المسؤول', 'البداية', 'الاستحقاق', 'الحالة', 'نسبة الإنجاز', 'وصف التقدم'];
-    const rows = actions.map((a) => [
-      a.actionId,
-      a.title,
-      a.standardName,
-      a.leader,
-      a.startDate,
-      a.dueDate,
-      a.statusArabic,
-      `${a.completionPercentage}%`,
-      a.progressDescription,
-    ]);
-    const filename = formatExportFilename('خطة_التحسين_المدرسي', 'xlsx');
-    const schoolName = user?.school?.schoolName || 'مدرسة الفاروق الأساسية للبنين';
-    const schoolCode = user?.school?.schoolCode || (user?.school?.schoolId ? `SCH-${user.school.schoolId}` : 'SCH-TAIZ-2026-001');
-    exportToExcel(filename, 'خطة التحسين', headers, rows, {
-      schoolName,
-      schoolCode,
-      reportTitle: 'وثيقة خطة التحسين والتطوير المدرسي',
-    });
-  };
 
   const handleExportUnifiedWorkbook = async () => {
     setIsExportingWorkbook(true);
@@ -224,14 +311,6 @@ export const ImprovementPlanPage: React.FC<ImprovementPlanPageProps> = ({
     } finally {
       setIsExportingWorkbook(false);
     }
-  };
-
-  const handleDirectStatusChange = (actionId: number, newStatus: ActionStatus) => {
-    if (readOnly) return;
-    updateAction(actionId, {
-      status: newStatus,
-      completionPercentage: newStatus === 'Done' ? 100 : newStatus === 'Pending' ? 0 : undefined,
-    });
   };
 
   const handleAddReviewNoteSubmit = async () => {
@@ -355,10 +434,7 @@ export const ImprovementPlanPage: React.FC<ImprovementPlanPageProps> = ({
               <button
                 key={tab.id}
                 type="button"
-                onClick={() => {
-                  selectPlan(null);
-                  setSelectedPlanType(tab.id);
-                }}
+                onClick={() => switchPlan(tab.id, null)}
                 style={{
                   padding: '10px 18px',
                   borderRadius: '10px',
@@ -526,7 +602,7 @@ export const ImprovementPlanPage: React.FC<ImprovementPlanPageProps> = ({
               ) : (
                 <>
                   <ChevronDown size={13} />
-                  <span>عرض السجل الماستر ({plansList.length})</span>
+                  <span>عرض السجل الماستر ({tabPlansList.length})</span>
                 </>
               )}
             </button>
@@ -546,21 +622,21 @@ export const ImprovementPlanPage: React.FC<ImprovementPlanPageProps> = ({
                   <th style={{ padding: '11px 14px', width: '150px' }}>الفترة الزمنية</th>
                   <th style={{ padding: '11px 14px', width: '90px', textAlign: 'center' }}>الحالة</th>
                   <th style={{ padding: '11px 14px', width: '110px', textAlign: 'center' }}>نسبة الإنجاز</th>
-                  <th style={{ padding: '11px 14px', width: '70px', textAlign: 'center' }}>المجالات</th>
-                  <th style={{ padding: '11px 14px', width: '80px', textAlign: 'center' }}>الإجراءات</th>
+                  <th style={{ padding: '11px 14px', width: '90px', textAlign: 'center' }} title="عدد مجالات ومؤشرات التحسين المستهدفة التي تشتمل على إجراءات معتمدة في الخطة">المجالات المستهدفة</th>
+                  <th style={{ padding: '11px 14px', width: '80px', textAlign: 'center' }} title="إجمالي عدد الإجراءات التنفيذية المعتمدة في الخطة">الإجراءات</th>
                   <th style={{ padding: '11px 14px', width: '70px', textAlign: 'center' }}>المتأخرة</th>
                   <th style={{ padding: '11px 14px', width: '110px', textAlign: 'center' }}>الإجراء</th>
                 </tr>
               </thead>
               <tbody>
-                {plansList.length === 0 ? (
+                {tabPlansList.length === 0 ? (
                   <tr>
                     <td colSpan={12} style={{ padding: '32px', textAlign: 'center', color: '#64748B' }}>
-                      لا توجد خطط مدرجة حالياً. يمكنك إنشاء خطة جديدة بالضغط على «إنشاء خطة جديدة».
+                      لا توجد خطط مدرجة لهذا النوع حالياً. يمكنك إنشاء خطة جديدة بالضغط على «إنشاء خطة جديدة».
                     </td>
                   </tr>
                 ) : (
-                  plansList.map((p) => {
+                  tabPlansList.map((p) => {
                     const isCurrent = planData?.planId === p.planId;
                     return (
                       <tr
@@ -686,10 +762,7 @@ export const ImprovementPlanPage: React.FC<ImprovementPlanPageProps> = ({
                         <td style={{ padding: '12px 14px', textAlign: 'center' }}>
                           <button
                             type="button"
-                            onClick={() => {
-                              selectPlan(p.planId);
-                              setSelectedPlanType(p.planType);
-                            }}
+                            onClick={() => switchPlan(p.planType, p.planId)}
                             style={{
                               padding: '4px 10px',
                               borderRadius: '6px',
@@ -930,26 +1003,6 @@ export const ImprovementPlanPage: React.FC<ImprovementPlanPageProps> = ({
           </button>
 
           <button
-            onClick={handleExportPlan}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '9px 16px',
-              borderRadius: '8px',
-              backgroundColor: '#F8FAFC',
-              color: '#334155',
-              border: '1px solid #CBD5E1',
-              fontSize: '13px',
-              fontWeight: 600,
-              cursor: 'pointer',
-            }}
-          >
-            <Download size={15} />
-            تصدير الخطة
-          </button>
-
-          <button
             onClick={handleExportUnifiedWorkbook}
             disabled={isExportingWorkbook}
             style={{
@@ -966,10 +1019,10 @@ export const ImprovementPlanPage: React.FC<ImprovementPlanPageProps> = ({
               cursor: isExportingWorkbook ? 'not-allowed' : 'pointer',
               opacity: isExportingWorkbook ? 0.7 : 1,
             }}
-            title="تصدير مصنف إكسل رسمي موحد يتضمن 3 أوراق"
+            title="تصدير مصنف إكسل رسمي موحد يتضمن 3 أوراق (الخطط، مصفوفة الإجراءات، مقترحات الفجوات)"
           >
             <FileSpreadsheet size={15} color="#4338CA" />
-            {isExportingWorkbook ? 'جاري التصدير...' : 'المصنف الموحد (3 أوراق)'}
+            <span>{isExportingWorkbook ? 'جاري التصدير...' : '📗 تصدير إكسل شامل (المصنف الموحد)'}</span>
           </button>
 
           {!readOnly && planData?.status !== 'Archived' && planData?.status !== 'Submitted' && (
@@ -1217,23 +1270,95 @@ export const ImprovementPlanPage: React.FC<ImprovementPlanPageProps> = ({
                   cursor: 'pointer',
                   outline: 'none',
                   fontWeight: filterAreaId !== 'ALL' ? 700 : 500,
+                  maxWidth: '240px',
                 }}
               >
-                <option value="ALL">كافة المجالات المعيارية</option>
+                <option value="ALL">كافة المؤشرات والمجالات ({actions.length})</option>
                 {availableAreasForFilter.map((area) => (
                   <option key={area.areaId} value={String(area.areaId)}>
+                    {area.indicatorCode ? `[${area.indicatorCode}] ` : ''}
                     {area.name}
+                    {area.standardCode ? ` — (${area.standardCode})` : ''}
                   </option>
                 ))}
               </select>
             </div>
+
+            {/* فلتر الأولوية */}
+            <select
+              value={filterPriority}
+              onChange={(e) => setFilterPriority(e.target.value)}
+              style={{
+                padding: '7px 10px',
+                borderRadius: '8px',
+                border: '1px solid #CBD5E1',
+                fontSize: '12px',
+                backgroundColor: '#FFFFFF',
+                color: '#334155',
+                cursor: 'pointer',
+                outline: 'none',
+                fontWeight: filterPriority !== 'ALL' ? 700 : 500,
+              }}
+            >
+              <option value="ALL">كافة الأولويات</option>
+              <option value="High">أولوية عالية</option>
+              <option value="Medium">أولوية متوسطة</option>
+              <option value="Low">أولوية منخفضة</option>
+            </select>
+
+            {/* فلتر الفجوة */}
+            <select
+              value={filterGap}
+              onChange={(e) => setFilterGap(e.target.value)}
+              style={{
+                padding: '7px 10px',
+                borderRadius: '8px',
+                border: '1px solid #CBD5E1',
+                fontSize: '12px',
+                backgroundColor: '#FFFFFF',
+                color: '#334155',
+                cursor: 'pointer',
+                outline: 'none',
+                fontWeight: filterGap !== 'ALL' ? 700 : 500,
+              }}
+            >
+              <option value="ALL">كافة الفجوات</option>
+              <option value="has_gap">توجد فجوة (&gt;0)</option>
+              <option value="gap_1">فجوة بمقدار 1</option>
+              <option value="gap_2">فجوة بمقدار 2</option>
+              <option value="gap_3">فجوة بمقدار 3★</option>
+            </select>
+
+            {/* فلتر المهلة المتبقية */}
+            <select
+              value={filterTimeRemaining}
+              onChange={(e) => setFilterTimeRemaining(e.target.value)}
+              style={{
+                padding: '7px 10px',
+                borderRadius: '8px',
+                border: '1px solid #CBD5E1',
+                fontSize: '12px',
+                backgroundColor: '#FFFFFF',
+                color: '#334155',
+                cursor: 'pointer',
+                outline: 'none',
+                fontWeight: filterTimeRemaining !== 'ALL' ? 700 : 500,
+              }}
+            >
+              <option value="ALL">كافة المهل والآجال</option>
+              <option value="overdue">متأخر عن الموعد</option>
+              <option value="today">يستحق اليوم</option>
+              <option value="this_week">خلال أسبوع (≤ 7 أيام)</option>
+              <option value="this_month">خلال شهر (≤ 30 يوم)</option>
+              <option value="more">أكثر من شهر (&gt; 30 يوم)</option>
+            </select>
 
             {/* فلتر الحالة */}
             <select
               value={filterStatus}
               onChange={(e) => setFilterStatus(e.target.value)}
               style={{
-                padding: '7px 12px',
+                padding: '7px 10px',
                 borderRadius: '8px',
                 border: '1px solid #CBD5E1',
                 fontSize: '12px',
@@ -1249,29 +1374,92 @@ export const ImprovementPlanPage: React.FC<ImprovementPlanPageProps> = ({
               <option value="Done">مكتمل ({actions.filter((a) => a.status === 'Done').length})</option>
               <option value="Pending">معلق ({actions.filter((a) => a.status === 'Pending').length})</option>
             </select>
+
+            {/* الفرز */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <ArrowUpDown size={13} style={{ color: '#64748B' }} />
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value)}
+                style={{
+                  padding: '7px 10px',
+                  borderRadius: '8px',
+                  border: '1px solid #CBD5E1',
+                  fontSize: '12px',
+                  backgroundColor: '#FFFFFF',
+                  color: '#334155',
+                  cursor: 'pointer',
+                  outline: 'none',
+                  fontWeight: sortBy !== 'default' ? 700 : 500,
+                }}
+              >
+                <option value="default">الترتيب الافتراضي</option>
+                <option value="priority_desc">الأولوية (الأعلى أولاً)</option>
+                <option value="priority_asc">الأولوية (الأقل أولاً)</option>
+                <option value="gap_desc">الفجوة (الأكبر أولاً)</option>
+                <option value="gap_asc">الفجوة (الأصغر أولاً)</option>
+                <option value="start_date_asc">تاريخ البدء (الأقدم أولاً)</option>
+                <option value="start_date_desc">تاريخ البدء (الأحدث أولاً)</option>
+                <option value="time_remaining_asc">المهلة المتبقية (الأقرب استحقاقاً)</option>
+                <option value="time_remaining_desc">المهلة المتبقية (الأبعد)</option>
+              </select>
+            </div>
+
+            {/* زر تفريغ الفلاتر إن كانت نشطة */}
+            {(searchActionTerm || filterAreaId !== 'ALL' || filterPriority !== 'ALL' || filterGap !== 'ALL' || filterTimeRemaining !== 'ALL' || filterStatus !== 'ALL' || sortBy !== 'default') && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchActionTerm('');
+                  setFilterAreaId('ALL');
+                  setFilterPriority('ALL');
+                  setFilterGap('ALL');
+                  setFilterTimeRemaining('ALL');
+                  setFilterStatus('ALL');
+                  setSortBy('default');
+                }}
+                style={{
+                  padding: '6px 10px',
+                  borderRadius: '6px',
+                  backgroundColor: '#FEF2F2',
+                  border: '1px solid #FECACA',
+                  color: '#DC2626',
+                  fontSize: '11.5px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                }}
+              >
+                إعادة ضبط الفلاتر
+              </button>
+            )}
           </div>
 
           <div style={{ fontSize: '12px', color: '#64748B' }}>
-            عرض <strong>{filteredActions.length}</strong> من إجمالي <strong>{actions.length}</strong> إجراء
+            عرض <strong>{sortedActions.length}</strong> من إجمالي <strong>{actions.length}</strong> إجراء
           </div>
         </div>
 
         <div style={{ overflowX: 'auto' }}>
-          <table style={{ minWidth: '920px', width: '100%', borderCollapse: 'collapse', textAlign: 'right' }}>
+          <table style={{ minWidth: '1150px', width: '100%', borderCollapse: 'collapse', textAlign: 'right' }}>
             <thead>
               <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '2px solid #F1F5F9' }}>
-                <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: 700, color: '#475569' }}>عنوان الإجراء التنفيذي</th>
-                <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: 700, color: '#475569' }}>المسؤول عن التنفيذ</th>
-                <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: 700, color: '#475569' }}>الجدول الزمني</th>
-                <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: 700, color: '#475569' }}>نسبة الإنجاز</th>
-                <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: 700, color: '#475569' }}>الحالة (تغيير فوري)</th>
-                <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: 700, color: '#475569', textAlign: 'center' }}>الإجراءات</th>
+                <th style={{ padding: '12px 14px', fontSize: '12px', fontWeight: 700, color: '#475569', width: '45px', textAlign: 'center' }}>#</th>
+                <th style={{ padding: '12px 14px', fontSize: '12px', fontWeight: 700, color: '#475569', width: '250px' }}>المؤشر والمعيار المستهدف</th>
+                <th style={{ padding: '12px 14px', fontSize: '12px', fontWeight: 700, color: '#475569', minWidth: '200px' }}>عنوان الإجراء التنفيذي</th>
+                <th style={{ padding: '12px 12px', fontSize: '12px', fontWeight: 700, color: '#475569', width: '90px', textAlign: 'center' }}>الأولوية</th>
+                <th style={{ padding: '12px 12px', fontSize: '12px', fontWeight: 700, color: '#475569', width: '135px', textAlign: 'center' }}>الدرجة ومسار الفجوة</th>
+                <th style={{ padding: '12px 14px', fontSize: '12px', fontWeight: 700, color: '#475569', width: '120px' }}>المسؤول</th>
+                <th style={{ padding: '12px 12px', fontSize: '12px', fontWeight: 700, color: '#475569', width: '135px' }}>تاريخ البدء</th>
+                <th style={{ padding: '12px 12px', fontSize: '12px', fontWeight: 700, color: '#475569', width: '155px' }}>تاريخ الاستحقاق والمهلة</th>
+                <th style={{ padding: '12px 12px', fontSize: '12px', fontWeight: 700, color: '#475569', width: '90px' }}>الإنجاز</th>
+                <th style={{ padding: '12px 12px', fontSize: '12px', fontWeight: 700, color: '#475569', width: '95px', textAlign: 'center' }}>الحالة</th>
+                <th style={{ padding: '12px 14px', fontSize: '12px', fontWeight: 700, color: '#475569', textAlign: 'center', width: '90px' }}>الإجراءات</th>
               </tr>
             </thead>
             <tbody>
-              {filteredActions.length === 0 ? (
+              {sortedActions.length === 0 ? (
                 <tr>
-                  <td colSpan={6} style={{ padding: '48px 20px', textAlign: 'center', color: '#64748B' }}>
+                  <td colSpan={11} style={{ padding: '48px 20px', textAlign: 'center', color: '#64748B' }}>
                     <div style={{ fontSize: '15px', fontWeight: 700, color: '#0F172A', marginBottom: '6px' }}>
                       لا توجد إجراءات مطابقة لشروط البحث أو التصفية الحالية
                     </div>
@@ -1281,8 +1469,18 @@ export const ImprovementPlanPage: React.FC<ImprovementPlanPageProps> = ({
                   </td>
                 </tr>
               ) : (
-                filteredActions.map((action) => {
+                sortedActions.map((action, idx) => {
                   const overdue = isActionOverdue(action);
+                  const remInfo = getRemainingDaysInfo(action.dueDate, action.status);
+                  const gapVal = action.gap !== undefined && action.gap !== null
+                    ? action.gap
+                    : (action.targetScore !== undefined && action.score !== undefined && action.score !== null
+                        ? Math.max(0, action.targetScore - action.score)
+                        : null);
+                  const isGapZero = gapVal !== null && gapVal === 0;
+                  const p = action.priority || 'Medium';
+                  const isHigh = p === 'High';
+                  const isMedium = p === 'Medium';
                   return (
                     <tr
                       key={action.actionId}
@@ -1294,9 +1492,90 @@ export const ImprovementPlanPage: React.FC<ImprovementPlanPageProps> = ({
                       onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = overdue ? '#FEF2F2' : '#F8FAFC')}
                       onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = overdue ? '#FFFBFB' : 'transparent')}
                     >
-                      <td style={{ padding: '14px 16px', maxWidth: '340px' }}>
+                      {/* 1. الرقم التسلسلي */}
+                      <td style={{ padding: '14px 12px', textAlign: 'center', fontSize: '12px', fontWeight: 700, color: '#94A3B8' }}>
+                        {idx + 1}
+                      </td>
+
+                      {/* 2. المؤشر والمعيار المستهدف (مع زر الانتقال إلى استمارة الرصد والتقييم) */}
+                      <td style={{ padding: '14px 14px', maxWidth: '260px' }}>
+                        {action.indicatorCode ? (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                              {action.indicatorId && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    sessionStorage.setItem('navigated_from_improvement_plan', 'true');
+                                    sessionStorage.setItem('navigated_from_improvement_plan_indicator_id', String(action.indicatorId));
+                                    onNavigate?.('rubric-assessment', action.indicatorId);
+                                  }}
+                                  title="الانتقال إلى تقييم هذا المؤشر في استمارة الرصد والتقييم"
+                                  style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '4px',
+                                    padding: '2px 7px',
+                                    borderRadius: '5px',
+                                    border: '1px solid #BFDBFE',
+                                    backgroundColor: '#EFF6FF',
+                                    color: '#1D4ED8',
+                                    fontSize: '11px',
+                                    fontWeight: 700,
+                                    cursor: 'pointer',
+                                    transition: 'all 0.15s ease',
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    e.currentTarget.style.backgroundColor = '#DBEAFE';
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    e.currentTarget.style.backgroundColor = '#EFF6FF';
+                                  }}
+                                >
+                                  <ExternalLink size={11} />
+                                  <span>استمارة الرصد</span>
+                                </button>
+                              )}
+                              <span
+                                style={{
+                                  fontFamily: 'monospace',
+                                  fontWeight: 800,
+                                  fontSize: '11px',
+                                  backgroundColor: '#EFF6FF',
+                                  color: '#1D4ED8',
+                                  padding: '1px 6px',
+                                  borderRadius: '4px',
+                                  border: '1px solid #BFDBFE',
+                                }}
+                              >
+                                {action.indicatorCode}
+                              </span>
+                              {action.standardCode && (
+                                <span style={{ fontSize: '10.5px', color: '#64748B', fontWeight: 600 }}>
+                                  ({action.standardCode})
+                                </span>
+                              )}
+                            </div>
+                            <div style={{ fontSize: '12.5px', fontWeight: 700, color: '#0F172A', lineHeight: 1.4 }}>
+                              {action.indicatorName || action.areaName}
+                            </div>
+                            {action.standardName && (
+                              <div style={{ fontSize: '11px', color: '#059669', fontWeight: 600 }}>
+                                {action.standardName}
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <div style={{ fontSize: '12.5px', color: '#64748B' }}>
+                            {action.areaName || 'مجال عام'}
+                          </div>
+                        )}
+                      </td>
+
+                      {/* 3. عنوان الإجراء والوصف */}
+                      <td style={{ padding: '14px 14px', maxWidth: '280px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                          <span style={{ fontSize: '13.5px', fontWeight: 700, color: '#0F172A' }}>
+                          <span style={{ fontSize: '13px', fontWeight: 700, color: '#0F172A' }}>
                             {action.title}
                           </span>
                           {action.isNewInVersion && (
@@ -1319,62 +1598,150 @@ export const ImprovementPlanPage: React.FC<ImprovementPlanPageProps> = ({
                             </span>
                           )}
                         </div>
-                        {action.standardName && (
-                          <div style={{ fontSize: '11px', color: '#059669', fontWeight: 600, marginTop: '3px' }}>
-                            المعيار: {action.standardName}
-                          </div>
-                        )}
-                        {action.areaName && (
-                          <div style={{ fontSize: '11px', color: '#64748B', marginTop: '1px' }}>
-                            المجال: {action.areaName}
-                          </div>
-                        )}
                         {action.progressDescription && (
-                          <div style={{ fontSize: '11.5px', color: '#64748B', marginTop: '4px' }}>
+                          <div style={{ fontSize: '11.5px', color: '#64748B', marginTop: '4px', lineHeight: 1.4 }}>
                             {action.progressDescription}
                           </div>
                         )}
                       </td>
 
-                      <td style={{ padding: '14px 16px', fontSize: '12.5px', color: '#334155' }}>
+                      {/* 4. الأولوية */}
+                      <td style={{ padding: '14px 10px', textAlign: 'center' }}>
+                        <span
+                          style={{
+                            display: 'inline-block',
+                            padding: '3px 8px',
+                            borderRadius: '6px',
+                            fontSize: '11px',
+                            fontWeight: 800,
+                            backgroundColor: isHigh ? '#FEE2E2' : isMedium ? '#FEF3C7' : '#F1F5F9',
+                            color: isHigh ? '#991B1B' : isMedium ? '#92400E' : '#475569',
+                            border: `1px solid ${isHigh ? '#FECACA' : isMedium ? '#FDE68A' : '#E2E8F0'}`,
+                          }}
+                        >
+                          {action.priorityArabic || (isHigh ? 'عالية' : isMedium ? 'متوسطة' : 'منخفضة')}
+                        </span>
+                      </td>
+
+                      {/* 5. الدرجات وتتبع مسار الفجوة (الأساس vs الحالي) */}
+                      <td style={{ padding: '14px 10px', textAlign: 'center' }}>
+                        <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: '3px' }}>
+                          {/* الدرجة الحالية والمستهدفة */}
+                          <div style={{ fontSize: '11.5px', fontWeight: 700, color: '#334155' }}>
+                            <span style={{ color: '#64748B' }} title="الدرجة الحالية">
+                              {action.score !== undefined && action.score !== null ? `${action.score}★` : '-'}
+                            </span>
+                            <span style={{ margin: '0 3px', color: '#94A3B8' }}>←</span>
+                            <span style={{ color: '#059669', fontWeight: 800 }} title="الدرجة المستهدفة">
+                              {action.targetScore ? `${action.targetScore}★` : '3★'}
+                            </span>
+                          </div>
+
+                          {/* مسار التحسن من خط الأساس عند التبني إن وُجد */}
+                          {action.baselineScore !== undefined && action.baselineScore !== null && action.score !== undefined && action.score !== null && (
+                            <div style={{ fontSize: '10px', color: '#64748B' }}>
+                              <span>الأساس: </span>
+                              <strong style={{ color: '#475569' }}>{action.baselineScore}★</strong>
+                              {action.score > action.baselineScore && (
+                                <span style={{ color: '#059669', fontWeight: 800, marginRight: '3px' }}>
+                                  (+{action.score - action.baselineScore}★)
+                                </span>
+                              )}
+                            </div>
+                          )}
+
+                          {/* شارة الفجوة الحالية */}
+                          {action.gap !== undefined && action.gap !== null && (
+                            <span
+                              style={{
+                                display: 'inline-block',
+                                padding: '1px 6px',
+                                borderRadius: '4px',
+                                backgroundColor: isGapZero ? '#ECFDF5' : '#FFFBEB',
+                                color: isGapZero ? '#059669' : '#D97706',
+                                fontSize: '10.5px',
+                                fontWeight: 700,
+                                border: isGapZero ? '1px solid #A7F3D0' : '1px solid #FDE68A',
+                              }}
+                            >
+                              {isGapZero ? 'فجوة: 0 (تم سد الفجوة)' : `فجوة: ${action.gap}`}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+
+                      {/* 6. المسؤول */}
+                      <td style={{ padding: '14px 14px', fontSize: '12.5px', color: '#334155' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                           <User size={14} color="#64748B" />
                           <span>{action.leader}</span>
                         </div>
                       </td>
 
-                      <td style={{ padding: '14px 16px', fontSize: '12px' }}>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: overdue ? '#DC2626' : '#64748B' }}>
-                            <Calendar size={14} />
-                            <span>{action.startDate} إلى {action.dueDate}</span>
-                          </div>
-                          {overdue && (
+                      {/* 7. تاريخ البدء (مع اسم اليوم) */}
+                      <td style={{ padding: '14px 12px', fontSize: '12px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '5px', color: '#334155' }}>
+                          <Calendar size={13} style={{ color: '#0284C7', flexShrink: 0 }} />
+                          <span style={{ fontWeight: 600 }}>{formatArabicDateWithDay(action.startDate)}</span>
+                        </div>
+                      </td>
+
+                      {/* 8. تاريخ الاستحقاق والمهلة المتبقية (مع اسم اليوم) */}
+                      <td style={{ padding: '14px 12px', fontSize: '12px' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                          {/* علامة خضراء فوق التاريخ إذا أصبحت الفجوة 0 للعلم فقط دون تغيير حالة التنفيذ */}
+                          {isGapZero && (
                             <span
                               style={{
                                 display: 'inline-flex',
                                 alignItems: 'center',
                                 gap: '3px',
-                                padding: '1px 6px',
-                                borderRadius: '4px',
-                                backgroundColor: '#FEF2F2',
-                                color: '#DC2626',
-                                border: '1px solid #FECACA',
+                                padding: '2px 7px',
+                                borderRadius: '5px',
+                                backgroundColor: '#ECFDF5',
+                                color: '#047857',
+                                border: '1px solid #A7F3D0',
                                 fontSize: '10.5px',
                                 fontWeight: 800,
                                 width: 'fit-content',
                               }}
+                              title="الدرجة المستهدفة للمؤشر محققة بالكامل في التقييم الذاتي (الفجوة = 0) — إشعار إنجاز للمعلومة دون تغيير حالة التنفيذ الميداني للإجراء"
+                            >
+                              <CheckCircle2 size={11} style={{ color: '#059669' }} />
+                              <span>مكتمل (الفجوة 0)</span>
+                            </span>
+                          )}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '5px', color: overdue ? '#DC2626' : '#334155' }}>
+                            <Calendar size={13} style={{ color: overdue ? '#DC2626' : '#D97706', flexShrink: 0 }} />
+                            <span style={{ fontWeight: 600 }}>{formatArabicDateWithDay(action.dueDate)}</span>
+                          </div>
+                          {remInfo && (
+                            <span
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '3px',
+                                padding: '2px 6px',
+                                borderRadius: '4px',
+                                backgroundColor: remInfo.isOverdue ? '#FEF2F2' : remInfo.isToday ? '#FFFBEB' : '#F0FDF4',
+                                color: remInfo.isOverdue ? '#DC2626' : remInfo.isToday ? '#B45309' : '#15803D',
+                                border: `1px solid ${remInfo.isOverdue ? '#FECACA' : remInfo.isToday ? '#FDE68A' : '#BBF7D0'}`,
+                                fontSize: '10.5px',
+                                fontWeight: 700,
+                                width: 'fit-content',
+                              }}
                             >
                               <Clock size={11} />
-                              متأخر عن الموعد
+                              {remInfo.text}
                             </span>
                           )}
                         </div>
                       </td>
 
-                      <td style={{ padding: '14px 16px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <div style={{ flex: 1, minWidth: '70px', height: '6px', backgroundColor: '#F1F5F9', borderRadius: '4px', overflow: 'hidden' }}>
+                      {/* 9. نسبة الإنجاز */}
+                      <td style={{ padding: '14px 12px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <div style={{ flex: 1, minWidth: '55px', height: '6px', backgroundColor: '#F1F5F9', borderRadius: '4px', overflow: 'hidden' }}>
                             <div
                               style={{
                                 height: '100%',
@@ -1384,21 +1751,22 @@ export const ImprovementPlanPage: React.FC<ImprovementPlanPageProps> = ({
                               }}
                             />
                           </div>
-                          <span style={{ fontSize: '12px', fontWeight: 700, color: '#334155' }}>
+                          <span style={{ fontSize: '11.5px', fontWeight: 700, color: '#334155' }}>
                             {action.completionPercentage}%
                           </span>
                         </div>
                       </td>
 
-                      <td style={{ padding: '14px 16px' }}>
-                        <select
-                          value={action.status}
-                          disabled={readOnly || planData?.status === 'Archived' || planData?.status === 'Submitted'}
-                          onChange={(e) => handleDirectStatusChange(action.actionId, e.target.value as ActionStatus)}
+                      {/* 10. الحالة المعتمدة */}
+                      <td style={{ padding: '14px 12px', textAlign: 'center' }}>
+                        <span
                           style={{
-                            padding: '6px 10px',
-                            borderRadius: '6px',
-                            fontSize: '12px',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            padding: '4px 8px',
+                            borderRadius: '12px',
+                            fontSize: '11px',
                             fontWeight: 700,
                             backgroundColor:
                               action.status === 'Done'
@@ -1412,78 +1780,55 @@ export const ImprovementPlanPage: React.FC<ImprovementPlanPageProps> = ({
                                 : action.status === 'InProgress'
                                 ? '#2563EB'
                                 : '#D97706',
-                            border: '1px solid #CBD5E1',
-                            cursor: readOnly || planData?.status === 'Archived' || planData?.status === 'Submitted' ? 'default' : 'pointer',
-                            outline: 'none',
+                            border:
+                              action.status === 'Done'
+                                ? '1px solid #A7F3D0'
+                                : action.status === 'InProgress'
+                                ? '1px solid #BFDBFE'
+                                : '1px solid #FDE68A',
                           }}
                         >
-                          <option value="InProgress">قيد التنفيذ</option>
-                          <option value="Done">مكتمل</option>
-                          <option value="Pending">معلق</option>
-                        </select>
+                          {action.status === 'Done' ? (
+                            <>
+                              <CheckCircle2 size={12} />
+                              <span>مكتمل</span>
+                            </>
+                          ) : action.status === 'InProgress' ? (
+                            <>
+                              <Clock size={12} />
+                              <span>قيد التنفيذ</span>
+                            </>
+                          ) : (
+                            <>
+                              <AlertCircle size={12} />
+                              <span>معلق</span>
+                            </>
+                          )}
+                        </span>
                       </td>
 
-                      <td style={{ padding: '14px 16px', textAlign: 'center' }}>
-                        {!readOnly && planData?.status !== 'Archived' && planData?.status !== 'Submitted' && (
-                          <button
-                            onClick={() => {
-                              setSelectedActionForEvidence(action);
-                              setIsAttachModalOpen(true);
-                            }}
-                            style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '4px',
-                              padding: '6px 12px',
-                              borderRadius: '6px',
-                              backgroundColor: '#EFF6FF',
-                              color: '#1D4ED8',
-                              border: '1px solid #BFDBFE',
-                              fontSize: '12px',
-                              fontWeight: 600,
-                              cursor: 'pointer',
-                              marginLeft: '6px',
-                            }}
-                            title="إرفاق شاهد أو وثيقة إثبات لتنفيذ الإجراء"
-                          >
-                            <Paperclip size={13} />
-                            <span>إرفاق شاهد</span>
-                            {action.evidences && action.evidences.length > 0 && (
-                              <span
-                                style={{
-                                  backgroundColor: '#DBEAFE',
-                                  color: '#1E40AF',
-                                  fontSize: '11px',
-                                  fontWeight: 700,
-                                  padding: '1px 6px',
-                                  borderRadius: '10px',
-                                  marginRight: '3px',
-                                }}
-                              >
-                                {action.evidences.length}
-                              </span>
-                            )}
-                          </button>
-                        )}
+                      {/* 11. الإجراءات (تعديل فقط — تم نقل شواهد المؤشر إلى عمود المؤشر) */}
+                      <td style={{ padding: '14px 14px', textAlign: 'center', whiteSpace: 'nowrap' }}>
                         <button
                           onClick={() => setEditingAction(action)}
                           style={{
                             display: 'inline-flex',
                             alignItems: 'center',
                             gap: '4px',
-                            padding: '6px 12px',
+                            padding: '5px 12px',
                             borderRadius: '6px',
                             backgroundColor: '#F1F5F9',
                             color: '#334155',
-                            border: '1px solid #E2E8F0',
-                            fontSize: '12px',
-                            fontWeight: 600,
+                            border: '1px solid #CBD5E1',
+                            fontSize: '11px',
+                            fontWeight: 700,
                             cursor: 'pointer',
+                            transition: 'all 0.15s ease',
                           }}
-                          title={readOnly ? 'استعراض تفاصيل الإجراء' : 'تعديل التفاصيل ووصف الإنجاز الميداني'}
+                          title={readOnly ? 'استعراض تفاصيل الإجراء' : 'تعديل كافة بيانات الإجراء والمتابعة الميدانية'}
                         >
-                          <Edit2 size={13} />
-                          {readOnly ? 'تفاصيل' : 'تحديث'}
+                          <Edit2 size={12} />
+                          {readOnly ? 'تفاصيل' : 'تعديل'}
                         </button>
                       </td>
                     </tr>
@@ -1664,6 +2009,7 @@ export const ImprovementPlanPage: React.FC<ImprovementPlanPageProps> = ({
         onClose={() => setIsAddPlanModalOpen(false)}
         availableAreas={planData?.availableAreas || []}
         defaultPlanType={selectedPlanType}
+        existingActivePlanTypes={plansList.filter((p) => p.status === 'Active').map((p) => p.planType)}
         onCreatePlan={async (payload) => {
           await createPlan(payload);
           await refreshPlansList();
@@ -1685,26 +2031,17 @@ export const ImprovementPlanPage: React.FC<ImprovementPlanPageProps> = ({
         isSubmitting={isSubmitting}
       />
 
-      {/* Action Progress Modal */}
+      {/* Action Edit / Progress Modal */}
       <ActionProgressModal
         isOpen={!!editingAction}
         onClose={() => setEditingAction(null)}
         action={editingAction}
-        onUpdateAction={updateAction}
+        onUpdateAction={async (actionId, payload) => {
+          await updateAction(actionId, payload);
+          addToast('success', 'تم حفظ وتحديث بيانات الإجراء التنفيذي بنجاح.');
+        }}
         isSubmitting={isSubmitting}
         readOnly={readOnly || planData?.status === 'Archived' || planData?.status === 'Submitted'}
-      />
-
-      {/* Attach Evidence Modal */}
-      <AttachActionEvidenceModal
-        isOpen={isAttachModalOpen}
-        onClose={() => {
-          setIsAttachModalOpen(false);
-          setSelectedActionForEvidence(null);
-        }}
-        action={selectedActionForEvidence}
-        onSuccess={(msg) => addToast('success', msg)}
-        onError={(err) => addToast('error', err)}
       />
 
       {/* Toasts */}

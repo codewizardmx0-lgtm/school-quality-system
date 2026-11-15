@@ -288,28 +288,57 @@ class DemoEvaluationSeeder extends Seeder
             }
         }
 
-        // د. خطة تحسين سنوية منشأة
-        $plan = ImprovementPlan::create([
+        // د. الخطط المدرسية المعتمدة الثلاث للعام 2026/2027 (خطة نشطة معتمدة واحدة لكل مسار)
+        $planQuality = ImprovementPlan::create([
             'school_id'            => $schoolFarouq->school_id,
             'cycle_id'             => $cycle->cycle_id,
-            'title'                => 'خطة التحسين والتطوير لمدرسة الفاروق 2026/2027',
+            'title'                => 'خطة تحسين الجودة المدرسية الشاملة لمدرسة الفاروق 2026/2027',
             'plan_type'            => ImprovementPlan::TYPE_QUALITY_IMPROVEMENT,
+            'version_number'       => 1,
+            'version_tag'          => 'خطة أساسية معتمدة',
             'start_date'           => now()->startOfMonth()->toDateString(),
             'end_date'             => now()->addMonths(6)->endOfMonth()->toDateString(),
-            'status'               => 'Draft',
-            'progress_description' => 'جاري مراجعة الإجراءات ومتابعة تخصيص الموارد لتنفيذ بنود خطة التحسين.',
+            'status'               => 'Active',
+            'progress_description' => 'خطة تحسين الجودة المدرسية الشاملة معتمدة وجاهزة لاستقبال الإجراءات التنفيذية.',
             'created_by_user_id'   => $evaluatorFarouq->user_id,
         ]);
 
-        // هـ. 4 مجالات تحسين منبثقة عن المؤشرات المتدنية
+        $planStaff = ImprovementPlan::create([
+            'school_id'            => $schoolFarouq->school_id,
+            'cycle_id'             => $cycle->cycle_id,
+            'title'                => 'خطة التطوير المهني والتربوي للكوادر لمدرسة الفاروق 2026/2027',
+            'plan_type'            => ImprovementPlan::TYPE_STAFF_DEVELOPMENT,
+            'version_number'       => 1,
+            'version_tag'          => 'خطة أساسية معتمدة',
+            'start_date'           => now()->startOfMonth()->toDateString(),
+            'end_date'             => now()->addMonths(6)->endOfMonth()->toDateString(),
+            'status'               => 'Active',
+            'progress_description' => 'خطة التطوير المهني والتربوي للكوادر معتمدة وجاهزة لبرامج التدريب والتأهيل.',
+            'created_by_user_id'   => $evaluatorFarouq->user_id,
+        ]);
+
+        $planOperational = ImprovementPlan::create([
+            'school_id'            => $schoolFarouq->school_id,
+            'cycle_id'             => $cycle->cycle_id,
+            'title'                => 'الخطة التشغيلية السنوية لمدرسة الفاروق 2026/2027',
+            'plan_type'            => ImprovementPlan::TYPE_ANNUAL_OPERATIONAL,
+            'version_number'       => 1,
+            'version_tag'          => 'خطة أساسية معتمدة',
+            'start_date'           => now()->startOfMonth()->toDateString(),
+            'end_date'             => now()->addMonths(6)->endOfMonth()->toDateString(),
+            'status'               => 'Active',
+            'progress_description' => 'الخطة التشغيلية السنوية لإدارة التجهيزات والمرافق والعمليات المدرسية.',
+            'created_by_user_id'   => $evaluatorFarouq->user_id,
+        ]);
+
+        // هـ. مجالات التحسين المنبثقة عن المؤشرات المتدنية وربطها بالخطط دون إدراج إجراءات مسبقة
         $areaDefs = [
-            ['name' => 'تطوير معمل الحاسوب وتجهيزات التقنية التعليمية', 'priority' => 'High', 'target' => 3],
-            ['name' => 'تعزيز منظومة الأمن والسلامة وتدريب فرق الطوارئ', 'priority' => 'Critical', 'target' => 3],
-            ['name' => 'تنفيذ برامج علاجية للطلبة ذوي صعوبات التعلم', 'priority' => 'Medium', 'target' => 2],
-            ['name' => 'تفعيل لجان الشراكة المجتمعية ومجلس الآباء والمعلمين', 'priority' => 'Medium', 'target' => 2],
+            ['name' => 'تطوير معمل الحاسوب وتجهيزات التقنية التعليمية', 'priority' => 'High', 'target' => 3, 'plan' => $planQuality],
+            ['name' => 'تعزيز منظومة الأمن والسلامة وتدريب فرق الطوارئ', 'priority' => 'High', 'target' => 3, 'plan' => $planOperational],
+            ['name' => 'تنفيذ برامج علاجية للطلبة ذوي صعوبات التعلم', 'priority' => 'Medium', 'target' => 2, 'plan' => $planQuality],
+            ['name' => 'تفعيل لجان الشراكة المجتمعية ومجلس الآباء والمعلمين', 'priority' => 'Medium', 'target' => 2, 'plan' => $planOperational],
         ];
 
-        $createdAreas = [];
         foreach ($areaDefs as $i => $aDef) {
             $linkedRes = $lowScoreResults[$i] ?? null;
             $area = ImprovementArea::create([
@@ -320,67 +349,10 @@ class DemoEvaluationSeeder extends Seeder
                 'target_score' => $aDef['target'],
                 'description'  => "مجال تحسين ذو أولوية للعام الدراسي لرفع مستوى الأداء المؤسسي.",
             ]);
-
-            PlanImprovementArea::create([
-                'plan_id' => $plan->plan_id,
-                'area_id' => $area->area_id,
-            ]);
-
-            $createdAreas[] = $area;
         }
 
-        // و. 5 إجراءات تنفيذية في improvement_actions
-        $actionsData = [
-            [
-                'title'  => 'تجهيز قاعة الحاسوب بـ 15 جهازاً حديثاً مع شبكة محلية',
-                'leader' => 'أ. سمير الجبلي — مسؤول التقنية',
-                'status' => 'InProgress',
-                'pct'    => 40,
-                'area'   => $createdAreas[0],
-            ],
-            [
-                'title'  => 'صيانة مخارج الطوارئ وتركيب 10 طفايات حريق إضافية مع لوحات إرشادية',
-                'leader' => 'أ. مروان الصلوي — مسؤول السلامة',
-                'status' => 'Done',
-                'pct'    => 100,
-                'area'   => $createdAreas[1],
-            ],
-            [
-                'title'  => 'تنظيم برنامج علاجي للطلبة الضعاف في مادتي العلوم والرياضيات',
-                'leader' => 'أ. أحمد الهاشمي — المشرف الأكاديمي',
-                'status' => 'InProgress',
-                'pct'    => 60,
-                'area'   => $createdAreas[2],
-            ],
-            [
-                'title'  => 'عقد ورشة تدريبية لمعلمي المدرسة في استراتيجيات التعلم النشط',
-                'leader' => 'أ. رضوان القادري — مدرب الجودة',
-                'status' => 'Done',
-                'pct'    => 100,
-                'area'   => $createdAreas[0],
-            ],
-            [
-                'title'  => 'تشكيل لجان العمل التطوعي المشتركة مع أولياء الأمور لتشجير المدرسة',
-                'leader' => 'أ. طارق العديني — الأخصائي الاجتماعي',
-                'status' => 'InProgress',
-                'pct'    => 30,
-                'area'   => $createdAreas[3],
-            ],
-        ];
-
-        foreach ($actionsData as $act) {
-            ImprovementAction::create([
-                'plan_id'                        => $plan->plan_id,
-                'area_id'                        => $act['area']->area_id,
-                'title'                          => $act['title'],
-                'responsible_person_description' => $act['leader'],
-                'start_date'                     => now()->toDateString(),
-                'due_date'                       => now()->addMonths(2)->toDateString(),
-                'status'                         => $act['status'],
-                'completion_percentage'          => $act['pct'],
-                'progress_description'           => "إجراء معتمد قيد المتابعة وفق الجدول الزمني للخطة.",
-            ]);
-        }
+        // و. تفريغ جدول improvement_actions تماماً لتبدأ الإجراءات نظيفة من الصفر بنسبة 100%
+        // (لا توجد أي سجلات تجريبية أو مكررة في جدول improvement_actions)
 
         // ز. إشعارات حقيقية للمستخدمين متوافقة مع الحالة الفعلية دون تكرار (الملاحظة 2)
         Notification::whereIn('recipient_user_id', [$evaluatorFarouq->user_id, $principalFarouq->user_id])

@@ -110,11 +110,13 @@ class ImprovementAreaController extends Controller
 
         // ربط المجال بالخطة المحددة أو الخطة النشطة الافتراضية للدورة
         $targetPlanId = $request->input('planId') ?? $request->input('plan_id');
+        $linkedPlan = null;
         if ($targetPlanId) {
             $targetPlan = \App\Models\ImprovementPlan::where('plan_id', (int) $targetPlanId)
                 ->where('school_id', $result->evaluation->school_id)
                 ->first();
             if ($targetPlan) {
+                $linkedPlan = $targetPlan;
                 \App\Models\PlanImprovementArea::firstOrCreate([
                     'plan_id' => $targetPlan->plan_id,
                     'area_id' => $area->area_id,
@@ -135,6 +137,7 @@ class ImprovementAreaController extends Controller
                     ->first();
 
             if ($defaultPlan) {
+                $linkedPlan = $defaultPlan;
                 \App\Models\PlanImprovementArea::firstOrCreate([
                     'plan_id' => $defaultPlan->plan_id,
                     'area_id' => $area->area_id,
@@ -142,6 +145,28 @@ class ImprovementAreaController extends Controller
                     'created_at' => now(),
                 ]);
             }
+        }
+
+        // إنشاء الإجراء التنفيذي تلقائياً عند التبني الموحد
+        if ($linkedPlan) {
+            $actionTitle = $request->input('actionTitle') ?? $request->input('title') ?? $request->input('name') ?? $area->name;
+            $leader = $request->input('leader') ?? $request->input('responsible_person_description') ?? 'فريق التطوير والجودة المدرسية';
+            $startDate = $request->input('startDate') ?? $request->input('start_date') ?? now()->toDateString();
+            $dueDate = $request->input('dueDate') ?? $request->input('due_date') ?? now()->addMonths(3)->toDateString();
+            $progressDescription = $request->input('progressDescription') ?? $request->input('progress_description') ?? $area->description ?? 'تم تبني الإجراء لمعالجة فجوة التقييم الذاتي.';
+
+            \App\Models\ImprovementAction::firstOrCreate([
+                'plan_id' => $linkedPlan->plan_id,
+                'area_id' => $area->area_id,
+            ], [
+                'title'                          => mb_substr($actionTitle, 0, 200),
+                'responsible_person_description' => mb_substr($leader, 0, 150),
+                'start_date'                     => $startDate,
+                'due_date'                       => $dueDate,
+                'status'                         => 'InProgress',
+                'completion_percentage'          => 0,
+                'progress_description'           => $progressDescription,
+            ]);
         }
 
         $area->load(['result.evaluation', 'indicator', 'plans']);

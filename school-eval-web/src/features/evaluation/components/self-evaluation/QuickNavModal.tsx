@@ -64,7 +64,7 @@ export const QuickNavModal: React.FC<QuickNavModalProps> = ({
 
   const toggleStandard = (standardId: number) => {
     setExpandedStandardIds((prev) =>
-      prev.includes(standardId) ? prev.filter((id) => id !== standardId) : [...prev, standardId]
+      prev.includes(standardId) ? [] : [standardId]
     );
   };
 
@@ -194,8 +194,8 @@ export const QuickNavModal: React.FC<QuickNavModalProps> = ({
     >
       <div
         style={{
-          width: '100%',
-          maxWidth: '840px',
+          width: '92vw',
+          maxWidth: '1100px',
           height: '88vh',
           maxHeight: '88vh',
           backgroundColor: '#FFFFFF',
@@ -614,7 +614,7 @@ export const QuickNavModal: React.FC<QuickNavModalProps> = ({
                           <div
                             style={{
                               display: 'grid',
-                              gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
+                              gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
                               gap: '8px',
                             }}
                           >

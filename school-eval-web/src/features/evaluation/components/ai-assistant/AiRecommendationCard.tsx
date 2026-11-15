@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import type { AiInitiative, AiRecommendationStatus } from '../../api/evaluationTypes';
-import { Target, CheckCircle2, Edit3, EyeOff, ArrowLeft } from 'lucide-react';
+import { Target, Edit3, EyeOff, ArrowLeft } from 'lucide-react';
 
 interface AiRecommendationCardProps {
   initiative: AiInitiative;
@@ -153,33 +153,12 @@ export const AiRecommendationCard: React.FC<AiRecommendationCardProps> = ({
           {/* Status Buttons */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <button
-              onClick={() => onUpdateStatus(initiative.id, 'Accepted')}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '4px',
-                padding: '5px 10px',
-                borderRadius: '6px',
-                backgroundColor: isAccepted ? '#059669' : '#ECFDF5',
-                color: isAccepted ? '#FFFFFF' : '#059669',
-                border: '1px solid #A7F3D0',
-                fontSize: '11.5px',
-                fontWeight: 700,
-                cursor: 'pointer',
-              }}
-              title="قبول التوصية كما هي"
-            >
-              <CheckCircle2 size={13} />
-              قبول
-            </button>
-
-            <button
               onClick={() => setIsEditing(!isEditing)}
               style={{
                 display: 'flex',
                 alignItems: 'center',
                 gap: '4px',
-                padding: '5px 10px',
+                padding: '6px 12px',
                 borderRadius: '6px',
                 backgroundColor: '#F8FAFC',
                 color: '#475569',
@@ -200,7 +179,7 @@ export const AiRecommendationCard: React.FC<AiRecommendationCardProps> = ({
                 display: 'flex',
                 alignItems: 'center',
                 gap: '4px',
-                padding: '5px 10px',
+                padding: '6px 12px',
                 borderRadius: '6px',
                 backgroundColor: '#F8FAFC',
                 color: '#64748B',
@@ -216,26 +195,28 @@ export const AiRecommendationCard: React.FC<AiRecommendationCardProps> = ({
             </button>
           </div>
 
-          {/* Transfer button */}
+          {/* Unified Adoption button */}
           <button
             onClick={() => onOpenTransferModal(initiative)}
             style={{
               display: 'flex',
               alignItems: 'center',
-              gap: '4px',
-              padding: '6px 12px',
-              borderRadius: '6px',
+              gap: '6px',
+              padding: '7px 14px',
+              borderRadius: '7px',
               backgroundColor: '#059669',
               color: '#FFFFFF',
               fontSize: '12px',
               fontWeight: 700,
               border: 'none',
               cursor: 'pointer',
+              boxShadow: '0 2px 6px rgba(5, 150, 105, 0.2)',
             }}
+            title="تبني المبادرة وتخصيصها كإجراء تنفيذي معتمد بالخطة"
           >
-            <Target size={13} />
-            نقل للخطة
-            <ArrowLeft size={13} />
+            <Target size={14} />
+            <span>تبني وإدراج في الخطة</span>
+            <ArrowLeft size={14} />
           </button>
         </div>
       )}

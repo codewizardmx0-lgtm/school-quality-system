@@ -7,6 +7,7 @@ interface AddPlanModalProps {
   onClose: () => void;
   availableAreas?: ImprovementAreaBrief[];
   defaultPlanType?: PlanType;
+  existingActivePlanTypes?: PlanType[];
   onCreatePlan: (payload: CreateImprovementPlanPayload) => Promise<any>;
   isSubmitting?: boolean;
 }
@@ -16,6 +17,7 @@ export const AddPlanModal: React.FC<AddPlanModalProps> = ({
   onClose,
   availableAreas = [],
   defaultPlanType = 'QualityImprovement',
+  existingActivePlanTypes = [],
   onCreatePlan,
   isSubmitting = false,
 }) => {
@@ -197,6 +199,23 @@ export const AddPlanModal: React.FC<AddPlanModalProps> = ({
             </div>
           )}
 
+          {existingActivePlanTypes.length >= 3 && (
+            <div
+              style={{
+                padding: '12px 16px',
+                borderRadius: '10px',
+                backgroundColor: '#ECFDF5',
+                border: '1.5px solid #10B981',
+                color: '#065F46',
+                fontSize: '12.5px',
+                lineHeight: 1.5,
+                fontWeight: 600,
+              }}
+            >
+              ✓ تمتلك المدرسة خططاً نشطة ومعتمدة بالفعل لكافة المسارات الثلاثة (خطة الجودة، التطوير المهني، والخطة التشغيلية). وفق القواعد الوزارية، يُسمح بخطة نشطة واحدة لكل مسار، ويمكنك تعديل الخطط القائمة أو استنساخ إصدار جديد (v2) عند طلب الاستكمال.
+            </div>
+          )}
+
           {/* Plan Type Selector */}
           <div>
             <label style={{ display: 'block', fontSize: '13px', fontWeight: 700, color: '#334155', marginBottom: '8px' }}>
@@ -211,29 +230,45 @@ export const AddPlanModal: React.FC<AddPlanModalProps> = ({
                 ] as const
               ).map((t) => {
                 const isSelected = planType === t.id;
+                const isAlreadyActive = existingActivePlanTypes.includes(t.id);
                 return (
                   <button
                     key={t.id}
                     type="button"
-                    onClick={() => handlePlanTypeChange(t.id)}
+                    disabled={isAlreadyActive}
+                    onClick={() => !isAlreadyActive && handlePlanTypeChange(t.id)}
                     style={{
                       padding: '10px 12px',
                       borderRadius: '10px',
-                      border: isSelected ? '2px solid #2563EB' : '1px solid #CBD5E1',
-                      backgroundColor: isSelected ? '#EFF6FF' : '#FFFFFF',
-                      color: isSelected ? '#1D4ED8' : '#475569',
+                      border: isAlreadyActive
+                        ? '1px dashed #CBD5E1'
+                        : isSelected
+                        ? '2px solid #2563EB'
+                        : '1px solid #CBD5E1',
+                      backgroundColor: isAlreadyActive ? '#F8FAFC' : isSelected ? '#EFF6FF' : '#FFFFFF',
+                      color: isAlreadyActive ? '#94A3B8' : isSelected ? '#1D4ED8' : '#475569',
                       fontSize: '12.5px',
                       fontWeight: isSelected ? 800 : 600,
-                      cursor: 'pointer',
+                      cursor: isAlreadyActive ? 'not-allowed' : 'pointer',
                       textAlign: 'right',
                       display: 'flex',
                       flexDirection: 'column',
                       gap: '2px',
+                      opacity: isAlreadyActive ? 0.7 : 1,
+                      transition: 'all 0.15s ease',
                     }}
+                    title={isAlreadyActive ? 'توجد خطة نشطة قائمة بالفعل لهذا المسار وفق المعايير الوزارية' : undefined}
                   >
-                    <span>{t.label}</span>
-                    <span style={{ fontSize: '11px', color: isSelected ? '#2563EB' : '#94A3B8', fontWeight: 500 }}>
-                      {t.desc}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <span>{t.label}</span>
+                      {isAlreadyActive && (
+                        <span style={{ fontSize: '10px', color: '#059669', fontWeight: 800, backgroundColor: '#ECFDF5', padding: '1px 6px', borderRadius: '4px', border: '1px solid #A7F3D0' }}>
+                          نشطة
+                        </span>
+                      )}
+                    </div>
+                    <span style={{ fontSize: '11px', fontWeight: 500, color: isAlreadyActive ? '#94A3B8' : isSelected ? '#3B82F6' : '#94A3B8' }}>
+                      {isAlreadyActive ? 'خطة نشطة قائمة' : t.desc}
                     </span>
                   </button>
                 );

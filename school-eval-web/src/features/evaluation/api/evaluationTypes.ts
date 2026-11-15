@@ -376,12 +376,23 @@ export interface ImprovementAreaBrief {
   areaId: number;
   name: string;
   priority: PriorityLevel;
+  score?: number | null;
   targetScore?: number;
   indicatorId?: number;
   indicatorCode?: string;
   indicatorName?: string;
   standardCode?: string;
   standardName?: string;
+  alreadyAdoptedPlanTitle?: string | null;
+  alreadyAdoptedPlanType?: string | null;
+  alreadyAdoptedPerson?: string | null;
+  existingLinks?: {
+    planId: number;
+    planTitle: string;
+    planType?: string;
+    person: string;
+  }[];
+  hasAction?: boolean;
 }
 
 export interface ImprovementPlanListItem {
@@ -423,7 +434,21 @@ export interface ImprovementPlanAction {
   areaId?: number;
   areaName?: string;
   title: string;
+  standardCode?: string;
   standardName: string;
+  subStandardCode?: string;
+  subStandardName?: string;
+  indicatorId?: number;
+  indicatorCode?: string;
+  indicatorName?: string;
+  score?: number | null;
+  targetScore?: number;
+  gap?: number | null;
+  baselineScore?: number | null;
+  baselineTargetScore?: number | null;
+  baselineGap?: number | null;
+  priority?: PriorityLevel;
+  priorityArabic?: string;
   leader: string;
   startDate: string;
   dueDate: string;
@@ -498,6 +523,8 @@ export interface UpdateImprovementActionPayload {
   startDate?: string;
   dueDate?: string;
   status?: ActionStatus;
+  priority?: PriorityLevel;
+  targetScore?: number;
   progressDescription?: string;
   completionPercentage?: number;
 }
@@ -614,6 +641,8 @@ export interface EvidenceInventoryIndicator {
   indicatorCode: string;
   indicatorName: string;
   domainName?: string;
+  adoptedPlanTitle?: string | null;
+  adoptedPlanType?: string | null;
   mandatoryRequiredCount: number;
   totalRequiredCount: number;
   uploadedEvidenceCount: number;
