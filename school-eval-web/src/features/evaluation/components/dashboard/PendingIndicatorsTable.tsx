@@ -1,6 +1,17 @@
 import React, { useState } from 'react';
 import type { PendingIndicatorItem } from '../../api/evaluationTypes';
-import { AlertCircle, ArrowLeft, CheckCircle2, Search, Filter } from 'lucide-react';
+import {
+  AlertCircle,
+  ArrowLeft,
+  CheckCircle2,
+  Search,
+  Filter,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+  X,
+  RotateCcw,
+} from 'lucide-react';
 
 interface PendingIndicatorsTableProps {
   indicators: PendingIndicatorItem[];
@@ -13,23 +24,80 @@ export const PendingIndicatorsTable: React.FC<PendingIndicatorsTableProps> = ({
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<'all' | 'unscored' | 'missing-evidence'>('all');
+  type SortKey = 'code' | 'name' | 'standard' | 'score' | 'evidence';
+  type SortDirection = 'asc' | 'desc';
+  const [sortKey, setSortKey] = useState<SortKey>('code');
+  const [sortDir, setSortDir] = useState<SortDirection>('asc');
 
-  const filteredIndicators = indicators.filter((item) => {
-    const matchesSearch =
-      item.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      item.standardName.toLowerCase().includes(searchQuery.toLowerCase());
-
-    if (!matchesSearch) return false;
-
-    if (filterType === 'unscored') {
-      return item.scoreStatus === 'unscored' || item.score === null || item.score === undefined;
+  const handleHeaderSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortDir((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortKey(key);
+      setSortDir(key === 'score' || key === 'evidence' ? 'desc' : 'asc');
     }
-    if (filterType === 'missing-evidence') {
-      return (item.evidenceCount ?? 0) === 0 || item.evidenceStatus === 'missing';
+  };
+
+  const renderSortIcon = (key: SortKey) => {
+    if (sortKey !== key) {
+      return <ArrowUpDown size={12} color="#94A3B8" />;
     }
-    return true;
-  });
+    return sortDir === 'asc' ? <ArrowUp size={12} color="#059669" /> : <ArrowDown size={12} color="#059669" />;
+  };
+
+  const hasActiveFilters = Boolean(searchQuery.trim() || filterType !== 'all');
+
+  const clearAllFilters = () => {
+    setSearchQuery('');
+    setFilterType('all');
+    setSortKey('code');
+    setSortDir('asc');
+  };
+
+  const filteredIndicators = indicators
+    .filter((item) => {
+      const matchesSearch =
+        item.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        item.standardName.toLowerCase().includes(searchQuery.toLowerCase());
+
+      if (!matchesSearch) return false;
+
+      if (filterType === 'unscored') {
+        return item.scoreStatus === 'unscored' || item.score === null || item.score === undefined;
+      }
+      if (filterType === 'missing-evidence') {
+        return (item.evidenceCount ?? 0) === 0 || item.evidenceStatus === 'missing';
+      }
+      return true;
+    })
+    .sort((a, b) => {
+      if (sortKey === 'code') {
+        const comp = a.code.localeCompare(b.code, undefined, { numeric: true });
+        return sortDir === 'asc' ? comp : -comp;
+      }
+      if (sortKey === 'name') {
+        const comp = (a.name || '').localeCompare(b.name || '', 'ar');
+        return sortDir === 'asc' ? comp : -comp;
+      }
+      if (sortKey === 'standard') {
+        const comp = (a.standardName || '').localeCompare(b.standardName || '', 'ar');
+        return sortDir === 'asc' ? comp : -comp;
+      }
+      if (sortKey === 'score') {
+        const sA = a.score ?? -1;
+        const sB = b.score ?? -1;
+        const diff = sA - sB;
+        return sortDir === 'asc' ? diff : -diff;
+      }
+      if (sortKey === 'evidence') {
+        const eA = a.evidenceCount ?? 0;
+        const eB = b.evidenceCount ?? 0;
+        const diff = eA - eB;
+        return sortDir === 'asc' ? diff : -diff;
+      }
+      return 0;
+    });
 
   const getScoreBadge = (item: PendingIndicatorItem) => {
     const isScored = item.scoreStatus === 'scored' || (item.score !== null && item.score !== undefined);
@@ -259,6 +327,90 @@ export const PendingIndicatorsTable: React.FC<PendingIndicatorsTableProps> = ({
         )}
       </div>
 
+      {/* Active Filter Chips Bar */}
+      {hasActiveFilters && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            flexWrap: 'wrap',
+            padding: '8px 14px',
+            backgroundColor: '#F8FAFC',
+            borderRadius: '8px',
+            border: '1px solid #E2E8F0',
+            marginBottom: '14px',
+          }}
+        >
+          <span style={{ fontSize: '11px', fontWeight: 700, color: '#64748B', display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <Filter size={12} />
+            الفلاتر النشطة:
+          </span>
+
+          {searchQuery.trim() && (
+            <span
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px',
+                padding: '2px 8px',
+                borderRadius: '6px',
+                backgroundColor: '#EFF6FF',
+                border: '1px solid #BFDBFE',
+                color: '#1E40AF',
+                fontSize: '11px',
+                fontWeight: 600,
+              }}
+            >
+              <span>البحث: &quot;{searchQuery}&quot;</span>
+              <X size={11} style={{ cursor: 'pointer' }} onClick={() => setSearchQuery('')} />
+            </span>
+          )}
+
+          {filterType !== 'all' && (
+            <span
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px',
+                padding: '2px 8px',
+                borderRadius: '6px',
+                backgroundColor: '#FFFBEB',
+                border: '1px solid #FDE68A',
+                color: '#92400E',
+                fontSize: '11px',
+                fontWeight: 600,
+              }}
+            >
+              <span>{filterType === 'unscored' ? 'غير مقيم فقط' : 'شواهد ناقصة فقط'}</span>
+              <X size={11} style={{ cursor: 'pointer' }} onClick={() => setFilterType('all')} />
+            </span>
+          )}
+
+          <button
+            type="button"
+            onClick={clearAllFilters}
+            style={{
+              padding: '2px 8px',
+              borderRadius: '6px',
+              backgroundColor: '#FEF2F2',
+              border: '1px solid #FECACA',
+              color: '#DC2626',
+              fontSize: '10.5px',
+              fontWeight: 700,
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '4px',
+              marginRight: 'auto',
+            }}
+          >
+            <RotateCcw size={10} />
+            <span>مسح الفلاتر</span>
+          </button>
+        </div>
+      )}
+
       {indicators.length === 0 ? (
         <div
           style={{
@@ -295,20 +447,55 @@ export const PendingIndicatorsTable: React.FC<PendingIndicatorsTableProps> = ({
           <table style={{ minWidth: '920px', width: '100%', borderCollapse: 'collapse', textAlign: 'right' }}>
             <thead>
               <tr style={{ borderBottom: '2px solid #F1F5F9', backgroundColor: '#F8FAFC' }}>
-                <th style={{ padding: '12px 14px', fontSize: '12px', fontWeight: 700, color: '#475569', width: '90px' }}>
-                  رمز المؤشر
+                <th
+                  onClick={() => handleHeaderSort('code')}
+                  style={{ padding: '12px 14px', fontSize: '12px', fontWeight: 700, color: '#475569', width: '105px', cursor: 'pointer', userSelect: 'none' }}
+                  title="انقر للفرز حسب الرمز"
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px' }}>
+                    <span>رمز المؤشر</span>
+                    {renderSortIcon('code')}
+                  </div>
                 </th>
-                <th style={{ padding: '12px 14px', fontSize: '12px', fontWeight: 700, color: '#475569' }}>
-                  عنوان المؤشر المعياري
+                <th
+                  onClick={() => handleHeaderSort('name')}
+                  style={{ padding: '12px 14px', fontSize: '12px', fontWeight: 700, color: '#475569', cursor: 'pointer', userSelect: 'none' }}
+                  title="انقر للفرز حسب العنوان"
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px' }}>
+                    <span>عنوان المؤشر المعياري</span>
+                    {renderSortIcon('name')}
+                  </div>
                 </th>
-                <th style={{ padding: '12px 14px', fontSize: '12px', fontWeight: 700, color: '#475569', width: '170px' }}>
-                  المجال المعياري
+                <th
+                  onClick={() => handleHeaderSort('standard')}
+                  style={{ padding: '12px 14px', fontSize: '12px', fontWeight: 700, color: '#475569', width: '170px', cursor: 'pointer', userSelect: 'none' }}
+                  title="انقر للفرز حسب المجال المعياري"
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px' }}>
+                    <span>المجال المعياري</span>
+                    {renderSortIcon('standard')}
+                  </div>
                 </th>
-                <th style={{ padding: '12px 14px', fontSize: '12px', fontWeight: 700, color: '#475569', width: '160px' }}>
-                  إدخال التقدير
+                <th
+                  onClick={() => handleHeaderSort('score')}
+                  style={{ padding: '12px 14px', fontSize: '12px', fontWeight: 700, color: '#475569', width: '160px', cursor: 'pointer', userSelect: 'none' }}
+                  title="انقر للفرز حسب التقدير"
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px' }}>
+                    <span>إدخال التقدير</span>
+                    {renderSortIcon('score')}
+                  </div>
                 </th>
-                <th style={{ padding: '12px 14px', fontSize: '12px', fontWeight: 700, color: '#475569', width: '150px' }}>
-                  الشواهد المرفقة
+                <th
+                  onClick={() => handleHeaderSort('evidence')}
+                  style={{ padding: '12px 14px', fontSize: '12px', fontWeight: 700, color: '#475569', width: '150px', cursor: 'pointer', userSelect: 'none' }}
+                  title="انقر للفرز حسب عدد الشواهد"
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px' }}>
+                    <span>الشواهد المرفقة</span>
+                    {renderSortIcon('evidence')}
+                  </div>
                 </th>
                 <th style={{ padding: '12px 14px', fontSize: '12px', fontWeight: 700, color: '#475569', textAlign: 'center', width: '110px' }}>
                   الإجراء

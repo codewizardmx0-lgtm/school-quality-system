@@ -25,8 +25,8 @@ export const FinalSubmissionLockModal: React.FC<FinalSubmissionLockModalProps> =
   const [isAgreed, setIsAgreed] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const displayTrackingCode = trackingCode || 'ARQ-2026-FINAL-PENDING';
-  const displayDigitalHash = digitalHash || 'SHA-256 Calculated upon digital sign-off';
+  const displayTrackingCode = trackingCode || 'يُولَّد تلقائياً فور تأكيد الختم';
+  const displayDigitalHash = digitalHash || 'تُحسب البصمة المشفرة (SHA-256) فور التحقق من كلمة المرور';
 
   const handleClose = () => {
     if (isSubmitting) return;

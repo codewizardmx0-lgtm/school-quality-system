@@ -1,5 +1,5 @@
 import { exportMultiSheetExcel, formatExportFilename } from '../../../admin/utils/exportUtils';
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useEvidences } from '../../hooks/useEvidences';
 import { evaluatorApi } from '../../api/evaluatorApi';
 import { EvidenceCard } from './EvidenceCard';
@@ -12,6 +12,7 @@ import { UploadEvidenceModal } from './UploadEvidenceModal';
 import { DocumentVersionsModal } from './DocumentVersionsModal';
 import { OldEvidenceVersionsView } from './OldEvidenceVersionsView';
 import { useAuth } from '../../../auth/AuthContext';
+import { designTokens } from '../../../../styles/designTokens';
 import type { EvidenceItem, EvaluatorScreen } from '../../api/evaluationTypes';
 import {
   FolderLock,
@@ -32,7 +33,43 @@ import {
   ExternalLink,
   History,
   ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+  Filter,
+  ChevronDown,
+  X,
 } from 'lucide-react';
+
+const STANDARD_OPTIONS = [
+  { id: 1, code: 'STD-01', label: 'STD-01: القيادة والإدارة المدرسية' },
+  { id: 2, code: 'STD-02', label: 'STD-02: التعليم والتعلم' },
+  { id: 3, code: 'STD-03', label: 'STD-03: نواتج التعلم وسلوك الطلبة' },
+  { id: 4, code: 'STD-04', label: 'STD-04: البيئة المدرسية والصحة والسلامة' },
+  { id: 5, code: 'STD-05', label: 'STD-05: رعاية الطلبة وخدمات الدعم' },
+  { id: 6, code: 'STD-06', label: 'STD-06: المشاركة المجتمعية والشراكات' },
+  { id: 7, code: 'STD-07', label: 'STD-07: التطوير المدرسي المستمر والتخطيط' },
+];
+
+const FORMAT_OPTIONS = [
+  { key: 'pdf', label: 'ملفات PDF', extensions: ['.pdf'], mimeSnippet: 'pdf' },
+  { key: 'sheet', label: 'جداول Excel', extensions: ['.xlsx', '.xls', '.csv'], mimeSnippet: 'spreadsheet' },
+  { key: 'word', label: 'مستندات Word', extensions: ['.docx', '.doc'], mimeSnippet: 'word' },
+  { key: 'image', label: 'صور ميدانية', extensions: ['.png', '.jpg', '.jpeg', '.webp'], mimeSnippet: 'image' },
+];
+
+const DOC_TYPE_OPTIONS = [
+  { key: 'evidence', label: 'شاهد توثيقي' },
+  { key: 'minutes', label: 'محضر اجتماع' },
+  { key: 'plan', label: 'خطة عمل' },
+  { key: 'record', label: 'سجل رسمي' },
+  { key: 'report', label: 'تقرير وإحصائية' },
+  { key: 'board', label: 'لوحة إعلانات' },
+  { key: 'image', label: 'صورة فوتوغرافية' },
+  { key: 'other', label: 'أخرى / عام' },
+];
+
+type SortField = 'standard' | 'title' | 'version' | 'size' | 'date' | 'links';
+type SortDirection = 'asc' | 'desc';
 
 interface EvidencesRepositoryProps {
   onNavigate?: (screen: EvaluatorScreen, param?: number) => void;
@@ -46,10 +83,6 @@ export const EvidencesRepository: React.FC<EvidencesRepositoryProps> = ({
   const {
     evidences,
     vaultStats,
-    selectedStandardFilter,
-    setSelectedStandardFilter,
-    selectedFormatFilter,
-    setSelectedFormatFilter,
     isUploading,
     uploadProgress,
     fetchEvidences,
@@ -62,8 +95,14 @@ export const EvidencesRepository: React.FC<EvidencesRepositoryProps> = ({
 
   const [searchTerm, setSearchTerm] = useState('');
   const [linkFilter, setLinkFilter] = useState<'all' | 'linked' | 'unlinked'>('all');
-  const [documentTypeFilter, setDocumentTypeFilter] = useState<string>('all');
-  const [sortBy, setSortBy] = useState<'standard' | 'date_desc' | 'date_asc' | 'size_desc' | 'size_asc' | 'links_desc' | 'title_asc'>('standard');
+  const [selectedStandardIds, setSelectedStandardIds] = useState<number[]>([]);
+  const [selectedFormats, setSelectedFormats] = useState<string[]>([]);
+  const [selectedDocumentTypes, setSelectedDocumentTypes] = useState<string[]>([]);
+  const [needsReplacementOnly, setNeedsReplacementOnly] = useState(false);
+  const [sortField, setSortField] = useState<SortField>('standard');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+  const [activeDropdown, setActiveDropdown] = useState<'standards' | 'formats' | 'types' | null>(null);
+  const filterDropdownRef = useRef<HTMLDivElement>(null);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [replaceDocId, setReplaceDocId] = useState<number | undefined>(undefined);
   const [viewMode, setViewMode] = useState<'grid' | 'table'>('table');
@@ -73,7 +112,6 @@ export const EvidencesRepository: React.FC<EvidencesRepositoryProps> = ({
   const [versionsModalEvidence, setVersionsModalEvidence] = useState<EvidenceItem | null>(null);
   const [isLinkModalOpen, setIsLinkModalOpen] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [navPopoverEvidenceId, setNavPopoverEvidenceId] = useState<number | null>(null);
   const { toasts, addToast, dismissToast } = useToast();
   const { user } = useAuth();
 
@@ -82,6 +120,20 @@ export const EvidencesRepository: React.FC<EvidencesRepositoryProps> = ({
       fetchVersionsArchive();
     }
   }, [activeTab, fetchVersionsArchive]);
+
+  useEffect(() => {
+    const handleOutsideClick = (e: MouseEvent) => {
+      if (filterDropdownRef.current && !filterDropdownRef.current.contains(e.target as Node)) {
+        setActiveDropdown(null);
+      }
+    };
+    if (activeDropdown) {
+      document.addEventListener('mousedown', handleOutsideClick);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleOutsideClick);
+    };
+  }, [activeDropdown]);
 
   const handleOpenLinkModal = (evidence: EvidenceItem) => {
     setSelectedEvidenceForLinking(evidence);
@@ -147,57 +199,137 @@ export const EvidencesRepository: React.FC<EvidencesRepositoryProps> = ({
   const coveredIndicators = stats.coveredIndicatorsCount ?? (uniqueCoveredIndicatorsCount || 109);
   const totalIndicators = stats.totalIndicatorsCount ?? 109;
 
-  const filteredEvidences = evidences.filter((item) => {
-    const matchesSearch =
-      item.title.includes(searchTerm) ||
-      item.fileName.includes(searchTerm) ||
-      item.standardName.includes(searchTerm) ||
-      item.indicatorCode.includes(searchTerm);
-    const isUnlinked = Boolean(item.isUnlinked || !item.indicatorId);
-    const matchesLink = linkFilter === 'all' || (linkFilter === 'unlinked' ? isUnlinked : !isUnlinked);
-    const matchesType = documentTypeFilter === 'all' || item.documentType === documentTypeFilter;
-    return matchesSearch && matchesLink && matchesType;
-  });
+  const filteredEvidences = useMemo(() => {
+    return evidences.filter((item) => {
+      // 1. Search term
+      if (searchTerm.trim()) {
+        const term = searchTerm.trim().toLowerCase();
+        const matchesMain =
+          item.title.toLowerCase().includes(term) ||
+          item.fileName.toLowerCase().includes(term) ||
+          item.standardName.toLowerCase().includes(term) ||
+          item.indicatorCode.toLowerCase().includes(term);
+        const matchesLinked = Boolean(
+          item.linkedIndicators &&
+            item.linkedIndicators.some(
+              (li) =>
+                li.indicatorCode.toLowerCase().includes(term) ||
+                li.indicatorTitle.toLowerCase().includes(term)
+            )
+        );
+        if (!matchesMain && !matchesLinked) return false;
+      }
+
+      // 2. Standards multi-select
+      if (selectedStandardIds.length > 0) {
+        let hasMatchingStandard = false;
+        if (item.linkedIndicators && item.linkedIndicators.length > 0) {
+          hasMatchingStandard = item.linkedIndicators.some((li) => {
+            if (li.standardId && selectedStandardIds.includes(li.standardId)) return true;
+            if (li.standardCode) {
+              const num = parseInt(li.standardCode.replace(/\D/g, ''), 10);
+              if (!isNaN(num) && selectedStandardIds.includes(num)) return true;
+            }
+            return false;
+          });
+        }
+        if (!hasMatchingStandard && item.standardCode) {
+          const num = parseInt(item.standardCode.replace(/\D/g, ''), 10);
+          if (!isNaN(num) && selectedStandardIds.includes(num)) {
+            hasMatchingStandard = true;
+          }
+        }
+        if (!hasMatchingStandard) return false;
+      }
+
+      // 3. Formats multi-select
+      if (selectedFormats.length > 0) {
+        const fileNameLower = (item.fileName || '').toLowerCase();
+        const mimeLower = (item.mimeType || '').toLowerCase();
+        const matchesFormat = selectedFormats.some((fmt) => {
+          const opt = FORMAT_OPTIONS.find((o) => o.key === fmt);
+          if (!opt) return false;
+          const matchesExt = opt.extensions.some((ext) => fileNameLower.endsWith(ext));
+          const matchesMime = mimeLower.includes(opt.mimeSnippet);
+          return matchesExt || matchesMime;
+        });
+        if (!matchesFormat) return false;
+      }
+
+      // 4. Document Types multi-select
+      if (selectedDocumentTypes.length > 0) {
+        if (!selectedDocumentTypes.includes(item.documentType || 'other')) {
+          return false;
+        }
+      }
+
+      // 5. Link Status filter
+      const isUnlinked = Boolean(item.isUnlinked || !item.indicatorId);
+      if (linkFilter === 'linked' && isUnlinked) return false;
+      if (linkFilter === 'unlinked' && !isUnlinked) return false;
+
+      // 6. Replacement / Flagged filter
+      if (needsReplacementOnly) {
+        const needsRep = Boolean((item as any).needsReplacement || item.versionNumber > 1);
+        if (!needsRep) return false;
+      }
+
+      return true;
+    });
+  }, [
+    evidences,
+    searchTerm,
+    selectedStandardIds,
+    selectedFormats,
+    selectedDocumentTypes,
+    linkFilter,
+    needsReplacementOnly,
+  ]);
+
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortField(field);
+      setSortDirection(field === 'title' || field === 'standard' ? 'asc' : 'desc');
+    }
+  };
 
   const sortedEvidences = React.useMemo(() => {
     return [...filteredEvidences].sort((a, b) => {
-      if (sortBy === 'date_desc') {
-        return new Date(b.uploadedAt || 0).getTime() - new Date(a.uploadedAt || 0).getTime();
+      let comparison = 0;
+      if (sortField === 'title') {
+        comparison = a.title.localeCompare(b.title, 'ar');
+      } else if (sortField === 'version') {
+        comparison = (a.versionNumber || 1) - (b.versionNumber || 1);
+      } else if (sortField === 'size') {
+        comparison = (a.fileSize || 0) - (b.fileSize || 0);
+      } else if (sortField === 'date') {
+        comparison = new Date(a.uploadedAt || 0).getTime() - new Date(b.uploadedAt || 0).getTime();
+      } else if (sortField === 'links') {
+        const aLinks = a.linkedIndicators?.length || (a.indicatorId ? 1 : 0);
+        const bLinks = b.linkedIndicators?.length || (b.indicatorId ? 1 : 0);
+        comparison = aLinks - bLinks;
+      } else {
+        // 'standard' default: RTL indicator code numeric parsing
+        const parseCodeNumeric = (code?: string): [number, number, number] => {
+          if (!code) return [999, 999, 999];
+          const parts = code.split(/[-._]/).map((p) => parseInt(p.replace(/\D/g, ''), 10)).filter((n) => !isNaN(n));
+          if (parts.length >= 3) {
+            return [parts[2] ?? 999, parts[1] ?? 999, parts[0] ?? 999];
+          }
+          return [parts[0] ?? 999, parts[1] ?? 999, parts[2] ?? 999];
+        };
+        const [sA, subA, iA] = parseCodeNumeric(a.indicatorCode);
+        const [sB, subB, iB] = parseCodeNumeric(b.indicatorCode);
+        if (sA !== sB) comparison = sA - sB;
+        else if (subA !== subB) comparison = subA - subB;
+        else if (iA !== iB) comparison = iA - iB;
+        else comparison = a.id - b.id;
       }
-      if (sortBy === 'date_asc') {
-        return new Date(a.uploadedAt || 0).getTime() - new Date(b.uploadedAt || 0).getTime();
-      }
-      if (sortBy === 'size_desc') {
-        return (b.fileSize || 0) - (a.fileSize || 0);
-      }
-      if (sortBy === 'size_asc') {
-        return (a.fileSize || 0) - (b.fileSize || 0);
-      }
-      if (sortBy === 'links_desc') {
-        const aLinks = (a.linkedIndicators?.length || (a.indicatorId ? 1 : 0));
-        const bLinks = (b.linkedIndicators?.length || (b.indicatorId ? 1 : 0));
-        return bLinks - aLinks;
-      }
-      if (sortBy === 'title_asc') {
-        return a.title.localeCompare(b.title, 'ar');
-      }
-      // 'standard' default: RTL indicator code parsing
-      const parseCodeNumeric = (code?: string): [number, number, number] => {
-        if (!code) return [999, 999, 999];
-        const parts = code.split(/[-._]/).map((p) => parseInt(p.replace(/\D/g, ''), 10)).filter((n) => !isNaN(n));
-        if (parts.length >= 3) {
-          return [parts[2] ?? 999, parts[1] ?? 999, parts[0] ?? 999];
-        }
-        return [parts[0] ?? 999, parts[1] ?? 999, parts[2] ?? 999];
-      };
-      const [sA, subA, iA] = parseCodeNumeric(a.indicatorCode);
-      const [sB, subB, iB] = parseCodeNumeric(b.indicatorCode);
-      if (sA !== sB) return sA - sB;
-      if (subA !== subB) return subA - subB;
-      if (iA !== iB) return iA - iB;
-      return a.id - b.id;
+      return sortDirection === 'asc' ? comparison : -comparison;
     });
-  }, [filteredEvidences, sortBy]);
+  }, [filteredEvidences, sortField, sortDirection]);
 
   const handleOpenUpload = (docId?: number) => {
     if (readOnly) return;
@@ -233,8 +365,8 @@ export const EvidencesRepository: React.FC<EvidencesRepositoryProps> = ({
   };
 
   const handleExportExcel = () => {
-    const schoolName = user?.school?.schoolName || 'مدرسة الفاروق الأساسية للبنين';
-    const schoolCode = user?.school?.schoolCode || (user?.school?.schoolId ? `SCH-${user.school.schoolId}` : 'SCH-TAIZ-2026-001');
+    const schoolName = user?.school?.schoolName || 'المدرسة';
+    const schoolCode = user?.school?.schoolCode || (user?.school?.schoolId ? `SCH-${user.school.schoolId}` : 'SCH-OFFICIAL');
 
     // الورقة 1: الشواهد السارية الفعالة في المستودع
     const sheet1Headers = ['معرف المستند', 'عنوان الشاهد', 'اسم الملف', 'المعيار', 'المؤشر', 'الإصدار', 'الحالة', 'الحجم', 'تاريخ الرفع'];
@@ -585,178 +717,538 @@ export const EvidencesRepository: React.FC<EvidencesRepositoryProps> = ({
           gap: '14px',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-          {/* Search */}
-          <div style={{ position: 'relative', width: '100%', maxWidth: '280px' }}>
-            <Search size={16} color="#94A3B8" style={{ position: 'absolute', right: '12px', top: '11px' }} />
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="بحث في الشواهد أو المؤشرات..."
-              style={{
-                width: '100%',
-                padding: '8px 36px 8px 12px',
-                borderRadius: '8px',
-                border: '1px solid #CBD5E1',
-                fontSize: '13px',
-                outline: 'none',
-                boxSizing: 'border-box',
-              }}
-            />
-          </div>
+        <div ref={filterDropdownRef} style={{ display: 'flex', flexDirection: 'column', gap: '12px', flex: 1, minWidth: '300px' }}>
+          {/* Row 1: Search & Multi-Select Filter Popovers & Link Filter & Grid Sort */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+            {/* Search */}
+            <div style={{ position: 'relative', width: '100%', maxWidth: '240px' }}>
+              <Search size={15} color="#94A3B8" style={{ position: 'absolute', right: '10px', top: '10px' }} />
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="بحث في الشواهد أو المؤشرات..."
+                style={{
+                  width: '100%',
+                  padding: '7px 32px 7px 10px',
+                  borderRadius: '8px',
+                  border: '1px solid #CBD5E1',
+                  fontSize: '12.5px',
+                  outline: 'none',
+                  boxSizing: 'border-box',
+                }}
+              />
+              {searchTerm && (
+                <X
+                  size={14}
+                  color="#94A3B8"
+                  onClick={() => setSearchTerm('')}
+                  style={{ position: 'absolute', left: '8px', top: '10px', cursor: 'pointer' }}
+                />
+              )}
+            </div>
 
-          {/* Standard Filter */}
-          <select
-            value={selectedStandardFilter || ''}
-            onChange={(e) => setSelectedStandardFilter(e.target.value ? Number(e.target.value) : undefined)}
-            style={{
-              padding: '8px 12px',
-              borderRadius: '8px',
-              border: '1px solid #CBD5E1',
-              fontSize: '13px',
-              backgroundColor: '#FFFFFF',
-              color: '#334155',
-              outline: 'none',
-              cursor: 'pointer',
-            }}
-          >
-            <option value="">كافة المعايير الوطنية</option>
-            <option value="1">STD-01: القيادة والإدارة</option>
-            <option value="2">STD-02: التعليم والتعلم</option>
-            <option value="3">STD-03: نواتج التعلم</option>
-            <option value="4">STD-04: البيئة المدرسية</option>
-            <option value="5">STD-05: رعاية الطلبة</option>
-            <option value="6">STD-06: المشاركة المجتمعية</option>
-            <option value="7">STD-07: التطوير المستمر</option>
-          </select>
+            {/* Standards Multi-Select Popover */}
+            <div style={{ position: 'relative' }}>
+              <button
+                type="button"
+                onClick={() => setActiveDropdown((prev) => (prev === 'standards' ? null : 'standards'))}
+                style={{
+                  padding: '7px 12px',
+                  borderRadius: '8px',
+                  border: `1px solid ${selectedStandardIds.length > 0 ? '#10B981' : '#CBD5E1'}`,
+                  backgroundColor: selectedStandardIds.length > 0 ? '#ECFDF5' : '#FFFFFF',
+                  color: selectedStandardIds.length > 0 ? '#065F46' : '#334155',
+                  fontSize: '12.5px',
+                  fontWeight: selectedStandardIds.length > 0 ? 700 : 500,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                }}
+              >
+                <Filter size={13} color={selectedStandardIds.length > 0 ? '#059669' : '#64748B'} />
+                <span>
+                  {selectedStandardIds.length === 0
+                    ? 'المعايير الوطنية'
+                    : selectedStandardIds.length === 1
+                    ? STANDARD_OPTIONS.find((s) => s.id === selectedStandardIds[0])?.code || 'معيار محدد'
+                    : `${selectedStandardIds.length} معايير محددة`}
+                </span>
+                <ChevronDown size={13} />
+              </button>
 
-          {/* Format Filter */}
-          <select
-            value={selectedFormatFilter}
-            onChange={(e) => setSelectedFormatFilter(e.target.value)}
-            style={{
-              padding: '8px 12px',
-              borderRadius: '8px',
-              border: '1px solid #CBD5E1',
-              fontSize: '13px',
-              backgroundColor: '#FFFFFF',
-              color: '#334155',
-              outline: 'none',
-              cursor: 'pointer',
-            }}
-          >
-            <option value="">كافة الصيغ (PDF, Word, Excel, صور)</option>
-            <option value="pdf">ملفات PDF</option>
-            <option value="sheet">جداول Excel</option>
-            <option value="word">مستندات Word</option>
-            <option value="image">صور ميدانية</option>
-          </select>
+              {activeDropdown === 'standards' && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: 'calc(100% + 4px)',
+                    right: 0,
+                    zIndex: 100,
+                    backgroundColor: '#FFFFFF',
+                    border: '1px solid #CBD5E1',
+                    borderRadius: '10px',
+                    boxShadow: '0 10px 25px -5px rgba(0,0,0,0.15)',
+                    padding: '8px',
+                    width: '280px',
+                    maxHeight: '320px',
+                    overflowY: 'auto',
+                    textAlign: 'right',
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 6px 8px', borderBottom: '1px solid #F1F5F9', marginBottom: '6px' }}>
+                    <span style={{ fontSize: '11px', fontWeight: 800, color: '#475569' }}>تصفية المعايير الوطنية</span>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedStandardIds(STANDARD_OPTIONS.map((s) => s.id))}
+                        style={{ border: 'none', background: 'none', color: '#059669', fontSize: '10.5px', fontWeight: 700, cursor: 'pointer', padding: 0 }}
+                      >
+                        الكل
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedStandardIds([])}
+                        style={{ border: 'none', background: 'none', color: '#EF4444', fontSize: '10.5px', fontWeight: 700, cursor: 'pointer', padding: 0 }}
+                      >
+                        مسح
+                      </button>
+                    </div>
+                  </div>
+                  {STANDARD_OPTIONS.map((opt) => {
+                    const isChecked = selectedStandardIds.includes(opt.id);
+                    return (
+                      <label
+                        key={opt.id}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '8px',
+                          padding: '6px 8px',
+                          borderRadius: '6px',
+                          cursor: 'pointer',
+                          backgroundColor: isChecked ? '#F0FDF4' : 'transparent',
+                          fontSize: '11.5px',
+                          color: '#334155',
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={() => {
+                            setSelectedStandardIds((prev) =>
+                              prev.includes(opt.id) ? prev.filter((id) => id !== opt.id) : [...prev, opt.id]
+                            );
+                          }}
+                        />
+                        <span style={{ fontWeight: 700, color: '#059669' }}>{opt.code}</span>
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{opt.label.split(':')[1] || opt.label}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
 
-          <select
-            value={linkFilter}
-            onChange={(e) => setLinkFilter(e.target.value as 'all' | 'linked' | 'unlinked')}
-            style={{
-              padding: '8px 12px',
-              borderRadius: '8px',
-              border: '1px solid #CBD5E1',
-              fontSize: '13px',
-              backgroundColor: '#FFFFFF',
-              color: '#334155',
-              outline: 'none',
-              cursor: 'pointer',
-            }}
-          >
-            <option value="all">كافة حالات الربط</option>
-            <option value="linked">مرتبطة بمؤشرات</option>
-            <option value="unlinked">غير مرتبطة بأي مؤشر</option>
-          </select>
+            {/* Formats Multi-Select Popover */}
+            <div style={{ position: 'relative' }}>
+              <button
+                type="button"
+                onClick={() => setActiveDropdown((prev) => (prev === 'formats' ? null : 'formats'))}
+                style={{
+                  padding: '7px 12px',
+                  borderRadius: '8px',
+                  border: `1px solid ${selectedFormats.length > 0 ? '#2563EB' : '#CBD5E1'}`,
+                  backgroundColor: selectedFormats.length > 0 ? '#EFF6FF' : '#FFFFFF',
+                  color: selectedFormats.length > 0 ? '#1E40AF' : '#334155',
+                  fontSize: '12.5px',
+                  fontWeight: selectedFormats.length > 0 ? 700 : 500,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                }}
+              >
+                <span>
+                  {selectedFormats.length === 0
+                    ? 'صيغ الملفات'
+                    : selectedFormats.length === 1
+                    ? FORMAT_OPTIONS.find((f) => f.key === selectedFormats[0])?.label || selectedFormats[0]
+                    : `${selectedFormats.length} صيغ محددة`}
+                </span>
+                <ChevronDown size={13} />
+              </button>
 
-          <select
-            value={documentTypeFilter}
-            onChange={(e) => setDocumentTypeFilter(e.target.value)}
-            style={{
-              padding: '8px 12px',
-              borderRadius: '8px',
-              border: '1px solid #CBD5E1',
-              fontSize: '13px',
-              backgroundColor: '#FFFFFF',
-              color: '#334155',
-              outline: 'none',
-              cursor: 'pointer',
-            }}
-          >
-            <option value="all">كافة أنواع الوثائق</option>
-            <option value="evidence">شاهد توثيقي</option>
-            <option value="minutes">محضر اجتماع</option>
-            <option value="plan">خطة عمل</option>
-            <option value="record">سجل رسمي</option>
-            <option value="report">تقرير وإحصائية</option>
-            <option value="board">لوحة إعلانات</option>
-            <option value="image">صورة فوتوغرافية</option>
-            <option value="other">أخرى / عام</option>
-          </select>
+              {activeDropdown === 'formats' && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: 'calc(100% + 4px)',
+                    right: 0,
+                    zIndex: 100,
+                    backgroundColor: '#FFFFFF',
+                    border: '1px solid #CBD5E1',
+                    borderRadius: '10px',
+                    boxShadow: '0 10px 25px -5px rgba(0,0,0,0.15)',
+                    padding: '8px',
+                    width: '200px',
+                    textAlign: 'right',
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 6px 8px', borderBottom: '1px solid #F1F5F9', marginBottom: '6px' }}>
+                    <span style={{ fontSize: '11px', fontWeight: 800, color: '#475569' }}>الصيغ المتاحة</span>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedFormats([])}
+                      style={{ border: 'none', background: 'none', color: '#EF4444', fontSize: '10.5px', fontWeight: 700, cursor: 'pointer', padding: 0 }}
+                    >
+                      مسح
+                    </button>
+                  </div>
+                  {FORMAT_OPTIONS.map((opt) => {
+                    const isChecked = selectedFormats.includes(opt.key);
+                    return (
+                      <label
+                        key={opt.key}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '8px',
+                          padding: '6px 8px',
+                          borderRadius: '6px',
+                          cursor: 'pointer',
+                          backgroundColor: isChecked ? '#EFF6FF' : 'transparent',
+                          fontSize: '11.5px',
+                          color: '#334155',
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={() => {
+                            setSelectedFormats((prev) =>
+                              prev.includes(opt.key) ? prev.filter((k) => k !== opt.key) : [...prev, opt.key]
+                            );
+                          }}
+                        />
+                        <span>{opt.label}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
 
-          {/* Sort Dropdown */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <ArrowUpDown size={14} color="#64748B" />
+            {/* Document Types Multi-Select Popover */}
+            <div style={{ position: 'relative' }}>
+              <button
+                type="button"
+                onClick={() => setActiveDropdown((prev) => (prev === 'types' ? null : 'types'))}
+                style={{
+                  padding: '7px 12px',
+                  borderRadius: '8px',
+                  border: `1px solid ${selectedDocumentTypes.length > 0 ? '#7C3AED' : '#CBD5E1'}`,
+                  backgroundColor: selectedDocumentTypes.length > 0 ? '#F5F3FF' : '#FFFFFF',
+                  color: selectedDocumentTypes.length > 0 ? '#6D28D9' : '#334155',
+                  fontSize: '12.5px',
+                  fontWeight: selectedDocumentTypes.length > 0 ? 700 : 500,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                }}
+              >
+                <span>
+                  {selectedDocumentTypes.length === 0
+                    ? 'أنواع الوثائق'
+                    : selectedDocumentTypes.length === 1
+                    ? DOC_TYPE_OPTIONS.find((t) => t.key === selectedDocumentTypes[0])?.label || selectedDocumentTypes[0]
+                    : `${selectedDocumentTypes.length} أنواع محددة`}
+                </span>
+                <ChevronDown size={13} />
+              </button>
+
+              {activeDropdown === 'types' && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: 'calc(100% + 4px)',
+                    right: 0,
+                    zIndex: 100,
+                    backgroundColor: '#FFFFFF',
+                    border: '1px solid #CBD5E1',
+                    borderRadius: '10px',
+                    boxShadow: '0 10px 25px -5px rgba(0,0,0,0.15)',
+                    padding: '8px',
+                    width: '210px',
+                    maxHeight: '280px',
+                    overflowY: 'auto',
+                    textAlign: 'right',
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 6px 8px', borderBottom: '1px solid #F1F5F9', marginBottom: '6px' }}>
+                    <span style={{ fontSize: '11px', fontWeight: 800, color: '#475569' }}>أنواع الوثائق</span>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedDocumentTypes([])}
+                      style={{ border: 'none', background: 'none', color: '#EF4444', fontSize: '10.5px', fontWeight: 700, cursor: 'pointer', padding: 0 }}
+                    >
+                      مسح
+                    </button>
+                  </div>
+                  {DOC_TYPE_OPTIONS.map((opt) => {
+                    const isChecked = selectedDocumentTypes.includes(opt.key);
+                    return (
+                      <label
+                        key={opt.key}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '8px',
+                          padding: '6px 8px',
+                          borderRadius: '6px',
+                          cursor: 'pointer',
+                          backgroundColor: isChecked ? '#F5F3FF' : 'transparent',
+                          fontSize: '11.5px',
+                          color: '#334155',
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={() => {
+                            setSelectedDocumentTypes((prev) =>
+                              prev.includes(opt.key) ? prev.filter((k) => k !== opt.key) : [...prev, opt.key]
+                            );
+                          }}
+                        />
+                        <span>{opt.label}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Link Status Select */}
             <select
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value as any)}
+              value={linkFilter}
+              onChange={(e) => setLinkFilter(e.target.value as 'all' | 'linked' | 'unlinked')}
               style={{
-                padding: '8px 12px',
+                padding: '7px 10px',
                 borderRadius: '8px',
                 border: '1px solid #CBD5E1',
-                fontSize: '13px',
+                fontSize: '12.5px',
                 backgroundColor: '#FFFFFF',
                 color: '#334155',
                 outline: 'none',
                 cursor: 'pointer',
-                fontWeight: 600,
               }}
-              title="ترتيب وفرز الشواهد"
             >
-              <option value="standard">الترتيب المعياري (حسب المعيار والمؤشر)</option>
-              <option value="date_desc">الأحدث رفعاً (تاريخ تنازلي)</option>
-              <option value="date_asc">الأقدم رفعاً (تاريخ تصاعدي)</option>
-              <option value="size_desc">حجم الملف (الأكبر أولاً)</option>
-              <option value="size_asc">حجم الملف (الأصغر أولاً)</option>
-              <option value="links_desc">عدد المؤشرات المرتبطة (الأكثر أولاً)</option>
-              <option value="title_asc">أبجدياً (اسم الشاهد أ-ي)</option>
+              <option value="all">كافة حالات الربط</option>
+              <option value="linked">مرتبطة بمؤشرات</option>
+              <option value="unlinked">غير مرتبطة بأي مؤشر</option>
             </select>
+
+            {/* Sort Dropdown (Visible in Grid View) */}
+            {viewMode === 'grid' && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <ArrowUpDown size={14} color="#64748B" />
+                <select
+                  value={`${sortField}_${sortDirection}`}
+                  onChange={(e) => {
+                    const [f, d] = e.target.value.split('_') as [SortField, SortDirection];
+                    setSortField(f);
+                    setSortDirection(d);
+                  }}
+                  style={{
+                    padding: '7px 10px',
+                    borderRadius: '8px',
+                    border: '1px solid #CBD5E1',
+                    fontSize: '12.5px',
+                    backgroundColor: '#FFFFFF',
+                    color: '#334155',
+                    outline: 'none',
+                    cursor: 'pointer',
+                    fontWeight: 600,
+                  }}
+                  title="ترتيب وفرز الشواهد"
+                >
+                  <option value="standard_asc">الترتيب المعياري</option>
+                  <option value="date_desc">الأحدث رفعاً</option>
+                  <option value="date_asc">الأقدم رفعاً</option>
+                  <option value="size_desc">حجم الملف (الأكبر أولاً)</option>
+                  <option value="size_asc">حجم الملف (الأصغر أولاً)</option>
+                  <option value="title_asc">أبجدياً (أ-ي)</option>
+                  <option value="version_desc">رقم الإصدار (الأحدث)</option>
+                </select>
+              </div>
+            )}
           </div>
 
-          {/* زر إعادة ضبط الفلاتر إن كانت نشطة */}
-          {(searchTerm || selectedStandardFilter !== undefined || selectedFormatFilter !== '' || linkFilter !== 'all' || documentTypeFilter !== 'all' || sortBy !== 'standard') && (
+          {/* Row 2: Quick Presets */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 700 }}>مرشحات سريعة:</span>
             <button
               type="button"
               onClick={() => {
                 setSearchTerm('');
-                setSelectedStandardFilter(undefined);
-                setSelectedFormatFilter('');
+                setSelectedStandardIds([]);
+                setSelectedFormats([]);
+                setSelectedDocumentTypes([]);
                 setLinkFilter('all');
-                setDocumentTypeFilter('all');
-                setSortBy('standard');
+                setNeedsReplacementOnly(false);
               }}
               style={{
-                padding: '7px 12px',
-                borderRadius: '8px',
-                backgroundColor: '#FEF2F2',
-                border: '1px solid #FECACA',
-                color: '#DC2626',
-                fontSize: '12px',
+                padding: '3px 9px',
+                borderRadius: '6px',
+                fontSize: '11px',
                 fontWeight: 700,
                 cursor: 'pointer',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '4px',
-                transition: 'all 0.15s ease',
+                border: selectedStandardIds.length === 0 && selectedFormats.length === 0 && selectedDocumentTypes.length === 0 && linkFilter === 'all' && !needsReplacementOnly && !searchTerm ? '1px solid #059669' : '1px solid #E2E8F0',
+                backgroundColor: selectedStandardIds.length === 0 && selectedFormats.length === 0 && selectedDocumentTypes.length === 0 && linkFilter === 'all' && !needsReplacementOnly && !searchTerm ? '#ECFDF5' : '#FFFFFF',
+                color: selectedStandardIds.length === 0 && selectedFormats.length === 0 && selectedDocumentTypes.length === 0 && linkFilter === 'all' && !needsReplacementOnly && !searchTerm ? '#065F46' : '#64748B',
               }}
-              title="مسح كافة معايير الفلترة والبحث والفرز"
             >
-              <RotateCcw size={13} />
-              <span>إعادة ضبط الفلاتر</span>
+              الكل ({evidences.length})
             </button>
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedStandardIds([]);
+                setSelectedFormats([]);
+                setSelectedDocumentTypes([]);
+                setNeedsReplacementOnly(false);
+                setLinkFilter('unlinked');
+              }}
+              style={{
+                padding: '3px 9px',
+                borderRadius: '6px',
+                fontSize: '11px',
+                fontWeight: 700,
+                cursor: 'pointer',
+                border: linkFilter === 'unlinked' ? '1px solid #D97706' : '1px solid #E2E8F0',
+                backgroundColor: linkFilter === 'unlinked' ? '#FFFBEB' : '#FFFFFF',
+                color: linkFilter === 'unlinked' ? '#92400E' : '#64748B',
+              }}
+            >
+              غير مرتبطة بأي مؤشر
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedStandardIds([]);
+                setSelectedDocumentTypes([]);
+                setLinkFilter('all');
+                setNeedsReplacementOnly(false);
+                setSelectedFormats(['pdf']);
+              }}
+              style={{
+                padding: '3px 9px',
+                borderRadius: '6px',
+                fontSize: '11px',
+                fontWeight: 700,
+                cursor: 'pointer',
+                border: selectedFormats.length === 1 && selectedFormats[0] === 'pdf' ? '1px solid #DC2626' : '1px solid #E2E8F0',
+                backgroundColor: selectedFormats.length === 1 && selectedFormats[0] === 'pdf' ? '#FEF2F2' : '#FFFFFF',
+                color: selectedFormats.length === 1 && selectedFormats[0] === 'pdf' ? '#991B1B' : '#64748B',
+              }}
+            >
+              ملفات PDF
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedStandardIds([]);
+                setSelectedFormats([]);
+                setSelectedDocumentTypes([]);
+                setLinkFilter('all');
+                setNeedsReplacementOnly(true);
+              }}
+              style={{
+                padding: '3px 9px',
+                borderRadius: '6px',
+                fontSize: '11px',
+                fontWeight: 700,
+                cursor: 'pointer',
+                border: needsReplacementOnly ? '1px solid #D97706' : '1px solid #E2E8F0',
+                backgroundColor: needsReplacementOnly ? '#FEF3C7' : '#FFFFFF',
+                color: needsReplacementOnly ? '#92400E' : '#64748B',
+              }}
+            >
+              بحاجة لتحديث / استبدال ({stats.needsReplacement})
+            </button>
+          </div>
+
+          {/* Row 3: Active Filter Chips */}
+          {(searchTerm || selectedStandardIds.length > 0 || selectedFormats.length > 0 || selectedDocumentTypes.length > 0 || linkFilter !== 'all' || needsReplacementOnly) && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', paddingTop: '6px', borderTop: '1px dashed #E2E8F0' }}>
+              <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 600 }}>الفلاتر النشطة:</span>
+              {searchTerm && (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 8px', borderRadius: '6px', backgroundColor: '#F1F5F9', border: '1px solid #CBD5E1', fontSize: '11px', color: '#334155' }}>
+                  بحث: &quot;{searchTerm}&quot;
+                  <X size={11} style={{ cursor: 'pointer' }} onClick={() => setSearchTerm('')} />
+                </span>
+              )}
+              {selectedStandardIds.map((sid) => (
+                <span key={sid} style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 8px', borderRadius: '6px', backgroundColor: '#ECFDF5', border: '1px solid #A7F3D0', fontSize: '11px', color: '#065F46', fontWeight: 700 }}>
+                  {STANDARD_OPTIONS.find((s) => s.id === sid)?.code || `STD-${sid}`}
+                  <X size={11} style={{ cursor: 'pointer' }} onClick={() => setSelectedStandardIds((prev) => prev.filter((id) => id !== sid))} />
+                </span>
+              ))}
+              {selectedFormats.map((fmt) => (
+                <span key={fmt} style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 8px', borderRadius: '6px', backgroundColor: '#EFF6FF', border: '1px solid #BFDBFE', fontSize: '11px', color: '#1E40AF', fontWeight: 700 }}>
+                  {FORMAT_OPTIONS.find((f) => f.key === fmt)?.label || fmt}
+                  <X size={11} style={{ cursor: 'pointer' }} onClick={() => setSelectedFormats((prev) => prev.filter((k) => k !== fmt))} />
+                </span>
+              ))}
+              {selectedDocumentTypes.map((type) => (
+                <span key={type} style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 8px', borderRadius: '6px', backgroundColor: '#F5F3FF', border: '1px solid #DDD6FE', fontSize: '11px', color: '#6D28D9', fontWeight: 700 }}>
+                  {DOC_TYPE_OPTIONS.find((t) => t.key === type)?.label || type}
+                  <X size={11} style={{ cursor: 'pointer' }} onClick={() => setSelectedDocumentTypes((prev) => prev.filter((t) => t !== type))} />
+                </span>
+              ))}
+              {linkFilter !== 'all' && (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 8px', borderRadius: '6px', backgroundColor: '#FFFBEB', border: '1px solid #FDE68A', fontSize: '11px', color: '#92400E', fontWeight: 700 }}>
+                  {linkFilter === 'unlinked' ? 'غير مرتبطة' : 'مرتبطة'}
+                  <X size={11} style={{ cursor: 'pointer' }} onClick={() => setLinkFilter('all')} />
+                </span>
+              )}
+              {needsReplacementOnly && (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 8px', borderRadius: '6px', backgroundColor: '#FEF3C7', border: '1px solid #FDE68A', fontSize: '11px', color: '#92400E', fontWeight: 700 }}>
+                  بحاجة لتحديث
+                  <X size={11} style={{ cursor: 'pointer' }} onClick={() => setNeedsReplacementOnly(false)} />
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchTerm('');
+                  setSelectedStandardIds([]);
+                  setSelectedFormats([]);
+                  setSelectedDocumentTypes([]);
+                  setLinkFilter('all');
+                  setNeedsReplacementOnly(false);
+                }}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '3px',
+                  padding: '2px 8px',
+                  borderRadius: '6px',
+                  backgroundColor: '#FEF2F2',
+                  border: '1px solid #FECACA',
+                  color: '#DC2626',
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                }}
+                title="مسح كافة الفلاتر"
+              >
+                <RotateCcw size={11} />
+                مسح الكل
+              </button>
+            </div>
           )}
         </div>
 
@@ -880,13 +1372,105 @@ export const EvidencesRepository: React.FC<EvidencesRepositoryProps> = ({
             <table style={{ minWidth: '920px', width: '100%', borderCollapse: 'collapse', textAlign: 'right' }}>
               <thead>
                 <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '2px solid #F1F5F9' }}>
-                  <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: 700, color: '#475569' }}>عنوان الشاهد</th>
-                  <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: 700, color: '#475569' }}>المعيار الوطني</th>
-                  <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: 700, color: '#475569' }}>المؤشر</th>
-                  <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: 700, color: '#475569' }}>الإصدار</th>
-                  <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: 700, color: '#475569' }}>الحجم والصيغة</th>
-                  <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: 700, color: '#475569' }}>نوع الوثيقة</th>
-                  <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: 700, color: '#475569', textAlign: 'center' }}>الإجراءات</th>
+                  <th
+                    onClick={() => handleSort('title')}
+                    style={{
+                      padding: '12px 16px',
+                      fontSize: '12px',
+                      fontWeight: 700,
+                      color: sortField === 'title' ? '#059669' : '#475569',
+                      cursor: 'pointer',
+                      userSelect: 'none',
+                    }}
+                    title="ترتيب أبجدي حسب عنوان الشاهد"
+                  >
+                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                      <span>عنوان الشاهد</span>
+                      {sortField === 'title' ? (
+                        sortDirection === 'asc' ? <ArrowUp size={13} color="#059669" /> : <ArrowDown size={13} color="#059669" />
+                      ) : (
+                        <ArrowUpDown size={12} color="#94A3B8" />
+                      )}
+                    </div>
+                  </th>
+
+                  <th
+                    onClick={() => handleSort('standard')}
+                    style={{
+                      padding: '12px 16px',
+                      fontSize: '12px',
+                      fontWeight: 700,
+                      color: sortField === 'standard' ? '#059669' : '#475569',
+                      cursor: 'pointer',
+                      userSelect: 'none',
+                    }}
+                    title="ترتيب معياري حسب تسلسل المعايير"
+                  >
+                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                      <span>المعيار الوطني</span>
+                      {sortField === 'standard' ? (
+                        sortDirection === 'asc' ? <ArrowUp size={13} color="#059669" /> : <ArrowDown size={13} color="#059669" />
+                      ) : (
+                        <ArrowUpDown size={12} color="#94A3B8" />
+                      )}
+                    </div>
+                  </th>
+
+                  <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: 700, color: '#475569' }}>
+                    المؤشر
+                  </th>
+
+                  <th
+                    onClick={() => handleSort('version')}
+                    style={{
+                      padding: '12px 16px',
+                      fontSize: '12px',
+                      fontWeight: 700,
+                      color: sortField === 'version' ? '#059669' : '#475569',
+                      cursor: 'pointer',
+                      userSelect: 'none',
+                    }}
+                    title="فرز حسب رقم الإصدار"
+                  >
+                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                      <span>الإصدار</span>
+                      {sortField === 'version' ? (
+                        sortDirection === 'asc' ? <ArrowUp size={13} color="#059669" /> : <ArrowDown size={13} color="#059669" />
+                      ) : (
+                        <ArrowUpDown size={12} color="#94A3B8" />
+                      )}
+                    </div>
+                  </th>
+
+                  <th
+                    onClick={() => handleSort('size')}
+                    style={{
+                      padding: '12px 16px',
+                      fontSize: '12px',
+                      fontWeight: 700,
+                      color: sortField === 'size' ? '#059669' : '#475569',
+                      cursor: 'pointer',
+                      userSelect: 'none',
+                    }}
+                    title="فرز حسب حجم الملف"
+                  >
+                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                      <span>الحجم والصيغة</span>
+                      {sortField === 'size' ? (
+                        sortDirection === 'asc' ? <ArrowUp size={13} color="#059669" /> : <ArrowDown size={13} color="#059669" />
+                      ) : (
+                        <ArrowUpDown size={12} color="#94A3B8" />
+                      )}
+                    </div>
+                  </th>
+
+                  <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: 700, color: '#475569' }}>
+                    نوع الوثيقة
+                  </th>
+
+                  <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: 700, color: '#475569', textAlign: 'center' }}>
+                    الإجراءات
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -980,9 +1564,35 @@ export const EvidencesRepository: React.FC<EvidencesRepositoryProps> = ({
                             : [{ indicatorId: ev.indicatorId, indicatorCode: ev.indicatorCode, indicatorTitle: ev.indicatorTitle }]
                           ).map((li, idx) => (
                             <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                              <span style={{ fontSize: '11px', fontWeight: 800, color: '#2563EB', backgroundColor: '#EFF6FF', padding: '2px 6px', borderRadius: '4px', whiteSpace: 'nowrap' }}>
-                                {li.indicatorCode}
-                              </span>
+                              {onNavigate && li.indicatorId ? (
+                                <button
+                                  type="button"
+                                  onClick={() => onNavigate('rubric-assessment', li.indicatorId)}
+                                  style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '3px',
+                                    padding: '2px 7px',
+                                    borderRadius: '5px',
+                                    backgroundColor: '#EFF6FF',
+                                    border: '1px solid #BFDBFE',
+                                    color: '#1D4ED8',
+                                    fontSize: '11px',
+                                    fontWeight: 800,
+                                    whiteSpace: 'nowrap',
+                                    cursor: 'pointer',
+                                    transition: 'all 0.15s ease',
+                                  }}
+                                  title={`الانتقال المباشر لتقييم المؤشر ${li.indicatorCode} ↗`}
+                                >
+                                  <span>{li.indicatorCode}</span>
+                                  <ExternalLink size={10} />
+                                </button>
+                              ) : (
+                                <span style={{ fontSize: '11px', fontWeight: 800, color: '#2563EB', backgroundColor: '#EFF6FF', padding: '2px 6px', borderRadius: '4px', whiteSpace: 'nowrap' }}>
+                                  {li.indicatorCode}
+                                </span>
+                              )}
                               {li.indicatorTitle && (
                                 <span style={{ fontSize: '11.5px', color: '#334155', maxWidth: '240px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={li.indicatorTitle}>
                                   {li.indicatorTitle}
@@ -1033,215 +1643,70 @@ export const EvidencesRepository: React.FC<EvidencesRepositoryProps> = ({
                       })()}
                     </td>
                     <td style={{ padding: '14px 16px', textAlign: 'center' }}>
-                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', justifyContent: 'center', position: 'relative' }}>
-                        {onNavigate && (ev.indicatorId || (ev.linkedIndicators && ev.linkedIndicators.length > 0)) && (
-                          <div style={{ position: 'relative' }}>
-                            <button
-                              onClick={() => {
-                                const count = ev.linkedIndicators?.length || (ev.indicatorId ? 1 : 0);
-                                if (count > 1) {
-                                  setNavPopoverEvidenceId((prev) => (prev === ev.id ? null : ev.id));
-                                } else {
-                                  const targetId = ev.indicatorId || ev.linkedIndicators?.[0]?.indicatorId;
-                                  if (targetId) onNavigate('rubric-assessment', targetId);
-                                }
-                              }}
-                              style={{
-                                padding: '5px 10px',
-                                borderRadius: '6px',
-                                backgroundColor: '#F0FDF4',
-                                border: '1px solid #BBF7D0',
-                                color: '#15803D',
-                                fontSize: '11.5px',
-                                fontWeight: 700,
-                                cursor: 'pointer',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '4px',
-                              }}
-                              title="الانتقال المباشر لاستمارة تقييم هذا المؤشر"
-                            >
-                              <ExternalLink size={12} />
-                              <span>الانتقال للمؤشر</span>
-                              {ev.linkedIndicators && ev.linkedIndicators.length > 1 && (
-                                <span style={{ fontSize: '10px', padding: '0 4px', borderRadius: '10px', backgroundColor: '#DCFCE7', color: '#166534' }}>
-                                  ({ev.linkedIndicators.length})
-                                </span>
-                              )}
-                            </button>
+                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', justifyContent: 'center' }}>
+                        {/* 1. Download */}
+                        <button
+                          onClick={() => handleDownloadEvidence(ev)}
+                          style={designTokens.buttons.iconAction}
+                          title="تحميل الشاهد"
+                        >
+                          <Download size={15} color="#059669" />
+                        </button>
 
-                            {/* Indicator Navigation Popover when multiple indicators are linked */}
-                            {navPopoverEvidenceId === ev.id && ev.linkedIndicators && ev.linkedIndicators.length > 1 && (
-                              <div
-                                style={{
-                                  position: 'absolute',
-                                  top: 'calc(100% + 4px)',
-                                  right: 0,
-                                  zIndex: 50,
-                                  backgroundColor: '#FFFFFF',
-                                  border: '1px solid #CBD5E1',
-                                  borderRadius: '8px',
-                                  boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.15)',
-                                  padding: '8px',
-                                  minWidth: '220px',
-                                  display: 'flex',
-                                  flexDirection: 'column',
-                                  gap: '4px',
-                                  textAlign: 'right',
-                                }}
-                              >
-                                <div style={{ fontSize: '11px', fontWeight: 800, color: '#64748B', padding: '2px 4px', borderBottom: '1px solid #F1F5F9' }}>
-                                  اختر المؤشر المستهدف:
-                                </div>
-                                {ev.linkedIndicators.map((li) => (
-                                  <button
-                                    key={li.indicatorId}
-                                    type="button"
-                                    onClick={() => {
-                                      setNavPopoverEvidenceId(null);
-                                      onNavigate('rubric-assessment', li.indicatorId);
-                                    }}
-                                    style={{
-                                      padding: '6px 8px',
-                                      borderRadius: '6px',
-                                      border: 'none',
-                                      backgroundColor: '#F8FAFC',
-                                      textAlign: 'right',
-                                      cursor: 'pointer',
-                                      fontSize: '11.5px',
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                      justifyContent: 'space-between',
-                                      gap: '6px',
-                                    }}
-                                  >
-                                    <span style={{ fontWeight: 800, color: '#2563EB' }}>{li.indicatorCode}</span>
-                                    <span style={{ color: '#334155', maxWidth: '140px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={li.indicatorTitle}>
-                                      {li.indicatorTitle}
-                                    </span>
-                                  </button>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        )}
-                        {!readOnly && (
-                          <button
-                            onClick={() => handleOpenEditMetadata(ev)}
-                            style={{
-                              padding: '5px 10px',
-                              borderRadius: '6px',
-                              backgroundColor: '#F8FAFC',
-                              border: '1px solid #CBD5E1',
-                              color: '#475569',
-                              fontSize: '11.5px',
-                              fontWeight: 600,
-                              cursor: 'pointer',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '4px',
-                            }}
-                            title="تعديل بيانات الشاهد والنوع والوصف"
-                          >
-                            <Pencil size={12} />
-                            تعديل
-                          </button>
-                        )}
-                        {!readOnly && (
-                          <button
-                            onClick={() => handleOpenUpload(ev.documentId)}
-                            style={{
-                              padding: '5px 10px',
-                              borderRadius: '6px',
-                              backgroundColor: '#F8FAFC',
-                              border: '1px solid #CBD5E1',
-                              color: '#475569',
-                              fontSize: '11.5px',
-                              fontWeight: 600,
-                              cursor: 'pointer',
-                            }}
-                            title="رفع نسخة بديلة دون حذف النسخ السابقة"
-                          >
-                            استبدال
-                          </button>
-                        )}
+                        {/* 2. Manage Links */}
                         {!readOnly && (
                           <button
                             onClick={() => handleOpenLinkModal(ev)}
-                            style={{
-                              padding: '5px 10px',
-                              borderRadius: '6px',
-                              backgroundColor: '#EFF6FF',
-                              border: '1px solid #BFDBFE',
-                              color: '#1D4ED8',
-                              fontSize: '11.5px',
-                              fontWeight: 700,
-                              cursor: 'pointer',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '4px',
-                            }}
-                            title="إدارة علاقات الشاهد (نقل / ربط متعدد / فك ارتباط)"
+                            style={designTokens.buttons.iconAction}
+                            title="إدارة علاقات الشاهد وربطه بالمؤشرات"
                           >
-                            <Link2 size={13} />
-                            إدارة الشواهد
+                            <Link2 size={15} color="#2563EB" />
                           </button>
                         )}
-                        <button
-                          onClick={() => handleDownloadEvidence(ev)}
-                          style={{
-                            padding: '5px 10px',
-                            borderRadius: '6px',
-                            backgroundColor: '#ECFDF5',
-                            border: '1px solid #A7F3D0',
-                            color: '#059669',
-                            fontSize: '11.5px',
-                            fontWeight: 700,
-                            cursor: 'pointer',
-                          }}
-                        >
-                          تحميل
-                        </button>
+
+                        {/* 3. Edit Metadata */}
+                        {!readOnly && (
+                          <button
+                            onClick={() => handleOpenEditMetadata(ev)}
+                            style={designTokens.buttons.iconAction}
+                            title="تعديل بيانات الشاهد والنوع والوصف"
+                          >
+                            <Pencil size={15} color="#475569" />
+                          </button>
+                        )}
+
+                        {/* 4. Replace File */}
+                        {!readOnly && (
+                          <button
+                            onClick={() => handleOpenUpload(ev.documentId)}
+                            style={designTokens.buttons.iconAction}
+                            title="رفع نسخة بديلة دون حذف النسخ السابقة"
+                          >
+                            <RefreshCw size={15} color="#D97706" />
+                          </button>
+                        )}
+
+                        {/* 5. Version History */}
                         <button
                           onClick={() => setVersionsModalEvidence(ev)}
-                          style={{
-                            padding: '5px 8px',
-                            borderRadius: '6px',
-                            backgroundColor: '#F8FAFC',
-                            border: '1px solid #CBD5E1',
-                            color: '#4F46E5',
-                            fontSize: '11.5px',
-                            fontWeight: 600,
-                            cursor: 'pointer',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '4px',
-                          }}
+                          style={designTokens.buttons.iconAction}
                           title="استعراض سجل الإصدارات التاريخية للشاهد"
                         >
-                          <History size={12} />
-                          الإصدارات
+                          <History size={15} color="#4F46E5" />
                         </button>
+
+                        {/* 6. Delete (Unlinked only) */}
                         {!readOnly && (ev.isUnlinked || !ev.linkedIndicators || ev.linkedIndicators.length === 0) && (
                           <button
                             onClick={() => handleDeleteUnlinked(ev)}
                             style={{
-                              padding: '5px 8px',
-                              borderRadius: '6px',
+                              ...designTokens.buttons.iconAction,
                               backgroundColor: '#FEF2F2',
-                              border: '1px solid #FECACA',
-                              color: '#DC2626',
-                              fontSize: '11.5px',
-                              fontWeight: 700,
-                              cursor: 'pointer',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '4px',
+                              borderColor: '#FECACA',
                             }}
                             title="حذف هذا الشاهد غير المرتبط نهائياً من مستودع المدرسة"
                           >
-                            <Trash2 size={12} />
-                            حذف
+                            <Trash2 size={15} color="#DC2626" />
                           </button>
                         )}
                       </div>

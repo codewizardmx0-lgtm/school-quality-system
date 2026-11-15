@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import type { EvidenceItem, EvaluatorScreen } from '../../api/evaluationTypes';
 import { File, Download, RefreshCw, Clock, Link2, Pencil, ExternalLink, History, Trash2 } from 'lucide-react';
 
@@ -25,8 +25,6 @@ export const EvidenceCard: React.FC<EvidenceCardProps> = ({
   onNavigate,
   readOnly = false,
 }) => {
-  const [isNavOpen, setIsNavOpen] = useState(false);
-
   const docTypeLabels: Record<string, { label: string; bg: string; text: string; border: string }> = {
     minutes: { label: 'محضر اجتماع', bg: '#EFF6FF', text: '#1D4ED8', border: '#BFDBFE' },
     plan: { label: 'خطة عمل', bg: '#ECFDF5', text: '#047857', border: '#A7F3D0' },
@@ -176,12 +174,38 @@ export const EvidenceCard: React.FC<EvidenceCardProps> = ({
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '2px' }}>
                 {(evidence.linkedIndicators && evidence.linkedIndicators.length > 0
                   ? evidence.linkedIndicators
-                  : [{ indicatorCode: evidence.indicatorCode, indicatorTitle: evidence.indicatorTitle }]
+                  : [{ indicatorId: evidence.indicatorId, indicatorCode: evidence.indicatorCode, indicatorTitle: evidence.indicatorTitle }]
                 ).map((li, idx) => (
                   <div key={idx} style={{ fontSize: '11px', color: '#475569', display: 'flex', alignItems: 'center', gap: '5px', minWidth: 0 }}>
-                    <span style={{ fontWeight: 800, color: '#2563EB', backgroundColor: '#EFF6FF', padding: '1px 6px', borderRadius: '4px', flexShrink: 0 }}>
-                      {li.indicatorCode}
-                    </span>
+                    {onNavigate && li.indicatorId ? (
+                      <button
+                        type="button"
+                        onClick={() => onNavigate('rubric-assessment', li.indicatorId)}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '3px',
+                          padding: '1px 6px',
+                          borderRadius: '4px',
+                          backgroundColor: '#EFF6FF',
+                          border: '1px solid #BFDBFE',
+                          color: '#1D4ED8',
+                          fontSize: '11px',
+                          fontWeight: 800,
+                          cursor: 'pointer',
+                          flexShrink: 0,
+                          transition: 'all 0.15s ease',
+                        }}
+                        title={`الانتقال لتقييم المؤشر ${li.indicatorCode} ↗`}
+                      >
+                        <span>{li.indicatorCode}</span>
+                        <ExternalLink size={9} />
+                      </button>
+                    ) : (
+                      <span style={{ fontWeight: 800, color: '#2563EB', backgroundColor: '#EFF6FF', padding: '1px 6px', borderRadius: '4px', flexShrink: 0 }}>
+                        {li.indicatorCode}
+                      </span>
+                    )}
                     <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={li.indicatorTitle}>
                       {li.indicatorTitle}
                     </span>
@@ -210,230 +234,134 @@ export const EvidenceCard: React.FC<EvidenceCardProps> = ({
           {evidence.uploadedAt}
         </span>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-          {onNavigate && (evidence.indicatorId || (evidence.linkedIndicators && evidence.linkedIndicators.length > 0)) && (
-            <div style={{ position: 'relative' }}>
-              <button
-                onClick={() => {
-                  const count = evidence.linkedIndicators?.length || (evidence.indicatorId ? 1 : 0);
-                  if (count > 1) {
-                    setIsNavOpen((prev) => !prev);
-                  } else {
-                    const targetId = evidence.indicatorId || evidence.linkedIndicators?.[0]?.indicatorId;
-                    if (targetId) onNavigate('rubric-assessment', targetId);
-                  }
-                }}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '3px',
-                  padding: '5px 8px',
-                  borderRadius: '6px',
-                  backgroundColor: '#F0FDF4',
-                  border: '1px solid #BBF7D0',
-                  color: '#15803D',
-                  fontSize: '11px',
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                }}
-                title="الانتقال المباشر للمؤشر"
-              >
-                <ExternalLink size={11} />
-                <span>المؤشر</span>
-                {evidence.linkedIndicators && evidence.linkedIndicators.length > 1 && (
-                  <span style={{ fontSize: '9.5px', padding: '0 4px', borderRadius: '8px', backgroundColor: '#DCFCE7' }}>
-                    ({evidence.linkedIndicators.length})
-                  </span>
-                )}
-              </button>
-
-              {isNavOpen && evidence.linkedIndicators && evidence.linkedIndicators.length > 1 && (
-                <div
-                  style={{
-                    position: 'absolute',
-                    bottom: 'calc(100% + 4px)',
-                    right: 0,
-                    zIndex: 50,
-                    backgroundColor: '#FFFFFF',
-                    border: '1px solid #CBD5E1',
-                    borderRadius: '8px',
-                    boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.15)',
-                    padding: '6px',
-                    minWidth: '200px',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '4px',
-                    textAlign: 'right',
-                  }}
-                >
-                  <div style={{ fontSize: '10.5px', fontWeight: 800, color: '#64748B', padding: '2px 4px', borderBottom: '1px solid #F1F5F9' }}>
-                    اختر المؤشر المستهدف:
-                  </div>
-                  {evidence.linkedIndicators.map((li) => (
-                    <button
-                      key={li.indicatorId}
-                      type="button"
-                      onClick={() => {
-                        setIsNavOpen(false);
-                        onNavigate('rubric-assessment', li.indicatorId);
-                      }}
-                      style={{
-                        padding: '5px 6px',
-                        borderRadius: '4px',
-                        border: 'none',
-                        backgroundColor: '#F8FAFC',
-                        textAlign: 'right',
-                        cursor: 'pointer',
-                        fontSize: '11px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        gap: '6px',
-                      }}
-                    >
-                      <span style={{ fontWeight: 800, color: '#2563EB' }}>{li.indicatorCode}</span>
-                      <span style={{ color: '#334155', maxWidth: '120px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={li.indicatorTitle}>
-                        {li.indicatorTitle}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
-          {!readOnly && onEditMetadata && (
-            <button
-              onClick={() => onEditMetadata(evidence)}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '3px',
-                padding: '5px 8px',
-                borderRadius: '6px',
-                backgroundColor: '#F8FAFC',
-                border: '1px solid #CBD5E1',
-                color: '#475569',
-                fontSize: '11px',
-                fontWeight: 600,
-                cursor: 'pointer',
-              }}
-              title="تعديل بيانات الشاهد والنوع والوصف"
-            >
-              <Pencil size={11} />
-              تعديل
-            </button>
-          )}
-
-          {!readOnly && (
-            <button
-              onClick={() => onReplaceVersion(evidence.documentId)}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '3px',
-                padding: '5px 8px',
-                borderRadius: '6px',
-                backgroundColor: '#F8FAFC',
-                border: '1px solid #CBD5E1',
-                color: '#334155',
-                fontSize: '11px',
-                fontWeight: 600,
-                cursor: 'pointer',
-              }}
-              title="رفع نسخة بديلة دون حذف النسخ السابقة"
-            >
-              <RefreshCw size={11} />
-              استبدال
-            </button>
-          )}
-
-          {!readOnly && onManageLinks && (
-            <button
-              onClick={() => onManageLinks(evidence)}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '3px',
-                padding: '5px 8px',
-                borderRadius: '6px',
-                backgroundColor: '#EFF6FF',
-                border: '1px solid #BFDBFE',
-                color: '#1D4ED8',
-                fontSize: '11px',
-                fontWeight: 600,
-                cursor: 'pointer',
-              }}
-              title="إدارة علاقات الشاهد (نقل / ربط متعدد / فك ارتباط)"
-            >
-              <Link2 size={11} />
-              ربط
-            </button>
-          )}
-
+        <div style={{ display: 'flex', alignItems: 'center', gap: '5px', flexWrap: 'wrap' }}>
+          {/* Download */}
           <button
             onClick={() => onDownload(evidence)}
             style={{
-              display: 'flex',
+              display: 'inline-flex',
               alignItems: 'center',
-              gap: '3px',
-              padding: '5px 10px',
+              justifyContent: 'center',
+              width: '30px',
+              height: '30px',
               borderRadius: '6px',
               backgroundColor: '#ECFDF5',
               border: '1px solid #A7F3D0',
               color: '#059669',
-              fontSize: '11px',
-              fontWeight: 700,
               cursor: 'pointer',
             }}
+            title="تحميل الشاهد"
           >
-            <Download size={12} />
-            تحميل
+            <Download size={14} />
           </button>
 
+          {/* Manage Links */}
+          {!readOnly && onManageLinks && (
+            <button
+              onClick={() => onManageLinks(evidence)}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: '30px',
+                height: '30px',
+                borderRadius: '6px',
+                backgroundColor: '#EFF6FF',
+                border: '1px solid #BFDBFE',
+                color: '#1D4ED8',
+                cursor: 'pointer',
+              }}
+              title="إدارة علاقات الشاهد وربطه بالمؤشرات"
+            >
+              <Link2 size={14} />
+            </button>
+          )}
+
+          {/* Edit Metadata */}
+          {!readOnly && onEditMetadata && (
+            <button
+              onClick={() => onEditMetadata(evidence)}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: '30px',
+                height: '30px',
+                borderRadius: '6px',
+                backgroundColor: '#F8FAFC',
+                border: '1px solid #CBD5E1',
+                color: '#475569',
+                cursor: 'pointer',
+              }}
+              title="تعديل بيانات الشاهد والنوع والوصف"
+            >
+              <Pencil size={13} />
+            </button>
+          )}
+
+          {/* Replace Version */}
+          {!readOnly && (
+            <button
+              onClick={() => onReplaceVersion(evidence.documentId)}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: '30px',
+                height: '30px',
+                borderRadius: '6px',
+                backgroundColor: '#F8FAFC',
+                border: '1px solid #CBD5E1',
+                color: '#D97706',
+                cursor: 'pointer',
+              }}
+              title="رفع نسخة بديلة دون حذف النسخ السابقة"
+            >
+              <RefreshCw size={13} />
+            </button>
+          )}
+
+          {/* Version History */}
           {onViewVersions && (
             <button
               onClick={() => onViewVersions(evidence)}
               style={{
-                display: 'flex',
+                display: 'inline-flex',
                 alignItems: 'center',
-                gap: '3px',
-                padding: '5px 8px',
+                justifyContent: 'center',
+                width: '30px',
+                height: '30px',
                 borderRadius: '6px',
                 backgroundColor: '#F8FAFC',
                 border: '1px solid #CBD5E1',
                 color: '#4F46E5',
-                fontSize: '11px',
-                fontWeight: 600,
                 cursor: 'pointer',
               }}
               title="استعراض سجل الإصدارات التاريخية للشاهد"
             >
-              <History size={11} />
-              الإصدارات
+              <History size={13} />
             </button>
           )}
 
+          {/* Delete Unlinked */}
           {!readOnly && onDeleteUnlinked && (evidence.isUnlinked || !evidence.linkedIndicators || evidence.linkedIndicators.length === 0) && (
             <button
               onClick={() => onDeleteUnlinked(evidence)}
               style={{
-                display: 'flex',
+                display: 'inline-flex',
                 alignItems: 'center',
-                gap: '3px',
-                padding: '5px 8px',
+                justifyContent: 'center',
+                width: '30px',
+                height: '30px',
                 borderRadius: '6px',
                 backgroundColor: '#FEF2F2',
                 border: '1px solid #FECACA',
                 color: '#DC2626',
-                fontSize: '11px',
-                fontWeight: 700,
                 cursor: 'pointer',
               }}
               title="حذف هذا الشاهد غير المرتبط نهائياً من مستودع المدرسة"
             >
-              <Trash2 size={11} />
-              حذف
+              <Trash2 size={13} />
             </button>
           )}
         </div>

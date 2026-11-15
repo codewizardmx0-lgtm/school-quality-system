@@ -81,7 +81,7 @@ export const DraftReportPreview: React.FC<DraftReportPreviewProps> = ({
   const schoolName = user?.school?.schoolName || dashboardData?.schoolInfo?.schoolName || 'مدرسة غير محددة';
   const academicYear = dashboardData?.schoolInfo?.academicYear || '2026/2027';
   const evaluatorName = user?.fullName || dashboardData?.schoolInfo?.currentEvaluator || 'المقيم المعتمد';
-  const finalTrackingCode = trackingCode || 'ARQ-2026-SCH-FIN';
+  const finalTrackingCode = trackingCode || 'مسودة قيد المراجعة الداخلية';
 
   const getStatusBadge = (percentage: number) => {
     if (percentage === 100) {

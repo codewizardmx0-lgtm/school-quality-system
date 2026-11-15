@@ -93,10 +93,8 @@ export const EvaluatorSidebar: React.FC<EvaluatorSidebarProps> = ({
       items: [
         {
           id: 'ai-assistant',
-          label: 'الاقتراحات والمبادرات',
+          label: 'مقترحات ومبادرات AI',
           icon: <Lightbulb size={19} />,
-          badge: 'فجوات ومبادرات',
-          badgeColor: '#10B981',
         },
         {
           id: 'improvement-plan',
@@ -508,22 +506,24 @@ export const EvaluatorSidebar: React.FC<EvaluatorSidebarProps> = ({
             <>
               <div
                 style={{
-                  padding: '10px 12px',
-                  borderRadius: '8px',
-                  backgroundColor: '#131A29',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '4px 6px',
                   marginBottom: '8px',
-                  border: '1px solid #1E293B',
+                  color: '#94A3B8',
+                  fontSize: '11px',
+                  fontWeight: 600,
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
                 }}
+                title={user?.school?.schoolName || 'المدرسة'}
               >
-                <div style={{ fontSize: '11.5px', fontWeight: 700, color: '#E2E8F0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {user?.school?.schoolName || 'مدرسة الفاروق الأساسية'}
-                </div>
-                <div style={{ fontSize: '10.5px', color: '#94A3B8', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {isPrincipal ? 'المدير: ' : 'المقيم: '}{user?.fullName || 'عمر محمد الشميري'}
-                </div>
-                <div style={{ fontSize: '10px', color: '#10B981', marginTop: '3px', fontWeight: 600 }}>
-                  {isPrincipal ? 'المراجعة والاعتماد الداخلي' : 'دورة التقييم 2026/2027'}
-                </div>
+                <span>🏫</span>
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {user?.school?.schoolName || 'مدرسة معتمدة'}
+                </span>
               </div>
 
               <div style={{ display: 'flex', gap: '6px' }}>

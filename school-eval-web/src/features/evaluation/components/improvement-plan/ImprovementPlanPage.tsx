@@ -38,6 +38,9 @@ import {
   X,
   ExternalLink,
   ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+  RotateCcw,
 } from 'lucide-react';
 
 interface ImprovementPlanPageProps {
@@ -288,10 +291,60 @@ export const ImprovementPlanPage: React.FC<ImprovementPlanPageProps> = ({
       if (sortBy === 'start_date_desc') {
         return (b.startDate || '').localeCompare(a.startDate || '');
       }
+      if (sortBy === 'title_asc') {
+        return (a.title || '').localeCompare(b.title || '', 'ar');
+      }
+      if (sortBy === 'title_desc') {
+        return (b.title || '').localeCompare(a.title || '', 'ar');
+      }
+      if (sortBy === 'indicator_asc') {
+        return (a.indicatorCode || a.standardName || '').localeCompare(b.indicatorCode || b.standardName || '', 'ar');
+      }
+      if (sortBy === 'indicator_desc') {
+        return (b.indicatorCode || b.standardName || '').localeCompare(a.indicatorCode || a.standardName || '', 'ar');
+      }
+      if (sortBy === 'owner_asc') {
+        return (a.leader || '').localeCompare(b.leader || '', 'ar');
+      }
+      if (sortBy === 'owner_desc') {
+        return (b.leader || '').localeCompare(a.leader || '', 'ar');
+      }
+      if (sortBy === 'progress_asc') {
+        return (a.completionPercentage ?? 0) - (b.completionPercentage ?? 0);
+      }
+      if (sortBy === 'progress_desc') {
+        return (b.completionPercentage ?? 0) - (a.completionPercentage ?? 0);
+      }
+      if (sortBy === 'status_asc') {
+        return (a.status || '').localeCompare(b.status || '');
+      }
+      if (sortBy === 'status_desc') {
+        return (b.status || '').localeCompare(a.status || '');
+      }
       return 0;
     });
     return list;
   }, [filteredActions, sortBy]);
+
+  const handleActionHeaderSort = (columnKey: string) => {
+    if (sortBy === `${columnKey}_asc`) {
+      setSortBy(`${columnKey}_desc`);
+    } else if (sortBy === `${columnKey}_desc`) {
+      setSortBy('default');
+    } else {
+      setSortBy(`${columnKey}_asc`);
+    }
+  };
+
+  const renderActionSortIcon = (columnKey: string) => {
+    if (sortBy === `${columnKey}_asc`) {
+      return <ArrowUp size={12} color="#059669" />;
+    }
+    if (sortBy === `${columnKey}_desc`) {
+      return <ArrowDown size={12} color="#059669" />;
+    }
+    return <ArrowUpDown size={12} color="#94A3B8" />;
+  };
 
   if (isLoading && !planData) {
     return (
@@ -1427,9 +1480,13 @@ export const ImprovementPlanPage: React.FC<ImprovementPlanPageProps> = ({
                   fontSize: '11.5px',
                   fontWeight: 700,
                   cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
                 }}
               >
-                إعادة ضبط الفلاتر
+                <RotateCcw size={12} />
+                <span>إعادة ضبط الفلاتر</span>
               </button>
             )}
           </div>
@@ -1439,20 +1496,294 @@ export const ImprovementPlanPage: React.FC<ImprovementPlanPageProps> = ({
           </div>
         </div>
 
+        {/* Active Filter Chips Bar */}
+        {(searchActionTerm || filterAreaId !== 'ALL' || filterPriority !== 'ALL' || filterGap !== 'ALL' || filterTimeRemaining !== 'ALL' || filterStatus !== 'ALL') && (
+          <div
+            style={{
+              padding: '10px 16px',
+              backgroundColor: '#F8FAFC',
+              borderBottom: '1px solid #E2E8F0',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              flexWrap: 'wrap',
+            }}
+          >
+            <span style={{ fontSize: '11.5px', fontWeight: 700, color: '#64748B', display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <Filter size={12} />
+              الفلاتر النشطة:
+            </span>
+
+            {searchActionTerm.trim() && (
+              <span
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  padding: '3px 8px',
+                  borderRadius: '6px',
+                  backgroundColor: '#EFF6FF',
+                  border: '1px solid #BFDBFE',
+                  color: '#1E40AF',
+                  fontSize: '11.5px',
+                  fontWeight: 600,
+                }}
+              >
+                <span>البحث: &quot;{searchActionTerm}&quot;</span>
+                <X size={12} style={{ cursor: 'pointer' }} onClick={() => setSearchActionTerm('')} />
+              </span>
+            )}
+
+            {filterAreaId !== 'ALL' && (
+              <span
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  padding: '3px 8px',
+                  borderRadius: '6px',
+                  backgroundColor: '#ECFDF5',
+                  border: '1px solid #A7F3D0',
+                  color: '#065F46',
+                  fontSize: '11.5px',
+                  fontWeight: 600,
+                }}
+              >
+                <span>
+                  المجال:{' '}
+                  {(() => {
+                    const found = planData?.areas?.find((a) => a.areaId === Number(filterAreaId));
+                    return found ? `${found.indicatorCode || ''} ${found.name}` : filterAreaId;
+                  })()}
+                </span>
+                <X size={12} style={{ cursor: 'pointer' }} onClick={() => setFilterAreaId('ALL')} />
+              </span>
+            )}
+
+            {filterPriority !== 'ALL' && (
+              <span
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  padding: '3px 8px',
+                  borderRadius: '6px',
+                  backgroundColor: '#FFFBEB',
+                  border: '1px solid #FDE68A',
+                  color: '#92400E',
+                  fontSize: '11.5px',
+                  fontWeight: 600,
+                }}
+              >
+                <span>
+                  الأولوية: {filterPriority === 'High' ? 'عالية' : filterPriority === 'Medium' ? 'متوسطة' : 'منخفضة'}
+                </span>
+                <X size={12} style={{ cursor: 'pointer' }} onClick={() => setFilterPriority('ALL')} />
+              </span>
+            )}
+
+            {filterGap !== 'ALL' && (
+              <span
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  padding: '3px 8px',
+                  borderRadius: '6px',
+                  backgroundColor: '#FEF2F2',
+                  border: '1px solid #FECACA',
+                  color: '#991B1B',
+                  fontSize: '11.5px',
+                  fontWeight: 600,
+                }}
+              >
+                <span>
+                  الفجوة: {filterGap === 'critical' ? 'حرجة (3)' : filterGap === 'large' ? 'كبيرة (2)' : 'طفيفة (1)'}
+                </span>
+                <X size={12} style={{ cursor: 'pointer' }} onClick={() => setFilterGap('ALL')} />
+              </span>
+            )}
+
+            {filterTimeRemaining !== 'ALL' && (
+              <span
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  padding: '3px 8px',
+                  borderRadius: '6px',
+                  backgroundColor: '#F1F5F9',
+                  border: '1px solid #CBD5E1',
+                  color: '#334155',
+                  fontSize: '11.5px',
+                  fontWeight: 600,
+                }}
+              >
+                <span>
+                  المهلة:{' '}
+                  {filterTimeRemaining === 'overdue'
+                    ? 'متأخر'
+                    : filterTimeRemaining === 'today'
+                    ? 'اليوم'
+                    : filterTimeRemaining === 'this_week'
+                    ? 'خلال أسبوع'
+                    : filterTimeRemaining === 'this_month'
+                    ? 'خلال شهر'
+                    : 'أكثر من شهر'}
+                </span>
+                <X size={12} style={{ cursor: 'pointer' }} onClick={() => setFilterTimeRemaining('ALL')} />
+              </span>
+            )}
+
+            {filterStatus !== 'ALL' && (
+              <span
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  padding: '3px 8px',
+                  borderRadius: '6px',
+                  backgroundColor: '#EFF6FF',
+                  border: '1px solid #BFDBFE',
+                  color: '#1E40AF',
+                  fontSize: '11.5px',
+                  fontWeight: 600,
+                }}
+              >
+                <span>
+                  الحالة: {filterStatus === 'InProgress' ? 'قيد التنفيذ' : filterStatus === 'Done' ? 'مكتمل' : 'معلق'}
+                </span>
+                <X size={12} style={{ cursor: 'pointer' }} onClick={() => setFilterStatus('ALL')} />
+              </span>
+            )}
+
+            <button
+              type="button"
+              onClick={() => {
+                setSearchActionTerm('');
+                setFilterAreaId('ALL');
+                setFilterPriority('ALL');
+                setFilterGap('ALL');
+                setFilterTimeRemaining('ALL');
+                setFilterStatus('ALL');
+                setSortBy('default');
+              }}
+              style={{
+                padding: '3px 8px',
+                borderRadius: '6px',
+                backgroundColor: '#FEF2F2',
+                border: '1px solid #FECACA',
+                color: '#DC2626',
+                fontSize: '11px',
+                fontWeight: 700,
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px',
+                marginRight: 'auto',
+              }}
+            >
+              <RotateCcw size={11} />
+              <span>مسح كافة الفلاتر</span>
+            </button>
+          </div>
+        )}
+
         <div style={{ overflowX: 'auto' }}>
           <table style={{ minWidth: '1150px', width: '100%', borderCollapse: 'collapse', textAlign: 'right' }}>
             <thead>
               <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '2px solid #F1F5F9' }}>
                 <th style={{ padding: '12px 14px', fontSize: '12px', fontWeight: 700, color: '#475569', width: '45px', textAlign: 'center' }}>#</th>
-                <th style={{ padding: '12px 14px', fontSize: '12px', fontWeight: 700, color: '#475569', width: '250px' }}>المؤشر والمعيار المستهدف</th>
-                <th style={{ padding: '12px 14px', fontSize: '12px', fontWeight: 700, color: '#475569', minWidth: '200px' }}>عنوان الإجراء التنفيذي</th>
-                <th style={{ padding: '12px 12px', fontSize: '12px', fontWeight: 700, color: '#475569', width: '90px', textAlign: 'center' }}>الأولوية</th>
-                <th style={{ padding: '12px 12px', fontSize: '12px', fontWeight: 700, color: '#475569', width: '135px', textAlign: 'center' }}>الدرجة ومسار الفجوة</th>
-                <th style={{ padding: '12px 14px', fontSize: '12px', fontWeight: 700, color: '#475569', width: '120px' }}>المسؤول</th>
-                <th style={{ padding: '12px 12px', fontSize: '12px', fontWeight: 700, color: '#475569', width: '135px' }}>تاريخ البدء</th>
-                <th style={{ padding: '12px 12px', fontSize: '12px', fontWeight: 700, color: '#475569', width: '155px' }}>تاريخ الاستحقاق والمهلة</th>
-                <th style={{ padding: '12px 12px', fontSize: '12px', fontWeight: 700, color: '#475569', width: '90px' }}>الإنجاز</th>
-                <th style={{ padding: '12px 12px', fontSize: '12px', fontWeight: 700, color: '#475569', width: '95px', textAlign: 'center' }}>الحالة</th>
+                <th
+                  onClick={() => handleActionHeaderSort('indicator')}
+                  style={{ padding: '12px 14px', fontSize: '12px', fontWeight: 700, color: '#475569', width: '250px', cursor: 'pointer', userSelect: 'none' }}
+                  title="انقر للفرز حسب المؤشر والمعيار"
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
+                    <span>المؤشر والمعيار المستهدف</span>
+                    {renderActionSortIcon('indicator')}
+                  </div>
+                </th>
+                <th
+                  onClick={() => handleActionHeaderSort('title')}
+                  style={{ padding: '12px 14px', fontSize: '12px', fontWeight: 700, color: '#475569', minWidth: '200px', cursor: 'pointer', userSelect: 'none' }}
+                  title="انقر للفرز حسب عنوان الإجراء"
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
+                    <span>عنوان الإجراء التنفيذي</span>
+                    {renderActionSortIcon('title')}
+                  </div>
+                </th>
+                <th
+                  onClick={() => handleActionHeaderSort('priority')}
+                  style={{ padding: '12px 12px', fontSize: '12px', fontWeight: 700, color: '#475569', width: '90px', textAlign: 'center', cursor: 'pointer', userSelect: 'none' }}
+                  title="انقر للفرز حسب الأولوية"
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
+                    <span>الأولوية</span>
+                    {renderActionSortIcon('priority')}
+                  </div>
+                </th>
+                <th
+                  onClick={() => handleActionHeaderSort('gap')}
+                  style={{ padding: '12px 12px', fontSize: '12px', fontWeight: 700, color: '#475569', width: '135px', textAlign: 'center', cursor: 'pointer', userSelect: 'none' }}
+                  title="انقر للفرز حسب حجم الفجوة"
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
+                    <span>الدرجة ومسار الفجوة</span>
+                    {renderActionSortIcon('gap')}
+                  </div>
+                </th>
+                <th
+                  onClick={() => handleActionHeaderSort('owner')}
+                  style={{ padding: '12px 14px', fontSize: '12px', fontWeight: 700, color: '#475569', width: '120px', cursor: 'pointer', userSelect: 'none' }}
+                  title="انقر للفرز حسب المسؤول"
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
+                    <span>المسؤول</span>
+                    {renderActionSortIcon('owner')}
+                  </div>
+                </th>
+                <th
+                  onClick={() => handleActionHeaderSort('start_date')}
+                  style={{ padding: '12px 12px', fontSize: '12px', fontWeight: 700, color: '#475569', width: '135px', cursor: 'pointer', userSelect: 'none' }}
+                  title="انقر للفرز حسب تاريخ البدء"
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px' }}>
+                    <span>تاريخ البدء</span>
+                    {renderActionSortIcon('start_date')}
+                  </div>
+                </th>
+                <th
+                  onClick={() => handleActionHeaderSort('time_remaining')}
+                  style={{ padding: '12px 12px', fontSize: '12px', fontWeight: 700, color: '#475569', width: '155px', cursor: 'pointer', userSelect: 'none' }}
+                  title="انقر للفرز حسب تاريخ الاستحقاق والمهلة"
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px' }}>
+                    <span>تاريخ الاستحقاق والمهلة</span>
+                    {renderActionSortIcon('time_remaining')}
+                  </div>
+                </th>
+                <th
+                  onClick={() => handleActionHeaderSort('progress')}
+                  style={{ padding: '12px 12px', fontSize: '12px', fontWeight: 700, color: '#475569', width: '90px', cursor: 'pointer', userSelect: 'none' }}
+                  title="انقر للفرز حسب نسبة الإنجاز"
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
+                    <span>الإنجاز</span>
+                    {renderActionSortIcon('progress')}
+                  </div>
+                </th>
+                <th
+                  onClick={() => handleActionHeaderSort('status')}
+                  style={{ padding: '12px 12px', fontSize: '12px', fontWeight: 700, color: '#475569', width: '95px', textAlign: 'center', cursor: 'pointer', userSelect: 'none' }}
+                  title="انقر للفرز حسب الحالة"
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
+                    <span>الحالة</span>
+                    {renderActionSortIcon('status')}
+                  </div>
+                </th>
                 <th style={{ padding: '12px 14px', fontSize: '12px', fontWeight: 700, color: '#475569', textAlign: 'center', width: '90px' }}>الإجراءات</th>
               </tr>
             </thead>

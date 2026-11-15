@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { evaluatorApi } from '../../api/evaluatorApi';
-import type { EvaluatorScreen } from '../../api/evaluationTypes';
+import type { EvaluatorScreen, EvaluatorDashboardData } from '../../api/evaluationTypes';
 import {
   FileText,
   Table,
@@ -25,6 +25,23 @@ export const ReportsHubPage: React.FC<ReportsHubPageProps> = ({ onNavigate }) =>
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [dashboardData, setDashboardData] = useState<EvaluatorDashboardData | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    evaluatorApi.getDashboardStats()
+      .then((data) => {
+        if (isMounted) setDashboardData(data);
+      })
+      .catch(() => {});
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const totalIndicators = dashboardData?.kpis?.totalIndicators ?? 109;
+  const scoredIndicators = dashboardData?.kpis?.scoredIndicators ?? 0;
+  const hasDigitalHash = Boolean(dashboardData?.schoolInfo?.digitalHash);
 
   const handleDownload = async (id: string, exportFn: () => Promise<void>, name: string) => {
     try {
@@ -97,7 +114,7 @@ export const ReportsHubPage: React.FC<ReportsHubPageProps> = ({ onNavigate }) =>
           </div>
         </div>
 
-        {/* Quick Stats Pill */}
+        {/* Dynamic Quick Stats Pill */}
         <div
           style={{
             display: 'flex',
@@ -110,7 +127,9 @@ export const ReportsHubPage: React.FC<ReportsHubPageProps> = ({ onNavigate }) =>
           }}
         >
           <div style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: '17px', fontWeight: 800 }}>109</div>
+            <div style={{ fontSize: '17px', fontWeight: 800 }}>
+              {scoredIndicators} / {totalIndicators}
+            </div>
             <div style={{ fontSize: '11px', color: '#CCFBF1' }}>مؤشرات مرصودة</div>
           </div>
           <div style={{ width: '1px', height: '26px', backgroundColor: 'rgba(255, 255, 255, 0.2)' }} />
@@ -120,8 +139,12 @@ export const ReportsHubPage: React.FC<ReportsHubPageProps> = ({ onNavigate }) =>
           </div>
           <div style={{ width: '1px', height: '26px', backgroundColor: 'rgba(255, 255, 255, 0.2)' }} />
           <div style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: '17px', fontWeight: 800 }}>SHA-256</div>
-            <div style={{ fontSize: '11px', color: '#CCFBF1' }}>بصمة مشفرة</div>
+            <div style={{ fontSize: '17px', fontWeight: 800 }}>
+              {hasDigitalHash ? 'SHA-256' : 'قيد التدقيق'}
+            </div>
+            <div style={{ fontSize: '11px', color: '#CCFBF1' }}>
+              {hasDigitalHash ? 'بصمة مشفرة' : 'بصمة الختم'}
+            </div>
           </div>
         </div>
       </div>
@@ -172,7 +195,7 @@ export const ReportsHubPage: React.FC<ReportsHubPageProps> = ({ onNavigate }) =>
       {/* ============================================================== */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <div style={{ width: '4px', height: '18px', backgroundColor: '#0F766E', borderRadius: '2px' }} />
+          <div style={{ width: '4px', height: '18px', backgroundColor: '#059669', borderRadius: '2px' }} />
           <h2 style={{ fontSize: '16.5px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
             القسم الأول: تقارير ومصفوفات التقييم الذاتي الرسمية
           </h2>
@@ -199,14 +222,14 @@ export const ReportsHubPage: React.FC<ReportsHubPageProps> = ({ onNavigate }) =>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <div style={{ width: '44px', height: '44px', borderRadius: '10px', backgroundColor: '#EFF6FF', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <FileText size={22} color="#1D4ED8" />
+                  <div style={{ width: '44px', height: '44px', borderRadius: '10px', backgroundColor: '#FEF2F2', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <FileText size={22} color="#DC2626" />
                   </div>
                   <div>
                     <h3 style={{ fontSize: '15px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
                       التقرير التقييمي الشامل للمدرسة (PDF Dossier)
                     </h3>
-                    <span style={{ fontSize: '11px', fontWeight: 700, padding: '2px 7px', borderRadius: '5px', backgroundColor: '#EFF6FF', color: '#1D4ED8', display: 'inline-block', marginTop: '3px' }}>
+                    <span style={{ fontSize: '11px', fontWeight: 700, padding: '2px 7px', borderRadius: '5px', backgroundColor: '#FEF2F2', color: '#DC2626', border: '1px solid #FECACA', display: 'inline-block', marginTop: '3px' }}>
                       PDF • استمارة التقرير المفصلة
                     </span>
                   </div>
@@ -229,13 +252,13 @@ export const ReportsHubPage: React.FC<ReportsHubPageProps> = ({ onNavigate }) =>
                   width: '100%',
                   padding: '10px 16px',
                   borderRadius: '8px',
-                  backgroundColor: '#1D4ED8',
+                  backgroundColor: '#059669',
                   color: '#FFFFFF',
                   fontSize: '12.8px',
                   fontWeight: 700,
                   border: 'none',
                   cursor: downloadingId ? 'not-allowed' : 'pointer',
-                  boxShadow: '0 2px 6px rgba(29, 78, 216, 0.25)',
+                  boxShadow: '0 2px 6px rgba(5, 150, 105, 0.25)',
                 }}
               >
                 <Download size={15} />
@@ -360,7 +383,7 @@ export const ReportsHubPage: React.FC<ReportsHubPageProps> = ({ onNavigate }) =>
       {/* ============================================================== */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <div style={{ width: '4px', height: '18px', backgroundColor: '#D97706', borderRadius: '2px' }} />
+          <div style={{ width: '4px', height: '18px', backgroundColor: '#059669', borderRadius: '2px' }} />
           <h2 style={{ fontSize: '16.5px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
             القسم الثاني: حزم وسجلات وثائق الشواهد والأدلة
           </h2>
@@ -375,7 +398,7 @@ export const ReportsHubPage: React.FC<ReportsHubPageProps> = ({ onNavigate }) =>
             style={{
               backgroundColor: '#FFFFFF',
               borderRadius: '14px',
-              border: '1.5px solid #FCD34D',
+              border: '1px solid #E2E8F0',
               padding: '22px',
               display: 'flex',
               flexDirection: 'column',
@@ -387,14 +410,14 @@ export const ReportsHubPage: React.FC<ReportsHubPageProps> = ({ onNavigate }) =>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <div style={{ width: '44px', height: '44px', borderRadius: '10px', backgroundColor: '#FEF3C7', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <FolderArchive size={22} color="#B45309" />
+                  <div style={{ width: '44px', height: '44px', borderRadius: '10px', backgroundColor: '#FFFBEB', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <FolderArchive size={22} color="#D97706" />
                   </div>
                   <div>
                     <h3 style={{ fontSize: '15px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
                       حزمة وثائق الشواهد المعتمدة (ZIP Archive)
                     </h3>
-                    <span style={{ fontSize: '11px', fontWeight: 700, padding: '2px 7px', borderRadius: '5px', backgroundColor: '#FEF3C7', color: '#92400E', display: 'inline-block', marginTop: '3px' }}>
+                    <span style={{ fontSize: '11px', fontWeight: 700, padding: '2px 7px', borderRadius: '5px', backgroundColor: '#FFFBEB', color: '#D97706', border: '1px solid #FDE68A', display: 'inline-block', marginTop: '3px' }}>
                       ZIP • خياران للتنزيل + فهرس إجرائي (MANIFEST)
                     </span>
                   </div>
@@ -406,7 +429,7 @@ export const ReportsHubPage: React.FC<ReportsHubPageProps> = ({ onNavigate }) =>
             </div>
 
             {/* Two Distinct ZIP Download Options */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', paddingTop: '10px', borderTop: '1px solid #FEF3C7' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', paddingTop: '10px', borderTop: '1px solid #F1F5F9' }}>
               <button
                 onClick={() => handleDownload('evidence-zip-latest', () => evaluatorApi.exportEvidenceZip('latest'), 'حزمة الشواهد (الإصدار الأخير فقط)')}
                 disabled={Boolean(downloadingId)}
@@ -418,13 +441,13 @@ export const ReportsHubPage: React.FC<ReportsHubPageProps> = ({ onNavigate }) =>
                   width: '100%',
                   padding: '10px 16px',
                   borderRadius: '8px',
-                  backgroundColor: '#B45309',
+                  backgroundColor: '#059669',
                   color: '#FFFFFF',
                   fontSize: '12.8px',
                   fontWeight: 700,
                   border: 'none',
                   cursor: downloadingId ? 'not-allowed' : 'pointer',
-                  boxShadow: '0 2px 6px rgba(180, 83, 9, 0.25)',
+                  boxShadow: '0 2px 6px rgba(5, 150, 105, 0.25)',
                 }}
               >
                 <Download size={15} />
@@ -442,11 +465,11 @@ export const ReportsHubPage: React.FC<ReportsHubPageProps> = ({ onNavigate }) =>
                   width: '100%',
                   padding: '9px 14px',
                   borderRadius: '8px',
-                  backgroundColor: '#FFFBEB',
-                  color: '#92400E',
+                  backgroundColor: '#F8FAFC',
+                  color: '#334155',
                   fontSize: '12px',
-                  fontWeight: 700,
-                  border: '1px solid #FDE68A',
+                  fontWeight: 600,
+                  border: '1px solid #CBD5E1',
                   cursor: downloadingId ? 'not-allowed' : 'pointer',
                 }}
               >
@@ -473,14 +496,14 @@ export const ReportsHubPage: React.FC<ReportsHubPageProps> = ({ onNavigate }) =>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <div style={{ width: '44px', height: '44px', borderRadius: '10px', backgroundColor: '#CCFBF1', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <FileCheck2 size={22} color="#0F766E" />
+                  <div style={{ width: '44px', height: '44px', borderRadius: '10px', backgroundColor: '#ECFDF5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <FileCheck2 size={22} color="#059669" />
                   </div>
                   <div>
                     <h3 style={{ fontSize: '15px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
                       إكسل الشواهد — سجل جرد ومطابقة الشواهد (Excel)
                     </h3>
-                    <span style={{ fontSize: '11px', fontWeight: 700, padding: '2px 7px', borderRadius: '5px', backgroundColor: '#F0FDFA', color: '#0F766E', display: 'inline-block', marginTop: '3px' }}>
+                    <span style={{ fontSize: '11px', fontWeight: 700, padding: '2px 7px', borderRadius: '5px', backgroundColor: '#ECFDF5', color: '#065F46', border: '1px solid #A7F3D0', display: 'inline-block', marginTop: '3px' }}>
                       Excel • تقرير جرد الوثائق والمطابقة
                     </span>
                   </div>
@@ -503,13 +526,13 @@ export const ReportsHubPage: React.FC<ReportsHubPageProps> = ({ onNavigate }) =>
                   width: '100%',
                   padding: '10px 16px',
                   borderRadius: '8px',
-                  backgroundColor: '#0F766E',
+                  backgroundColor: '#059669',
                   color: '#FFFFFF',
                   fontSize: '12.8px',
                   fontWeight: 700,
                   border: 'none',
                   cursor: downloadingId ? 'not-allowed' : 'pointer',
-                  boxShadow: '0 2px 6px rgba(15, 118, 110, 0.25)',
+                  boxShadow: '0 2px 6px rgba(5, 150, 105, 0.25)',
                 }}
               >
                 <Download size={15} />
@@ -549,7 +572,7 @@ export const ReportsHubPage: React.FC<ReportsHubPageProps> = ({ onNavigate }) =>
       {/* ============================================================== */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <div style={{ width: '4px', height: '18px', backgroundColor: '#6D28D9', borderRadius: '2px' }} />
+          <div style={{ width: '4px', height: '18px', backgroundColor: '#059669', borderRadius: '2px' }} />
           <h2 style={{ fontSize: '16.5px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
             القسم الثالث: الخطط التطويرية ووثائق الحوكمة والاعتماد
           </h2>
@@ -576,14 +599,14 @@ export const ReportsHubPage: React.FC<ReportsHubPageProps> = ({ onNavigate }) =>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <div style={{ width: '44px', height: '44px', borderRadius: '10px', backgroundColor: '#F0FDFA', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <TrendingUp size={22} color="#0D9488" />
+                  <div style={{ width: '44px', height: '44px', borderRadius: '10px', backgroundColor: '#ECFDF5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <TrendingUp size={22} color="#059669" />
                   </div>
                   <div>
                     <h3 style={{ fontSize: '15px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
                       وثيقة خطة التحسين والتطوير المعتمدة (Excel)
                     </h3>
-                    <span style={{ fontSize: '11px', fontWeight: 700, padding: '2px 7px', borderRadius: '5px', backgroundColor: '#F0FDFA', color: '#0F766E', display: 'inline-block', marginTop: '3px' }}>
+                    <span style={{ fontSize: '11px', fontWeight: 700, padding: '2px 7px', borderRadius: '5px', backgroundColor: '#ECFDF5', color: '#065F46', border: '1px solid #A7F3D0', display: 'inline-block', marginTop: '3px' }}>
                       Excel • 3 أوراق عمل تنفيذية
                     </span>
                   </div>
@@ -606,13 +629,13 @@ export const ReportsHubPage: React.FC<ReportsHubPageProps> = ({ onNavigate }) =>
                   width: '100%',
                   padding: '10px 16px',
                   borderRadius: '8px',
-                  backgroundColor: '#0D9488',
+                  backgroundColor: '#059669',
                   color: '#FFFFFF',
                   fontSize: '12.8px',
                   fontWeight: 700,
                   border: 'none',
                   cursor: downloadingId ? 'not-allowed' : 'pointer',
-                  boxShadow: '0 2px 6px rgba(13, 148, 136, 0.25)',
+                  boxShadow: '0 2px 6px rgba(5, 150, 105, 0.25)',
                 }}
               >
                 <Download size={15} />
@@ -631,7 +654,7 @@ export const ReportsHubPage: React.FC<ReportsHubPageProps> = ({ onNavigate }) =>
                     padding: '8px 14px',
                     borderRadius: '8px',
                     backgroundColor: 'transparent',
-                    color: '#0D9488',
+                    color: '#059669',
                     fontSize: '12px',
                     fontWeight: 700,
                     border: 'none',
@@ -650,7 +673,7 @@ export const ReportsHubPage: React.FC<ReportsHubPageProps> = ({ onNavigate }) =>
             style={{
               backgroundColor: '#FFFFFF',
               borderRadius: '14px',
-              border: '1.5px solid #DDD6FE',
+              border: '1px solid #E2E8F0',
               padding: '22px',
               display: 'flex',
               flexDirection: 'column',
@@ -662,14 +685,14 @@ export const ReportsHubPage: React.FC<ReportsHubPageProps> = ({ onNavigate }) =>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <div style={{ width: '44px', height: '44px', borderRadius: '10px', backgroundColor: '#EDE9FE', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <ShieldCheck size={22} color="#6D28D9" />
+                  <div style={{ width: '44px', height: '44px', borderRadius: '10px', backgroundColor: '#FEF2F2', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <ShieldCheck size={22} color="#DC2626" />
                   </div>
                   <div>
                     <h3 style={{ fontSize: '15px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
                       شهادة الختم الرقمي وإشعار التسليم الرسمي (PDF)
                     </h3>
-                    <span style={{ fontSize: '11px', fontWeight: 700, padding: '2px 7px', borderRadius: '5px', backgroundColor: '#EDE9FE', color: '#6D28D9', display: 'inline-block', marginTop: '3px' }}>
+                    <span style={{ fontSize: '11px', fontWeight: 700, padding: '2px 7px', borderRadius: '5px', backgroundColor: '#FEF2F2', color: '#DC2626', border: '1px solid #FECACA', display: 'inline-block', marginTop: '3px' }}>
                       PDF + Barcode • وثيقة حوكمة ملزمة
                     </span>
                   </div>
@@ -680,7 +703,7 @@ export const ReportsHubPage: React.FC<ReportsHubPageProps> = ({ onNavigate }) =>
               </p>
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', paddingTop: '10px', borderTop: '1px solid #EDE9FE' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', paddingTop: '10px', borderTop: '1px solid #F1F5F9' }}>
               <button
                 onClick={() => handleDownload('seal-certificate', () => evaluatorApi.exportSealCertificatePdf(), 'شهادة الختم الرقمي (PDF)')}
                 disabled={Boolean(downloadingId)}
@@ -692,13 +715,13 @@ export const ReportsHubPage: React.FC<ReportsHubPageProps> = ({ onNavigate }) =>
                   width: '100%',
                   padding: '10px 16px',
                   borderRadius: '8px',
-                  backgroundColor: '#6D28D9',
+                  backgroundColor: '#059669',
                   color: '#FFFFFF',
                   fontSize: '12.8px',
                   fontWeight: 700,
                   border: 'none',
                   cursor: downloadingId ? 'not-allowed' : 'pointer',
-                  boxShadow: '0 2px 6px rgba(109, 40, 217, 0.25)',
+                  boxShadow: '0 2px 6px rgba(5, 150, 105, 0.25)',
                 }}
               >
                 <Download size={15} />
@@ -717,7 +740,7 @@ export const ReportsHubPage: React.FC<ReportsHubPageProps> = ({ onNavigate }) =>
                     padding: '8px 14px',
                     borderRadius: '8px',
                     backgroundColor: 'transparent',
-                    color: '#6D28D9',
+                    color: '#059669',
                     fontSize: '12px',
                     fontWeight: 700,
                     border: 'none',
@@ -738,7 +761,7 @@ export const ReportsHubPage: React.FC<ReportsHubPageProps> = ({ onNavigate }) =>
       {/* ============================================================== */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <div style={{ width: '4px', height: '18px', backgroundColor: '#2563EB', borderRadius: '2px' }} />
+          <div style={{ width: '4px', height: '18px', backgroundColor: '#059669', borderRadius: '2px' }} />
           <h2 style={{ fontSize: '16.5px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
             القسم الرابع: مسار التطور والمقارنة التاريخية للدورات
           </h2>

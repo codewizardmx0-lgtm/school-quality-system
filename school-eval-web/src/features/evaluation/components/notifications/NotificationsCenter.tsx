@@ -11,6 +11,11 @@ import {
   ShieldAlert,
   ArrowLeft,
   Inbox,
+  Search,
+  ArrowUpDown,
+  Filter,
+  X,
+  RotateCcw,
 } from 'lucide-react';
 
 interface NotificationsCenterProps {
@@ -40,6 +45,8 @@ export const NotificationsCenter: React.FC<NotificationsCenterProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [category, setCategory] = useState<NotificationCategory>('all');
   const [unreadOnly, setUnreadOnly] = useState<boolean>(false);
+  const [searchTerm, setSearchTerm] = useState<string>('');
+  const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'priority'>('newest');
 
   const fetchNotifications = useCallback(async () => {
     setIsLoading(true);
@@ -137,11 +144,46 @@ export const NotificationsCenter: React.FC<NotificationsCenterProps> = ({
     general: notifications.filter((n) => classifyNotification(n) === 'general').length,
   };
 
-  const filtered = notifications.filter((n) => {
-    if (unreadOnly && n.isRead) return false;
-    if (category === 'all') return true;
-    return classifyNotification(n) === category;
-  });
+  const filtered = notifications
+    .filter((n) => {
+      if (unreadOnly && n.isRead) return false;
+      if (category !== 'all' && classifyNotification(n) !== category) return false;
+      if (searchTerm.trim()) {
+        const term = searchTerm.toLowerCase();
+        return (
+          n.title?.toLowerCase().includes(term) ||
+          n.message?.toLowerCase().includes(term)
+        );
+      }
+      return true;
+    })
+    .sort((a, b) => {
+      if (sortBy === 'oldest') {
+        return (a.createdAt || '').localeCompare(b.createdAt || '');
+      }
+      if (sortBy === 'priority') {
+        const catWeight: Record<string, number> = { completion: 3, improvement: 2, procedural: 2, general: 1 };
+        const pA = (a as any).priority ? ((a as any).priority === 'high' ? 3 : 2) : (catWeight[classifyNotification(a)] || 1);
+        const pB = (b as any).priority ? ((b as any).priority === 'high' ? 3 : 2) : (catWeight[classifyNotification(b)] || 1);
+        if (pB !== pA) return pB - pA;
+        return (b.createdAt || '').localeCompare(a.createdAt || '');
+      }
+      return (b.createdAt || '').localeCompare(a.createdAt || '');
+    });
+
+  const hasActiveFilters = Boolean(
+    category !== 'all' ||
+    unreadOnly ||
+    searchTerm.trim() ||
+    sortBy !== 'newest'
+  );
+
+  const clearAllFilters = () => {
+    setCategory('all');
+    setUnreadOnly(false);
+    setSearchTerm('');
+    setSortBy('newest');
+  };
 
   return (
     <div style={{ padding: '24px', maxWidth: '1100px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '22px' }}>
@@ -257,9 +299,9 @@ export const NotificationsCenter: React.FC<NotificationsCenterProps> = ({
             gap: '6px',
             padding: '9px 16px',
             borderRadius: '10px',
-            backgroundColor: category === 'all' ? '#0F766E' : '#FFFFFF',
+            backgroundColor: category === 'all' ? '#059669' : '#FFFFFF',
             color: category === 'all' ? '#FFFFFF' : '#334155',
-            border: `1px solid ${category === 'all' ? '#0F766E' : '#E2E8F0'}`,
+            border: `1px solid ${category === 'all' ? '#059669' : '#E2E8F0'}`,
             fontSize: '12.5px',
             fontWeight: 700,
             cursor: 'pointer',
@@ -368,6 +410,212 @@ export const NotificationsCenter: React.FC<NotificationsCenterProps> = ({
           </span>
         </button>
       </div>
+
+      {/* Search and Sort Toolbar */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '12px',
+          padding: '12px 16px',
+          backgroundColor: '#FFFFFF',
+          borderRadius: '12px',
+          border: '1px solid #E2E8F0',
+        }}
+      >
+        <div style={{ position: 'relative', flex: 1, minWidth: '220px', maxWidth: '400px' }}>
+          <Search size={15} style={{ position: 'absolute', right: '10px', top: '9px', color: '#94A3B8' }} />
+          <input
+            type="text"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            placeholder="ابحث في نص التنبيه أو العنوان..."
+            style={{
+              width: '100%',
+              padding: '6px 32px 6px 10px',
+              borderRadius: '8px',
+              border: '1px solid #CBD5E1',
+              fontSize: '12.5px',
+              outline: 'none',
+              boxSizing: 'border-box',
+            }}
+          />
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <ArrowUpDown size={14} color="#64748B" />
+          <span style={{ fontSize: '12px', color: '#64748B', fontWeight: 600 }}>ترتيب حسب:</span>
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value as any)}
+            style={{
+              padding: '6px 10px',
+              borderRadius: '8px',
+              border: '1px solid #CBD5E1',
+              fontSize: '12px',
+              backgroundColor: '#FFFFFF',
+              color: '#334155',
+              cursor: 'pointer',
+              outline: 'none',
+              fontWeight: sortBy !== 'newest' ? 700 : 500,
+            }}
+          >
+            <option value="newest">الأحدث أولاً</option>
+            <option value="oldest">الأقدم أولاً</option>
+            <option value="priority">الأولوية والأهمية</option>
+          </select>
+
+          {hasActiveFilters && (
+            <button
+              type="button"
+              onClick={clearAllFilters}
+              style={{
+                padding: '6px 10px',
+                borderRadius: '8px',
+                backgroundColor: '#FEF2F2',
+                border: '1px solid #FECACA',
+                color: '#DC2626',
+                fontSize: '11.5px',
+                fontWeight: 700,
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px',
+              }}
+            >
+              <RotateCcw size={12} />
+              <span>إعادة ضبط</span>
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Active Filter Chips Bar */}
+      {hasActiveFilters && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            flexWrap: 'wrap',
+            padding: '10px 14px',
+            backgroundColor: '#F8FAFC',
+            borderRadius: '10px',
+            border: '1px solid #E2E8F0',
+          }}
+        >
+          <span style={{ fontSize: '11.5px', fontWeight: 700, color: '#64748B', display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <Filter size={12} />
+            الفلاتر النشطة:
+          </span>
+
+          {searchTerm.trim() && (
+            <span
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px',
+                padding: '3px 8px',
+                borderRadius: '6px',
+                backgroundColor: '#EFF6FF',
+                border: '1px solid #BFDBFE',
+                color: '#1E40AF',
+                fontSize: '11.5px',
+                fontWeight: 600,
+              }}
+            >
+              <span>البحث: &quot;{searchTerm}&quot;</span>
+              <X size={12} style={{ cursor: 'pointer' }} onClick={() => setSearchTerm('')} />
+            </span>
+          )}
+
+          {category !== 'all' && (
+            <span
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px',
+                padding: '3px 8px',
+                borderRadius: '6px',
+                backgroundColor: category === 'completion' ? '#FFFBEB' : category === 'improvement' ? '#ECFDF5' : '#EFF6FF',
+                border: `1px solid ${category === 'completion' ? '#FDE68A' : category === 'improvement' ? '#A7F3D0' : '#BFDBFE'}`,
+                color: category === 'completion' ? '#92400E' : category === 'improvement' ? '#065F46' : '#1E40AF',
+                fontSize: '11.5px',
+                fontWeight: 600,
+              }}
+            >
+              <span>
+                التصنيف: {category === 'completion' ? 'طلبات استكمال' : category === 'improvement' ? 'مواعيد تحسين' : category === 'procedural' ? 'إجرائية' : 'عامة'}
+              </span>
+              <X size={12} style={{ cursor: 'pointer' }} onClick={() => setCategory('all')} />
+            </span>
+          )}
+
+          {unreadOnly && (
+            <span
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px',
+                padding: '3px 8px',
+                borderRadius: '6px',
+                backgroundColor: '#F0FDF4',
+                border: '1px solid #BBF7D0',
+                color: '#15803D',
+                fontSize: '11.5px',
+                fontWeight: 600,
+              }}
+            >
+              <span>غير المقروء فقط</span>
+              <X size={12} style={{ cursor: 'pointer' }} onClick={() => setUnreadOnly(false)} />
+            </span>
+          )}
+
+          {sortBy !== 'newest' && (
+            <span
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px',
+                padding: '3px 8px',
+                borderRadius: '6px',
+                backgroundColor: '#F1F5F9',
+                border: '1px solid #CBD5E1',
+                color: '#334155',
+                fontSize: '11.5px',
+                fontWeight: 600,
+              }}
+            >
+              <span>ترتيب: {sortBy === 'oldest' ? 'الأقدم' : 'الأولوية'}</span>
+              <X size={12} style={{ cursor: 'pointer' }} onClick={() => setSortBy('newest')} />
+            </span>
+          )}
+
+          <button
+            type="button"
+            onClick={clearAllFilters}
+            style={{
+              padding: '3px 8px',
+              borderRadius: '6px',
+              backgroundColor: '#FEF2F2',
+              border: '1px solid #FECACA',
+              color: '#DC2626',
+              fontSize: '11px',
+              fontWeight: 700,
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '4px',
+              marginRight: 'auto',
+            }}
+          >
+            <RotateCcw size={11} />
+            <span>مسح كافة الفلاتر</span>
+          </button>
+        </div>
+      )}
 
       {/* Loading Skeletons */}
       {isLoading ? (

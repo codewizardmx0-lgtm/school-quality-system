@@ -40,6 +40,7 @@ export const InternalReviewPage: React.FC<InternalReviewPageProps> = ({
 }) => {
   const {
     preflightData,
+    isLoadingCheck,
     isSubmitting,
     submitFinalLock,
     refreshPreflight,
@@ -103,8 +104,8 @@ export const InternalReviewPage: React.FC<InternalReviewPageProps> = ({
   const [isExporting, setIsExporting] = useState(false);
 
   const submissionStatus = dashboardData?.schoolInfo?.status || preflightData?.digitalSealInfo?.submissionStatus || (isLocked ? 'Submitted' : 'Draft');
-  const activeTrackingCode = preflightData?.digitalSealInfo?.trackingCode || preflightData?.digitalSealInfo?.systemCode || dashboardData?.schoolInfo?.trackingCode || 'ARQ-2026-FINAL';
-  const activeDigitalHash = preflightData?.digitalSealInfo?.digitalHash || dashboardData?.schoolInfo?.digitalHash || 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
+  const activeTrackingCode = preflightData?.digitalSealInfo?.trackingCode || preflightData?.digitalSealInfo?.systemCode || dashboardData?.schoolInfo?.trackingCode || (isLocked ? 'ARQ-LOCKED' : 'بانتظار الاعتماد والختم');
+  const activeDigitalHash = preflightData?.digitalSealInfo?.digitalHash || dashboardData?.schoolInfo?.digitalHash || (isLocked ? 'بصمة مشفرة مسجلة' : 'تُولَّد البصمة المشفرة (SHA-256) فور تأكيد الختم النهائي');
 
   const toggleCriterionExpand = (id: string) => {
     setExpandedCriteria((prev) => ({ ...prev, [id]: !prev[id] }));
@@ -286,6 +287,43 @@ export const InternalReviewPage: React.FC<InternalReviewPageProps> = ({
             تحميل شهادة الختم الرسمي
           </button>
         </div>
+      ) : isLoadingCheck ? (
+        <div
+          style={{
+            padding: '16px 20px',
+            borderRadius: '12px',
+            backgroundColor: '#F8FAFC',
+            border: '1px solid #E2E8F0',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '14px',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <RefreshCw size={20} color="#059669" className="animate-spin" />
+            <div>
+              <div style={{ fontSize: '13.5px', fontWeight: 800, color: '#1E293B' }}>
+                جاري فحص معايير الجاهزية والتحقق من الشواهد المعتمدة...
+              </div>
+              <div style={{ fontSize: '12px', color: '#64748B', marginTop: '2px' }}>
+                يتم التحقق آلياً من اكتمال الرصد، وربط الشواهد، وجاهزية خطة التحسين ومسودة التقرير.
+              </div>
+            </div>
+          </div>
+          <div
+            style={{
+              padding: '4px 12px',
+              borderRadius: '20px',
+              backgroundColor: '#F1F5F9',
+              color: '#64748B',
+              fontSize: '12px',
+              fontWeight: 700,
+            }}
+          >
+            جاري الفحص...
+          </div>
+        </div>
       ) : (
         <div
           style={{
@@ -400,16 +438,16 @@ export const InternalReviewPage: React.FC<InternalReviewPageProps> = ({
             borderRadius: '12px',
             padding: '16px',
             border: '1px solid #E2E8F0',
-            borderRight: `4px solid ${isLocked || submissionStatus === 'Submitted' ? '#059669' : canSubmit ? '#2563EB' : '#EF4444'}`,
+            borderRight: `4px solid ${isLocked || submissionStatus === 'Submitted' ? '#059669' : isLoadingCheck ? '#94A3B8' : canSubmit ? '#2563EB' : '#EF4444'}`,
             boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
           }}
         >
           <div style={{ fontSize: '12px', color: '#64748B', fontWeight: 600 }}>حالة الختم الرقمي</div>
-          <div style={{ fontSize: '20px', fontWeight: 800, color: isLocked || submissionStatus === 'Submitted' ? '#059669' : canSubmit ? '#2563EB' : '#EF4444', marginTop: '6px' }}>
-            {isLocked || submissionStatus === 'Submitted' ? 'مختوم ومرفوع' : canSubmit ? 'جاهز للختم النهائي' : 'غير مؤهل للختم'}
+          <div style={{ fontSize: '20px', fontWeight: 800, color: isLocked || submissionStatus === 'Submitted' ? '#059669' : isLoadingCheck ? '#64748B' : canSubmit ? '#2563EB' : '#EF4444', marginTop: '6px' }}>
+            {isLocked || submissionStatus === 'Submitted' ? 'مختوم ومرفوع' : isLoadingCheck ? 'جاري التحقق...' : canSubmit ? 'جاهز للختم النهائي' : 'غير مؤهل للختم'}
           </div>
           <div style={{ fontSize: '11.5px', color: '#64748B', marginTop: '4px' }}>
-            {isLocked || submissionStatus === 'Submitted' ? 'وضع القراءة فقط' : canSubmit ? 'بانتظار توقيع المقيم' : 'يتطلب استيفاء المعايير'}
+            {isLocked || submissionStatus === 'Submitted' ? 'وضع القراءة فقط' : isLoadingCheck ? 'جاري استرجاع البيانات...' : canSubmit ? 'بانتظار توقيع المقيم' : 'يتطلب استيفاء المعايير'}
           </div>
         </div>
       </div>
@@ -461,33 +499,33 @@ export const InternalReviewPage: React.FC<InternalReviewPageProps> = ({
               style={{
                 padding: '6px 14px',
                 borderRadius: '20px',
-                backgroundColor: canSubmit ? '#ECFDF5' : '#FEF2F2',
-                color: canSubmit ? '#059669' : '#EF4444',
+                backgroundColor: isLoadingCheck ? '#F1F5F9' : canSubmit ? '#ECFDF5' : '#FEF2F2',
+                color: isLoadingCheck ? '#64748B' : canSubmit ? '#059669' : '#EF4444',
                 fontSize: '13px',
                 fontWeight: 800,
-                border: `1px solid ${canSubmit ? '#A7F3D0' : '#FECACA'}`,
+                border: `1px solid ${isLoadingCheck ? '#CBD5E1' : canSubmit ? '#A7F3D0' : '#FECACA'}`,
               }}
             >
-              نسبة الجاهزية: {readiness}%
+              {isLoadingCheck ? 'نسبة الجاهزية: جارٍ الفحص...' : `نسبة الجاهزية: ${readiness}%`}
             </div>
 
             {!isLocked && !isPrincipal && submissionStatus !== 'Submitted' && (
               <button
                 onClick={() => setIsLockModalOpen(true)}
-                disabled={!canSubmit || isSubmitting}
+                disabled={!canSubmit || isSubmitting || isLoadingCheck}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
                   gap: '6px',
                   padding: '10px 22px',
                   borderRadius: '10px',
-                  backgroundColor: canSubmit ? '#EF4444' : '#CBD5E1',
+                  backgroundColor: canSubmit && !isLoadingCheck ? '#EF4444' : '#CBD5E1',
                   color: '#FFFFFF',
                   fontSize: '13.5px',
                   fontWeight: 800,
                   border: 'none',
-                  cursor: canSubmit ? 'pointer' : 'not-allowed',
-                  boxShadow: canSubmit ? '0 4px 12px rgba(239, 68, 68, 0.25)' : 'none',
+                  cursor: canSubmit && !isLoadingCheck ? 'pointer' : 'not-allowed',
+                  boxShadow: canSubmit && !isLoadingCheck ? '0 4px 12px rgba(239, 68, 68, 0.25)' : 'none',
                 }}
               >
                 <Lock size={16} />
@@ -517,8 +555,65 @@ export const InternalReviewPage: React.FC<InternalReviewPageProps> = ({
           </div>
         </div>
 
-        {/* 4 Checklist Items with Deep-Links */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+        {/* 4 Checklist Items or Skeleton Loading Shimmers */}
+        {isLoadingCheck ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            {[
+              { id: '1', title: 'رصد تقديرات كافة مؤشرات المعايير الوطنية (109 مؤشرات)', desc: 'جاري التحقق من اكتمال الرصد العددي...' },
+              { id: '2', title: 'فهرسة وربط الشواهد والوثائق الداعمة للتقديرات', desc: 'جاري فحص المستندات المودعة والمربوطة بالمؤشرات...' },
+              { id: '3', title: 'صياغة خطة التحسين ومبادرات التطوير للمؤشرات المتدنية', desc: 'جاري التحقق من اعتماد إجراءات خطة التحسين...' },
+              { id: '4', title: 'جاهزية مسودة التقرير الشامل والمراجعة الداخلية لمدير المدرسة', desc: 'جاري تدقيق مصفوفة النتائج المعتمدة...' },
+            ].map((skel) => (
+              <div
+                key={skel.id}
+                style={{
+                  borderRadius: '10px',
+                  backgroundColor: '#F8FAFC',
+                  border: '1px solid #E2E8F0',
+                  padding: '16px 20px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  boxShadow: '0 1px 2px rgba(0,0,0,0.02)',
+                }}
+                className="animate-pulse"
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <div
+                    style={{
+                      width: '24px',
+                      height: '24px',
+                      borderRadius: '50%',
+                      backgroundColor: '#E2E8F0',
+                      flexShrink: 0,
+                    }}
+                  />
+                  <div>
+                    <div style={{ fontSize: '13.5px', fontWeight: 700, color: '#334155' }}>
+                      {skel.title}
+                    </div>
+                    <div style={{ fontSize: '11.5px', color: '#94A3B8', marginTop: '3px' }}>
+                      {skel.desc}
+                    </div>
+                  </div>
+                </div>
+                <div
+                  style={{
+                    padding: '3px 12px',
+                    borderRadius: '12px',
+                    backgroundColor: '#F1F5F9',
+                    color: '#64748B',
+                    fontSize: '11px',
+                    fontWeight: 700,
+                  }}
+                >
+                  قيد الفحص...
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
           {checklist.map((item, idx) => {
             const isExpanded = expandedCriteria[item.id] ?? false;
             const hasPendingItems = Boolean(item.pendingItems && item.pendingItems.length > 0);
@@ -676,7 +771,8 @@ export const InternalReviewPage: React.FC<InternalReviewPageProps> = ({
             );
           })}
         </div>
-      </div>
+      )}
+    </div>
 
       {/* 3. Governance Cards: Principal Sign-off & Digital Fingerprint */}
       <div
@@ -771,23 +867,23 @@ export const InternalReviewPage: React.FC<InternalReviewPageProps> = ({
                   fontWeight: 700,
                   padding: '3px 8px',
                   borderRadius: '6px',
-                  backgroundColor: '#EFF6FF',
-                  color: '#2563EB',
+                  backgroundColor: (isLocked || submissionStatus === 'Submitted') ? '#ECFDF5' : '#EFF6FF',
+                  color: (isLocked || submissionStatus === 'Submitted') ? '#059669' : '#2563EB',
                 }}
               >
-                SHA-256 Validated
+                {(isLocked || submissionStatus === 'Submitted') ? 'SHA-256 Validated' : 'جاهز للترميز الرقمي'}
               </span>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '12px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ color: '#64748B' }}>رمز التتبع الوطني الرسمي:</span>
                 <span style={{ fontWeight: 800, color: '#1E40AF', fontFamily: 'monospace' }}>
-                  {activeTrackingCode}
+                  {isLoadingCheck ? 'جاري الفحص...' : activeTrackingCode}
                 </span>
               </div>
               <div style={{ color: '#64748B' }}>البصمة المشفرة للبيانات:</div>
               <div style={{ fontSize: '10px', color: '#64748B', wordBreak: 'break-all', fontFamily: 'monospace', backgroundColor: '#F8FAFC', padding: '6px 8px', borderRadius: '6px', border: '1px solid #E2E8F0' }}>
-                {activeDigitalHash}
+                {isLoadingCheck ? 'جاري التحقق من بصمة التشفير...' : activeDigitalHash}
               </div>
             </div>
           </div>

@@ -41,8 +41,10 @@
 | TypeScript | متغيرات/دوال camelCase، أنواع PascalCase، ثوابت Enums بمسميات القسم 5 | `submissionStatus`, `type Submission` | خطة المشروع الثاني — المرحلة 4 |
 | ملفات React | مكوّنات `PascalCase.tsx`، دوال مساعدة وhooks بـ `camelCase.ts` (`useAuth.ts`) | `StatusBadge.tsx` | [اقتراح] |
 | مجلدات React | `features/<module>/` بوحدات الوثيقة | `features/evaluation/`, `features/ai-assistant/` | خطة المشروع الثاني — المرحلة 4 |
+| رموز الهوية البصرية | `designTokens.ts` — الألوان والأزرار وحالات التحميل | `designTokens.colors.primary` | [دليل معايير الواجهات](UI_STANDARDS_REFERENCE_GUIDE.md) |
 
 قاعدة تعارض الأسماء: إذا اختلف اسم الجدول عن اصطلاح Laravel الافتراضي، يبقى اسم القاموس ويتكيف الكود (انظر §12).
+مرجع الواجهات البصرية: لكافة قواعد الألوان والأزرار والفلاتر والفرز وحظر البيانات الوهمية، يُرجع إلى [docs/UI_STANDARDS_REFERENCE_GUIDE.md](UI_STANDARDS_REFERENCE_GUIDE.md).
 
 ---
 

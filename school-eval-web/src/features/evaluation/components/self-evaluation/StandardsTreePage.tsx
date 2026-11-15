@@ -14,6 +14,7 @@ import {
 import { DetailedReportExportModal } from '../reports/DetailedReportExportModal';
 import { SafeResetConfirmModal } from './SafeResetConfirmModal';
 import { useAuth } from '../../../auth/AuthContext';
+import { designTokens, getScoreLevelColor } from '../../../../styles/designTokens';
 
 interface StandardsTreePageProps {
   onSelectIndicator: (indicatorId: number) => void;
@@ -293,8 +294,9 @@ export const StandardsTreePage: React.FC<StandardsTreePageProps> = ({
                       style={{
                         fontSize: '11px',
                         fontWeight: 800,
-                        color: '#047857',
-                        backgroundColor: '#D1FAE5',
+                        color: designTokens.colors.status.success.primary,
+                        backgroundColor: designTokens.colors.status.success.bg,
+                        border: `1px solid ${designTokens.colors.status.success.border}`,
                         padding: '4px 8px',
                         borderRadius: '6px',
                         display: 'inline-flex',
@@ -310,8 +312,9 @@ export const StandardsTreePage: React.FC<StandardsTreePageProps> = ({
                       style={{
                         fontSize: '11px',
                         fontWeight: 800,
-                        color: '#1D4ED8',
-                        backgroundColor: '#DBEAFE',
+                        color: designTokens.colors.status.info.primary,
+                        backgroundColor: designTokens.colors.status.info.bg,
+                        border: `1px solid ${designTokens.colors.status.info.border}`,
                         padding: '4px 8px',
                         borderRadius: '6px',
                         display: 'inline-flex',
@@ -327,8 +330,9 @@ export const StandardsTreePage: React.FC<StandardsTreePageProps> = ({
                       style={{
                         fontSize: '11px',
                         fontWeight: 800,
-                        color: '#B45309',
-                        backgroundColor: '#FEF3C7',
+                        color: designTokens.colors.status.warning.primary,
+                        backgroundColor: designTokens.colors.status.warning.bg,
+                        border: `1px solid ${designTokens.colors.status.warning.border}`,
                         padding: '4px 8px',
                         borderRadius: '6px',
                         display: 'inline-flex',
@@ -344,8 +348,9 @@ export const StandardsTreePage: React.FC<StandardsTreePageProps> = ({
                       style={{
                         fontSize: '11px',
                         fontWeight: 800,
-                        color: '#B91C1C',
-                        backgroundColor: '#FEE2E2',
+                        color: designTokens.colors.status.danger.primary,
+                        backgroundColor: designTokens.colors.status.danger.bg,
+                        border: `1px solid ${designTokens.colors.status.danger.border}`,
                         padding: '4px 8px',
                         borderRadius: '6px',
                         display: 'inline-flex',
@@ -505,26 +510,24 @@ export const StandardsTreePage: React.FC<StandardsTreePageProps> = ({
                                       <span>{ind.title}</span>
                                       {/* Indicator Score Badge */}
                                       {isScored ? (
-                                        <span
-                                          style={{
-                                            fontSize: '10.5px',
-                                            fontWeight: 800,
-                                            padding: '2px 8px',
-                                            borderRadius: '6px',
-                                            backgroundColor:
-                                              ind.score === 3 ? '#D1FAE5' : ind.score === 2 ? '#DBEAFE' : ind.score === 1 ? '#FEF3C7' : '#FEE2E2',
-                                            color:
-                                              ind.score === 3 ? '#065F46' : ind.score === 2 ? '#1E40AF' : ind.score === 1 ? '#92400E' : '#991B1B',
-                                          }}
-                                        >
-                                          {ind.score === 3
-                                            ? 'المستوى 3: متحقق'
-                                            : ind.score === 2
-                                            ? 'المستوى 2: متحقق بدرجة متوسطة'
-                                            : ind.score === 1
-                                            ? 'المستوى 1: متحقق بدرجة ضعيفة'
-                                            : 'المستوى 0: غير متوفر'}
-                                        </span>
+                                        (() => {
+                                          const scoreTheme = getScoreLevelColor(ind.score);
+                                          return (
+                                            <span
+                                              style={{
+                                                fontSize: '10.5px',
+                                                fontWeight: 800,
+                                                padding: '2px 8px',
+                                                borderRadius: '6px',
+                                                backgroundColor: scoreTheme.bg,
+                                                color: scoreTheme.primary,
+                                                border: `1px solid ${scoreTheme.border}`,
+                                              }}
+                                            >
+                                              {scoreTheme.label}
+                                            </span>
+                                          );
+                                        })()
                                       ) : (
                                         <span
                                           style={{
@@ -534,9 +537,10 @@ export const StandardsTreePage: React.FC<StandardsTreePageProps> = ({
                                             borderRadius: '6px',
                                             backgroundColor: '#F1F5F9',
                                             color: '#64748B',
+                                            border: '1px solid #E2E8F0',
                                           }}
                                         >
-                                          غير مدخل
+                                          غير مرصود
                                         </span>
                                       )}
 

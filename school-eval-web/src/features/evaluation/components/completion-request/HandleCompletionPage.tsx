@@ -152,26 +152,38 @@ export const HandleCompletionPage: React.FC<HandleCompletionPageProps> = ({
                   color: '#0369A1',
                 }}
               >
-                <span>{resubmitResult.trackingCode || 'ARQ-2026-SCH002-R1-B4F2'}</span>
-                <button
-                  onClick={() => copyToClipboard(resubmitResult.trackingCode || 'ARQ-2026-SCH002-R1-B4F2')}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '4px',
-                    padding: '4px 10px',
-                    borderRadius: '6px',
-                    border: '1px solid #E2E8F0',
-                    backgroundColor: '#F8FAFC',
-                    cursor: 'pointer',
-                    fontSize: '11px',
-                    fontWeight: 700,
-                    color: '#475569',
-                  }}
-                >
-                  {copiedCode ? <Check size={13} color="#059669" /> : <Copy size={13} />}
-                  <span>{copiedCode ? 'تم النسخ' : 'نسخ'}</span>
-                </button>
+                <span>{resubmitResult.trackingCode || 'رمز استكمال معتمد'}</span>
+                {resubmitResult.trackingCode && (
+                  <button
+                    onClick={() => copyToClipboard(resubmitResult.trackingCode!)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      padding: '4px 10px',
+                      borderRadius: '6px',
+                      border: '1px solid #E2E8F0',
+                      backgroundColor: '#F8FAFC',
+                      color: '#0369A1',
+                      fontSize: '12px',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                    }}
+                    title="نسخ رمز التتبع"
+                  >
+                    {copiedCode ? (
+                      <>
+                        <Check size={13} color="#16A34A" />
+                        <span style={{ color: '#16A34A' }}>تم النسخ</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy size={13} />
+                        <span>نسخ</span>
+                      </>
+                    )}
+                  </button>
+                )}
               </div>
             </div>
 

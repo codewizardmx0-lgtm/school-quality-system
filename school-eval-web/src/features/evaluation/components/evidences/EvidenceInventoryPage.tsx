@@ -9,6 +9,11 @@ import {
   Link2,
   ExternalLink,
   RotateCcw,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+  Filter,
+  X,
 } from 'lucide-react';
 import { evaluatorApi } from '../../api/evaluatorApi';
 import type {
@@ -39,6 +44,27 @@ export const EvidenceInventoryPage: React.FC<EvidenceInventoryPageProps> = ({
   const [expandedStandards, setExpandedStandards] = useState<Record<number, boolean>>({});
   const [selectedEvidenceForLinking, setSelectedEvidenceForLinking] = useState<EvidenceItem | null>(null);
   const [isLinkModalOpen, setIsLinkModalOpen] = useState(false);
+
+  type InvSortKey = 'code' | 'title' | 'coverage' | 'status' | 'evidences_count';
+  type SortDirection = 'asc' | 'desc';
+  const [sortKey, setSortKey] = useState<InvSortKey>('code');
+  const [sortDir, setSortDir] = useState<SortDirection>('asc');
+
+  const handleHeaderSort = (key: InvSortKey) => {
+    if (sortKey === key) {
+      setSortDir((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortKey(key);
+      setSortDir(key === 'coverage' || key === 'status' || key === 'evidences_count' ? 'desc' : 'asc');
+    }
+  };
+
+  const renderSortIcon = (key: InvSortKey) => {
+    if (sortKey !== key) {
+      return <ArrowUpDown size={12} color="#94A3B8" />;
+    }
+    return sortDir === 'asc' ? <ArrowUp size={12} color="#059669" /> : <ArrowDown size={12} color="#059669" />;
+  };
 
   const fetchInventory = async () => {
     setIsLoading(true);
@@ -346,6 +372,93 @@ export const EvidenceInventoryPage: React.FC<EvidenceInventoryPageProps> = ({
         </div>
       </div>
 
+      {/* Active Filter Chips Bar */}
+      {(filterType !== 'all' || searchTerm.trim()) && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            flexWrap: 'wrap',
+            padding: '10px 16px',
+            backgroundColor: '#F8FAFC',
+            borderRadius: '10px',
+            border: '1px solid #E2E8F0',
+            marginBottom: '16px',
+          }}
+        >
+          <span style={{ fontSize: '11.5px', fontWeight: 700, color: '#64748B', display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <Filter size={12} />
+            الفلاتر النشطة:
+          </span>
+
+          {searchTerm.trim() && (
+            <span
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px',
+                padding: '3px 8px',
+                borderRadius: '6px',
+                backgroundColor: '#EFF6FF',
+                border: '1px solid #BFDBFE',
+                color: '#1E40AF',
+                fontSize: '11.5px',
+                fontWeight: 600,
+              }}
+            >
+              <span>البحث: &quot;{searchTerm}&quot;</span>
+              <X size={12} style={{ cursor: 'pointer' }} onClick={() => setSearchTerm('')} />
+            </span>
+          )}
+
+          {filterType !== 'all' && (
+            <span
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px',
+                padding: '3px 8px',
+                borderRadius: '6px',
+                backgroundColor: filterType === 'missing' ? '#FEF2F2' : '#ECFDF5',
+                border: `1px solid ${filterType === 'missing' ? '#FECACA' : '#A7F3D0'}`,
+                color: filterType === 'missing' ? '#DC2626' : '#059669',
+                fontSize: '11.5px',
+                fontWeight: 600,
+              }}
+            >
+              <span>{filterType === 'missing' ? 'المؤشرات الناقصة الشواهد' : 'المؤشرات المستوفية'}</span>
+              <X size={12} style={{ cursor: 'pointer' }} onClick={() => setFilterType('all')} />
+            </span>
+          )}
+
+          <button
+            type="button"
+            onClick={() => {
+              setFilterType('all');
+              setSearchTerm('');
+            }}
+            style={{
+              padding: '3px 8px',
+              borderRadius: '6px',
+              backgroundColor: '#FEF2F2',
+              border: '1px solid #FECACA',
+              color: '#DC2626',
+              fontSize: '11px',
+              fontWeight: 700,
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '4px',
+              marginRight: 'auto',
+            }}
+          >
+            <RotateCcw size={11} />
+            <span>مسح كافة الفلاتر</span>
+          </button>
+        </div>
+      )}
+
       {/* Standards & Indicators List */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
         {data.standards.map((std) => {
@@ -365,6 +478,38 @@ export const EvidenceInventoryPage: React.FC<EvidenceInventoryPageProps> = ({
           });
 
           if (filteredIndicators.length === 0) return null;
+
+          const sortedIndicators = [...filteredIndicators].sort((a, b) => {
+            if (sortKey === 'code') {
+              const comp = a.indicatorCode.localeCompare(b.indicatorCode, undefined, { numeric: true });
+              return sortDir === 'asc' ? comp : -comp;
+            }
+            if (sortKey === 'title') {
+              const comp = (a.indicatorName || '').localeCompare(b.indicatorName || '', 'ar');
+              return sortDir === 'asc' ? comp : -comp;
+            }
+            if (sortKey === 'coverage') {
+              const getCovered = (item: any) =>
+                Array.isArray(item.coveredRequirementIds)
+                  ? item.coveredRequirementIds.length
+                  : Array.isArray(item.requirements)
+                  ? item.requirements.filter((r: any) => r.isCovered).length
+                  : 0;
+              const diff = getCovered(a) - getCovered(b);
+              return sortDir === 'asc' ? diff : -diff;
+            }
+            if (sortKey === 'status') {
+              const vA = a.isSufficient ? 1 : 0;
+              const vB = b.isSufficient ? 1 : 0;
+              const diff = vA - vB;
+              return sortDir === 'asc' ? diff : -diff;
+            }
+            if (sortKey === 'evidences_count') {
+              const diff = (a.evidences?.length ?? 0) - (b.evidences?.length ?? 0);
+              return sortDir === 'asc' ? diff : -diff;
+            }
+            return 0;
+          });
 
           const isExpanded = !!expandedStandards[std.standardId];
 
@@ -431,15 +576,60 @@ export const EvidenceInventoryPage: React.FC<EvidenceInventoryPageProps> = ({
                   <table style={{ width: '100%', minWidth: '750px', borderCollapse: 'collapse', fontSize: '13px' }}>
                     <thead>
                       <tr style={{ borderBottom: '1px solid #e2e8f0', color: '#64748b', textAlign: 'right' }}>
-                        <th style={{ padding: '10px 8px', width: '90px' }}>الرمز</th>
-                        <th style={{ padding: '10px 8px' }}>المؤشر ومجال التحقق</th>
-                        <th style={{ padding: '10px 8px', width: '170px', textAlign: 'center' }}>استيفاء المتطلبات الوطنية</th>
-                        <th style={{ padding: '10px 8px', width: '110px', textAlign: 'center' }}>الحالة</th>
-                        <th style={{ padding: '10px 8px', width: '180px' }}>الشواهد المرتبطة</th>
+                        <th
+                          onClick={() => handleHeaderSort('code')}
+                          style={{ padding: '10px 8px', width: '100px', cursor: 'pointer', userSelect: 'none' }}
+                          title="انقر للفرز حسب الرمز"
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px' }}>
+                            <span>الرمز</span>
+                            {renderSortIcon('code')}
+                          </div>
+                        </th>
+                        <th
+                          onClick={() => handleHeaderSort('title')}
+                          style={{ padding: '10px 8px', cursor: 'pointer', userSelect: 'none' }}
+                          title="انقر للفرز حسب المؤشر ومجال التحقق"
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px' }}>
+                            <span>المؤشر ومجال التحقق</span>
+                            {renderSortIcon('title')}
+                          </div>
+                        </th>
+                        <th
+                          onClick={() => handleHeaderSort('coverage')}
+                          style={{ padding: '10px 8px', width: '180px', textAlign: 'center', cursor: 'pointer', userSelect: 'none' }}
+                          title="انقر للفرز حسب استيفاء المتطلبات"
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
+                            <span>استيفاء المتطلبات الوطنية</span>
+                            {renderSortIcon('coverage')}
+                          </div>
+                        </th>
+                        <th
+                          onClick={() => handleHeaderSort('status')}
+                          style={{ padding: '10px 8px', width: '110px', textAlign: 'center', cursor: 'pointer', userSelect: 'none' }}
+                          title="انقر للفرز حسب الحالة"
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
+                            <span>الحالة</span>
+                            {renderSortIcon('status')}
+                          </div>
+                        </th>
+                        <th
+                          onClick={() => handleHeaderSort('evidences_count')}
+                          style={{ padding: '10px 8px', width: '180px', cursor: 'pointer', userSelect: 'none' }}
+                          title="انقر للفرز حسب عدد الشواهد"
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px' }}>
+                            <span>الشواهد المرتبطة</span>
+                            {renderSortIcon('evidences_count')}
+                          </div>
+                        </th>
                       </tr>
                     </thead>
                     <tbody>
-                      {filteredIndicators.map((ind) => (
+                      {sortedIndicators.map((ind) => (
                         <tr
                           key={ind.indicatorId}
                           style={{

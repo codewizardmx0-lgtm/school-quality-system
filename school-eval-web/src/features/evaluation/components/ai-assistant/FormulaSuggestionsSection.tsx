@@ -1,8 +1,23 @@
 import React, { useState, useEffect } from 'react';
-import { Target, CheckCircle2, ArrowRight, RefreshCw, Trash2, Search, ArrowUpDown, EyeOff, RotateCcw } from 'lucide-react';
+import {
+  Target,
+  CheckCircle2,
+  ArrowRight,
+  RefreshCw,
+  Trash2,
+  Search,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+  EyeOff,
+  RotateCcw,
+  X,
+  Filter,
+} from 'lucide-react';
 import { evaluatorApi } from '../../api/evaluatorApi';
 import type { ImprovementSuggestion, PriorityLevel } from '../../api/evaluationTypes';
 import { AdoptSuggestionModal, getRecommendedPlanType } from './AdoptSuggestionModal';
+import { getScoreLevelColor } from '../../../../styles/designTokens';
 
 interface FormulaSuggestionsSectionProps {
   readOnly?: boolean;
@@ -26,6 +41,12 @@ export const FormulaSuggestionsSection: React.FC<FormulaSuggestionsSectionProps>
   const [exclusionFilter, setExclusionFilter] = useState<'active' | 'excluded' | 'all'>('active');
   const [planTypeFilter, setPlanTypeFilter] = useState<'all' | 'QualityImprovement' | 'StaffProfessionalDevelopment' | 'AnnualOperational'>('all');
   
+  type SortField = 'gap' | 'code' | 'title' | 'standard' | 'score' | 'target' | 'priority' | 'adopted';
+  type SortDirection = 'asc' | 'desc';
+  const [sortField, setSortField] = useState<SortField>('gap');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+  const [selectedStandards, setSelectedStandards] = useState<string[]>([]);
+  
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [standardFilter, setStandardFilter] = useState<string>('all');
   const [sortBy, setSortBy] = useState<'gap_desc' | 'gap_asc' | 'code' | 'priority'>('gap_desc');
@@ -34,6 +55,26 @@ export const FormulaSuggestionsSection: React.FC<FormulaSuggestionsSectionProps>
   const [isAdoptModalOpen, setIsAdoptModalOpen] = useState(false);
   const [isExcluding, setIsExcluding] = useState<number | null>(null);
   const [isUnadopting, setIsUnadopting] = useState<number | null>(null);
+
+  const handleHeaderSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortField(field);
+      setSortDirection(field === 'gap' || field === 'score' || field === 'priority' ? 'desc' : 'asc');
+    }
+  };
+
+  const renderSortIcon = (field: SortField) => {
+    if (sortField !== field) {
+      return <ArrowUpDown size={13} color="#94A3B8" />;
+    }
+    return sortDirection === 'asc' ? (
+      <ArrowUp size={13} color="#059669" />
+    ) : (
+      <ArrowDown size={13} color="#059669" />
+    );
+  };
 
   const fetchSuggestions = async (scoreTarget: number = targetScore) => {
     setIsLoading(true);
@@ -75,7 +116,7 @@ export const FormulaSuggestionsSection: React.FC<FormulaSuggestionsSectionProps>
   const excludedCount = suggestions.filter((s) => s.isExcluded).length;
   const activeCount = suggestions.filter((s) => !s.isExcluded).length;
 
-  const standardsList = Array.from(new Set(suggestions.map((s) => s.standardName).filter(Boolean)));
+  const standardsList = Array.from(new Set(suggestions.map((s) => s.standardName).filter(Boolean))) as string[];
 
   const filteredSuggestions = suggestions
     // 1. Exclusion filter
@@ -98,8 +139,9 @@ export const FormulaSuggestionsSection: React.FC<FormulaSuggestionsSectionProps>
       if (adoptionFilter === 'adopted') return s.isAdopted;
       return true;
     })
-    // 4. Standard filter
+    // 4. Standard filter (support single & multi-select)
     .filter((s) => {
+      if (selectedStandards.length > 0 && !selectedStandards.includes(s.standardName || '')) return false;
       if (standardFilter !== 'all' && s.standardName !== standardFilter) return false;
       return true;
     })
@@ -129,8 +171,6 @@ export const FormulaSuggestionsSection: React.FC<FormulaSuggestionsSectionProps>
         if (!code) return [999, 999, 999];
         const parts = code.split(/[-._]/).map((p) => parseInt(p.replace(/\D/g, ''), 10)).filter((n) => !isNaN(n));
         if (parts.length >= 3) {
-          // Format is IND-SUB-STD in Arabic notation (e.g. 1-1-1, 5-2-1, 1-1-2)
-          // parts[2] = Standard, parts[1] = Substandard, parts[0] = Indicator
           return [parts[2] ?? 999, parts[1] ?? 999, parts[0] ?? 999];
         }
         return [parts[0] ?? 999, parts[1] ?? 999, parts[2] ?? 999];
@@ -144,29 +184,73 @@ export const FormulaSuggestionsSection: React.FC<FormulaSuggestionsSectionProps>
         return iA - iB;
       };
 
-      if (sortBy === 'gap_desc') {
-        const diff = bGap - aGap;
+      if (sortField === 'gap') {
+        const diff = sortDirection === 'asc' ? aGap - bGap : bGap - aGap;
         if (diff !== 0) return diff;
         return compareCodesNumeric(a.indicatorCode, b.indicatorCode);
       }
-      if (sortBy === 'gap_asc') {
-        const diff = aGap - bGap;
+      if (sortField === 'code') {
+        const comp = compareCodesNumeric(a.indicatorCode, b.indicatorCode);
+        return sortDirection === 'asc' ? comp : -comp;
+      }
+      if (sortField === 'standard') {
+        const comp = (a.standardName || '').localeCompare(b.standardName || '', 'ar');
+        return sortDirection === 'asc' ? comp : -comp;
+      }
+      if (sortField === 'title') {
+        const comp = (a.indicatorName || '').localeCompare(b.indicatorName || '', 'ar');
+        return sortDirection === 'asc' ? comp : -comp;
+      }
+      if (sortField === 'score') {
+        const diff = sortDirection === 'asc' ? a.score - b.score : b.score - a.score;
         if (diff !== 0) return diff;
         return compareCodesNumeric(a.indicatorCode, b.indicatorCode);
       }
-      if (sortBy === 'code') {
+      if (sortField === 'target') {
+        const diff = sortDirection === 'asc' ? aTarget - bTarget : bTarget - aTarget;
+        if (diff !== 0) return diff;
         return compareCodesNumeric(a.indicatorCode, b.indicatorCode);
       }
-      if (sortBy === 'priority') {
+      if (sortField === 'priority') {
         const pOrder: Record<string, number> = { High: 3, Medium: 2, Low: 1 };
-        const pA = customPriorities[a.resultId] ?? a.suggestedPriority;
-        const pB = customPriorities[b.resultId] ?? b.suggestedPriority;
-        const diff = (pOrder[pB] || 0) - (pOrder[pA] || 0);
+        const pA = pOrder[customPriorities[a.resultId] ?? a.suggestedPriority] || 0;
+        const pB = pOrder[customPriorities[b.resultId] ?? b.suggestedPriority] || 0;
+        const diff = sortDirection === 'asc' ? pA - pB : pB - pA;
+        if (diff !== 0) return diff;
+        return compareCodesNumeric(a.indicatorCode, b.indicatorCode);
+      }
+      if (sortField === 'adopted') {
+        const vA = a.isAdopted ? 1 : 0;
+        const vB = b.isAdopted ? 1 : 0;
+        const diff = sortDirection === 'asc' ? vA - vB : vB - vA;
         if (diff !== 0) return diff;
         return compareCodesNumeric(a.indicatorCode, b.indicatorCode);
       }
       return compareCodesNumeric(a.indicatorCode, b.indicatorCode);
     });
+
+  const hasActiveFilters = Boolean(
+    searchTerm.trim() ||
+    scorePriorityFilter !== 'all' ||
+    adoptionFilter !== 'all' ||
+    exclusionFilter !== 'active' ||
+    standardFilter !== 'all' ||
+    selectedStandards.length > 0 ||
+    planTypeFilter !== 'all'
+  );
+
+  const clearAllFilters = () => {
+    setSearchTerm('');
+    setScorePriorityFilter('all');
+    setAdoptionFilter('all');
+    setExclusionFilter('active');
+    setStandardFilter('all');
+    setSelectedStandards([]);
+    setPlanTypeFilter('all');
+    setSortBy('gap_desc');
+    setSortField('gap');
+    setSortDirection('desc');
+  };
 
   const handleUnadopt = async (sugg: ImprovementSuggestion) => {
     if (readOnly) return;
@@ -560,7 +644,23 @@ export const FormulaSuggestionsSection: React.FC<FormulaSuggestionsSectionProps>
             <span style={{ fontSize: '12px', color: '#64748B', fontWeight: 600 }}>ترتيب حسب:</span>
             <select
               value={sortBy}
-              onChange={(e) => setSortBy(e.target.value as any)}
+              onChange={(e) => {
+                const val = e.target.value as any;
+                setSortBy(val);
+                if (val === 'gap_desc') {
+                  setSortField('gap');
+                  setSortDirection('desc');
+                } else if (val === 'gap_asc') {
+                  setSortField('gap');
+                  setSortDirection('asc');
+                } else if (val === 'code') {
+                  setSortField('code');
+                  setSortDirection('asc');
+                } else if (val === 'priority') {
+                  setSortField('priority');
+                  setSortDirection('desc');
+                }
+              }}
               style={{
                 padding: '8px 12px',
                 borderRadius: '8px',
@@ -579,18 +679,10 @@ export const FormulaSuggestionsSection: React.FC<FormulaSuggestionsSectionProps>
             </select>
 
             {/* زر إعادة ضبط الفلاتر */}
-            {(searchTerm || scorePriorityFilter !== 'all' || adoptionFilter !== 'all' || exclusionFilter !== 'active' || standardFilter !== 'all' || planTypeFilter !== 'all' || sortBy !== 'gap_desc') && (
+            {hasActiveFilters && (
               <button
                 type="button"
-                onClick={() => {
-                  setSearchTerm('');
-                  setScorePriorityFilter('all');
-                  setAdoptionFilter('all');
-                  setExclusionFilter('active');
-                  setStandardFilter('all');
-                  setPlanTypeFilter('all');
-                  setSortBy('gap_desc');
-                }}
+                onClick={clearAllFilters}
                 style={{
                   padding: '7px 12px',
                   borderRadius: '8px',
@@ -614,6 +706,205 @@ export const FormulaSuggestionsSection: React.FC<FormulaSuggestionsSectionProps>
           </div>
       </div>
 
+      {/* Active Filter Chips Bar */}
+      {hasActiveFilters && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            flexWrap: 'wrap',
+            padding: '10px 14px',
+            backgroundColor: '#F8FAFC',
+            borderRadius: '10px',
+            border: '1px solid #E2E8F0',
+            marginBottom: '14px',
+          }}
+        >
+          <span style={{ fontSize: '11.5px', fontWeight: 700, color: '#64748B', display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <Filter size={12} />
+            الفلاتر النشطة:
+          </span>
+
+          {searchTerm.trim() && (
+            <span
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px',
+                padding: '3px 8px',
+                borderRadius: '6px',
+                backgroundColor: '#EFF6FF',
+                border: '1px solid #BFDBFE',
+                color: '#1E40AF',
+                fontSize: '11.5px',
+                fontWeight: 600,
+              }}
+            >
+              <span>البحث: &quot;{searchTerm}&quot;</span>
+              <X size={12} style={{ cursor: 'pointer' }} onClick={() => setSearchTerm('')} />
+            </span>
+          )}
+
+          {scorePriorityFilter !== 'all' && (
+            <span
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px',
+                padding: '3px 8px',
+                borderRadius: '6px',
+                backgroundColor: '#FFFBEB',
+                border: '1px solid #FDE68A',
+                color: '#92400E',
+                fontSize: '11.5px',
+                fontWeight: 600,
+              }}
+            >
+              <span>
+                {scorePriorityFilter === 'score_0'
+                  ? 'الدرجة: 0 (حرجة)'
+                  : scorePriorityFilter === 'score_1'
+                  ? 'الدرجة: 1 (عالية)'
+                  : scorePriorityFilter === 'score_2'
+                  ? 'الدرجة: 2 (متوسطة)'
+                  : 'الدرجة: 3 (تميز)'}
+              </span>
+              <X size={12} style={{ cursor: 'pointer' }} onClick={() => setScorePriorityFilter('all')} />
+            </span>
+          )}
+
+          {adoptionFilter !== 'all' && (
+            <span
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px',
+                padding: '3px 8px',
+                borderRadius: '6px',
+                backgroundColor: '#ECFDF5',
+                border: '1px solid #A7F3D0',
+                color: '#065F46',
+                fontSize: '11.5px',
+                fontWeight: 600,
+              }}
+            >
+              <span>{adoptionFilter === 'unadopted' ? 'لم يتم تبنيها بعد' : 'تم تبنيها مسبقاً'}</span>
+              <X size={12} style={{ cursor: 'pointer' }} onClick={() => setAdoptionFilter('all')} />
+            </span>
+          )}
+
+          {exclusionFilter !== 'active' && (
+            <span
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px',
+                padding: '3px 8px',
+                borderRadius: '6px',
+                backgroundColor: '#FEF2F2',
+                border: '1px solid #FECACA',
+                color: '#991B1B',
+                fontSize: '11.5px',
+                fontWeight: 600,
+              }}
+            >
+              <span>{exclusionFilter === 'excluded' ? 'المستبعدة فقط' : 'عرض الكل مع المستبعدة'}</span>
+              <X size={12} style={{ cursor: 'pointer' }} onClick={() => setExclusionFilter('active')} />
+            </span>
+          )}
+
+          {standardFilter !== 'all' && (
+            <span
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px',
+                padding: '3px 8px',
+                borderRadius: '6px',
+                backgroundColor: '#F1F5F9',
+                border: '1px solid #CBD5E1',
+                color: '#334155',
+                fontSize: '11.5px',
+                fontWeight: 600,
+              }}
+            >
+              <span>معيار: {standardFilter}</span>
+              <X size={12} style={{ cursor: 'pointer' }} onClick={() => setStandardFilter('all')} />
+            </span>
+          )}
+
+          {selectedStandards.map((std) => (
+            <span
+              key={std}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px',
+                padding: '3px 8px',
+                borderRadius: '6px',
+                backgroundColor: '#F1F5F9',
+                border: '1px solid #CBD5E1',
+                color: '#334155',
+                fontSize: '11.5px',
+                fontWeight: 600,
+              }}
+            >
+              <span>معيار: {std}</span>
+              <X
+                size={12}
+                style={{ cursor: 'pointer' }}
+                onClick={() => setSelectedStandards((prev) => prev.filter((s) => s !== std))}
+              />
+            </span>
+          ))}
+
+          {planTypeFilter !== 'all' && (
+            <span
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px',
+                padding: '3px 8px',
+                borderRadius: '6px',
+                backgroundColor: '#F5F3FF',
+                border: '1px solid #DDD6FE',
+                color: '#6D28D9',
+                fontSize: '11.5px',
+                fontWeight: 600,
+              }}
+            >
+              <span>
+                مسار: {planTypeFilter === 'QualityImprovement' ? 'تحسين الجودة' : planTypeFilter === 'StaffProfessionalDevelopment' ? 'تطوير الكوادر' : 'تشغيلية سنوية'}
+              </span>
+              <X size={12} style={{ cursor: 'pointer' }} onClick={() => setPlanTypeFilter('all')} />
+            </span>
+          )}
+
+          <button
+            type="button"
+            onClick={clearAllFilters}
+            style={{
+              padding: '3px 8px',
+              borderRadius: '6px',
+              backgroundColor: '#FEF2F2',
+              border: '1px solid #FECACA',
+              color: '#DC2626',
+              fontSize: '11px',
+              fontWeight: 700,
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '4px',
+              marginRight: 'auto',
+            }}
+          >
+            <RotateCcw size={11} />
+            <span>مسح كافة الفلاتر</span>
+          </button>
+        </div>
+      )}
+
       {/* Suggestions Table */}
       <div
         style={{
@@ -628,14 +919,86 @@ export const FormulaSuggestionsSection: React.FC<FormulaSuggestionsSectionProps>
           <table style={{ width: '100%', minWidth: '820px', borderCollapse: 'collapse', fontSize: '13px' }}>
             <thead>
               <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0', color: '#64748b', textAlign: 'right' }}>
-                <th style={{ padding: '12px 14px', width: '130px' }}>المعيار الرئيسي</th>
-                <th style={{ padding: '12px 14px', width: '90px' }}>كود المؤشر</th>
-                <th style={{ padding: '12px 14px' }}>اسم المؤشر المعياري</th>
-                <th style={{ padding: '12px 14px', width: '80px', textAlign: 'center' }}>الدرجة</th>
-                <th style={{ padding: '12px 14px', width: '90px', textAlign: 'center' }}>المستهدف</th>
-                <th style={{ padding: '12px 14px', width: '70px', textAlign: 'center' }}>الفجوة</th>
-                <th style={{ padding: '12px 14px', width: '120px', textAlign: 'center' }}>الأولوية (تعديل مباشر)</th>
-                <th style={{ padding: '12px 14px', width: '100px', textAlign: 'center' }}>حالة التبني</th>
+                <th
+                  onClick={() => handleHeaderSort('standard')}
+                  style={{ padding: '12px 14px', width: '130px', cursor: 'pointer', userSelect: 'none' }}
+                  title="انقر للفرز حسب المعيار الرئيسي"
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
+                    <span>المعيار الرئيسي</span>
+                    {renderSortIcon('standard')}
+                  </div>
+                </th>
+                <th
+                  onClick={() => handleHeaderSort('code')}
+                  style={{ padding: '12px 14px', width: '100px', cursor: 'pointer', userSelect: 'none' }}
+                  title="انقر للفرز حسب كود المؤشر"
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
+                    <span>كود المؤشر</span>
+                    {renderSortIcon('code')}
+                  </div>
+                </th>
+                <th
+                  onClick={() => handleHeaderSort('title')}
+                  style={{ padding: '12px 14px', cursor: 'pointer', userSelect: 'none' }}
+                  title="انقر للفرز حسب اسم المؤشر"
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
+                    <span>اسم المؤشر المعياري</span>
+                    {renderSortIcon('title')}
+                  </div>
+                </th>
+                <th
+                  onClick={() => handleHeaderSort('score')}
+                  style={{ padding: '12px 14px', width: '80px', textAlign: 'center', cursor: 'pointer', userSelect: 'none' }}
+                  title="انقر للفرز حسب الدرجة الحالية"
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                    <span>الدرجة</span>
+                    {renderSortIcon('score')}
+                  </div>
+                </th>
+                <th
+                  onClick={() => handleHeaderSort('target')}
+                  style={{ padding: '12px 14px', width: '90px', textAlign: 'center', cursor: 'pointer', userSelect: 'none' }}
+                  title="انقر للفرز حسب التقدير المستهدف"
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                    <span>المستهدف</span>
+                    {renderSortIcon('target')}
+                  </div>
+                </th>
+                <th
+                  onClick={() => handleHeaderSort('gap')}
+                  style={{ padding: '12px 14px', width: '80px', textAlign: 'center', cursor: 'pointer', userSelect: 'none' }}
+                  title="انقر للفرز حسب حجم الفجوة"
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                    <span>الفجوة</span>
+                    {renderSortIcon('gap')}
+                  </div>
+                </th>
+                <th
+                  onClick={() => handleHeaderSort('priority')}
+                  style={{ padding: '12px 14px', width: '130px', textAlign: 'center', cursor: 'pointer', userSelect: 'none' }}
+                  title="انقر للفرز حسب الأولوية"
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                    <span>الأولوية</span>
+                    {renderSortIcon('priority')}
+                  </div>
+                </th>
+                <th
+                  onClick={() => handleHeaderSort('adopted')}
+                  style={{ padding: '12px 14px', width: '105px', textAlign: 'center', cursor: 'pointer', userSelect: 'none' }}
+                  title="انقر للفرز حسب حالة التبني"
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                    <span>حالة التبني</span>
+                    {renderSortIcon('adopted')}
+                  </div>
+                </th>
                 <th style={{ padding: '12px 14px', width: '180px', textAlign: 'center' }}>إجراء التحسين</th>
               </tr>
             </thead>
@@ -699,8 +1062,28 @@ export const FormulaSuggestionsSection: React.FC<FormulaSuggestionsSectionProps>
                           الإجراء المقترح: {sugg.suggestedName}
                         </div>
                       </td>
-                      <td style={{ padding: '12px 14px', textAlign: 'center', fontWeight: 700, color: '#dc2626' }}>
-                        {sugg.score}
+                      <td style={{ padding: '12px 14px', textAlign: 'center' }}>
+                        {(() => {
+                          const scoreTheme = getScoreLevelColor(sugg.score);
+                          return (
+                            <span
+                              style={{
+                                display: 'inline-block',
+                                minWidth: '30px',
+                                padding: '2px 8px',
+                                borderRadius: '6px',
+                                backgroundColor: scoreTheme.bg,
+                                color: scoreTheme.primary,
+                                border: `1px solid ${scoreTheme.border}`,
+                                fontWeight: 800,
+                                fontSize: '12.5px',
+                              }}
+                              title={scoreTheme.label}
+                            >
+                              {sugg.score}
+                            </span>
+                          );
+                        })()}
                       </td>
                       <td style={{ padding: '12px 14px', textAlign: 'center' }}>
                         <select
