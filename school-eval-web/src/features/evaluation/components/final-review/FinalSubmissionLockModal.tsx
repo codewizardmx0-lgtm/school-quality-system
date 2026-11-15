@@ -6,6 +6,8 @@ interface FinalSubmissionLockModalProps {
   onClose: () => void;
   onConfirmLock: (password: string, notes?: string) => Promise<unknown>;
   isSubmitting?: boolean;
+  trackingCode?: string;
+  digitalHash?: string;
 }
 
 export const FinalSubmissionLockModal: React.FC<FinalSubmissionLockModalProps> = ({
@@ -13,19 +15,23 @@ export const FinalSubmissionLockModal: React.FC<FinalSubmissionLockModalProps> =
   onClose,
   onConfirmLock,
   isSubmitting = false,
+  trackingCode,
+  digitalHash,
 }) => {
   if (!isOpen) return null;
 
   const [password, setPassword] = useState('');
   const [notes, setNotes] = useState('تم استيفاء وتدقيق كافة المعايير والشواهد المعتمدة والرفع النهائي للاعتماد الوزاري.');
+  const [isAgreed, setIsAgreed] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const trackingCode = 'ARQ-2026-SCH104-FIN';
-  const digitalHash = 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
+  const displayTrackingCode = trackingCode || 'ARQ-2026-FINAL-PENDING';
+  const displayDigitalHash = digitalHash || 'SHA-256 Calculated upon digital sign-off';
 
-    const handleClose = () => {
+  const handleClose = () => {
     if (isSubmitting) return;
     setPassword('');
+    setIsAgreed(false);
     setError(null);
     onClose();
   };
@@ -33,6 +39,11 @@ export const FinalSubmissionLockModal: React.FC<FinalSubmissionLockModalProps> =
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+
+    if (!isAgreed) {
+      setError('يجب التأشير على إقرار الحوكمة القانونية وتأكيد صحة التقييم للمتابعة.');
+      return;
+    }
 
     if (!password) {
       setError('يرجى إدخال كلمة المرور لتأكيد الهوية وتوليد الختم الرقمي.');
@@ -106,7 +117,7 @@ export const FinalSubmissionLockModal: React.FC<FinalSubmissionLockModalProps> =
                 تأكيد الختم الرقمي والرفع النهائي (قفل التقييم)
               </h3>
               <p style={{ fontSize: '12px', color: '#B91C1C', margin: '2px 0 0 0' }}>
-                إجراء نهائي غير قابل للتراجع وفق المادة FR-SCH-33
+                إجراء نهائي غير قابل للتراجع وفق متطلبات الحوكمة الوطنية (المادة FR-SCH-33)
               </p>
             </div>
           </div>
@@ -167,7 +178,7 @@ export const FinalSubmissionLockModal: React.FC<FinalSubmissionLockModalProps> =
             أو رفع إلا في حال صدور "طلب استكمال رسمي" من المشرف الوزاري المختص.
           </div>
 
-          {/* Digital Signature & Tracking Code Details */}
+          {/* Digital Signature & Dynamic Tracking Code Details */}
           <div
             style={{
               padding: '12px 16px',
@@ -180,17 +191,45 @@ export const FinalSubmissionLockModal: React.FC<FinalSubmissionLockModalProps> =
             }}
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
-              <span style={{ color: '#64748B' }}>رمز التتبع الوطني:</span>
-              <span style={{ fontWeight: 800, color: '#0F172A' }}>{trackingCode}</span>
+              <span style={{ color: '#64748B' }}>رمز التتبع الوطني الرسمي:</span>
+              <span style={{ fontWeight: 800, color: '#1E40AF', fontFamily: 'monospace' }}>{displayTrackingCode}</span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
-              <span style={{ color: '#64748B' }}>البصمة الرقمية (Digital Hash):</span>
+              <span style={{ color: '#64748B' }}>البصمة الرقمية للبيانات:</span>
               <span style={{ fontWeight: 700, color: '#059669', fontSize: '11px' }}>SHA-256 Validated</span>
             </div>
-            <div style={{ fontSize: '10px', color: '#94A3B8', wordBreak: 'break-all', fontFamily: 'monospace' }}>
-              {digitalHash}
+            <div style={{ fontSize: '10px', color: '#64748B', wordBreak: 'break-all', fontFamily: 'monospace' }}>
+              {displayDigitalHash}
             </div>
           </div>
+
+          {/* Governance Declaration Checkbox */}
+          <label
+            style={{
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: '10px',
+              fontSize: '12px',
+              color: '#1E293B',
+              lineHeight: 1.6,
+              cursor: 'pointer',
+              padding: '10px 12px',
+              backgroundColor: isAgreed ? '#F0FDF4' : '#F8FAFC',
+              border: `1px solid ${isAgreed ? '#86EFAC' : '#CBD5E1'}`,
+              borderRadius: '8px',
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={isAgreed}
+              onChange={(e) => setIsAgreed(e.target.checked)}
+              style={{ marginTop: '3px', cursor: 'pointer', width: '16px', height: '16px' }}
+            />
+            <span>
+              <strong>إقرار الحوكمة القانونية:</strong> أقر بصفتي مسؤول التقييم المعتمد بصحة واكتمال كافة التقديرات
+              والشواهد المرفقة ومطابقتها للواقع الميداني، وأتحمل المسؤولية المهنية المترتبة على ذلك وفق المعايير واللوائح الوطنية المعتمدة.
+            </span>
+          </label>
 
           {/* Password confirmation */}
           <div>
@@ -214,7 +253,7 @@ export const FinalSubmissionLockModal: React.FC<FinalSubmissionLockModalProps> =
               }}
             />
             <div style={{ fontSize: '11px', color: '#64748B', marginTop: '4px' }}>
-              (يمكن استخدام كلمة المرور التجريبية المعتمدة للبيئة)
+              (يتم التحقق الأمني وإثبات عدم الإنكار بربط الختم بهوية المستخدم المعتمد)
             </div>
           </div>
 
@@ -262,20 +301,20 @@ export const FinalSubmissionLockModal: React.FC<FinalSubmissionLockModalProps> =
             </button>
             <button
               type="submit"
-              disabled={isSubmitting}
+              disabled={isSubmitting || !isAgreed || !password}
               style={{
                 display: 'flex',
                 alignItems: 'center',
                 gap: '6px',
                 padding: '10px 24px',
                 borderRadius: '8px',
-                backgroundColor: '#EF4444',
+                backgroundColor: (isSubmitting || !isAgreed || !password) ? '#CBD5E1' : '#EF4444',
                 color: '#FFFFFF',
                 fontSize: '13.5px',
                 fontWeight: 800,
                 border: 'none',
-                cursor: isSubmitting ? 'not-allowed' : 'pointer',
-                boxShadow: '0 4px 12px rgba(239, 68, 68, 0.3)',
+                cursor: (isSubmitting || !isAgreed || !password) ? 'not-allowed' : 'pointer',
+                boxShadow: (isSubmitting || !isAgreed || !password) ? 'none' : '0 4px 12px rgba(239, 68, 68, 0.3)',
               }}
             >
               <ShieldCheck size={18} />

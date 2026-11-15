@@ -101,6 +101,10 @@ export const EvaluatorTopBar: React.FC<EvaluatorTopBarProps> = ({
         return 'المراجعة الداخلية والختم الرقمي';
       case 'completion-request':
         return 'معالجة طلب استكمال المشرف الوزاري';
+      case 'reports':
+        return 'مركز التقارير وحزم الوثائق الرسمية';
+      case 'historical':
+        return 'مقارنة الأداء التاريخي ومسار التطور';
       case 'notifications':
         return 'مركز الإشعارات والتنبيهات';
       default:

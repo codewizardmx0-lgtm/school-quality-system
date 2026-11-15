@@ -124,6 +124,8 @@ export const AppContent: React.FC = () => {
     if (path.includes('/plan')) return 'improvement-plan';
     if (path.includes('/review') || path.includes('/final')) return 'final-review';
     if (path.includes('/completion')) return 'completion-request';
+    if (path.includes('/reports')) return 'reports';
+    if (path.includes('/historical') || path.includes('/trend')) return 'historical';
     if (path.includes('/notifications')) return 'notifications';
     return 'dashboard';
   };
@@ -138,6 +140,8 @@ export const AppContent: React.FC = () => {
     'ai-assistant': 'ai-assistant',
     'review-reports': 'final-review',
     'completion-request': 'completion-request',
+    'reports': 'reports',
+    'historical': 'historical',
   };
 
   // 1. إذا كان المسار يبدأ بـ /school/*

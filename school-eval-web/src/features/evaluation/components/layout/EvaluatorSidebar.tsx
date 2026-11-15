@@ -16,6 +16,8 @@ import {
   X,
   User as UserIcon,
   Lightbulb,
+  Archive,
+  BarChart3,
 } from 'lucide-react';
 import { SYSTEM_SHORT_NAME } from '../../../../constants/systemConstants';
 import { useAuth } from '../../../auth/AuthContext';
@@ -50,60 +52,96 @@ export const EvaluatorSidebar: React.FC<EvaluatorSidebarProps> = ({
   const { user, hasPermission } = useAuth();
   const isPrincipal = user?.roles?.some((r) => r.roleName === 'school_principal') || (!hasPermission('evaluations.edit') && user?.userType === 'school');
 
-  const navItems: {
+  interface NavItem {
     id: EvaluatorScreen;
     label: string;
     icon: React.ReactNode;
     badge?: string;
     badgeColor?: string;
-  }[] = [
+  }
+
+  interface NavSection {
+    title: string;
+    items: NavItem[];
+  }
+
+  const navSections: NavSection[] = [
     {
-      id: 'dashboard',
-      label: 'لوحة التحكم',
-      icon: <LayoutDashboard size={19} />,
+      title: 'التقييم الذاتي والرصد',
+      items: [
+        {
+          id: 'dashboard',
+          label: 'لوحة التحكم',
+          icon: <LayoutDashboard size={19} />,
+        },
+        {
+          id: 'standards-tree',
+          label: 'دليل وتقييم المعايير',
+          icon: <ClipboardList size={19} />,
+          badge: isPrincipal ? 'للاطلاع' : isLocked ? 'مقفل' : undefined,
+          badgeColor: isPrincipal ? '#64748B' : '#EF4444',
+        },
+        {
+          id: 'evidences',
+          label: 'مستودع الشواهد',
+          icon: <FolderLock size={19} />,
+        },
+      ],
     },
     {
-      id: 'standards-tree',
-      label: 'دليل وتقييم المعايير الوطنية',
-      icon: <ClipboardList size={19} />,
-      badge: isPrincipal ? 'للاطلاع' : isLocked ? 'مقفل' : undefined,
-      badgeColor: isPrincipal ? '#64748B' : '#EF4444',
+      title: 'التحسين والمراجعة',
+      items: [
+        {
+          id: 'ai-assistant',
+          label: 'الاقتراحات والمبادرات',
+          icon: <Lightbulb size={19} />,
+          badge: 'فجوات ومبادرات',
+          badgeColor: '#10B981',
+        },
+        {
+          id: 'improvement-plan',
+          label: 'خطة التحسين',
+          icon: <Target size={19} />,
+        },
+        {
+          id: 'final-review',
+          label: isPrincipal ? 'المراجعة والاعتماد' : 'المراجعة والختم',
+          icon: <FileCheck2 size={19} />,
+          badge: isLocked ? 'مختوم' : undefined,
+          badgeColor: '#10B981',
+        },
+        {
+          id: 'completion-request',
+          label: 'طلب الاستكمال',
+          icon: <AlertCircle size={19} />,
+          badge: hasOpenCompletionRequest ? 'تنبيه' : undefined,
+          badgeColor: '#F59E0B',
+        },
+      ],
     },
     {
-      id: 'evidences',
-      label: 'مستودع الشواهد',
-      icon: <FolderLock size={19} />,
-    },
-    {
-      id: 'ai-assistant',
-      label: 'الاقتراحات',
-      icon: <Lightbulb size={19} />,
-      badge: 'فجوات ومبادرات',
-      badgeColor: '#10B981',
-    },
-    {
-      id: 'improvement-plan',
-      label: 'خطة التحسين',
-      icon: <Target size={19} />,
-    },
-    {
-      id: 'final-review',
-      label: isPrincipal ? 'المراجعة والاعتماد' : 'المراجعة والختم',
-      icon: <FileCheck2 size={19} />,
-      badge: isLocked ? 'مختوم' : undefined,
-      badgeColor: '#10B981',
-    },
-    {
-      id: 'completion-request',
-      label: 'طلب الاستكمال',
-      icon: <AlertCircle size={19} />,
-      badge: hasOpenCompletionRequest ? 'تنبيه' : undefined,
-      badgeColor: '#F59E0B',
-    },
-    {
-      id: 'notifications',
-      label: 'مركز التنبيهات',
-      icon: <Bell size={19} />,
+      title: 'المخرجات والتقارير',
+      items: [
+        {
+          id: 'reports',
+          label: 'مركز التقارير',
+          icon: <Archive size={19} />,
+          badge: '5 حزم',
+          badgeColor: '#0F766E',
+        },
+        {
+          id: 'historical',
+          label: 'مقارنة الأداء التاريخي',
+          icon: <BarChart3 size={19} />,
+          badge: 'مسار التطور',
+          badgeColor: '#2563EB',
+        },
+        {
+          id: 'notifications',
+          label: 'مركز التنبيهات',
+          icon: <Bell size={19} />,
+        },
+      ],
     },
   ];
 
@@ -286,87 +324,109 @@ export const EvaluatorSidebar: React.FC<EvaluatorSidebarProps> = ({
             msOverflowStyle: 'none',
           }}
         >
-          {navItems.map((item) => {
-            const isActive = item.id === 'standards-tree'
-              ? (activeScreen === 'standards-tree' || activeScreen === 'rubric-assessment')
-              : activeScreen === item.id;
-            return (
-              <button
-                key={item.id}
-                onClick={() => {
-                  onNavigate(item.id);
-                  if (isMobile && onCloseMobile) {
-                    onCloseMobile();
-                  }
-                }}
-                title={isCollapsed && !isMobile ? item.label : undefined}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: isCollapsed && !isMobile ? 'center' : 'space-between',
-                  width: '100%',
-                  padding: isCollapsed && !isMobile ? '10px 0' : '10px 12px',
-                  borderRadius: '10px',
-                  backgroundColor: isActive ? 'rgba(5, 150, 105, 0.18)' : 'transparent',
-                  color: isActive ? '#34D399' : '#94A3B8',
-                  border: isActive ? '1px solid rgba(16, 185, 129, 0.35)' : '1px solid transparent',
-                  cursor: 'pointer',
-                  transition: 'all 0.18s ease',
-                  textAlign: 'right',
-                  boxSizing: 'border-box',
-                }}
-                onMouseEnter={(e) => {
-                  if (!isActive) {
-                    e.currentTarget.style.backgroundColor = '#131A29';
-                    e.currentTarget.style.color = '#F1F5F9';
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (!isActive) {
-                    e.currentTarget.style.backgroundColor = 'transparent';
-                    e.currentTarget.style.color = '#94A3B8';
-                  }
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
-                  <span style={{ color: isActive ? '#10B981' : '#64748B', flexShrink: 0 }}>{item.icon}</span>
-                  {(!isCollapsed || isMobile) && (
-                    <span
-                      style={{
-                        fontSize: '13px',
-                        fontWeight: isActive ? 700 : 500,
-                        whiteSpace: 'nowrap',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                      }}
-                    >
-                      {item.label}
-                    </span>
-                  )}
+          {navSections.map((section, sIdx) => (
+            <div key={section.title} style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+              {(!isCollapsed || isMobile) ? (
+                <div
+                  style={{
+                    fontSize: '10.5px',
+                    fontWeight: 800,
+                    color: '#64748B',
+                    padding: '8px 10px 4px',
+                    letterSpacing: '0.3px',
+                    borderTop: sIdx > 0 ? '1px solid rgba(255, 255, 255, 0.06)' : 'none',
+                    marginTop: sIdx > 0 ? '4px' : '0',
+                  }}
+                >
+                  {section.title}
                 </div>
+              ) : sIdx > 0 ? (
+                <div style={{ height: '1px', backgroundColor: 'rgba(255, 255, 255, 0.08)', margin: '6px 8px' }} />
+              ) : null}
 
-                {(!isCollapsed || isMobile) && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
-                    {item.badge && (
-                      <span
-                        style={{
-                          fontSize: '10.5px',
-                          fontWeight: 700,
-                          padding: '1px 6px',
-                          borderRadius: '12px',
-                          backgroundColor: item.badgeColor || '#059669',
-                          color: '#FFFFFF',
-                        }}
-                      >
-                        {item.badge}
-                      </span>
+              {section.items.map((item) => {
+                const isActive = item.id === 'standards-tree'
+                  ? (activeScreen === 'standards-tree' || activeScreen === 'rubric-assessment')
+                  : activeScreen === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => {
+                      onNavigate(item.id);
+                      if (isMobile && onCloseMobile) {
+                        onCloseMobile();
+                      }
+                    }}
+                    title={isCollapsed && !isMobile ? item.label : undefined}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: isCollapsed && !isMobile ? 'center' : 'space-between',
+                      width: '100%',
+                      padding: isCollapsed && !isMobile ? '10px 0' : '9px 12px',
+                      borderRadius: '10px',
+                      backgroundColor: isActive ? 'rgba(5, 150, 105, 0.18)' : 'transparent',
+                      color: isActive ? '#34D399' : '#94A3B8',
+                      border: isActive ? '1px solid rgba(16, 185, 129, 0.35)' : '1px solid transparent',
+                      cursor: 'pointer',
+                      transition: 'all 0.18s ease',
+                      textAlign: 'right',
+                      boxSizing: 'border-box',
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!isActive) {
+                        e.currentTarget.style.backgroundColor = '#131A29';
+                        e.currentTarget.style.color = '#F1F5F9';
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!isActive) {
+                        e.currentTarget.style.backgroundColor = 'transparent';
+                        e.currentTarget.style.color = '#94A3B8';
+                      }
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
+                      <span style={{ color: isActive ? '#10B981' : '#64748B', flexShrink: 0 }}>{item.icon}</span>
+                      {(!isCollapsed || isMobile) && (
+                        <span
+                          style={{
+                            fontSize: '13px',
+                            fontWeight: isActive ? 700 : 500,
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                          }}
+                        >
+                          {item.label}
+                        </span>
+                      )}
+                    </div>
+
+                    {(!isCollapsed || isMobile) && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+                        {item.badge && (
+                          <span
+                            style={{
+                              fontSize: '10.5px',
+                              fontWeight: 700,
+                              padding: '1px 6px',
+                              borderRadius: '12px',
+                              backgroundColor: item.badgeColor || '#059669',
+                              color: '#FFFFFF',
+                            }}
+                          >
+                            {item.badge}
+                          </span>
+                        )}
+                        {isActive && <ChevronLeft size={15} color="#10B981" />}
+                      </div>
                     )}
-                    {isActive && <ChevronLeft size={15} color="#10B981" />}
-                  </div>
-                )}
-              </button>
-            );
-          })}
+                  </button>
+                );
+              })}
+            </div>
+          ))}
         </nav>
 
         {/* Expand toggle when collapsed */}

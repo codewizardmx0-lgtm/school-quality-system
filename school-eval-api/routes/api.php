@@ -141,6 +141,10 @@ Route::prefix('v1')->group(function () {
             Route::get('/export-detailed-pdf', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'exportDetailedReportPdf'])->name('api.v1.evaluator.export-detailed-pdf');
             Route::get('/export-detailed-excel', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'exportDetailedReportExcel'])->name('api.v1.evaluator.export-detailed-excel');
             Route::get('/export-improvement-workbook', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'exportImprovementWorkbook'])->name('api.v1.evaluator.export-improvement-workbook');
+            Route::get('/export-seal-certificate-pdf', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'exportSealCertificatePdf'])->name('api.v1.evaluator.export-seal-certificate-pdf');
+            Route::get('/export-evidences-zip', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'exportEvidenceZip'])->name('api.v1.evaluator.export-evidences-zip');
+            Route::get('/export-evidence-inventory-excel', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'exportEvidenceInventoryExcel'])->name('api.v1.evaluator.export-evidence-inventory-excel');
+            Route::get('/trend', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'getHistoricalTrend'])->name('api.v1.evaluator.trend');
             Route::get('/internal-review-note', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'getInternalReviewNote'])->name('api.v1.evaluator.internal-review-note.show');
             Route::post('/internal-review-note', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'saveInternalReviewNote'])->name('api.v1.evaluator.internal-review-note.store');
             Route::get('/evidence-inventory', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'getEvidenceInventory'])->name('api.v1.evaluator.evidence-inventory');

@@ -9,6 +9,8 @@ import { ImprovementPlanPage } from '../improvement-plan/ImprovementPlanPage';
 import { InternalReviewPage } from '../final-review/InternalReviewPage';
 import { HandleCompletionPage } from '../completion-request/HandleCompletionPage';
 import { NotificationsCenter } from '../notifications/NotificationsCenter';
+import { ReportsHubPage } from '../reports/ReportsHubPage';
+import { HistoricalPerformancePage } from '../historical/HistoricalPerformancePage';
 import { ChangePasswordModal } from '../../../auth/ChangePasswordModal';
 import { ProfileModal } from '../../../auth/ProfileModal';
 import { useAuth } from '../../../auth/AuthContext';
@@ -195,6 +197,18 @@ export const EvaluatorLayout: React.FC<EvaluatorLayoutProps> = ({
       case 'completion-request':
         return (
           <HandleCompletionPage
+            onNavigate={handleNavigate}
+          />
+        );
+      case 'reports':
+        return (
+          <ReportsHubPage
+            onNavigate={handleNavigate}
+          />
+        );
+      case 'historical':
+        return (
+          <HistoricalPerformancePage
             onNavigate={handleNavigate}
           />
         );

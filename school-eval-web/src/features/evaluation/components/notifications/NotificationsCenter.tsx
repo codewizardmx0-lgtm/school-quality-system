@@ -8,12 +8,28 @@ import {
   BookOpen,
   Target,
   CheckCheck,
+  ShieldAlert,
+  ArrowLeft,
+  Inbox,
 } from 'lucide-react';
 
 interface NotificationsCenterProps {
-  onNavigate: (screen: EvaluatorScreen) => void;
+  onNavigate: (screen: EvaluatorScreen, param?: number) => void;
   onNotificationsChanged?: () => void;
 }
+
+type NotificationCategory = 'all' | 'procedural' | 'completion' | 'improvement' | 'general';
+
+const formatNotificationDate = (dateStr?: string): string => {
+  if (!dateStr) return 'مؤخراً';
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return dateStr;
+    return d.toLocaleString('ar-SA', { dateStyle: 'medium', timeStyle: 'short' });
+  } catch {
+    return dateStr;
+  }
+};
 
 export const NotificationsCenter: React.FC<NotificationsCenterProps> = ({
   onNavigate,
@@ -22,14 +38,15 @@ export const NotificationsCenter: React.FC<NotificationsCenterProps> = ({
   const [notifications, setNotifications] = useState<EvaluatorNotificationItem[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
-  const [filter, setFilter] = useState<'all' | 'unread'>('all');
+  const [category, setCategory] = useState<NotificationCategory>('all');
+  const [unreadOnly, setUnreadOnly] = useState<boolean>(false);
 
   const fetchNotifications = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     try {
       const items = await evaluatorApi.getNotifications();
-      setNotifications(items);
+      setNotifications(Array.isArray(items) ? items : []);
     } catch (err: unknown) {
       setError((err as Error)?.message || 'فشل في تحميل الإشعارات من الخادم.');
     } finally {
@@ -40,8 +57,6 @@ export const NotificationsCenter: React.FC<NotificationsCenterProps> = ({
   useEffect(() => {
     fetchNotifications();
   }, [fetchNotifications]);
-
-  const filtered = notifications.filter((n) => (filter === 'unread' ? !n.isRead : true));
 
   const markAllAsRead = async () => {
     try {
@@ -65,112 +80,142 @@ export const NotificationsCenter: React.FC<NotificationsCenterProps> = ({
     }
   };
 
-  const getIcon = (type: string) => {
-    switch (type) {
-      case 'completion_requested':
+  const classifyNotification = (item: EvaluatorNotificationItem): NotificationCategory => {
+    const type = item.type?.toLowerCase() || '';
+    if (type.includes('completion') || type.includes('supervisor') || item.relatedEntityType === 'completion_request') {
+      return 'completion';
+    }
+    if (type.includes('action') || type.includes('improvement') || type.includes('plan') || item.relatedEntityType === 'improvement_action') {
+      return 'improvement';
+    }
+    if (type.includes('cycle') || type.includes('locked') || type.includes('seal') || type.includes('legal') || type.includes('procedural')) {
+      return 'procedural';
+    }
+    return 'general';
+  };
+
+  const getTargetInfo = (item: EvaluatorNotificationItem): { screen: EvaluatorScreen; label: string } | null => {
+    const type = item.type?.toLowerCase() || '';
+    if (type.includes('completion') || item.relatedEntityType === 'completion_request') {
+      return { screen: 'completion-request', label: 'معالجة طلب الاستكمال' };
+    }
+    if (type.includes('action') || type.includes('plan') || item.relatedEntityType === 'improvement_action') {
+      return { screen: 'improvement-plan', label: 'استعراض خطة التحسين' };
+    }
+    if (type.includes('version') || item.relatedEntityType === 'standard_version') {
+      return { screen: 'standards-tree', label: 'دليل المعايير الوطنية' };
+    }
+    if (type.includes('report') || type.includes('dossier')) {
+      return { screen: 'reports', label: 'مركز التقارير' };
+    }
+    if (type.includes('seal') || type.includes('review')) {
+      return { screen: 'final-review', label: 'المراجعة والختم' };
+    }
+    return { screen: 'dashboard', label: 'لوحة التحكم' };
+  };
+
+  const getIcon = (item: EvaluatorNotificationItem) => {
+    const cat = classifyNotification(item);
+    switch (cat) {
+      case 'completion':
         return <AlertTriangle size={18} color="#D97706" />;
-      case 'action_due_soon':
-        return <Target size={18} color="#2563EB" />;
-      case 'version_activated':
-        return <BookOpen size={18} color="#059669" />;
-      case 'cycle_launched':
+      case 'improvement':
+        return <Target size={18} color="#059669" />;
+      case 'procedural':
+        return <ShieldAlert size={18} color="#2563EB" />;
       default:
-        return <CheckCircle2 size={18} color="#059669" />;
+        return <Bell size={18} color="#6366F1" />;
     }
   };
 
-  const getTargetScreen = (item: EvaluatorNotificationItem): EvaluatorScreen | undefined => {
-    if (item.type === 'completion_requested' || item.relatedEntityType === 'completion_request') {
-      return 'completion-request';
-    }
-    if (item.type === 'action_due_soon' || item.relatedEntityType === 'improvement_action') {
-      return 'improvement-plan';
-    }
-    if (item.type === 'version_activated' || item.relatedEntityType === 'standard_version') {
-      return 'standards-tree';
-    }
-    if (item.type === 'cycle_launched' || item.relatedEntityType === 'cycle') {
-      return 'dashboard';
-    }
-    return undefined;
+  // Filter counts
+  const counts = {
+    all: notifications.length,
+    procedural: notifications.filter((n) => classifyNotification(n) === 'procedural').length,
+    completion: notifications.filter((n) => classifyNotification(n) === 'completion').length,
+    improvement: notifications.filter((n) => classifyNotification(n) === 'improvement').length,
+    general: notifications.filter((n) => classifyNotification(n) === 'general').length,
   };
+
+  const filtered = notifications.filter((n) => {
+    if (unreadOnly && n.isRead) return false;
+    if (category === 'all') return true;
+    return classifyNotification(n) === category;
+  });
 
   return (
-    <div style={{ padding: '24px', maxWidth: '1000px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '20px' }}>
-      {/* Header */}
+    <div style={{ padding: '24px', maxWidth: '1100px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '22px' }}>
+      {/* Header Banner */}
       <div
         style={{
-          backgroundColor: '#FFFFFF',
-          borderRadius: '14px',
-          padding: '24px',
-          border: '1px solid #E2E8F0',
+          background: 'linear-gradient(135deg, #0F172A 0%, #1E293B 50%, #334155 100%)',
+          borderRadius: '16px',
+          padding: '24px 30px',
+          color: '#FFFFFF',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
           flexWrap: 'wrap',
-          gap: '14px',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+          gap: '16px',
+          boxShadow: '0 8px 24px rgba(15, 23, 42, 0.2)',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
           <div
             style={{
-              width: '42px',
-              height: '42px',
-              borderRadius: '10px',
-              backgroundColor: '#ECFDF5',
-              color: '#059669',
+              width: '50px',
+              height: '50px',
+              borderRadius: '12px',
+              backgroundColor: 'rgba(255, 255, 255, 0.12)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
+              backdropFilter: 'blur(8px)',
             }}
           >
-            <Bell size={22} />
+            <Bell size={26} color="#38BDF8" />
           </div>
           <div>
-            <h2 style={{ fontSize: '18px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
-              مركز التنبيهات والإشعارات النظامية
-            </h2>
-            <p style={{ fontSize: '12.5px', color: '#64748B', margin: '3px 0 0 0' }}>
-              سجل الأحداث الإدارية والتنبيهات الميدانية لملف المدرسة
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <h1 style={{ fontSize: '20px', fontWeight: 800, margin: 0 }}>
+                مركز الإشعارات والتنبيهات الإجرائية
+              </h1>
+              <span
+                style={{
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  padding: '2px 8px',
+                  borderRadius: '12px',
+                  backgroundColor: 'rgba(56, 189, 248, 0.2)',
+                  color: '#38BDF8',
+                }}
+              >
+                {notifications.filter((n) => !n.isRead).length} غير مقروء
+              </span>
+            </div>
+            <p style={{ fontSize: '13px', color: '#94A3B8', margin: '4px 0 0 0' }}>
+              المتابعة الإجرائية لطلبات الاستكمال، ومواعيد خطط التحسين، والقرارات التنظيمية المعتمدة
             </p>
           </div>
         </div>
 
+        {/* Global Action */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <div style={{ display: 'flex', backgroundColor: '#F1F5F9', borderRadius: '8px', padding: '3px' }}>
-            <button
-              onClick={() => setFilter('all')}
-              style={{
-                padding: '6px 12px',
-                borderRadius: '6px',
-                border: 'none',
-                backgroundColor: filter === 'all' ? '#FFFFFF' : 'transparent',
-                color: filter === 'all' ? '#059669' : '#64748B',
-                fontSize: '12px',
-                fontWeight: 700,
-                cursor: 'pointer',
-              }}
-            >
-              الكل ({notifications.length})
-            </button>
-            <button
-              onClick={() => setFilter('unread')}
-              style={{
-                padding: '6px 12px',
-                borderRadius: '6px',
-                border: 'none',
-                backgroundColor: filter === 'unread' ? '#FFFFFF' : 'transparent',
-                color: filter === 'unread' ? '#059669' : '#64748B',
-                fontSize: '12px',
-                fontWeight: 700,
-                cursor: 'pointer',
-              }}
-            >
-              غير المقروءة ({notifications.filter((n) => !n.isRead).length})
-            </button>
-          </div>
-
+          <button
+            onClick={() => setUnreadOnly(!unreadOnly)}
+            style={{
+              padding: '8px 14px',
+              borderRadius: '8px',
+              backgroundColor: unreadOnly ? '#38BDF8' : 'rgba(255, 255, 255, 0.12)',
+              color: unreadOnly ? '#0F172A' : '#FFFFFF',
+              border: 'none',
+              fontSize: '12px',
+              fontWeight: 700,
+              cursor: 'pointer',
+            }}
+          >
+            {unreadOnly ? 'عرض الكل' : 'غير المقروء فقط'}
+          </button>
           <button
             onClick={markAllAsRead}
             disabled={notifications.length === 0}
@@ -178,40 +223,170 @@ export const NotificationsCenter: React.FC<NotificationsCenterProps> = ({
               display: 'flex',
               alignItems: 'center',
               gap: '6px',
-              padding: '7px 14px',
+              padding: '8px 16px',
               borderRadius: '8px',
-              backgroundColor: '#F8FAFC',
-              border: '1px solid #CBD5E1',
-              color: '#334155',
+              backgroundColor: 'rgba(255, 255, 255, 0.12)',
+              color: '#FFFFFF',
+              border: '1px solid rgba(255, 255, 255, 0.2)',
               fontSize: '12px',
-              fontWeight: 600,
+              fontWeight: 700,
               cursor: notifications.length === 0 ? 'not-allowed' : 'pointer',
             }}
           >
             <CheckCheck size={14} />
-            تحديد الكل كمقروء
+            <span>تحديد الكل كمقروء</span>
           </button>
         </div>
+      </div>
+
+      {/* 5 Category Filter Tabs (Matching Figma) */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          overflowX: 'auto',
+          paddingBottom: '4px',
+        }}
+      >
+        <button
+          onClick={() => setCategory('all')}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            padding: '9px 16px',
+            borderRadius: '10px',
+            backgroundColor: category === 'all' ? '#0F766E' : '#FFFFFF',
+            color: category === 'all' ? '#FFFFFF' : '#334155',
+            border: `1px solid ${category === 'all' ? '#0F766E' : '#E2E8F0'}`,
+            fontSize: '12.5px',
+            fontWeight: 700,
+            cursor: 'pointer',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          <span>الكل</span>
+          <span style={{ fontSize: '11px', padding: '1px 6px', borderRadius: '10px', backgroundColor: category === 'all' ? 'rgba(255,255,255,0.25)' : '#F1F5F9' }}>
+            {counts.all}
+          </span>
+        </button>
+
+        <button
+          onClick={() => setCategory('completion')}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            padding: '9px 16px',
+            borderRadius: '10px',
+            backgroundColor: category === 'completion' ? '#D97706' : '#FFFFFF',
+            color: category === 'completion' ? '#FFFFFF' : '#334155',
+            border: `1px solid ${category === 'completion' ? '#D97706' : '#E2E8F0'}`,
+            fontSize: '12.5px',
+            fontWeight: 700,
+            cursor: 'pointer',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          <AlertTriangle size={14} />
+          <span>طلبات استكمال وملاحظات المشرف</span>
+          <span style={{ fontSize: '11px', padding: '1px 6px', borderRadius: '10px', backgroundColor: category === 'completion' ? 'rgba(255,255,255,0.25)' : '#F1F5F9' }}>
+            {counts.completion}
+          </span>
+        </button>
+
+        <button
+          onClick={() => setCategory('improvement')}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            padding: '9px 16px',
+            borderRadius: '10px',
+            backgroundColor: category === 'improvement' ? '#059669' : '#FFFFFF',
+            color: category === 'improvement' ? '#FFFFFF' : '#334155',
+            border: `1px solid ${category === 'improvement' ? '#059669' : '#E2E8F0'}`,
+            fontSize: '12.5px',
+            fontWeight: 700,
+            cursor: 'pointer',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          <Target size={14} />
+          <span>مواعيد خطة التحسين</span>
+          <span style={{ fontSize: '11px', padding: '1px 6px', borderRadius: '10px', backgroundColor: category === 'improvement' ? 'rgba(255,255,255,0.25)' : '#F1F5F9' }}>
+            {counts.improvement}
+          </span>
+        </button>
+
+        <button
+          onClick={() => setCategory('procedural')}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            padding: '9px 16px',
+            borderRadius: '10px',
+            backgroundColor: category === 'procedural' ? '#2563EB' : '#FFFFFF',
+            color: category === 'procedural' ? '#FFFFFF' : '#334155',
+            border: `1px solid ${category === 'procedural' ? '#2563EB' : '#E2E8F0'}`,
+            fontSize: '12.5px',
+            fontWeight: 700,
+            cursor: 'pointer',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          <ShieldAlert size={14} />
+          <span>تنبيهات إجرائية وقانونية</span>
+          <span style={{ fontSize: '11px', padding: '1px 6px', borderRadius: '10px', backgroundColor: category === 'procedural' ? 'rgba(255,255,255,0.25)' : '#F1F5F9' }}>
+            {counts.procedural}
+          </span>
+        </button>
+
+        <button
+          onClick={() => setCategory('general')}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            padding: '9px 16px',
+            borderRadius: '10px',
+            backgroundColor: category === 'general' ? '#475569' : '#FFFFFF',
+            color: category === 'general' ? '#FFFFFF' : '#334155',
+            border: `1px solid ${category === 'general' ? '#475569' : '#E2E8F0'}`,
+            fontSize: '12.5px',
+            fontWeight: 700,
+            cursor: 'pointer',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          <BookOpen size={14} />
+          <span>إشعارات النظام العامة</span>
+          <span style={{ fontSize: '11px', padding: '1px 6px', borderRadius: '10px', backgroundColor: category === 'general' ? 'rgba(255,255,255,0.25)' : '#F1F5F9' }}>
+            {counts.general}
+          </span>
+        </button>
       </div>
 
       {/* Loading Skeletons */}
       {isLoading ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
           {[1, 2, 3].map((i) => (
-            <div key={i} style={{ height: '80px', borderRadius: '12px', backgroundColor: '#E2E8F0' }} className="animate-pulse" />
+            <div key={i} style={{ height: '90px', borderRadius: '14px', backgroundColor: '#E2E8F0' }} className="animate-pulse" />
           ))}
         </div>
       ) : error ? (
-        <div style={{ padding: '36px 20px', textAlign: 'center', backgroundColor: '#FFFFFF', borderRadius: '12px', border: '1px solid #FECACA' }}>
+        <div style={{ padding: '36px 20px', textAlign: 'center', backgroundColor: '#FFFFFF', borderRadius: '14px', border: '1px solid #FECACA' }}>
           <AlertTriangle size={36} color="#DC2626" style={{ margin: '0 auto 8px' }} />
           <div style={{ fontSize: '14px', fontWeight: 700, color: '#991B1B' }}>تعذر استرجاع الإشعارات</div>
           <p style={{ fontSize: '12.5px', color: '#64748B', margin: '4px 0 16px' }}>{error}</p>
           <button
             onClick={fetchNotifications}
             style={{
-              padding: '6px 14px',
+              padding: '6px 16px',
               borderRadius: '6px',
-              backgroundColor: '#059669',
+              backgroundColor: '#0F766E',
               color: '#FFFFFF',
               fontWeight: 700,
               fontSize: '12px',
@@ -225,95 +400,140 @@ export const NotificationsCenter: React.FC<NotificationsCenterProps> = ({
       ) : filtered.length === 0 ? (
         <div
           style={{
-            padding: '48px 24px',
+            padding: '54px 24px',
             textAlign: 'center',
             backgroundColor: '#FFFFFF',
-            borderRadius: '12px',
+            borderRadius: '16px',
             border: '1px solid #E2E8F0',
           }}
         >
-          <CheckCircle2 size={36} color="#059669" style={{ margin: '0 auto 10px' }} />
-          <div style={{ fontSize: '14.5px', fontWeight: 700, color: '#0F172A' }}>
-            {filter === 'unread' ? 'لا توجد تنبيهات غير مقروءة حالياً' : 'لا توجد أي إشعارات مسجلة لحسابك حالياً'}
+          <Inbox size={40} color="#94A3B8" style={{ margin: '0 auto 12px' }} />
+          <div style={{ fontSize: '15px', fontWeight: 800, color: '#0F172A' }}>
+            {unreadOnly ? 'لا توجد تنبيهات غير مقروءة في هذا التصنيف' : 'لا توجد أي إشعارات مسجلة في هذا التصنيف'}
           </div>
-          <div style={{ fontSize: '12px', color: '#64748B', marginTop: '4px' }}>
-            {filter === 'unread'
-              ? 'كافة الإشعارات الإدارية والتنبيهات الميدانية تمت قراءتها والاطلاع عليها.'
-              : 'سيتم إشعارك فور حدوث أي إجراءات أو تكليفات جديدة في دورة التقييم.'}
+          <div style={{ fontSize: '12.5px', color: '#64748B', marginTop: '6px' }}>
+            كافة العمليات والإجراءات محدثة ولا توجد مهام معلقة تتطلب التدخل الفوري.
           </div>
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
           {filtered.map((item) => {
-            const targetScreen = getTargetScreen(item);
+            const target = getTargetInfo(item);
+            const isUnread = !item.isRead;
+
             return (
               <div
                 key={item.notificationId}
-                onClick={() => {
-                  markSingleAsRead(item.notificationId);
-                  if (targetScreen) {
-                    onNavigate(targetScreen);
-                  }
-                }}
                 style={{
-                  backgroundColor: item.isRead ? '#FFFFFF' : '#F0FDF4',
-                  borderRadius: '12px',
-                  border: item.isRead ? '1px solid #E2E8F0' : '1px solid #A7F3D0',
-                  padding: '16px 20px',
+                  backgroundColor: '#FFFFFF',
+                  borderRadius: '14px',
+                  border: isUnread ? '1.5px solid #0F766E' : '1px solid #E2E8F0',
+                  padding: '18px 22px',
                   display: 'flex',
-                  alignItems: 'flex-start',
+                  alignItems: 'center',
                   justifyContent: 'space-between',
-                  cursor: targetScreen ? 'pointer' : 'default',
-                  transition: 'background-color 0.15s',
-                }}
-                onMouseEnter={(e) => {
-                  if (targetScreen) e.currentTarget.style.backgroundColor = '#F8FAFC';
-                }}
-                onMouseLeave={(e) => {
-                  if (targetScreen) {
-                    e.currentTarget.style.backgroundColor = item.isRead ? '#FFFFFF' : '#F0FDF4';
-                  }
+                  gap: '16px',
+                  flexWrap: 'wrap',
+                  boxShadow: isUnread ? '0 4px 12px rgba(15, 118, 110, 0.08)' : '0 1px 3px rgba(0,0,0,0.02)',
+                  transition: 'all 0.15s ease',
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '14px', flex: 1, minWidth: '280px' }}>
                   <div
                     style={{
-                      width: '36px',
-                      height: '36px',
-                      borderRadius: '8px',
-                      backgroundColor: '#FFFFFF',
-                      border: '1px solid #E2E8F0',
+                      width: '40px',
+                      height: '40px',
+                      borderRadius: '10px',
+                      backgroundColor: isUnread ? '#F0FDFA' : '#F8FAFC',
+                      border: `1px solid ${isUnread ? '#CCFBF1' : '#E2E8F0'}`,
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
+                      flexShrink: 0,
                       marginTop: '2px',
                     }}
                   >
-                    {getIcon(item.type)}
+                    {getIcon(item)}
                   </div>
+
                   <div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <h4 style={{ fontSize: '14px', fontWeight: item.isRead ? 700 : 800, color: '#0F172A', margin: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                      <h3 style={{ fontSize: '14px', fontWeight: isUnread ? 800 : 700, color: '#0F172A', margin: 0 }}>
                         {item.title}
-                      </h4>
-                      {!item.isRead && (
+                      </h3>
+                      {isUnread && (
                         <span
                           style={{
-                            width: '7px',
-                            height: '7px',
-                            borderRadius: '50%',
-                            backgroundColor: '#10B981',
+                            fontSize: '10.5px',
+                            fontWeight: 800,
+                            padding: '2px 7px',
+                            borderRadius: '10px',
+                            backgroundColor: '#ECFDF5',
+                            color: '#059669',
                           }}
-                        />
+                        >
+                          جديد
+                        </span>
                       )}
                     </div>
-                    <p style={{ fontSize: '12.5px', color: '#475569', margin: '4px 0 0 0', lineHeight: 1.5 }}>
+
+                    <p style={{ fontSize: '12.8px', color: '#475569', margin: '4px 0 0 0', lineHeight: 1.55 }}>
                       {item.message}
                     </p>
+
                     <div style={{ fontSize: '11px', color: '#94A3B8', marginTop: '6px' }}>
-                      {item.createdAt ? new Date(item.createdAt).toLocaleDateString('ar-YE') : 'مؤخراً'}
+                      {formatNotificationDate(item.createdAt)}
                     </div>
                   </div>
+                </div>
+
+                {/* Deep Link Action Button */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  {target && (
+                    <button
+                      onClick={() => {
+                        markSingleAsRead(item.notificationId);
+                        onNavigate(target.screen);
+                      }}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        padding: '8px 16px',
+                        borderRadius: '8px',
+                        backgroundColor: '#F0FDFA',
+                        color: '#0F766E',
+                        border: '1px solid #CCFBF1',
+                        fontSize: '12px',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      <span>{target.label}</span>
+                      <ArrowLeft size={13} />
+                    </button>
+                  )}
+
+                  {isUnread && (
+                    <button
+                      onClick={() => markSingleAsRead(item.notificationId)}
+                      title="تحديد كمقروء"
+                      style={{
+                        padding: '8px',
+                        borderRadius: '8px',
+                        backgroundColor: '#F8FAFC',
+                        border: '1px solid #E2E8F0',
+                        color: '#64748B',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      <CheckCircle2 size={16} />
+                    </button>
+                  )}
                 </div>
               </div>
             );

@@ -24,6 +24,10 @@ export interface EvaluatorSchoolInfo {
   currentEvaluator: string;
   academicYear: string;
   cycleName: string;
+  trackingCode?: string;
+  digitalHash?: string;
+  submittedAt?: string;
+  attemptNo?: number;
 }
 
 export interface EvaluatorKpis {
@@ -529,12 +533,19 @@ export interface UpdateImprovementActionPayload {
   completionPercentage?: number;
 }
 
+export interface PendingIndicatorItem {
+  indicatorId: number;
+  code: string;
+  name: string;
+}
+
 export interface PreflightCheckCriterion {
   id: string;
   title: string;
   description: string;
   passed: boolean;
   weight: number;
+  pendingItems?: PendingIndicatorItem[];
 }
 
 export interface PreflightCheckData {
@@ -545,8 +556,12 @@ export interface PreflightCheckData {
   checklist: PreflightCheckCriterion[];
   digitalSealInfo: {
     systemCode: string;
+    trackingCode?: string;
+    digitalHash?: string;
     hashAlgorithm: string;
     submissionNotice: string;
+    isSubmitted?: boolean;
+    submissionStatus?: string;
   };
 }
 
@@ -572,6 +587,16 @@ export interface FlaggedCompletionItem {
   resolutionNotes: string;
 }
 
+export interface ResubmitCompletionResponse {
+  requestId: number;
+  status: string;
+  submissionAttempt?: number;
+  trackingCode?: string;
+  digitalHash?: string;
+  resubmittedAt?: string;
+  message?: string;
+}
+
 export interface CompletionRequestData {
   requestId: number;
   status: RequestStatus;
@@ -592,7 +617,9 @@ export type EvaluatorScreen =
   | 'improvement-plan'
   | 'final-review'
   | 'completion-request'
-  | 'notifications';
+  | 'notifications'
+  | 'reports'
+  | 'historical';
 
 
 export interface ActionCatalogItem {
@@ -790,4 +817,45 @@ export interface DiscrepancySummary {
 export interface DiscrepancyAuditResponse {
   summary: DiscrepancySummary;
   cases: DiscrepancyCase[];
+}
+
+export interface IndicatorTrendItem {
+  indicator_code: string;
+  indicator_name?: string;
+  previous_score?: number;
+  current_score: number;
+  delta?: number;
+  text_changed?: boolean;
+  previous_name?: string;
+  current_name?: string;
+  notice?: string;
+}
+
+export interface HistoricalTrendSummary {
+  current_final_score: number;
+  previous_final_score: number;
+  score_delta: number;
+  trend_direction: 'improving' | 'declining' | 'stable';
+  improved_count: number;
+  regressed_count: number;
+  maintained_count: number;
+  newly_evaluated_count: number;
+  deprecated_count: number;
+  improved_indicators: IndicatorTrendItem[];
+  regressed_indicators: IndicatorTrendItem[];
+  maintained_indicators: IndicatorTrendItem[];
+  newly_evaluated_indicators: IndicatorTrendItem[];
+  deprecated_indicators: IndicatorTrendItem[];
+}
+
+export interface HistoricalTrendData {
+  has_previous_cycle: boolean;
+  school_id: number;
+  school_name?: string;
+  current_evaluation_id: number;
+  current_cycle: string;
+  previous_evaluation_id?: number | null;
+  previous_cycle?: string | null;
+  notice: string;
+  trend: HistoricalTrendSummary | null;
 }

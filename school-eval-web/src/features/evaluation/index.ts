@@ -13,6 +13,7 @@ export * from './hooks/useAiAnalysis';
 export * from './hooks/useImprovementPlan';
 export * from './hooks/useFinalSubmission';
 export * from './hooks/useCompletionRequest';
+export * from './hooks/useHistoricalTrend';
 
 export * from './components/layout/EvaluatorLayout';
 export * from './components/layout/EvaluatorSidebar';
@@ -47,3 +48,5 @@ export * from './components/final-review/FinalSubmissionLockModal';
 
 export * from './components/completion-request/HandleCompletionPage';
 export * from './components/notifications/NotificationsCenter';
+export * from './components/reports/ReportsHubPage';
+export * from './components/historical/HistoricalPerformancePage';

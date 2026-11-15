@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { evaluatorApi } from '../api/evaluatorApi';
-import type { CompletionRequestData } from '../api/evaluationTypes';
+import type { CompletionRequestData, ResubmitCompletionResponse } from '../api/evaluationTypes';
 
 export function useCompletionRequest() {
   const [completionData, setCompletionData] = useState<CompletionRequestData | null>(null);
@@ -8,6 +8,7 @@ export function useCompletionRequest() {
   const [isResolving, setIsResolving] = useState<boolean>(false);
   const [isResubmitting, setIsResubmitting] = useState<boolean>(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [resubmitResult, setResubmitResult] = useState<ResubmitCompletionResponse | null>(null);
 
   const fetchCompletionRequest = useCallback(async () => {
     setIsLoading(true);
@@ -73,15 +74,18 @@ export function useCompletionRequest() {
   // إعادة الرفع النهائي للمشرف بعد حل كافة البنود
   const resubmitToMinistry = useCallback(
     async (schoolNotes?: string) => {
-      if (!completionData) return;
+      if (!completionData) return null;
       setIsResubmitting(true);
 
       try {
-        await evaluatorApi.resubmitCompletionRequest(completionData.requestId, schoolNotes);
+        const res = await evaluatorApi.resubmitCompletionRequest(completionData.requestId, schoolNotes);
         setCompletionData((prev) => (prev ? { ...prev, status: 'Resolved' } : null));
-        setSuccessMessage('تمت إعادة الرفع النهائي بنجاح وتم إغلاق طلب الاستكمال.');
+        setResubmitResult(res);
+        setSuccessMessage('تمت إعادة الرفع النهائي بنجاح وتم توليد رمز تتبع معتمد جديد للمحاولة.');
+        return res;
       } catch (err) {
         console.error('Failed to resubmit completion request:', err);
+        throw err;
       } finally {
         setIsResubmitting(false);
       }
@@ -95,6 +99,7 @@ export function useCompletionRequest() {
     isResolving,
     isResubmitting,
     successMessage,
+    resubmitResult,
     isIndicatorUnlockedForCompletion,
     resolveItem,
     resubmitToMinistry,

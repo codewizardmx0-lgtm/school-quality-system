@@ -378,7 +378,7 @@ class CompletionRequestController extends Controller
         $unresolvedItems = [];
         foreach ($completionRequest->items as $item) {
             $item->refreshResolutionStatus();
-            if ($item->status !== 'resolved') {
+            if (strtolower($item->status) !== 'resolved') {
                 $unresolvedItems[] = [
                     'request_item_id' => $item->request_item_id,
                     'indicator_id' => $item->indicator_id,
@@ -400,12 +400,21 @@ class CompletionRequestController extends Controller
             $maxAttempt = EvaluationSubmission::where('report_id', $report->report_id)->max('attempt_no') ?? 1;
             $newAttemptNo = $maxAttempt + 1;
 
+            $academicYear = $evaluation->cycle?->academic_year ? preg_replace('/[^0-9]/', '', explode('/', $evaluation->cycle->academic_year)[0]) : '2026';
+            $schoolCode = $evaluation->school?->school_code ?? ('SCH' . str_pad((string)$evaluation->school_id, 3, '0', STR_PAD_LEFT));
+            $phase = 'R' . ($newAttemptNo - 1);
+            $crc = strtoupper(substr(hash('crc32b', "{$evaluation->evaluation_id}-{$newAttemptNo}-{$report->report_id}"), 0, 4));
+            $trackingCode = "ARQ-{$academicYear}-{$schoolCode}-{$phase}-{$crc}";
+            $digitalHash = hash('sha256', "{$evaluation->evaluation_id}|{$report->report_id}|{$newAttemptNo}|{$trackingCode}|" . now()->toIso8601String());
+
             $newSubmission = EvaluationSubmission::create([
                 'report_id' => $report->report_id,
                 'attempt_no' => $newAttemptNo,
                 'submitted_by_user_id' => $user->user_id,
                 'submitted_at' => now(),
                 'status' => 'Submitted',
+                'tracking_code' => $trackingCode,
+                'digital_hash' => $digitalHash,
             ]);
 
             // حالة الطلب تنتقل إلى UnderReview
@@ -422,6 +431,8 @@ class CompletionRequestController extends Controller
             return [
                 'newSubmission' => $newSubmission,
                 'attemptNo' => $newAttemptNo,
+                'trackingCode' => $trackingCode,
+                'digitalHash' => $digitalHash,
             ];
         });
 
@@ -448,8 +459,12 @@ class CompletionRequestController extends Controller
             data: [
                 'requestId' => $completionRequest->request_id,
                 'requestStatus' => $completionRequest->status,
+                'status' => $completionRequest->status,
                 'evaluationStatus' => $evaluation->status,
                 'newAttemptNo' => $resubmitResult['attemptNo'],
+                'attemptNo' => $resubmitResult['attemptNo'],
+                'trackingCode' => $resubmitResult['trackingCode'],
+                'digitalHash' => $resubmitResult['digitalHash'],
                 'submissionId' => $resubmitResult['newSubmission']->submission_id,
                 'submittedAt' => $resubmitResult['newSubmission']->submitted_at?->toIso8601ZuluString(),
             ],

@@ -19,6 +19,25 @@ class BatchCSafeResetTest extends TestCase
 {
     use DatabaseTransactions;
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $evaluator = User::where('username', 'quality_farouq')->first();
+        if ($evaluator) {
+            $evaluation = Evaluation::where('school_id', $evaluator->school_id)->first();
+            if ($evaluation) {
+                $evaluation->update(['status' => 'InProgress']);
+                $reqIds = \App\Models\CompletionRequest::whereHas('submission.report', fn($q) => $q->where('evaluation_id', $evaluation->evaluation_id))->pluck('request_id');
+                if ($reqIds->isNotEmpty()) {
+                    \App\Models\CompletionRequestItem::whereIn('request_id', $reqIds)->delete();
+                    \App\Models\CompletionRequest::whereIn('request_id', $reqIds)->delete();
+                }
+                \App\Models\SupervisorNote::whereHas('submission.report', fn($q) => $q->where('evaluation_id', $evaluation->evaluation_id))->delete();
+                \App\Models\EvaluationSubmission::whereHas('report', fn($q) => $q->where('evaluation_id', $evaluation->evaluation_id))->delete();
+            }
+        }
+    }
+
     /**
      * التحقق من نجاح تصفير مؤشر واحد مع الإبقاء على الشواهد وظهوره في قائمة الاستيفاء
      */

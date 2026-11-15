@@ -406,4 +406,91 @@ class EvaluationReportService
 
         return $mpdf->Output('', 'S');
     }
+
+    /**
+     * توليد شهادة الختم الرقمي وإشعار التسليم الميداني الرسمي بصيغة PDF
+     */
+    public function generateSealCertificatePdf(Evaluation $evaluation, ?User $requester = null): string
+    {
+        $evaluation->loadMissing(['school', 'cycle', 'reports']);
+
+        $school = $evaluation->school;
+        $reportIds = $evaluation->reports->pluck('report_id');
+        $activeSubmission = \App\Models\EvaluationSubmission::whereIn('report_id', $reportIds)
+            ->orderBy('attempt_no', 'desc')
+            ->first();
+
+        $trackingCode = $activeSubmission?->tracking_code ?? ('ARQ-' . date('Y') . '-' . ($school?->school_code ?? 'SCH') . '-FIN-' . strtoupper(substr(dechex(crc32($evaluation->evaluation_id . '_CERT')), 0, 4)));
+        $digitalHash = $activeSubmission?->digital_hash ?? hash('sha256', "CERT_{$evaluation->evaluation_id}_{$trackingCode}");
+        $submittedAt = $activeSubmission?->submitted_at?->format('Y-m-d H:i') ?? Carbon::now()->format('Y-m-d H:i');
+        $attemptNo = $activeSubmission?->attempt_no ?? 1;
+
+        $viewData = [
+            'school' => [
+                'school_name' => $school?->school_name ?? 'المدرسة المستفيدة',
+                'school_code' => $school?->school_code ?? 'SCH-000',
+                'stage' => $school?->stage ?? 'التعليم العام',
+                'gender' => $school?->gender ?? 'مشترك',
+            ],
+            'cycle' => [
+                'academic_year' => $evaluation->cycle?->academic_year ?? '2025/2026',
+                'cycle_name' => $evaluation->cycle?->cycle_name ?? 'الدورة الرئيسية',
+            ],
+            'tracking_code' => $trackingCode,
+            'digital_hash' => $digitalHash,
+            'submitted_at' => $submittedAt,
+            'attempt_no' => $attemptNo,
+            'evaluator_name' => $requester?->name ?? 'مسؤول التقييم المعتمد',
+            'principal_name' => 'إدارة المدرسة المعتمدة',
+        ];
+
+        $html = View::make('reports.seal_certificate', $viewData)->render();
+
+        $tempDir = storage_path('app/temp-mpdf');
+        if (!file_exists($tempDir)) {
+            mkdir($tempDir, 0755, true);
+        }
+
+        $defaultConfig = (new ConfigVariables())->getDefaults();
+        $fontDirs = $defaultConfig['fontDir'];
+        $defaultFontConfig = (new FontVariables())->getDefaults();
+        $fontData = $defaultFontConfig['fontdata'];
+
+        $customFontsDir = resource_path('fonts');
+        $hasAmiri = file_exists($customFontsDir . '/Amiri-Regular.ttf');
+
+        $mpdfConfig = [
+            'mode' => 'utf-8',
+            'format' => 'A4',
+            'orientation' => 'P',
+            'margin_left' => 12,
+            'margin_right' => 12,
+            'margin_top' => 12,
+            'margin_bottom' => 12,
+            'autoScriptToLang' => true,
+            'autoArabic' => true,
+            'autoLangToFont' => true,
+            'default_font' => $hasAmiri ? 'amiri' : 'dejavusans',
+            'tempDir' => $tempDir,
+        ];
+
+        if ($hasAmiri) {
+            $mpdfConfig['fontDir'] = array_merge($fontDirs, [$customFontsDir]);
+            $mpdfConfig['fontdata'] = $fontData + [
+                'amiri' => [
+                    'R' => 'Amiri-Regular.ttf',
+                    'B' => 'Amiri-Bold.ttf',
+                ],
+            ];
+        }
+
+        $mpdf = new Mpdf($mpdfConfig);
+        $mpdf->SetDirectionality('rtl');
+        $mpdf->SetTitle('شهادة الختم الرقمي - ' . ($school?->school_name ?? ''));
+        $mpdf->SetAuthor(config('reports.system_name'));
+
+        $mpdf->WriteHTML($html);
+
+        return $mpdf->Output('', 'S');
+    }
 }

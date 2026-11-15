@@ -10,6 +10,10 @@ import {
   Send,
   Unlock,
   ArrowLeft,
+  Copy,
+  Check,
+  ShieldCheck,
+  AlertCircle,
 } from 'lucide-react';
 
 interface HandleCompletionPageProps {
@@ -25,6 +29,7 @@ export const HandleCompletionPage: React.FC<HandleCompletionPageProps> = ({
     isResolving,
     isResubmitting,
     successMessage,
+    resubmitResult,
     resolveItem,
     resubmitToMinistry,
   } = useCompletionRequest();
@@ -33,15 +38,206 @@ export const HandleCompletionPage: React.FC<HandleCompletionPageProps> = ({
 
   const [resolutionNotes, setResolutionNotes] = useState<Record<number, string>>({});
   const [uploadedFiles, setUploadedFiles] = useState<Record<number, File>>({});
+  const [copiedCode, setCopiedCode] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [schoolGeneralNotes, setSchoolGeneralNotes] = useState(
     'تمت معالجة كافة الملاحظات الواردة من سعادة المشرف الوزاري واستيفاء الشواهد الميدانية المعتمدة.'
   );
 
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedCode(true);
+    setTimeout(() => setCopiedCode(false), 2500);
+  };
+
   if (isLoading && !completionData) {
     return (
       <div style={{ padding: '24px', maxWidth: '1440px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '22px' }}>
-        <div style={{ height: '100px', borderRadius: '16px', backgroundColor: '#E2E8F0' }} className="animate-pulse" />
-        <div style={{ height: '220px', borderRadius: '14px', backgroundColor: '#E2E8F0' }} className="animate-pulse" />
+        <div style={{ height: '110px', borderRadius: '16px', backgroundColor: '#E2E8F0' }} className="animate-pulse" />
+        <div style={{ height: '240px', borderRadius: '14px', backgroundColor: '#E2E8F0' }} className="animate-pulse" />
+      </div>
+    );
+  }
+
+  // If successfully resubmitted, display the formal resubmission certificate card
+  if (resubmitResult) {
+    return (
+      <div style={{ padding: '24px', maxWidth: '1000px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '24px' }}>
+        <div
+          style={{
+            backgroundColor: '#FFFFFF',
+            borderRadius: '18px',
+            border: '2px solid #059669',
+            padding: '36px 30px',
+            boxShadow: '0 12px 36px rgba(5, 150, 105, 0.12)',
+            textAlign: 'center',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: '18px',
+          }}
+        >
+          <div
+            style={{
+              width: '72px',
+              height: '72px',
+              borderRadius: '50%',
+              backgroundColor: '#ECFDF5',
+              border: '2px solid #A7F3D0',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <CheckCircle2 size={44} color="#059669" />
+          </div>
+
+          <div>
+            <div
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '4px 14px',
+                borderRadius: '20px',
+                backgroundColor: '#ECFDF5',
+                color: '#065F46',
+                fontSize: '12px',
+                fontWeight: 800,
+                marginBottom: '10px',
+              }}
+            >
+              <ShieldCheck size={16} />
+              <span>إعادة الرفع المعتمدة — المحاولة رقم {resubmitResult.submissionAttempt ?? 2}</span>
+            </div>
+            <h2 style={{ fontSize: '22px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
+              تمت إعادة رفع ملف التقييم إلى المشرف الوزاري بنجاح
+            </h2>
+            <p style={{ fontSize: '13.5px', color: '#64748B', maxWidth: '580px', margin: '8px auto 0', lineHeight: 1.6 }}>
+              {resubmitResult.message || 'تم قفل التعديل الجزئي وإرسال الشواهد والردود الرسمية المحدثة للمشرف الوزاري لمتابعة التحقق والاعتماد النهائي.'}
+            </p>
+          </div>
+
+          {/* Tracking Code & Hash Panel */}
+          <div
+            style={{
+              width: '100%',
+              maxWidth: '680px',
+              backgroundColor: '#F8FAFC',
+              borderRadius: '12px',
+              border: '1px solid #E2E8F0',
+              padding: '20px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '14px',
+              textAlign: 'right',
+            }}
+          >
+            <div>
+              <div style={{ fontSize: '11.5px', fontWeight: 700, color: '#64748B', marginBottom: '6px' }}>
+                رمز التتبع الوطني للمحاولة (National Tracking Code):
+              </div>
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  backgroundColor: '#FFFFFF',
+                  border: '1px solid #CBD5E1',
+                  borderRadius: '8px',
+                  padding: '10px 14px',
+                  fontFamily: 'monospace',
+                  fontSize: '14px',
+                  fontWeight: 800,
+                  color: '#0369A1',
+                }}
+              >
+                <span>{resubmitResult.trackingCode || 'ARQ-2026-SCH002-R1-B4F2'}</span>
+                <button
+                  onClick={() => copyToClipboard(resubmitResult.trackingCode || 'ARQ-2026-SCH002-R1-B4F2')}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    padding: '4px 10px',
+                    borderRadius: '6px',
+                    border: '1px solid #E2E8F0',
+                    backgroundColor: '#F8FAFC',
+                    cursor: 'pointer',
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    color: '#475569',
+                  }}
+                >
+                  {copiedCode ? <Check size={13} color="#059669" /> : <Copy size={13} />}
+                  <span>{copiedCode ? 'تم النسخ' : 'نسخ'}</span>
+                </button>
+              </div>
+            </div>
+
+            {resubmitResult.digitalHash && (
+              <div>
+                <div style={{ fontSize: '11.5px', fontWeight: 700, color: '#64748B', marginBottom: '6px' }}>
+                  البصمة الرقمية للبيانات المحدثة (SHA-256):
+                </div>
+                <div
+                  style={{
+                    backgroundColor: '#FFFFFF',
+                    border: '1px solid #CBD5E1',
+                    borderRadius: '8px',
+                    padding: '8px 12px',
+                    fontFamily: 'monospace',
+                    fontSize: '11px',
+                    color: '#475569',
+                    wordBreak: 'break-all',
+                    lineHeight: 1.4,
+                  }}
+                >
+                  {resubmitResult.digitalHash}
+                </div>
+              </div>
+            )}
+
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '12px', color: '#64748B', paddingTop: '6px', borderTop: '1px solid #E2E8F0' }}>
+              <span>تاريخ الإرسال: {resubmitResult.resubmittedAt ? new Date(resubmitResult.resubmittedAt).toLocaleString('ar-SA') : 'الآن'}</span>
+              <span>الحالة: <strong style={{ color: '#059669' }}>بانتظار مراجعة المشرف الوزاري</strong></span>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <button
+              onClick={() => onNavigate('dashboard')}
+              style={{
+                padding: '11px 24px',
+                borderRadius: '8px',
+                backgroundColor: '#059669',
+                color: '#FFFFFF',
+                fontWeight: 700,
+                fontSize: '13.5px',
+                border: 'none',
+                cursor: 'pointer',
+                boxShadow: '0 4px 12px rgba(5, 150, 105, 0.25)',
+              }}
+            >
+              العودة للوحة التحكم الرئيسية
+            </button>
+            <button
+              onClick={() => onNavigate('final-review')}
+              style={{
+                padding: '11px 20px',
+                borderRadius: '8px',
+                backgroundColor: '#F1F5F9',
+                color: '#334155',
+                fontWeight: 700,
+                fontSize: '13.5px',
+                border: '1px solid #CBD5E1',
+                cursor: 'pointer',
+              }}
+            >
+              عرض المراجعة والختم
+            </button>
+          </div>
+        </div>
       </div>
     );
   }
@@ -74,27 +270,48 @@ export const HandleCompletionPage: React.FC<HandleCompletionPageProps> = ({
   }
 
   const items = completionData?.flaggedItems || [];
+  const pendingCount = items.filter((i) => i.status !== 'Resolved').length;
+  const allResolved = items.length > 0 && pendingCount === 0;
 
   const handleResolveClick = async (item: FlaggedCompletionItem) => {
-    const notes = resolutionNotes[item.itemId] || 'تم تدقيق المؤشر وإرفاق المستند المعتمد.';
+    setErrorMessage(null);
+    const notes = resolutionNotes[item.itemId] || 'تم تدقيق المؤشر واستيفاء الشاهد الميداني المطلوب وتحديث السجل.';
     let evidenceVersionId: number | undefined;
 
-    if (uploadedFiles[item.itemId]) {
-      const uploadRes = await uploadEvidenceFile({
-        file: uploadedFiles[item.itemId],
-        indicatorId: item.indicatorId,
-        title: `استكمال ${item.indicatorCode}: ${uploadedFiles[item.itemId].name}`,
-        notes,
-      });
-      evidenceVersionId = uploadRes.versionId;
-    }
+    try {
+      if (uploadedFiles[item.itemId]) {
+        const uploadRes = await uploadEvidenceFile({
+          file: uploadedFiles[item.itemId],
+          indicatorId: item.indicatorId,
+          title: `استكمال ${item.indicatorCode}: ${uploadedFiles[item.itemId].name}`,
+          notes,
+        });
+        evidenceVersionId = uploadRes.versionId;
+      }
 
-    await resolveItem(item.itemId, notes, evidenceVersionId);
+      await resolveItem(item.itemId, notes, evidenceVersionId);
+    } catch (err: any) {
+      console.error(err);
+      setErrorMessage(err.message || 'حدث خطأ أثناء حفظ معالجة البند');
+    }
   };
 
   const handleFileSelect = (itemId: number, e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
       setUploadedFiles((prev) => ({ ...prev, [itemId]: e.target.files![0] }));
+    }
+  };
+
+  const handleResubmit = async () => {
+    setErrorMessage(null);
+    if (!allResolved) {
+      setErrorMessage(`لا يمكن إعادة الرفع حتى يتم استيفاء جميع البنود (متبقي ${pendingCount} بند قيد المعالجة).`);
+      return;
+    }
+    try {
+      await resubmitToMinistry(schoolGeneralNotes);
+    } catch (err: any) {
+      setErrorMessage(err.message || 'فشلت عملية إعادة الرفع للمشرف الوزاري.');
     }
   };
 
@@ -169,7 +386,7 @@ export const HandleCompletionPage: React.FC<HandleCompletionPageProps> = ({
           <div>
             <div style={{ fontSize: '11px', color: '#FDE68A' }}>المهلة المحددة للمعالجة</div>
             <div style={{ fontSize: '14px', fontWeight: 800 }}>
-              متبقي {completionData?.remainingDays ?? 11} يوماً (حتى {completionData?.completionDeadline})
+              متبقي {completionData?.remainingDays ?? 5} يوماً (حتى {completionData?.completionDeadline})
             </div>
           </div>
         </div>
@@ -196,6 +413,27 @@ export const HandleCompletionPage: React.FC<HandleCompletionPageProps> = ({
         </div>
       )}
 
+      {/* Error Message */}
+      {errorMessage && (
+        <div
+          style={{
+            padding: '12px 18px',
+            borderRadius: '10px',
+            backgroundColor: '#FEF2F2',
+            border: '1px solid #FCA5A5',
+            color: '#991B1B',
+            fontSize: '13px',
+            fontWeight: 700,
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+          }}
+        >
+          <AlertCircle size={18} />
+          <span>{errorMessage}</span>
+        </div>
+      )}
+
       {/* Partial Unlock Explanatory Box */}
       <div
         style={{
@@ -211,204 +449,242 @@ export const HandleCompletionPage: React.FC<HandleCompletionPageProps> = ({
       >
         <Unlock size={22} color="#059669" />
         <div style={{ fontSize: '13px', color: '#334155', lineHeight: 1.5 }}>
-          <strong>نطاق الفتح الجزئي للصلاحيات:</strong> تم فك القفل عن المؤشرات الثلاثة الموضحة أدناه فقط لإتاحة تعديل التقدير
-          ورفع الشواهد المكملة، بينما تظل بقية مؤشرات المعايير الوطنية السبعة في حالة القراءة فقط لحماية النزاهة التوثيقية.
+          <strong>نطاق الفتح الجزئي للصلاحيات:</strong> تم فك القفل عن المؤشرات الموضحة أدناه فقط لإتاحة تعديل التقدير
+          ورفع الشواهد المكملة، بينما تظل بقية مؤشرات المعايير الوطنية السبعة في حالة القراءة فقط لحماية النزاهة التوثيقية وعدم الإنكار.
         </div>
       </div>
 
       {/* 2. Flagged Items Cards */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-        <h3 style={{ fontSize: '16px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
-          العناصر والمؤشرات المطلوب استيفاؤها ({items.length} مؤشرات)
-        </h3>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <h3 style={{ fontSize: '16px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
+            العناصر والمؤشرات المطلوب استيفاؤها ({items.length} مؤشرات)
+          </h3>
+          <span
+            style={{
+              fontSize: '12px',
+              fontWeight: 700,
+              padding: '4px 10px',
+              borderRadius: '20px',
+              backgroundColor: allResolved ? '#ECFDF5' : '#FFFBEB',
+              color: allResolved ? '#059669' : '#D97706',
+              border: `1px solid ${allResolved ? '#A7F3D0' : '#FDE68A'}`,
+            }}
+          >
+            {allResolved ? '✓ تم استيفاء كافة البنود' : `متبقي ${pendingCount} بند غير مستوفى`}
+          </span>
+        </div>
 
         {items.length === 0 ? (
-        <div style={{ padding: '48px 24px', textAlign: 'center', backgroundColor: '#FFFFFF', borderRadius: '14px', border: '1px solid #E2E8F0' }}>
-          <CheckCircle2 size={44} color="#059669" style={{ margin: '0 auto 10px' }} />
-          <div style={{ fontSize: '15px', fontWeight: 800, color: '#0F172A', marginBottom: '6px' }}>
-            لا توجد طلبات استكمال مفتوحة حالياً
+          <div style={{ padding: '48px 24px', textAlign: 'center', backgroundColor: '#FFFFFF', borderRadius: '14px', border: '1px solid #E2E8F0' }}>
+            <CheckCircle2 size={44} color="#059669" style={{ margin: '0 auto 10px' }} />
+            <div style={{ fontSize: '15px', fontWeight: 800, color: '#0F172A', marginBottom: '6px' }}>
+              لا توجد طلبات استكمال مفتوحة حالياً
+            </div>
+            <div style={{ fontSize: '13px', color: '#64748B' }}>
+              كافة شواهد ومؤشرات التقييم مستوفاة ولم تسجل أي ملاحظات متبقية من المشرف الوزاري.
+            </div>
           </div>
-          <div style={{ fontSize: '13px', color: '#64748B' }}>
-            كافة شواهد ومؤشرات التقييم مستوفاة ولم تسجل أي ملاحظات متبقية من المشرف الوزاري.
-          </div>
-        </div>
-      ) : (
-        items.map((item) => {
-          const isResolved = item.status === 'Resolved';
-          const file = uploadedFiles[item.itemId];
+        ) : (
+          items.map((item) => {
+            const isResolved = item.status === 'Resolved';
+            const file = uploadedFiles[item.itemId];
 
-          return (
-            <div
-              key={item.itemId}
-              style={{
-                backgroundColor: '#FFFFFF',
-                borderRadius: '14px',
-                border: isResolved ? '1.5px solid #059669' : '1.5px solid #FCD34D',
-                padding: '22px',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '14px',
-                boxShadow: '0 1px 4px rgba(0,0,0,0.04)',
-              }}
-            >
-              {/* Header */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <span
-                    style={{
-                      fontSize: '11.5px',
-                      fontWeight: 800,
-                      padding: '3px 8px',
-                      borderRadius: '6px',
-                      backgroundColor: isResolved ? '#ECFDF5' : '#FFFBEB',
-                      color: isResolved ? '#059669' : '#D97706',
-                      border: `1px solid ${isResolved ? '#A7F3D0' : '#FDE68A'}`,
-                    }}
-                  >
-                    {item.indicatorCode}
-                  </span>
-                  <span style={{ fontSize: '14px', fontWeight: 800, color: '#0F172A' }}>
-                    {item.indicatorTitle}
-                  </span>
-                </div>
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span
-                    style={{
-                      fontSize: '11.5px',
-                      fontWeight: 700,
-                      padding: '3px 10px',
-                      borderRadius: '12px',
-                      backgroundColor: isResolved ? '#ECFDF5' : '#FFFBEB',
-                      color: isResolved ? '#059669' : '#D97706',
-                    }}
-                  >
-                    {isResolved ? '✓ تم الاستيفاء والمعالجة' : 'قيد المعالجة'}
-                  </span>
-
-                  <button
-                    onClick={() => onNavigate('rubric-assessment', item.indicatorId)}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '4px',
-                      padding: '6px 12px',
-                      borderRadius: '6px',
-                      backgroundColor: '#F1F5F9',
-                      color: '#334155',
-                      fontSize: '12px',
-                      fontWeight: 600,
-                      border: 'none',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    <span>فتح المؤشر</span>
-                    <ArrowLeft size={13} />
-                  </button>
-                </div>
-              </div>
-
-              {/* Supervisor Feedback Note */}
+            return (
               <div
+                key={item.itemId}
                 style={{
-                  padding: '12px 16px',
-                  borderRadius: '10px',
-                  backgroundColor: '#FEF3C7',
-                  border: '1px solid #FDE68A',
-                  color: '#92400E',
-                  fontSize: '12.5px',
-                  lineHeight: 1.5,
+                  backgroundColor: '#FFFFFF',
+                  borderRadius: '14px',
+                  border: isResolved ? '1.5px solid #059669' : '1.5px solid #FCD34D',
+                  padding: '22px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '14px',
+                  boxShadow: '0 1px 4px rgba(0,0,0,0.04)',
                 }}
               >
-                <strong>ملاحظة وتوجيه المشرف الوزاري:</strong> {item.missingDescription}
-              </div>
+                {/* Header */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <span
+                      style={{
+                        fontSize: '11.5px',
+                        fontWeight: 800,
+                        padding: '3px 8px',
+                        borderRadius: '6px',
+                        backgroundColor: isResolved ? '#ECFDF5' : '#FFFBEB',
+                        color: isResolved ? '#059669' : '#D97706',
+                        border: `1px solid ${isResolved ? '#A7F3D0' : '#FDE68A'}`,
+                      }}
+                    >
+                      {item.indicatorCode}
+                    </span>
+                    <span style={{ fontSize: '14px', fontWeight: 800, color: '#0F172A' }}>
+                      {item.indicatorTitle}
+                    </span>
+                    {item.standardTitle && (
+                      <span style={{ fontSize: '11px', color: '#64748B' }}>
+                        ({item.standardTitle})
+                      </span>
+                    )}
+                  </div>
 
-              {/* School Formal Response Input & File Uploader */}
-              {!isResolved ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                  <label style={{ fontSize: '12.5px', fontWeight: 700, color: '#334155' }}>
-                    رد وتوضيح المدرسة على الملاحظة:
-                  </label>
-                  <textarea
-                    value={resolutionNotes[item.itemId] || ''}
-                    onChange={(e) =>
-                      setResolutionNotes({ ...resolutionNotes, [item.itemId]: e.target.value })
-                    }
-                    placeholder="أدخل الإجراءات التي اتخذتها المدرسة لاستيفاء الملاحظة والشواهد المرفقة..."
-                    rows={2}
-                    style={{
-                      width: '100%',
-                      padding: '9px 12px',
-                      borderRadius: '8px',
-                      border: '1px solid #CBD5E1',
-                      fontSize: '13px',
-                      outline: 'none',
-                      fontFamily: 'inherit',
-                      boxSizing: 'border-box',
-                    }}
-                  />
-
-                  {/* Targeted File Uploader */}
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
-                    <div>
-                      <input
-                        type="file"
-                        id={`file-${item.itemId}`}
-                        onChange={(e) => handleFileSelect(item.itemId, e)}
-                        accept=".pdf,.png,.jpg,.jpeg,.docx,.xlsx"
-                        style={{ display: 'none' }}
-                      />
-                      <label
-                        htmlFor={`file-${item.itemId}`}
-                        style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '6px',
-                          padding: '7px 14px',
-                          borderRadius: '6px',
-                          backgroundColor: '#F1F5F9',
-                          border: '1px solid #CBD5E1',
-                          color: '#334155',
-                          fontSize: '12px',
-                          fontWeight: 600,
-                          cursor: 'pointer',
-                        }}
-                      >
-                        <UploadCloud size={15} />
-                        <span>{file ? file.name : 'إرفاق شاهد مكمل للمؤشر'}</span>
-                      </label>
-                    </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span
+                      style={{
+                        fontSize: '11.5px',
+                        fontWeight: 700,
+                        padding: '3px 10px',
+                        borderRadius: '12px',
+                        backgroundColor: isResolved ? '#ECFDF5' : '#FFFBEB',
+                        color: isResolved ? '#059669' : '#D97706',
+                      }}
+                    >
+                      {isResolved ? '✓ تم الاستيفاء والمعالجة' : 'قيد المعالجة'}
+                    </span>
 
                     <button
-                      onClick={() => handleResolveClick(item)}
-                      disabled={isResolving}
+                      onClick={() => onNavigate('rubric-assessment', item.indicatorId)}
                       style={{
                         display: 'flex',
                         alignItems: 'center',
-                        gap: '6px',
-                        padding: '8px 18px',
+                        gap: '4px',
+                        padding: '6px 12px',
                         borderRadius: '6px',
-                        backgroundColor: '#059669',
-                        color: '#FFFFFF',
-                        fontSize: '12.5px',
-                        fontWeight: 700,
+                        backgroundColor: '#F1F5F9',
+                        color: '#334155',
+                        fontSize: '12px',
+                        fontWeight: 600,
                         border: 'none',
                         cursor: 'pointer',
                       }}
                     >
-                      <CheckCircle2 size={15} />
-                      <span>تأكيد معالجة البند</span>
+                      <span>فتح المؤشر للتقييم</span>
+                      <ArrowLeft size={13} />
                     </button>
                   </div>
                 </div>
-              ) : (
-                <div style={{ fontSize: '12px', color: '#065F46', backgroundColor: '#F0FDF4', padding: '10px 14px', borderRadius: '8px' }}>
-                  <strong>رد المدرسة المعتمد:</strong> {item.resolutionNotes || 'تم استيفاء النقص وإرفاق الشاهد المطلوب بنجاح.'}
+
+                {/* Supervisor Feedback Note */}
+                <div
+                  style={{
+                    padding: '12px 16px',
+                    borderRadius: '10px',
+                    backgroundColor: '#FEF3C7',
+                    border: '1px solid #FDE68A',
+                    color: '#92400E',
+                    fontSize: '12.5px',
+                    lineHeight: 1.5,
+                  }}
+                >
+                  <strong>ملاحظة وتوجيه المشرف الوزاري:</strong> {item.missingDescription}
                 </div>
-              )}
-            </div>
-          );
-        }))}
+
+                {/* School Formal Response Input & File Uploader */}
+                {!isResolved ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    <label style={{ fontSize: '12.5px', fontWeight: 700, color: '#334155' }}>
+                      رد وتوضيح المدرسة على الملاحظة:
+                    </label>
+                    <textarea
+                      value={resolutionNotes[item.itemId] || ''}
+                      onChange={(e) =>
+                        setResolutionNotes({ ...resolutionNotes, [item.itemId]: e.target.value })
+                      }
+                      placeholder="أدخل الإجراءات التي اتخذتها المدرسة لاستيفاء الملاحظة وتفاصيل الشاهد المرفق..."
+                      rows={2}
+                      style={{
+                        width: '100%',
+                        padding: '9px 12px',
+                        borderRadius: '8px',
+                        border: '1px solid #CBD5E1',
+                        fontSize: '13px',
+                        outline: 'none',
+                        fontFamily: 'inherit',
+                        boxSizing: 'border-box',
+                      }}
+                    />
+
+                    {/* Targeted File Uploader */}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+                      <div>
+                        <input
+                          type="file"
+                          id={`file-${item.itemId}`}
+                          onChange={(e) => handleFileSelect(item.itemId, e)}
+                          accept=".pdf,.png,.jpg,.jpeg,.docx,.xlsx"
+                          style={{ display: 'none' }}
+                        />
+                        <label
+                          htmlFor={`file-${item.itemId}`}
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            padding: '7px 14px',
+                            borderRadius: '6px',
+                            backgroundColor: '#F1F5F9',
+                            border: '1px solid #CBD5E1',
+                            color: '#334155',
+                            fontSize: '12px',
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                          }}
+                        >
+                          <UploadCloud size={15} />
+                          <span>{file ? file.name : 'إرفاق شاهد مكمل للمؤشر (PDF / صورة / مستند)'}</span>
+                        </label>
+                      </div>
+
+                      <button
+                        onClick={() => handleResolveClick(item)}
+                        disabled={isResolving}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          padding: '8px 18px',
+                          borderRadius: '6px',
+                          backgroundColor: '#059669',
+                          color: '#FFFFFF',
+                          fontSize: '12.5px',
+                          fontWeight: 700,
+                          border: 'none',
+                          cursor: isResolving ? 'not-allowed' : 'pointer',
+                        }}
+                      >
+                        <CheckCircle2 size={15} />
+                        <span>{isResolving ? 'جاري المعالجة...' : 'تأكيد معالجة البند'}</span>
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div
+                    style={{
+                      fontSize: '12.5px',
+                      color: '#065F46',
+                      backgroundColor: '#F0FDF4',
+                      padding: '12px 16px',
+                      borderRadius: '8px',
+                      border: '1px solid #BBF7D0',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '4px',
+                    }}
+                  >
+                    <div>
+                      <strong>رد المدرسة المعتمد:</strong> {item.resolutionNotes || 'تم استيفاء النقص وإرفاق الشاهد المطلوب بنجاح.'}
+                    </div>
+                    <div style={{ fontSize: '11.5px', color: '#047857' }}>
+                      ✓ تم تسجيل المعالجة ويمكنك تعديلها بالضغط على المؤشر أعلاه إذا دعت الحاجة قبل إعادة الرفع النهائي.
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })
+        )}
       </div>
 
       {/* 3. Re-submission to Ministry Section */}
@@ -424,9 +700,14 @@ export const HandleCompletionPage: React.FC<HandleCompletionPageProps> = ({
           gap: '14px',
         }}
       >
-        <h3 style={{ fontSize: '15px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
-          كتاب التغطية الرسمي وإعادة الرفع للمشرف الوزاري
-        </h3>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <h3 style={{ fontSize: '15px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
+            كتاب التغطية الرسمي وإعادة الرفع للمشرف الوزاري
+          </h3>
+          <span style={{ fontSize: '12px', color: '#64748B' }}>
+            سيتم إصدار رمز تتبع رسمي جديد مرتبط بالمحاولة
+          </span>
+        </div>
 
         <textarea
           value={schoolGeneralNotes}
@@ -444,27 +725,49 @@ export const HandleCompletionPage: React.FC<HandleCompletionPageProps> = ({
           }}
         />
 
+        {!allResolved && (
+          <div
+            style={{
+              padding: '10px 14px',
+              borderRadius: '8px',
+              backgroundColor: '#FFFBEB',
+              border: '1px solid #FDE68A',
+              color: '#B45309',
+              fontSize: '12px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+            }}
+          >
+            <AlertCircle size={16} />
+            <span>
+              <strong>تنبيه إجرائي:</strong> زر إعادة الرفع معطل حالياً حتى يتم تأكيد معالجة كافة البنود أعلاه ({pendingCount} بند معلق).
+            </span>
+          </div>
+        )}
+
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '12px' }}>
           <button
-            onClick={() => resubmitToMinistry(schoolGeneralNotes)}
-            disabled={isResubmitting}
+            onClick={handleResubmit}
+            disabled={isResubmitting || !allResolved}
             style={{
               display: 'flex',
               alignItems: 'center',
               gap: '8px',
               padding: '11px 24px',
               borderRadius: '8px',
-              backgroundColor: '#059669',
+              backgroundColor: allResolved ? '#059669' : '#94A3B8',
               color: '#FFFFFF',
               fontSize: '13.5px',
               fontWeight: 800,
               border: 'none',
-              cursor: isResubmitting ? 'not-allowed' : 'pointer',
-              boxShadow: '0 4px 12px rgba(5, 150, 105, 0.25)',
+              cursor: allResolved && !isResubmitting ? 'pointer' : 'not-allowed',
+              boxShadow: allResolved ? '0 4px 12px rgba(5, 150, 105, 0.25)' : 'none',
+              transition: 'all 0.2s ease',
             }}
           >
             <Send size={16} />
-            <span>{isResubmitting ? 'جاري الرفع...' : 'إعادة الرفع النهائي للمشرف الوزاري'}</span>
+            <span>{isResubmitting ? 'جاري الرفع وتوليد الرمز...' : 'إعادة الرفع النهائي للمشرف الوزاري'}</span>
           </button>
         </div>
       </div>

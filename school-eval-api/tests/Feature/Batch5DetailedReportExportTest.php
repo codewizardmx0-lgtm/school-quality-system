@@ -50,7 +50,7 @@ class Batch5DetailedReportExportTest extends TestCase
      */
     public function test_completion_alert_is_null_when_no_open_request_exists_for_evaluation(): void
     {
-        $evaluator = User::where('username', 'quality_farouq')->firstOrFail();
+        $evaluator = User::where('username', 'quality_belqees')->firstOrFail();
 
         $response = $this->actingAs($evaluator, 'sanctum')
             ->getJson('/api/v1/evaluator/dashboard-stats');

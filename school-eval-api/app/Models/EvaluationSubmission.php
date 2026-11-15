@@ -62,6 +62,8 @@ class EvaluationSubmission extends Model
         'attempt_no',
         'submitted_at',
         'status',
+        'tracking_code',
+        'digital_hash',
     ];
 
     /**

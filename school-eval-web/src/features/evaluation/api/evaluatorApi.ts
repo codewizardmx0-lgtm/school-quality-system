@@ -25,6 +25,7 @@ import type {
   PreflightCheckData,
   FinalSubmissionResponse,
   CompletionRequestData,
+  ResubmitCompletionResponse,
   EvidenceInventoryData,
   ActionCatalogItem,
   ImprovementSuggestion,
@@ -35,6 +36,7 @@ import type {
   VersionsArchiveData,
   LinkedIndicatorBrief,
   DiscrepancyAuditResponse,
+  HistoricalTrendData,
 } from './evaluationTypes';
 
 export const evaluatorApi = {
@@ -410,10 +412,11 @@ export const evaluatorApi = {
    * 17. POST /api/v1/completion-requests/{id}/resubmit
    * Resubmit completed items back to ministry supervisor
    */
-  async resubmitCompletionRequest(requestId: number, schoolNotes?: string): Promise<void> {
-    await post(`/completion-requests/${requestId}/resubmit`, {
+  async resubmitCompletionRequest(requestId: number, schoolNotes?: string): Promise<ResubmitCompletionResponse> {
+    const response = await post<ResubmitCompletionResponse>(`/completion-requests/${requestId}/resubmit`, {
       school_notes: schoolNotes,
     });
+    return response.data!;
   },
 
   /**
@@ -505,6 +508,83 @@ export const evaluatorApi = {
     link.click();
     document.body.removeChild(link);
     window.URL.revokeObjectURL(url);
+  },
+
+  /**
+   * 18.e Export Evidences Archive ZIP package (mode: 'latest' or 'all')
+   */
+  async exportEvidenceZip(mode: 'latest' | 'all' = 'latest'): Promise<void> {
+    const response = await apiClient.get('/evaluator/export-evidences-zip', {
+      params: { mode },
+      responseType: 'blob',
+    });
+
+    const blob = new Blob([response as unknown as BlobPart], {
+      type: 'application/zip',
+    });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    const now = new Date();
+    const dateStr = now.toISOString().split('T')[0];
+    const modeName = mode === 'all' ? 'كافة_الإصدارات_التاريخية' : 'الإصدار_الأخير_المعتمد';
+    link.download = `حزمة_وثائق_الشواهد_${modeName}_${dateStr}.zip`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+  },
+
+  /**
+   * 18.e2 Export Evidence Inventory & Compliance Registry Excel (XLSX)
+   */
+  async exportEvidenceInventoryExcel(): Promise<void> {
+    const response = await apiClient.get('/evaluator/export-evidence-inventory-excel', {
+      responseType: 'blob',
+    });
+
+    const blob = new Blob([response as unknown as BlobPart], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    const now = new Date();
+    const dateStr = now.toISOString().split('T')[0];
+    link.download = `سجل_جرد_ومطابقة_الشواهد_المعتمدة_${dateStr}.xlsx`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+  },
+
+  /**
+   * 18.f Export Digital Seal Certificate PDF with QR
+   */
+  async exportSealCertificatePdf(): Promise<void> {
+    const response = await apiClient.get('/evaluator/export-seal-certificate-pdf', {
+      responseType: 'blob',
+    });
+
+    const blob = new Blob([response as unknown as BlobPart], { type: 'application/pdf' });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    const now = new Date();
+    const dateStr = now.toISOString().split('T')[0];
+    link.download = `شهادة_الختم_الرقمي_المعتمد_${dateStr}.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+  },
+
+  /**
+   * 18.g Fetch Historical Performance Trend for active school evaluation
+   */
+  async getHistoricalTrend(): Promise<HistoricalTrendData> {
+    const response = await get<HistoricalTrendData>('/evaluator/trend');
+    return response.data!;
   },
 
   /**

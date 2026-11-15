@@ -20,6 +20,12 @@ use App\Models\PlanReviewNote;
 use App\Models\School;
 use App\Models\SchoolDocument;
 use App\Models\User;
+use App\Models\Report;
+use App\Models\EvaluationSubmission;
+use App\Models\CompletionRequest;
+use App\Models\CompletionRequestItem;
+use App\Models\SupervisorNote;
+use App\Models\InternalReviewNote;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
@@ -349,17 +355,96 @@ class DemoEvaluationSeeder extends Seeder
                 'target_score' => $aDef['target'],
                 'description'  => "مجال تحسين ذو أولوية للعام الدراسي لرفع مستوى الأداء المؤسسي.",
             ]);
+
+            PlanImprovementArea::create([
+                'plan_id' => $aDef['plan']->plan_id,
+                'area_id' => $area->area_id,
+            ]);
         }
 
         // و. تفريغ جدول improvement_actions تماماً لتبدأ الإجراءات نظيفة من الصفر بنسبة 100%
         // (لا توجد أي سجلات تجريبية أو مكررة في جدول improvement_actions)
 
-        // ز. إشعارات حقيقية للمستخدمين متوافقة مع الحالة الفعلية دون تكرار (الملاحظة 2)
+        // ز. إنشاء التقرير المعتمد ومحاولة التسليم مع طلب استكمال مفتوح على المؤشر 6-2-1 (اختبار الدورة الكاملة)
+        $reportFarouq = Report::create([
+            'evaluation_id' => $evalFarouq->evaluation_id,
+            'generated_at'  => now()->subDays(2),
+            'updated_at'    => now()->subDays(2),
+            'status'        => 'Final',
+        ]);
+
+        $trackingCodeFarouq = 'ARQ-2026-SCH' . str_pad((string)$schoolFarouq->school_id, 3, '0', STR_PAD_LEFT) . '-FIN-B4F2';
+        $digitalHashFarouq  = hash('sha256', "{$evalFarouq->evaluation_id}|{$reportFarouq->report_id}|1|{$trackingCodeFarouq}");
+
+        $submissionFarouq = EvaluationSubmission::create([
+            'report_id'            => $reportFarouq->report_id,
+            'submitted_by_user_id' => $principalFarouq->user_id,
+            'attempt_no'           => 1,
+            'submitted_at'         => now()->subDays(2),
+            'updated_at'           => now()->subDays(1),
+            'status'               => 'NeedsCompletion',
+            'tracking_code'        => $trackingCodeFarouq,
+            'digital_hash'         => $digitalHashFarouq,
+        ]);
+
+        $evalFarouq->status = 'NeedsCompletion';
+        $evalFarouq->save();
+
+        $supervisor = User::where('username', 'supervisor_ministry')->first() ?? User::where('user_type', 'supervisor')->first();
+
+        $completionRequest = CompletionRequest::create([
+            'submission_id'             => $submissionFarouq->submission_id,
+            'issued_by_user_id'         => $supervisor?->user_id ?? 1,
+            'completion_deadline'       => now()->addDays(5),
+            'deadline_extensions_count' => 0,
+            'status'                    => 'Open',
+            'created_at'                => now()->subDays(1),
+            'updated_at'                => now()->subDays(1),
+        ]);
+
+        $ind621 = Indicator::where('code', '6-2-1')->first() ?? Indicator::first();
+
+        // ربط البند المعلق بالشاهد السابق مع وسمه بـ draft لحين رفع وثيقة الفرضية المعتمدة
+        $link621 = EvidenceLink::where('evaluation_id', $evalFarouq->evaluation_id)
+            ->where('indicator_id', $ind621->indicator_id)
+            ->first();
+        if ($link621) {
+            $link621->status = 'draft';
+            $link621->save();
+        }
+
+        CompletionRequestItem::create([
+            'request_id'          => $completionRequest->request_id,
+            'indicator_id'        => $ind621->indicator_id,
+            'evidence_link_id'    => $link621?->id,
+            'missing_description' => 'يرجى إرفاق تقرير فرضية الإخلاء المعتمد بختم الدفاع المدني للعام الدراسي الحالي وتحديث سجل وسائل السلامة.',
+            'status'              => 'Pending',
+            'created_at'          => now()->subDays(1),
+            'updated_at'          => now()->subDays(1),
+        ]);
+
+        SupervisorNote::create([
+            'submission_id'  => $submissionFarouq->submission_id,
+            'author_user_id' => $supervisor?->user_id ?? 1,
+            'text'           => 'تمت مراجعة ملف مدرسة الفاروق؛ النتائج ممتازة والمؤشرات مستوفاة باستثناء بند فرضية الإخلاء في مؤشر الأمن والسلامة 6-2-1.',
+            'created_at'     => now()->subDays(1),
+            'updated_at'     => now()->subDays(1),
+        ]);
+
+        // ح. إشعارات حقيقية للمستخدمين متوافقة مع الحالة الفعلية دون تكرار
         Notification::whereIn('recipient_user_id', [$evaluatorFarouq->user_id, $principalFarouq->user_id])
             ->where('related_entity_id', $evalFarouq->evaluation_id)
             ->delete();
 
         $notificationData = [
+            [
+                'user'  => $evaluatorFarouq,
+                'title' => 'طلب استكمال شواهد وملاحظات من المشرف الوزاري',
+                'msg'   => 'أصدر المشرف الوزاري طلب استكمال على المؤشر 6-2-1 (الأمن والسلامة)، المهلة المحددة: 5 أيام.',
+                'type'  => 'completion_requested',
+                'read'  => false,
+                'entity'=> 'completion_request',
+            ],
             [
                 'user'  => $evaluatorFarouq,
                 'title' => 'انطلاق دورة التقييم الذاتي للعام 2026/2027',
@@ -370,35 +455,35 @@ class DemoEvaluationSeeder extends Seeder
             ],
             [
                 'user'  => $evaluatorFarouq,
-                'title' => 'اكتمال رصد جميع المؤشرات الوطنية وتغطية الشواهد (109/109)',
-                'msg'   => 'تم رصد كافة مؤشرات الأداء الـ 109 وربطها بالشواهد الموثقة في المستودع بنجاح؛ يمكنك مراجعة الختم الرقمي وخطة التحسين.',
-                'type'  => 'version_activated',
+                'title' => 'اقتراب موعد إجراء تنفيذي في خطة التحسين المدرسية',
+                'msg'   => 'تنبيه: اقترب موعد تنفيذ إجراء تحسين البيئة التعليمية والمختبرات المدرسية المجدول لهذا الأسبوع.',
+                'type'  => 'action_deadline_approaching',
                 'read'  => false,
-                'entity'=> 'standard_version',
+                'entity'=> 'improvement_action',
             ],
             [
                 'user'  => $evaluatorFarouq,
-                'title' => 'متابعة جدول تنفيذ إجراءات خطة التحسين المدرسي',
-                'msg'   => 'تم رصد 15 مؤشراً من المستويين (0 و 1) وإدراج خطة التحسين بإجراءاتها الخمسة، يرجى متابعة نسب الإنجاز.',
-                'type'  => 'action_due_soon',
+                'title' => 'ملاحظة توجيه داخلية من مدير المدرسة',
+                'msg'   => 'دوّن مدير المدرسة ملاحظة اعتماد داخلي: تم تدقيق شواهد المعيار الخامس والاعتماد مشروط باستكمال الفرضية.',
+                'type'  => 'reviewer_note_added',
                 'read'  => false,
-                'entity'=> 'improvement_action',
+                'entity'=> 'evaluation',
             ],
             [
-                'user'  => $principalFarouq,
-                'title' => 'اكتمال صياغة مسودة خطة التحسين المدرسي',
-                'msg'   => 'أنهى مقيم الجودة إعداد مسودة خطة التحسين ومصفوفة الإجراءات الخمسة، بانتظار مراجعة الإدارة واعتماد الملاحظات.',
-                'type'  => 'plan_ready',
+                'user'  => $evaluatorFarouq,
+                'title' => 'تنبيه أرشفة نسخة شاهد سابقة',
+                'msg'   => 'تم استبدال وحفظ النسخة السابقة من لائحة الانضباط المدرسي في أرشيف الشواهد التاريخية.',
+                'type'  => 'evidence_pruned_warning',
                 'read'  => true,
-                'entity'=> 'improvement_action',
+                'entity'=> 'school_document',
             ],
             [
                 'user'  => $principalFarouq,
-                'title' => 'ملف التقييم الذاتي جاهز للمراجعة الداخلية والاعتماد',
-                'msg'   => 'يمكنك استعراض النتائج الكاملة (109/109) من تبويب المراجعة والاعتماد وتدوين ملاحظات مدير المدرسة.',
-                'type'  => 'report_review',
+                'title' => 'طلب استكمال شواهد وملاحظات من المشرف الوزاري',
+                'msg'   => 'أصدرت الإدارة العامة للاعتماد والجودة طلباً لاستكمال شواهد المؤشر 6-2-1 لمدرسة الفاروق.',
+                'type'  => 'completion_requested',
                 'read'  => false,
-                'entity'=> 'Evaluation',
+                'entity'=> 'completion_request',
             ],
         ];
 
@@ -451,6 +536,23 @@ class DemoEvaluationSeeder extends Seeder
         }
 
         EvaluationResult::where('evaluation_id', $evaluationId)->delete();
+
+        // تنظيف تقارير ومحاولات وطلبات استكمال التقييم
+        $reportIds = Report::where('evaluation_id', $evaluationId)->pluck('report_id');
+        if ($reportIds->isNotEmpty()) {
+            $submissionIds = EvaluationSubmission::whereIn('report_id', $reportIds)->pluck('submission_id');
+            if ($submissionIds->isNotEmpty()) {
+                $reqIds = CompletionRequest::whereIn('submission_id', $submissionIds)->pluck('request_id');
+                if ($reqIds->isNotEmpty()) {
+                    CompletionRequestItem::whereIn('request_id', $reqIds)->delete();
+                    CompletionRequest::whereIn('request_id', $reqIds)->delete();
+                }
+                SupervisorNote::whereIn('submission_id', $submissionIds)->delete();
+                EvaluationSubmission::whereIn('submission_id', $submissionIds)->delete();
+            }
+            InternalReviewNote::whereIn('report_id', $reportIds)->delete();
+            Report::whereIn('report_id', $reportIds)->delete();
+        }
 
         $docIds = SchoolDocument::where('school_id', $schoolId)->pluck('id');
         if ($docIds->isNotEmpty()) {

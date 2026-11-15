@@ -295,6 +295,10 @@ class EvaluatorApiController extends Controller
                 'currentEvaluator' => $user?->full_name ?? 'مقيم المدرسة',
                 'academicYear' => $evaluation->cycle?->academic_year ?? '2026/2027',
                 'cycleName' => $evaluation->cycle?->name ?? 'دورة التقييم الذاتي المعتمدة 2026',
+                'trackingCode' => $submission?->tracking_code,
+                'digitalHash' => $submission?->digital_hash,
+                'submittedAt' => $submission?->submitted_at?->toIso8601String(),
+                'attemptNo' => $submission?->attempt_no ?? 0,
             ],
             'kpis' => [
                 'completionPercentage' => $completionPercentage,
@@ -2452,6 +2456,14 @@ class EvaluatorApiController extends Controller
 
         // 1. اكتمال التقديرات لكافة المؤشرات الوطنية
         $scoresCompleted = ($scoredCount >= $totalIndicators);
+        $unscoredIndicators = Indicator::whereNotIn('indicator_id', function ($q) use ($evaluation) {
+            $q->select('indicator_id')->from('evaluation_results')->where('evaluation_id', $evaluation->evaluation_id)->whereNotNull('score');
+        })->take(15)->get(['indicator_id', 'code', 'name'])->map(fn($ind) => [
+            'indicatorId' => $ind->indicator_id,
+            'code' => $ind->code,
+            'name' => $ind->name,
+        ]);
+
         // 2. الشواهد مربوطة
         $evidenceLinksCount = EvidenceLink::where('evaluation_id', $evaluation->evaluation_id)->count();
         $uniqueDocsCount = EvidenceLink::where('evidence_links.evaluation_id', $evaluation->evaluation_id)
@@ -2481,6 +2493,7 @@ class EvaluatorApiController extends Controller
                     : "متبقي رصد تقديرات " . max(0, $totalIndicators - $scoredCount) . " مؤشراً لإتمام التقييم الشامل.",
                 'passed' => $scoresCompleted,
                 'weight' => 30,
+                'pendingItems' => $unscoredIndicators,
             ],
             [
                 'id' => 'evidence_linked',
@@ -2519,6 +2532,13 @@ class EvaluatorApiController extends Controller
         $yearClean = preg_replace('/[^0-9]/', '', (string)$academicYear) ?: '2026';
         $systemCode = 'ARQ-' . $yearClean . '-SCH' . str_pad((string)$evaluation->school_id, 3, '0', STR_PAD_LEFT) . '-FIN';
 
+        $latestSubmission = EvaluationSubmission::where('report_id', function ($q) use ($evaluation) {
+            $q->select('report_id')->from('reports')->where('evaluation_id', $evaluation->evaluation_id);
+        })->orderByDesc('submission_id')->first();
+
+        $activeTrackingCode = $latestSubmission?->tracking_code ?? $systemCode;
+        $activeDigitalHash = $latestSubmission?->digital_hash ?? hash('sha256', "{$evaluation->evaluation_id}|{$systemCode}");
+
         return ApiResponse::success([
             'canSubmit' => $canSubmit,
             'readinessPercentage' => $totalWeight,
@@ -2526,9 +2546,13 @@ class EvaluatorApiController extends Controller
             'totalCriteriaCount' => count($criteria),
             'checklist' => $criteria,
             'digitalSealInfo' => [
-                'systemCode' => $systemCode,
+                'systemCode' => $activeTrackingCode,
+                'trackingCode' => $activeTrackingCode,
+                'digitalHash' => $activeDigitalHash,
                 'hashAlgorithm' => 'SHA-256 Validated',
                 'submissionNotice' => 'إقرار نهائي: الرفع ينقل ملف التقييم إلى وضع القراءة فقط ولا يمكن التعديل عليه إلا بطلب استكمال رسمي من المشرف.',
+                'isSubmitted' => in_array($evaluation->status, ['Submitted', 'NeedsCompletion', 'Completed']),
+                'submissionStatus' => $latestSubmission?->status ?? 'Draft',
             ],
         ]);
     }
@@ -2581,8 +2605,12 @@ class EvaluatorApiController extends Controller
 
         $attemptNo = (EvaluationSubmission::where('report_id', $report->report_id)->max('attempt_no') ?? 0) + 1;
 
-        $trackingCode = 'ARQ-2026-SCH' . str_pad($evaluation->school_id, 3, '0', STR_PAD_LEFT) . '-FIN';
-        $digitalHash = hash('sha256', $evaluation->evaluation_id . '-' . now()->toIso8601String() . '-' . $trackingCode);
+        $academicYear = $evaluation->cycle?->academic_year ? preg_replace('/[^0-9]/', '', explode('/', $evaluation->cycle->academic_year)[0]) : '2026';
+        $schoolCode = $evaluation->school?->school_code ?? ('SCH' . str_pad((string)$evaluation->school_id, 3, '0', STR_PAD_LEFT));
+        $phase = $attemptNo > 1 ? ('R' . ($attemptNo - 1)) : 'FIN';
+        $crc = strtoupper(substr(hash('crc32b', "{$evaluation->evaluation_id}-{$attemptNo}-{$report->report_id}"), 0, 4));
+        $trackingCode = "ARQ-{$academicYear}-{$schoolCode}-{$phase}-{$crc}";
+        $digitalHash = hash('sha256', "{$evaluation->evaluation_id}|{$report->report_id}|{$attemptNo}|{$trackingCode}|" . now()->toIso8601String());
 
         $submission = EvaluationSubmission::create([
             'report_id' => $report->report_id,
@@ -2590,6 +2618,8 @@ class EvaluatorApiController extends Controller
             'attempt_no' => $attemptNo,
             'submitted_at' => now(),
             'status' => 'Submitted',
+            'tracking_code' => $trackingCode,
+            'digital_hash' => $digitalHash,
         ]);
 
         // قفل حالة التقييم
@@ -2701,20 +2731,82 @@ class EvaluatorApiController extends Controller
     {
         $validator = Validator::make($request->all(), [
             'schoolNotes' => 'nullable|string',
+            'school_notes' => 'nullable|string',
         ]);
 
-        $comp = CompletionRequest::find($id);
-        if ($comp) {
-            $comp->status = 'Resolved';
-            $comp->resolved_at = now();
-            $comp->save();
+        if ($validator->fails()) {
+            return ApiResponse::validationError($validator->errors()->toArray());
+        }
+
+        $comp = CompletionRequest::with(['submission.report', 'items'])->find($id);
+        if (!$comp) {
+            return ApiResponse::notFound('طلب الاستكمال المطلوب غير موجود.');
+        }
+
+        $evaluation = $this->getActiveEvaluation($request);
+        $user = $request->user();
+
+        // التحقق من استيفاء وحل كافة بنود الاستكمال (100% Resolved)
+        $unresolvedCount = CompletionRequestItem::where('request_id', $comp->request_id)
+            ->where('status', '!=', 'Resolved')
+            ->count();
+        if ($unresolvedCount > 0) {
+            return ApiResponse::error("لا يمكن إعادة الرفع؛ يرجى استيفاء كافة البنود المطلوبة أولاً (متبقي {$unresolvedCount} بند معلق).", 422);
+        }
+
+        $comp->status = 'Resolved';
+        $comp->resolved_at = now();
+        $comp->save();
+
+        // استخراج التقرير المرتبط
+        $report = $comp->submission?->report ?? Report::firstOrCreate(
+            ['evaluation_id' => $evaluation->evaluation_id],
+            ['generated_at' => now(), 'status' => 'Final']
+        );
+
+        $attemptNo = (EvaluationSubmission::where('report_id', $report->report_id)->max('attempt_no') ?? 1) + 1;
+        $academicYear = $evaluation->cycle?->academic_year ? preg_replace('/[^0-9]/', '', explode('/', $evaluation->cycle->academic_year)[0]) : '2026';
+        $schoolCode = $evaluation->school?->school_code ?? ('SCH' . str_pad((string)$evaluation->school_id, 3, '0', STR_PAD_LEFT));
+        $phase = 'R' . ($attemptNo - 1);
+        $crc = strtoupper(substr(hash('crc32b', "{$evaluation->evaluation_id}-{$attemptNo}-{$report->report_id}"), 0, 4));
+        $trackingCode = "ARQ-{$academicYear}-{$schoolCode}-{$phase}-{$crc}";
+        $digitalHash = hash('sha256', "{$evaluation->evaluation_id}|{$report->report_id}|{$attemptNo}|{$trackingCode}|" . now()->toIso8601String());
+
+        $newSubmission = EvaluationSubmission::create([
+            'report_id' => $report->report_id,
+            'submitted_by_user_id' => $user?->user_id ?? 1,
+            'attempt_no' => $attemptNo,
+            'submitted_at' => now(),
+            'status' => 'Submitted',
+            'tracking_code' => $trackingCode,
+            'digital_hash' => $digitalHash,
+        ]);
+
+        $evaluation->status = 'Completed';
+        $evaluation->save();
+
+        if ($comp->issued_by_user_id) {
+            Notification::create([
+                'recipient_user_id' => $comp->issued_by_user_id,
+                'title' => 'إعادة رفع ملف التقييم بعد الاستكمال',
+                'message' => "أعادت المدرسة {$evaluation->school?->school_name} رفع ملف التقييم برمز التتبع الوطني {$trackingCode}.",
+                'type' => 'resubmission',
+                'related_entity_type' => 'evaluation',
+                'related_entity_id' => $evaluation->evaluation_id,
+                'is_read' => false,
+                'created_at' => now(),
+            ]);
         }
 
         return ApiResponse::success([
             'requestId' => $id,
             'status' => 'Resolved',
+            'submissionId' => $newSubmission->submission_id,
+            'attemptNo' => $attemptNo,
+            'trackingCode' => $trackingCode,
+            'digitalHash' => $digitalHash,
             'resubmittedAt' => now()->toIso8601String(),
-        ], 'تمت إعادة الرفع النهائي للمشرف الوزاري بنجاح وتم إغلاق طلب الاستكمال');
+        ], 'تمت إعادة الرفع النهائي للمشرف الوزاري بنجاح وتسجيل محاولة التسليم الجديدة');
     }
 
     /**
@@ -2832,6 +2924,169 @@ class EvaluatorApiController extends Controller
         return \Maatwebsite\Excel\Facades\Excel::download(
             new \App\Exports\UnifiedImprovementWorkbookExport($evaluation),
             $fileName
+        );
+    }
+
+    /**
+     * GET /api/v1/evaluator/export-seal-certificate-pdf
+     * تصدير شهادة الختم الرقمي وإشعار التسليم الرسمي بصيغة PDF + QR
+     */
+    public function exportSealCertificatePdf(Request $request)
+    {
+        $user = $request->user();
+        if ($user && !$user->hasPermission('evaluations.view') && !$user->hasPermission('reports.view') && !$user->hasRole('admin') && !$user->hasRole('school_evaluator') && !$user->hasRole('school_principal')) {
+            return ApiResponse::forbidden('ليس لديك صلاحية لتصدير شهادة الختم الرقمي.');
+        }
+
+        $evaluation = $this->getActiveEvaluation($request);
+        if (!$evaluation) {
+            return ApiResponse::notFound('ملف التقييم غير موجود.');
+        }
+
+        $evaluation->loadMissing(['school', 'cycle']);
+        $reportService = app(\App\Services\EvaluationReportService::class);
+        $pdfContent = $reportService->generateSealCertificatePdf($evaluation, $user);
+
+        $schoolCode = $evaluation->school?->school_code ?? 'SCH';
+        $fileName = 'digital_seal_certificate_' . $schoolCode . '_' . date('Y-m-d_H-i') . '.pdf';
+
+        return response($pdfContent, 200, [
+            'Content-Type'        => 'application/pdf',
+            'Content-Disposition' => 'attachment; filename="' . $fileName . '"',
+            'Cache-Control'       => 'private, max-age=0, must-revalidate',
+            'Pragma'              => 'public',
+        ]);
+    }
+
+    /**
+     * GET /api/v1/evaluator/export-evidences-zip
+     * تصدير حزمة ملفات الشواهد والوثائق المعتمدة في أرشيف ZIP منظم
+     */
+    public function exportEvidenceZip(Request $request)
+    {
+        $user = $request->user();
+        if ($user && !$user->hasPermission('evaluations.view') && !$user->hasPermission('reports.view') && !$user->hasRole('admin') && !$user->hasRole('school_evaluator') && !$user->hasRole('school_principal')) {
+            return ApiResponse::forbidden('ليس لديك صلاحية لتصدير حزمة الشواهد.');
+        }
+
+        $evaluation = $this->getActiveEvaluation($request);
+        if (!$evaluation) {
+            return ApiResponse::notFound('ملف التقييم غير موجود.');
+        }
+
+        $evaluation->loadMissing(['school', 'cycle']);
+        $schoolCode = $evaluation->school?->school_code ?? 'SCH';
+        $mode = $request->query('mode', 'latest');
+        $isAllVersions = ($mode === 'all');
+        $modeSuffix = $isAllVersions ? 'all_versions' : 'latest';
+        $zipFileName = 'evidence_dossier_' . $modeSuffix . '_' . $schoolCode . '_' . date('Y-m-d_H-i') . '.zip';
+        $tempDir = storage_path('app/temp');
+        if (!file_exists($tempDir)) {
+            mkdir($tempDir, 0755, true);
+        }
+        $tempZipPath = $tempDir . '/' . $zipFileName;
+
+        $zip = new \ZipArchive();
+        if ($zip->open($tempZipPath, \ZipArchive::CREATE | \ZipArchive::OVERWRITE) !== true) {
+            return ApiResponse::serverError('تعذر إنشاء أرشيف ملفات الشواهد.');
+        }
+
+        $evidenceLinks = \App\Models\EvidenceLink::where('evaluation_id', $evaluation->evaluation_id)
+            ->with(['indicator.subStandard.standard', 'documentVersion.document.versions'])
+            ->get();
+
+        $manifestContent = "فهرس حزمة الشواهد والوثائق المعتمدة لتقويم المدرسة\n";
+        $manifestContent .= "المدرسة: " . ($evaluation->school?->school_name ?? '') . " (" . $schoolCode . ")\n";
+        $manifestContent .= "العام الدراسي: " . ($evaluation->cycle?->academic_year ?? '') . "\n";
+        $manifestContent .= "نوع الحزمة: " . ($isAllVersions ? 'الأرشيف الكامل لكافة الإصدارات والنسخ التاريخية' : 'الإصدار الأخير المعتمد فقط') . "\n";
+        $manifestContent .= "إجمالي روابط الشواهد: " . $evidenceLinks->count() . "\n";
+        $manifestContent .= "تاريخ التصدير: " . date('Y-m-d H:i') . "\n";
+        $manifestContent .= "==================================================\n\n";
+
+        $counter = 0;
+        foreach ($evidenceLinks as $link) {
+            $counter++;
+            $standardCode = $link->indicator?->subStandard?->standard?->code ?? 'STD';
+            $indicatorCode = $link->indicator?->code ?? "IND-{$counter}";
+
+            if ($isAllVersions && $link->documentVersion?->document?->versions?->isNotEmpty()) {
+                foreach ($link->documentVersion->document->versions as $ver) {
+                    $vNo = $ver->version_no ?? 1;
+                    $docTitle = $ver->file_name ?? "evidence_{$indicatorCode}_v{$vNo}.pdf";
+                    $manifestContent .= "{$counter}. [{$standardCode}] المؤشر: {$indicatorCode} | الإصدار: v{$vNo} | اسم المستند: {$docTitle}\n";
+                    $filePath = $ver->file_path;
+                    if ($filePath && \Illuminate\Support\Facades\Storage::disk('local')->exists($filePath)) {
+                        $fileContent = \Illuminate\Support\Facades\Storage::disk('local')->get($filePath);
+                        $zip->addFromString("evidences/{$standardCode}/{$indicatorCode}_v{$vNo}_{$docTitle}", $fileContent);
+                    } else {
+                        $simulatedContent = "وثيقة شاهد معتمدة رقمياً بنظام ارتقاء\nالمؤشر: {$indicatorCode}\nالإصدار: v{$vNo}\nالاسم: {$docTitle}\nتاريخ الاعتماد: " . date('Y-m-d');
+                        $zip->addFromString("evidences/{$standardCode}/{$indicatorCode}_v{$vNo}_{$docTitle}.txt", $simulatedContent);
+                    }
+                }
+            } else {
+                $docTitle = $link->documentVersion?->file_name ?? "evidence_{$indicatorCode}.pdf";
+                $manifestContent .= "{$counter}. [{$standardCode}] المؤشر: {$indicatorCode} | اسم المستند: {$docTitle}\n";
+
+                $filePath = $link->documentVersion?->file_path;
+                if ($filePath && \Illuminate\Support\Facades\Storage::disk('local')->exists($filePath)) {
+                    $fileContent = \Illuminate\Support\Facades\Storage::disk('local')->get($filePath);
+                    $zip->addFromString("evidences/{$standardCode}/{$indicatorCode}_{$docTitle}", $fileContent);
+                } else {
+                    $simulatedContent = "وثيقة شاهد معتمدة رقمياً بنظام ارتقاء\nالمؤشر: {$indicatorCode}\nالاسم: {$docTitle}\nتاريخ الاعتماد: " . date('Y-m-d');
+                    $zip->addFromString("evidences/{$standardCode}/{$indicatorCode}_{$docTitle}.txt", $simulatedContent);
+                }
+            }
+        }
+
+        $zip->addFromString("MANIFEST.txt", $manifestContent);
+        $zip->close();
+
+        return response()->download($tempZipPath, $zipFileName)->deleteFileAfterSend(true);
+    }
+
+    /**
+     * GET /api/v1/evaluator/export-evidence-inventory-excel
+     * تصدير سجل جرد ومطابقة الشواهد المعتمدة بتنسيق Excel (XLSX)
+     */
+    public function exportEvidenceInventoryExcel(Request $request)
+    {
+        $user = $request->user();
+        if ($user && !$user->hasPermission('evaluations.view') && !$user->hasPermission('reports.view') && !$user->hasRole('admin') && !$user->hasRole('school_evaluator') && !$user->hasRole('school_principal')) {
+            return ApiResponse::forbidden('ليس لديك صلاحية لتصدير سجل الشواهد.');
+        }
+
+        $evaluation = $this->getActiveEvaluation($request);
+        if (!$evaluation) {
+            return ApiResponse::notFound('ملف التقييم غير موجود.');
+        }
+
+        $evaluation->loadMissing(['school', 'cycle']);
+        $schoolCode = $evaluation->school?->school_code ?? 'SCH';
+        $fileName = 'evidence_inventory_' . $schoolCode . '_' . date('Y-m-d_H-i') . '.xlsx';
+
+        return \Maatwebsite\Excel\Facades\Excel::download(
+            new \App\Exports\EvidenceInventoryExport($evaluation, $user),
+            $fileName
+        );
+    }
+
+    /**
+     * GET /api/v1/evaluator/trend
+     * جلب مسار التطور والمقارنة التاريخية مع الدورة السابقة للتقييم النشط للمدرسة
+     */
+    public function getHistoricalTrend(Request $request): JsonResponse
+    {
+        $evaluation = $this->getActiveEvaluation($request);
+        if (!$evaluation) {
+            return ApiResponse::notFound('ملف التقييم غير موجود.');
+        }
+
+        $trendService = app(\App\Services\EvaluationTrendService::class);
+        $trendData = $trendService->calculateTrend($evaluation);
+
+        return ApiResponse::success(
+            data: $trendData,
+            message: 'تم استخراج بيانات مسار التطور مقارنة بالدورة السابقة بنجاح.'
         );
     }
 
