@@ -79,7 +79,9 @@ return new class extends Migration
         });
 
         // قيد فحص موثق: تاريخ الإرسال يكون NULL في Draft وغير NULL للحالات الأخرى
-        DB::statement("ALTER TABLE evaluation_submissions ADD CONSTRAINT chk_submission_submitted_at CHECK ((status = 'Draft' AND submitted_at IS NULL) OR (status <> 'Draft' AND submitted_at IS NOT NULL))");
+        if (DB::getDriverName() !== 'sqlite') {
+            DB::statement("ALTER TABLE evaluation_submissions ADD CONSTRAINT chk_submission_submitted_at CHECK ((status = 'Draft' AND submitted_at IS NULL) OR (status <> 'Draft' AND submitted_at IS NOT NULL))");
+        }
 
         // --------------------------------------------------------------------------------------
         // جدول internal_review_notes: ملاحظات المراجعة الداخلية لمدير المدرسة على التقرير
@@ -136,7 +138,9 @@ return new class extends Migration
         Schema::dropIfExists('supervisor_notes');
         Schema::dropIfExists('plan_review_notes');
         Schema::dropIfExists('internal_review_notes');
-        DB::statement('ALTER TABLE evaluation_submissions DROP CHECK chk_submission_submitted_at');
+        if (DB::getDriverName() !== 'sqlite') {
+            DB::statement('ALTER TABLE evaluation_submissions DROP CHECK chk_submission_submitted_at');
+        }
         Schema::dropIfExists('evaluation_submissions');
         Schema::dropIfExists('reports');
     }

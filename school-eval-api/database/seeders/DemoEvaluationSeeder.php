@@ -2,38 +2,71 @@
 
 namespace Database\Seeders;
 
+use App\Models\DocumentVersion;
 use App\Models\Evaluation;
 use App\Models\EvaluationCycle;
 use App\Models\EvaluationResult;
-use App\Models\Evidence;
-use App\Models\EvidenceVersion;
+use App\Models\EvidenceLink;
+use App\Models\ImprovementAction;
+use App\Models\ImprovementArea;
 use App\Models\ImprovementPlan;
 use App\Models\Indicator;
 use App\Models\IndicatorScoreDescriptor;
+use App\Models\Note;
+use App\Models\EvaluationResultVerificationMethod;
+use App\Models\Notification;
+use App\Models\PlanImprovementArea;
+use App\Models\PlanReviewNote;
 use App\Models\School;
+use App\Models\SchoolDocument;
 use App\Models\User;
+use App\Models\Report;
+use App\Models\EvaluationSubmission;
+use App\Models\CompletionRequest;
+use App\Models\CompletionRequestItem;
+use App\Models\SupervisorNote;
+use App\Models\InternalReviewNote;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Storage;
 
 /**
- * Seeder اختباري لإنشاء بيانات تقييم حية ومميزة لكل من مدرسة بلقيس ومدرسة الفاروق
- * للتحقق من العزل المؤسسي (Tenant Isolation NFR-SEC-03) والفصل التام بين بيانات المدرستين.
+ * Seeder اختباري لتهيئة بيانات التقييم الحي لمدرسة الفاروق (مكتملة وقابلة للتعديل)
+ * ومدرسة بلقيس (فارغة لاختبار Empty States) وفق متطلبات الجودة والأمان الصارم لكلمات المرور.
  */
 class DemoEvaluationSeeder extends Seeder
 {
     public function run(): void
     {
-        $cycle = EvaluationCycle::firstOrFail();
-        $schoolBelqees = School::where('identification_data', 'SCH-SANAA-2026-001')->firstOrFail();
-        $schoolFarouq  = School::where('identification_data', 'SCH-TAIZ-2026-002')->firstOrFail();
+        $cycle = EvaluationCycle::where('status', 'Active')->first() ?? EvaluationCycle::firstOrFail();
+
+        $schoolBelqees = School::where('identification_data', 'SCH-AMANA-2026-001')
+            ->orWhere('school_name', 'like', '%بلقيس%')
+            ->firstOrFail();
+
+        $schoolFarouq = School::where('identification_data', 'SCH-TAIZ-2026-001')
+            ->orWhere('school_name', 'like', '%الفاروق%')
+            ->firstOrFail();
 
         $evaluatorBelqees = User::where('username', 'quality_belqees')->firstOrFail();
-        $evaluatorFarouq  = User::where('username', 'quality_farouq')->firstOrFail();
-
         $principalBelqees = User::where('username', 'principal_belqees')->firstOrFail();
+        $evaluatorFarouq  = User::where('username', 'quality_farouq')->firstOrFail();
         $principalFarouq  = User::where('username', 'principal_farouq')->firstOrFail();
 
-        // 1. إنشاء عملية تقييم لمدرسة بلقيس
-        $evalBelqees = Evaluation::updateOrCreate(
+        // تحديث كلمات مرور حسابات الاختبار برمز بيئة آمن مخصص للتطوير دون أي بيانات حساسة
+        $devSafePassword = env('SEED_DEFAULT_PASSWORD', 'TestingEnv_Seed_Password_2026_Strict!');
+        $safeHash = Hash::make($devSafePassword);
+
+        foreach ([$evaluatorBelqees, $principalBelqees, $evaluatorFarouq, $principalFarouq] as $u) {
+            $u->password_hash = $safeHash;
+            $u->status = 'Active';
+            $u->save();
+        }
+
+        // =========================================================================
+        // 1. مدرسة بلقيس الثانوية للبنات — أمانة العاصمة (الحالة الفارغة النظيفة)
+        // =========================================================================
+        $evalBelqees = Evaluation::firstOrCreate(
             [
                 'cycle_id'  => $cycle->cycle_id,
                 'school_id' => $schoolBelqees->school_id,
@@ -44,7 +77,12 @@ class DemoEvaluationSeeder extends Seeder
             ]
         );
 
-        // 2. إنشاء عملية تقييم لمدرسة الفاروق
+        // تصفير أي شواهد أو نتائج أو خطط لمدرسة بلقيس لضمان Empty State نظيف 100%
+        $this->cleanSchoolEvaluationData((int) $schoolBelqees->school_id, (int) $evalBelqees->evaluation_id);
+
+        // =========================================================================
+        // 2. مدرسة الفاروق الأساسية للبنين — تعز (بيانات كاملة وجاهزة للاختبار)
+        // =========================================================================
         $evalFarouq = Evaluation::updateOrCreate(
             [
                 'cycle_id'  => $cycle->cycle_id,
@@ -56,134 +94,614 @@ class DemoEvaluationSeeder extends Seeder
             ]
         );
 
-        // جلب أول 3 مؤشرات
-        $indicators = Indicator::take(3)->get();
-        if ($indicators->count() < 3) return;
+        // تنظيف قديم لمدرسة الفاروق لإعادة البناء المنضبط وفق ترتيب المفاتيح الأجنبية
+        $this->cleanSchoolEvaluationData((int) $schoolFarouq->school_id, (int) $evalFarouq->evaluation_id);
 
-        // نتائج مدرسة بلقيس (متميزة بدرجات 3 و 2)
-        foreach ($indicators as $idx => $ind) {
-            $score = ($idx === 0) ? 3 : 2;
+        // أ. رصد كافة المؤشرات الـ 109 بدرجات متنوعة (62 بدرجة 3، 32 بدرجة 2، 10 بدرجة 1، 5 بدرجة 0)
+        $allIndicators = Indicator::orderBy('indicator_id')->get();
+
+        $lowScoreResults = [];
+        $ratedResults = [];
+
+        foreach ($allIndicators as $idx => $ind) {
+            // توزيع واقعي ومدروس للمستويات الأربعة عبر كافة المجالات السبعة
+            if ($idx % 22 === 0) {
+                $score = 0; // 5 مؤشرات غير مفعلة / فجوة حرجة
+            } elseif ($idx % 10 === 0) {
+                $score = 1; // 10 مؤشرات بمستوى محدود
+            } elseif ($idx % 3 === 0) {
+                $score = 2; // 32 مؤشراً بمستوى كافٍ
+            } else {
+                $score = 3; // 62 مؤشراً بمستوى متقدم
+            }
+
             $descriptor = IndicatorScoreDescriptor::where('indicator_id', $ind->indicator_id)
                 ->where('score_level_id', $score + 1)
-                ->first();
+                ->first()
+                ?? IndicatorScoreDescriptor::where('indicator_id', $ind->indicator_id)->first()
+                ?? IndicatorScoreDescriptor::first();
 
-            $res = EvaluationResult::updateOrCreate(
-                [
-                    'evaluation_id' => $evalBelqees->evaluation_id,
-                    'indicator_id'  => $ind->indicator_id,
-                ],
-                [
-                    'score_descriptor_id' => $descriptor?->descriptor_id ?? 1,
-                    'standard_version_id' => $cycle->version_id,
-                    'evaluator_user_id'   => $evaluatorBelqees->user_id,
-                    'score'               => $score,
-                    'textual_result'      => "رصد ذاتي خاص بمدرسة بلقيس النموذجية للمؤشر ({$ind->code}): الأداء متميز وموثق بسجلات الجودة المدرسية لعام 2026.",
-                    'completion_status'   => 'Completed',
-                ]
-            );
+            $justification = match ($score) {
+                3 => "تم استيفاء متطلبات المؤشر ({$ind->code}) بالكامل وتوثيقها بملفات الجودة والمحاضر الرسمية لعام 2026.",
+                2 => "تحقق جيد للمؤشر ({$ind->code}) مع وجود فرص للتحسين في جانب المتابعة الدورية وتفعيل السجلات.",
+                1 => "تحقق جزئي للمؤشر ({$ind->code}) وتوجد فجوات في التجهيزات والمستلزمات تتطلب خطة تدخل عاجلة.",
+                0 => "غير متوفر حالياً للمؤشر ({$ind->code})؛ يتطلب مبادرة تأسيسية وتوفير متطلبات البنية واللائحة المنظمة.",
+            };
 
-            // شاهد إثبات لمدرسة بلقيس
-            $ev = Evidence::updateOrCreate(
-                [
-                    'result_id'    => $res->result_id,
-                    'indicator_id' => $ind->indicator_id,
-                ],
-                [
-                    'title'         => "ملف شواهد مدرسة بلقيس — {$ind->code}",
-                    'description'   => 'سجلات الحضور وتوثيق خطط التدريس وجداول الفعاليات المدرسية المعتمدة بختم الإدارة.',
-                    'justification' => 'تم استيفاء كافة متطلبات المعيار وفق الدليل الإجرائي الوطني.',
-                ]
-            );
+            $res = EvaluationResult::create([
+                'evaluation_id'       => $evalFarouq->evaluation_id,
+                'indicator_id'        => $ind->indicator_id,
+                'score_descriptor_id' => $descriptor->descriptor_id,
+                'standard_version_id' => $cycle->version_id,
+                'evaluator_user_id'   => $evaluatorFarouq->user_id,
+                'score'               => $score,
+                'textual_result'      => $justification,
+                'completion_status'   => 'Completed',
+            ]);
 
-            EvidenceVersion::updateOrCreate(
-                [
-                    'evidence_id' => $ev->evidence_id,
-                    'version_no'  => 1,
-                ],
-                [
-                    'current' => true,
-                ]
-            );
+            $ratedResults[] = ['result' => $res, 'indicator' => $ind, 'score' => $score];
+            if ($score <= 1) {
+                $lowScoreResults[] = ['result' => $res, 'indicator' => $ind];
+            }
         }
 
-        // خطة تحسين لمدرسة بلقيس
-        ImprovementPlan::updateOrCreate(
-            [
-                'cycle_id'  => $cycle->cycle_id,
-                'school_id' => $schoolBelqees->school_id,
-            ],
-            [
-                'created_by_user_id'   => $evaluatorBelqees->user_id,
-                'title'                => 'الخطة التطويرية الشاملة لمدرسة بلقيس النموذجية 2026',
-                'start_date'           => '2026-02-01',
-                'end_date'             => '2026-06-15',
-                'status'               => 'Draft',
-                'progress_description' => 'تم استكمال تحديد الأولويات بالتعاون مع فريق التطوير المدرسي بمدرسة بلقيس.',
-            ]
-        );
+        // ب. إنشاء 45 وثيقة مدرسية واقعية تغطي كافة المعايير والمتطلبات الوطنية الـ 278 (ارتباط ثنائي وثلاثي مدروس)
+        $samplePdfContent = "%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n3 0 obj<</Type/Page/MediaBox[0 0 612 792]/Parent 2 0 R/Resources<<>>>>endobj\nxref\n0 4\n0000000000 65535 f\n0000000010 00000 n\n0000000053 00000 n\n0000000102 00000 n\ntrailer<</Size 4/Root 1 0 R>>\nstartxref\n178\n%%EOF\n";
 
-        // -------------------------------------------------------------
-        // نتائج مدرسة الفاروق (بدرجات مختلفة 1 و 2)
-        // -------------------------------------------------------------
-        foreach ($indicators as $idx => $ind) {
-            $score = ($idx === 0) ? 1 : 2;
-            $descriptor = IndicatorScoreDescriptor::where('indicator_id', $ind->indicator_id)
-                ->where('score_level_id', $score + 1)
-                ->first();
+        // تعريف الوثائق المدرسية الـ 45 الموزعة على المعايير السبعة
+        $documentsCatalog = [
+            // المعيار 1: الإدارة المدرسية (24 مؤشراً - 10 وثائق: 4 ثلاثية و 6 ثنائية)
+            ['title' => 'الخطة الاستراتيجية والتطويرية الشاملة لمدرسة الفاروق (2024-2027)', 'type' => 'plan', 'size' => 3],
+            ['title' => 'الخطة التشغيلية السنوية والبرنامج التنفيذي لمدرسة الفاروق (2026/2027)', 'type' => 'plan', 'size' => 3],
+            ['title' => 'الهيكل التنظيمي والوصف الوظيفي للعاملين بالمدرسة', 'type' => 'policy', 'size' => 3],
+            ['title' => 'سجل اجتماعات مجلس إدارة المدرسة والمجالس الإدارية', 'type' => 'minutes', 'size' => 3],
+            ['title' => 'اللائحة التنظيمية المدرسية وسياسات العمل الإداري', 'type' => 'policy', 'size' => 2],
+            ['title' => 'السجل المالي ومستندات المصروفات والإيرادات والميزانية المدرسية', 'type' => 'record', 'size' => 2],
+            ['title' => 'سجل استلام وتوزيع العهد والكتب المدرسية والمستلزمات', 'type' => 'record', 'size' => 2],
+            ['title' => 'التقرير السنوي للتقييم الذاتي وإدارة الجودة المدرسية', 'type' => 'report', 'size' => 2],
+            ['title' => 'سجل المراسلات الإدارية والتعاميم الوزارية الصادرة والواردة', 'type' => 'record', 'size' => 2],
+            ['title' => 'ملف الإشراف والمتابعة الإدارية وسجل الأرشفة والتوثيق الإلكتروني', 'type' => 'record', 'size' => 2],
 
-            $res = EvaluationResult::updateOrCreate(
-                [
-                    'evaluation_id' => $evalFarouq->evaluation_id,
-                    'indicator_id'  => $ind->indicator_id,
-                ],
-                [
-                    'score_descriptor_id' => $descriptor?->descriptor_id ?? 1,
-                    'standard_version_id' => $cycle->version_id,
-                    'evaluator_user_id'   => $evaluatorFarouq->user_id,
-                    'score'               => $score,
-                    'textual_result'      => "تقييم أولي خاص بمدرسة الفاروق الأساسية للمؤشر ({$ind->code}): تحقق جزئي وتوجد حاجة لتعزيز الوسائل التعليمية والمعامل.",
-                    'completion_status'   => 'Completed',
-                ]
-            );
+            // المعيار 2: المعلمون والكوادر الإدارية والخدمية (18 مؤشراً - 7 وثائق: 4 ثلاثية و 3 ثنائية)
+            ['title' => 'سجل حصر الكادر التعليمي والإداري وبيانات المؤهلات والتخصصات', 'type' => 'record', 'size' => 3],
+            ['title' => 'سجل توزيع الجدول المدرسي وأنصبة الحصص للمعلمين', 'type' => 'record', 'size' => 3],
+            ['title' => 'خطة وسجل التنمية المهنية وورش التدريب الداخلي للمعلمين', 'type' => 'plan', 'size' => 3],
+            ['title' => 'سجل الزيارات الإشرافية والتوجيه التربوي والتقويم الصفي', 'type' => 'record', 'size' => 3],
+            ['title' => 'سجل تقييم الأداء الوظيفي السنوي للمعلمين والموظفين', 'type' => 'report', 'size' => 2],
+            ['title' => 'ملف الحوافز والمكافآت ولائحة التكريم والتحفيز المدرسي', 'type' => 'policy', 'size' => 2],
+            ['title' => 'سجل دوام وحضور وغياب الكادر التعليمي والإداري', 'type' => 'record', 'size' => 2],
 
-            // شاهد إثبات لمدرسة الفاروق
-            $ev = Evidence::updateOrCreate(
-                [
-                    'result_id'    => $res->result_id,
-                    'indicator_id' => $ind->indicator_id,
-                ],
-                [
-                    'title'         => "وثائق شواهد مدرسة الفاروق — {$ind->code}",
-                    'description'   => 'محاضر اجتماعات المجالس المدرسية ولجان الجودة بمدرسة الفاروق بتعز.',
-                    'justification' => 'شواهد أولية جاري استكمالها قبل الموعد النهائي.',
-                ]
-            );
+            // المعيار 3: المتعلمون (13 مؤشراً - 5 وثائق: 3 ثلاثية و 2 ثنائية)
+            ['title' => 'سجل قيد وقبول الطلاب وملفات الإحصاء المدرسي السنوي', 'type' => 'record', 'size' => 3],
+            ['title' => 'لائحة الانضباط المدرسي وقواعد السلوك والمواظبة للطلاب', 'type' => 'policy', 'size' => 3],
+            ['title' => 'سجل متابعة الحالات الخاصة والإرشاد الطلابي والاجتماعي', 'type' => 'record', 'size' => 3],
+            ['title' => 'خطة وبرامج رعاية الموهوبين والمتفوقين والطلاب المتعثرين', 'type' => 'plan', 'size' => 2],
+            ['title' => 'سجل الأنشطة الطلابية والاتحاد الطلابي والمبادرات المدرسية', 'type' => 'record', 'size' => 2],
 
-            EvidenceVersion::updateOrCreate(
-                [
-                    'evidence_id' => $ev->evidence_id,
-                    'version_no'  => 1,
-                ],
-                [
-                    'current' => true,
-                ]
-            );
+            // المعيار 4: التعليم والتعلم (21 مؤشراً - 9 وثائق: 3 ثلاثية و 6 ثنائية)
+            ['title' => 'الخطة الفصلية وسجلات تحضير الدروس وتوزيع المناهج الدراسية', 'type' => 'plan', 'size' => 3],
+            ['title' => 'سجل استخدام المعامل والمختبرات العلمية والتجارب العملية', 'type' => 'record', 'size' => 3],
+            ['title' => 'خطة وسجل تفعيل مصادر التعلم والمكتبة المدرسية', 'type' => 'plan', 'size' => 3],
+            ['title' => 'سجل استخدام الوسائل التعليمية والتقنيات الرقمية في التدريس', 'type' => 'record', 'size' => 2],
+            ['title' => 'بنك الأسئلة ونماذج الاختبارات التشخيصية والدورية والنهائية', 'type' => 'record', 'size' => 2],
+            ['title' => 'سجل رصد درجات الطلاب وتقارير التقويم المستمر والنتائج الشهرية', 'type' => 'record', 'size' => 2],
+            ['title' => 'سجل تحليل نتائج الاختبارات واستخراج نسب التحصيل الدراسي', 'type' => 'report', 'size' => 2],
+            ['title' => 'خطة برامج التقوية والخطط العلاجية لرفع التحصيل التعليمي', 'type' => 'plan', 'size' => 2],
+            ['title' => 'سجل المسابقات العلمية والمنهجية والأنشطة الصفية المعززة للتعلم', 'type' => 'record', 'size' => 2],
+
+            // المعيار 5: البيئة المدرسية (21 مؤشراً - 9 وثائق: 3 ثلاثية و 6 ثنائية)
+            ['title' => 'خطة الأمن والسلامة المدرسية ودليل الإخلاء في حالات الطوارئ', 'type' => 'plan', 'size' => 3],
+            ['title' => 'تقارير الصيانة الدورية للمبنى والمرافق المدرسية', 'type' => 'report', 'size' => 3],
+            ['title' => 'سجل فحص وتجهيز طفايات الحريق وحقائب الإسعافات الأولية', 'type' => 'record', 'size' => 3],
+            ['title' => 'سجل النظافة العامة والاشتراطات الصحية لمرافق المدرسة والمقصف', 'type' => 'record', 'size' => 2],
+            ['title' => 'سجل كفاءة غرف التدريس والإضاءة والتهوية والمقاعد الدراسية', 'type' => 'record', 'size' => 2],
+            ['title' => 'سجل صيانة الشبكة الكهربائية وشبكة المياه والصرف الصحي', 'type' => 'record', 'size' => 2],
+            ['title' => 'ملف تجهيزات الملاعب والساحات الرياضية والأنشطة الخارجية', 'type' => 'record', 'size' => 2],
+            ['title' => 'دليل الاستخدام الآمن للأجهزة والمعدات في المعامل المدرسية', 'type' => 'policy', 'size' => 2],
+            ['title' => 'سجل اللوحات الإرشادية وسلامة المداخل ومخارج الطوارئ', 'type' => 'board', 'size' => 2],
+
+            // المعيار 6: الشراكة المجتمعية (6 مؤشرات - وثيقتان ثلاثيتان)
+            ['title' => 'لائحة ومحاضر اجتماعات مجلس الآباء والمعلمين والشراكة المجتمعية', 'type' => 'minutes', 'size' => 3],
+            ['title' => 'سجل برامج التوعية المجتمعية والمبادرات المشتركة مع أولياء الأمور', 'type' => 'record', 'size' => 3],
+
+            // المعيار 7: ضمان الجودة والتحسين المستمر (6 مؤشرات - 3 وثائق ثنائية)
+            ['title' => 'ميثاق الجودة وسياسة التحسين المستمر والتقويم الذاتي لمدرسة الفاروق', 'type' => 'policy', 'size' => 2],
+            ['title' => 'تقرير مراجعة الأداء المؤسسي ومؤشرات قياس الجودة المدرسية', 'type' => 'report', 'size' => 2],
+            ['title' => 'خطة التحسين المدرسي الشاملة ومصفوفة المتابعة الدورية', 'type' => 'plan', 'size' => 2],
+        ];
+
+        // خريطة نتائج التقييم للمؤشرات
+        $resultMap = [];
+        foreach ($ratedResults as $item) {
+            $resultMap[$item['indicator']->indicator_id] = $item['result']->result_id;
         }
 
-        // خطة تحسين لمدرسة الفاروق
-        ImprovementPlan::updateOrCreate(
+        // تقسيم الـ 109 مؤشراً على الـ 45 وثيقة بدقة تامة
+        $indicatorOffset = 0;
+        foreach ($documentsCatalog as $docIdx => $catalogItem) {
+            $chunkSize = $catalogItem['size'];
+            $chunkIndicators = $allIndicators->slice($indicatorOffset, $chunkSize)->values();
+            $indicatorOffset += $chunkSize;
+
+            $docNumber = $docIdx + 1;
+            $doc = SchoolDocument::create([
+                'school_id'          => $schoolFarouq->school_id,
+                'title'              => $catalogItem['title'],
+                'document_type'      => $catalogItem['type'],
+                'description'        => "شاهد توثيقي رسمي معتمد يغطي متطلبات مؤشرات الجودة الوطنية لمدرسة الفاروق الأساسية للبنين لعام 2026.",
+                'created_by_user_id' => $evaluatorFarouq->user_id,
+            ]);
+
+            // لأول 3 مستندات: إنشاء نسخة أرشيفية قديمة (v1) لاختبار تبويب الإصدارات والنسخ القديمة وسجل التاريخ
+            if ($docNumber <= 3) {
+                $oldFileName = "farouq_doc_{$doc->id}_v1.pdf";
+                DocumentVersion::create([
+                    'school_document_id' => $doc->id,
+                    'version_no'         => 1,
+                    'school_id'          => $schoolFarouq->school_id,
+                    'is_current'         => false,
+                    'file_name'          => $oldFileName,
+                    'storage_uri'        => "documents/{$schoolFarouq->school_id}/{$oldFileName}",
+                    'file_size'          => 1024 * 1024 * 2, // 2MB
+                    'mime_type'          => 'application/pdf',
+                    'notes'              => 'المسودة الأولية قبل مراجعة وإقرار مجلس إدارة المدرسة (نسخة سابقة)',
+                ]);
+                Storage::disk('local')->put("documents/{$schoolFarouq->school_id}/{$oldFileName}", $samplePdfContent);
+
+                $currentVersionNo = 2;
+            } else {
+                $currentVersionNo = 1;
+            }
+
+            $curFileName = "farouq_doc_{$doc->id}_v{$currentVersionNo}.pdf";
+            $fileSize = 1024 * 768 + (($docNumber * 57) % 3500) * 1024;
+
+            $ver = DocumentVersion::create([
+                'school_document_id' => $doc->id,
+                'version_no'         => $currentVersionNo,
+                'school_id'          => $schoolFarouq->school_id,
+                'is_current'         => true,
+                'file_name'          => $curFileName,
+                'storage_uri'        => "documents/{$schoolFarouq->school_id}/{$curFileName}",
+                'file_size'          => $fileSize,
+                'mime_type'          => 'application/pdf',
+                'notes'              => 'الإصدار المعتمد والنهائي للشاهد التوثيقي لعام 2026/2027',
+            ]);
+
+            // تخزين الملف الفيزيائي لأول 3 مستندات فقط لتقليل استهلاك القرص وضمان الأداء الخفيف
+            if ($docNumber <= 3) {
+                Storage::disk('local')->put("documents/{$schoolFarouq->school_id}/{$curFileName}", $samplePdfContent);
+            }
+
+            // ربط الشاهد بكافة المؤشرات التابعة لهذه الوثيقة مع تغطية 100% لكافة متطلباتها الإلزامية
+            foreach ($chunkIndicators as $ind) {
+                $mandatoryReqIds = \App\Models\IndicatorEvidenceRequirement::where('indicator_id', $ind->indicator_id)
+                    ->where('required', true)
+                    ->pluck('requirement_id')
+                    ->map(fn($id) => (int)$id)
+                    ->all();
+
+                EvidenceLink::create([
+                    'evaluation_id'        => $evalFarouq->evaluation_id,
+                    'indicator_id'         => $ind->indicator_id,
+                    'document_version_id'  => $ver->id,
+                    'school_id'            => $schoolFarouq->school_id,
+                    'evaluation_result_id' => $resultMap[$ind->indicator_id] ?? null,
+                    'justification'        => "شاهد معتمد وموثق يغطي كافة متطلبات المؤشر ({$ind->code}: {$ind->name}) ضمن وثيقة [{$catalogItem['title']}].",
+                    'covered_requirements' => $mandatoryReqIds,
+                    'status'               => 'completed',
+                ]);
+            }
+        }
+
+        // د. الخطط المدرسية المعتمدة الثلاث للعام 2026/2027 (خطة نشطة معتمدة واحدة لكل مسار)
+        $planQuality = ImprovementPlan::create([
+            'school_id'            => $schoolFarouq->school_id,
+            'cycle_id'             => $cycle->cycle_id,
+            'title'                => 'خطة تحسين الجودة المدرسية الشاملة لمدرسة الفاروق 2026/2027',
+            'plan_type'            => ImprovementPlan::TYPE_QUALITY_IMPROVEMENT,
+            'version_number'       => 1,
+            'version_tag'          => 'خطة أساسية معتمدة',
+            'start_date'           => now()->startOfMonth()->toDateString(),
+            'end_date'             => now()->addMonths(6)->endOfMonth()->toDateString(),
+            'status'               => 'Active',
+            'progress_description' => 'خطة تحسين الجودة المدرسية الشاملة معتمدة وجاهزة لاستقبال الإجراءات التنفيذية.',
+            'created_by_user_id'   => $evaluatorFarouq->user_id,
+        ]);
+
+        $planStaff = ImprovementPlan::create([
+            'school_id'            => $schoolFarouq->school_id,
+            'cycle_id'             => $cycle->cycle_id,
+            'title'                => 'خطة التطوير المهني والتربوي للكوادر لمدرسة الفاروق 2026/2027',
+            'plan_type'            => ImprovementPlan::TYPE_STAFF_DEVELOPMENT,
+            'version_number'       => 1,
+            'version_tag'          => 'خطة أساسية معتمدة',
+            'start_date'           => now()->startOfMonth()->toDateString(),
+            'end_date'             => now()->addMonths(6)->endOfMonth()->toDateString(),
+            'status'               => 'Active',
+            'progress_description' => 'خطة التطوير المهني والتربوي للكوادر معتمدة وجاهزة لبرامج التدريب والتأهيل.',
+            'created_by_user_id'   => $evaluatorFarouq->user_id,
+        ]);
+
+        $planOperational = ImprovementPlan::create([
+            'school_id'            => $schoolFarouq->school_id,
+            'cycle_id'             => $cycle->cycle_id,
+            'title'                => 'الخطة التشغيلية السنوية لمدرسة الفاروق 2026/2027',
+            'plan_type'            => ImprovementPlan::TYPE_ANNUAL_OPERATIONAL,
+            'version_number'       => 1,
+            'version_tag'          => 'خطة أساسية معتمدة',
+            'start_date'           => now()->startOfMonth()->toDateString(),
+            'end_date'             => now()->addMonths(6)->endOfMonth()->toDateString(),
+            'status'               => 'Active',
+            'progress_description' => 'الخطة التشغيلية السنوية لإدارة التجهيزات والمرافق والعمليات المدرسية.',
+            'created_by_user_id'   => $evaluatorFarouq->user_id,
+        ]);
+
+        // هـ. مجالات التحسين المنبثقة عن المؤشرات المتدنية وربطها بالخطط
+        // توزيع دقيق: إجراء واحد واقعي لكل مؤشر ومجال دون تكرار أي مؤشر
+        $areaDefs = [
+            ['name' => 'تطوير معمل الحاسوب وتجهيزات التقنية التعليمية', 'priority' => 'High', 'target' => 3, 'plan' => $planQuality],
+            ['name' => 'تعزيز منظومة الأمن والسلامة وتدريب فرق الطوارئ', 'priority' => 'High', 'target' => 3, 'plan' => $planOperational],
+            ['name' => 'تأمين حزم البرمجيات التعليمية وتفعيل منصة التدريب الرقمي', 'priority' => 'Medium', 'target' => 3, 'plan' => $planQuality],
+            ['name' => 'تفعيل لجان الشراكة المجتمعية ومجلس الآباء والمعلمين', 'priority' => 'Medium', 'target' => 2, 'plan' => $planOperational],
+            ['name' => 'تنفيذ برامج علاجية للطلبة ذوي صعوبات التعلم', 'priority' => 'Medium', 'target' => 2, 'plan' => $planQuality],
+        ];
+
+        $createdAreas = [];
+        foreach ($areaDefs as $i => $aDef) {
+            $linkedRes = $lowScoreResults[$i] ?? null;
+            $area = ImprovementArea::create([
+                'result_id'    => $linkedRes ? $linkedRes['result']->result_id : null,
+                'indicator_id' => $linkedRes ? $linkedRes['indicator']->indicator_id : null,
+                'name'         => $aDef['name'],
+                'priority'     => $aDef['priority'],
+                'target_score' => $aDef['target'],
+                'status'       => ImprovementArea::STATUS_PENDING_ACTION,
+                'description'  => "مجال تحسين ذو أولوية للعام الدراسي لرفع مستوى الأداء المؤسسي.",
+            ]);
+
+            PlanImprovementArea::create([
+                'plan_id' => $aDef['plan']->plan_id,
+                'area_id' => $area->area_id,
+            ]);
+
+            $createdAreas[] = $area;
+        }
+
+        // و. إدراج إجراءات تجريبية واقعية: إجراء تنفيذي واحد فقط لكل مؤشر/مجال دون تكرار (نسب إنجاز 25% و 60%)
+        // مع إبقاء مجال تحسين واحد (المجال رقم 4) دون إجراءات لإظهار شريط التنبيه الذكي بالواجهة
+        // 1. خطة تحسين الجودة المدرسية: إجراء للمجال 0 بنسبة 60%
+        if (isset($createdAreas[0])) {
+            ImprovementAction::create([
+                'plan_id'                        => $planQuality->plan_id,
+                'area_id'                        => $createdAreas[0]->area_id,
+                'title'                          => 'تحديث أجهزة الحاسوب وتمديد شبكة الإنترنت للأجنحة التعليمية',
+                'responsible_person_description' => 'أمين مركز مصادر التعلم ومعلم الحاسب',
+                'start_date'                     => now()->subDays(20)->toDateString(),
+                'due_date'                       => now()->addDays(40)->toDateString(),
+                'status'                         => 'InProgress',
+                'completion_percentage'          => 60,
+                'progress_description'           => \App\Enums\ProgressLevel::Moderate->value,
+                'baseline_score'                 => 1,
+                'baseline_target_score'          => 3,
+                'baseline_gap'                   => 2,
+            ]);
+        }
+
+        // 2. الخطة التشغيلية السنوية: إجراء للمجال 1 بنسبة 60%
+        if (isset($createdAreas[1])) {
+            ImprovementAction::create([
+                'plan_id'                        => $planOperational->plan_id,
+                'area_id'                        => $createdAreas[1]->area_id,
+                'title'                          => 'صيانة وتحديث طفايات الحريق وأجهزة الإنذار ومخارج الطوارئ',
+                'responsible_person_description' => 'مسؤول الأمن والسلامة المدرسية',
+                'start_date'                     => now()->subDays(15)->toDateString(),
+                'due_date'                       => now()->addDays(45)->toDateString(),
+                'status'                         => 'InProgress',
+                'completion_percentage'          => 60,
+                'progress_description'           => \App\Enums\ProgressLevel::Moderate->value,
+                'baseline_score'                 => 1,
+                'baseline_target_score'          => 3,
+                'baseline_gap'                   => 2,
+            ]);
+        }
+
+        // 3. خطة تحسين الجودة المدرسية: إجراء للمجال 2 بنسبة 25%
+        if (isset($createdAreas[2])) {
+            ImprovementAction::create([
+                'plan_id'                        => $planQuality->plan_id,
+                'area_id'                        => $createdAreas[2]->area_id,
+                'title'                          => 'تأمين حزم البرمجيات التعليمية وتفعيل منصة التدريب الرقمي',
+                'responsible_person_description' => 'رائد النشاط ومعلم الحاسب الآلي',
+                'start_date'                     => now()->subDays(10)->toDateString(),
+                'due_date'                       => now()->addDays(50)->toDateString(),
+                'status'                         => 'InProgress',
+                'completion_percentage'          => 25,
+                'progress_description'           => \App\Enums\ProgressLevel::Limited->value,
+                'baseline_score'                 => 1,
+                'baseline_target_score'          => 3,
+                'baseline_gap'                   => 2,
+            ]);
+        }
+
+        // 4. الخطة التشغيلية السنوية: إجراء للمجال 3 بنسبة 25%
+        if (isset($createdAreas[3])) {
+            ImprovementAction::create([
+                'plan_id'                        => $planOperational->plan_id,
+                'area_id'                        => $createdAreas[3]->area_id,
+                'title'                          => 'عقد اللقاء التعريفي الأول لمجلس الآباء والمعلمين وإقرار خطة اللقاءات',
+                'responsible_person_description' => 'المرشد الطلابي ولجنة التوجيه الطلابي',
+                'start_date'                     => now()->subDays(12)->toDateString(),
+                'due_date'                       => now()->addDays(30)->toDateString(),
+                'status'                         => 'InProgress',
+                'completion_percentage'          => 25,
+                'progress_description'           => \App\Enums\ProgressLevel::Limited->value,
+                'baseline_score'                 => 2,
+                'baseline_target_score'          => 3,
+                'baseline_gap'                   => 1,
+            ]);
+        }
+
+        // ملاحظة: المجال 4 (تنفيذ برامج علاجية للطلبة ذوي صعوبات التعلم) يظل دون إجراءات (pending_action)
+        // لاختبار شريط التنبيه الذكي وزر الصياغة المباشرة بالواجهة
+
+        // تحديث الحالة الصريحة للمجالات (status): in_progress للمجالات المجدولة، و pending_action للمجال الشاغر
+        if (isset($createdAreas[0])) {
+            $createdAreas[0]->status = ImprovementArea::STATUS_IN_PROGRESS;
+            $createdAreas[0]->save();
+        }
+        if (isset($createdAreas[1])) {
+            $createdAreas[1]->status = ImprovementArea::STATUS_IN_PROGRESS;
+            $createdAreas[1]->save();
+        }
+        if (isset($createdAreas[2])) {
+            $createdAreas[2]->status = ImprovementArea::STATUS_PENDING_ACTION;
+            $createdAreas[2]->save();
+        }
+        if (isset($createdAreas[3])) {
+            $createdAreas[3]->status = ImprovementArea::STATUS_IN_PROGRESS;
+            $createdAreas[3]->save();
+        }
+
+        // تحديث وصف مستوى التقدم الإجمالي للخطط بناءً على الإجراءات
+        foreach ([$planQuality, $planOperational] as $p) {
+            $planActions = ImprovementAction::where('plan_id', $p->plan_id)->get();
+            if ($planActions->isNotEmpty()) {
+                $overall = \App\Http\Controllers\Api\V1\ImprovementPlanController::calculateOverallProgress($planActions);
+                $p->progress_description = $overall['code'];
+                $p->save();
+            }
+        }
+
+        // تسجيل ملاحظات مراجعة إدارية واقعية من مدير المدرسة على عينة من المؤشرات (12 مؤشراً)
+        // لتغذية "مركز التدقيق والمراجعة الإدارية"
+        $indicatorsToReview = EvaluationResult::where('evaluation_id', $evalFarouq->evaluation_id)
+            ->take(12)
+            ->get();
+
+        $sampleReviewNotes = [
+            'تمت مراجعة الوثائق والمحاضر الإدارية مع وكيل المدرسة وهي مطابقة لمعايير الجودة المعتمدة.',
+            'اطلعت الإدارة المدرسية على الشواهد المرفقة ونؤكد استيفاء متطلبات هذا المؤشر بدقة.',
+            'تم التدقيق الميداني على التجهيزات والمرافق ويوصى بتقديم الدعم اللازم لاستدامة الأداء.',
+            'ملاحظة إدارية: نؤيد هذا التقدير وتم توجيه فريق التطوير بمتابعة سجلات التوثيق الدورية.',
+        ];
+
+        foreach ($indicatorsToReview as $k => $revResult) {
+            Note::create([
+                'result_id'      => $revResult->result_id,
+                'author_user_id' => $principalFarouq->user_id,
+                'text'           => $sampleReviewNotes[$k % count($sampleReviewNotes)],
+                'created_at'     => now()->subDays(3)->addHours($k * 2),
+            ]);
+        }
+
+        PlanReviewNote::create([
+            'plan_id'        => $planQuality->plan_id,
+            'author_user_id' => $principalFarouq->user_id,
+            'reviewer_role'  => 'school_principal',
+            'text'           => 'تمت المراجعة الإدارية لخطة تحسين الجودة واعتماد مصفوفة الأهداف والإجراءات للمتابعة الفصلية.',
+            'created_at'     => now()->subDays(2),
+        ]);
+
+        // ز. إنشاء التقرير المعتمد ومحاولة التسليم مع طلب استكمال مفتوح على المؤشر 6-2-1 (اختبار الدورة الكاملة)
+        $reportFarouq = Report::create([
+            'evaluation_id' => $evalFarouq->evaluation_id,
+            'generated_at'  => now()->subDays(2),
+            'updated_at'    => now()->subDays(2),
+            'status'        => 'Final',
+        ]);
+
+        $trackingCodeFarouq = 'ARQ-2026-SCH' . str_pad((string)$schoolFarouq->school_id, 3, '0', STR_PAD_LEFT) . '-FIN-B4F2';
+        $digitalHashFarouq  = hash('sha256', "{$evalFarouq->evaluation_id}|{$reportFarouq->report_id}|1|{$trackingCodeFarouq}");
+
+        $submissionFarouq = EvaluationSubmission::create([
+            'report_id'            => $reportFarouq->report_id,
+            'submitted_by_user_id' => $principalFarouq->user_id,
+            'attempt_no'           => 1,
+            'submitted_at'         => now()->subDays(2),
+            'updated_at'           => now()->subDays(1),
+            'status'               => 'NeedsCompletion',
+            'tracking_code'        => $trackingCodeFarouq,
+            'digital_hash'         => $digitalHashFarouq,
+        ]);
+
+        $evalFarouq->status = 'NeedsCompletion';
+        $evalFarouq->save();
+
+        $supervisor = User::where('username', 'supervisor_ministry')->first() ?? User::where('user_type', 'supervisor')->first();
+
+        $completionRequest = CompletionRequest::create([
+            'submission_id'             => $submissionFarouq->submission_id,
+            'issued_by_user_id'         => $supervisor?->user_id ?? 1,
+            'completion_deadline'       => now()->addDays(5),
+            'deadline_extensions_count' => 0,
+            'status'                    => 'Open',
+            'created_at'                => now()->subDays(1),
+            'updated_at'                => now()->subDays(1),
+        ]);
+
+        $ind621 = Indicator::where('code', '6-2-1')->first() ?? Indicator::first();
+
+        // ربط البند المعلق بالشاهد السابق مع وسمه بـ draft لحين رفع وثيقة الفرضية المعتمدة
+        $link621 = EvidenceLink::where('evaluation_id', $evalFarouq->evaluation_id)
+            ->where('indicator_id', $ind621->indicator_id)
+            ->first();
+        if ($link621) {
+            $link621->status = 'draft';
+            $link621->save();
+        }
+
+        CompletionRequestItem::create([
+            'request_id'          => $completionRequest->request_id,
+            'indicator_id'        => $ind621->indicator_id,
+            'evidence_link_id'    => $link621?->id,
+            'missing_description' => 'يرجى إرفاق تقرير فرضية الإخلاء المعتمد بختم الدفاع المدني للعام الدراسي الحالي وتحديث سجل وسائل السلامة.',
+            'status'              => 'Pending',
+            'created_at'          => now()->subDays(1),
+            'updated_at'          => now()->subDays(1),
+        ]);
+
+        SupervisorNote::create([
+            'submission_id'  => $submissionFarouq->submission_id,
+            'author_user_id' => $supervisor?->user_id ?? 1,
+            'text'           => 'تمت مراجعة ملف مدرسة الفاروق؛ النتائج ممتازة والمؤشرات مستوفاة باستثناء بند فرضية الإخلاء في مؤشر الأمن والسلامة 6-2-1.',
+            'created_at'     => now()->subDays(1),
+            'updated_at'     => now()->subDays(1),
+        ]);
+
+        // ح. إشعارات حقيقية للمستخدمين متوافقة مع الحالة الفعلية دون تكرار
+        Notification::whereIn('recipient_user_id', [$evaluatorFarouq->user_id, $principalFarouq->user_id])
+            ->where('related_entity_id', $evalFarouq->evaluation_id)
+            ->delete();
+
+        $notificationData = [
             [
-                'cycle_id'  => $cycle->cycle_id,
-                'school_id' => $schoolFarouq->school_id,
+                'user'  => $evaluatorFarouq,
+                'title' => 'طلب استكمال شواهد وملاحظات من المشرف الوزاري',
+                'msg'   => 'أصدر المشرف الوزاري طلب استكمال على المؤشر 6-2-1 (الأمن والسلامة)، المهلة المحددة: 5 أيام.',
+                'type'  => 'completion_requested',
+                'read'  => false,
+                'entity'=> 'completion_request',
             ],
             [
-                'created_by_user_id'   => $evaluatorFarouq->user_id,
-                'title'                => 'خطة التحسين والتطوير لمدرسة الفاروق الأساسية (تعز)',
-                'start_date'           => '2026-03-01',
-                'end_date'             => '2026-06-30',
-                'status'               => 'Draft',
-                'progress_description' => 'جاري حصر الفجوات في البنية التحتية والوسائل التعليمية بمدرسة الفاروق.',
-            ]
-        );
+                'user'  => $evaluatorFarouq,
+                'title' => 'انطلاق دورة التقييم الذاتي للعام 2026/2027',
+                'msg'   => 'تم تفعيل الإصدار المعياري المعتمد (109 مؤشرات) وفتح ملف التقييم الذاتي لمدرسة الفاروق.',
+                'type'  => 'cycle_launched',
+                'read'  => true,
+                'entity'=> 'cycle',
+            ],
+            [
+                'user'  => $evaluatorFarouq,
+                'title' => 'اقتراب موعد إجراء تنفيذي في خطة التحسين المدرسية',
+                'msg'   => 'تنبيه: اقترب موعد تنفيذ إجراء تحسين البيئة التعليمية والمختبرات المدرسية المجدول لهذا الأسبوع.',
+                'type'  => 'action_deadline_approaching',
+                'read'  => false,
+                'entity'=> 'improvement_action',
+            ],
+            [
+                'user'  => $evaluatorFarouq,
+                'title' => 'ملاحظة توجيه داخلية من مدير المدرسة',
+                'msg'   => 'دوّن مدير المدرسة ملاحظة اعتماد داخلي: تم تدقيق شواهد المعيار الخامس والاعتماد مشروط باستكمال الفرضية.',
+                'type'  => 'reviewer_note_added',
+                'read'  => false,
+                'entity'=> 'evaluation',
+            ],
+            [
+                'user'  => $evaluatorFarouq,
+                'title' => 'تنبيه أرشفة نسخة شاهد سابقة',
+                'msg'   => 'تم استبدال وحفظ النسخة السابقة من لائحة الانضباط المدرسي في أرشيف الشواهد التاريخية.',
+                'type'  => 'evidence_pruned_warning',
+                'read'  => true,
+                'entity'=> 'school_document',
+            ],
+            [
+                'user'  => $principalFarouq,
+                'title' => 'طلب استكمال شواهد وملاحظات من المشرف الوزاري',
+                'msg'   => 'أصدرت الإدارة العامة للاعتماد والجودة طلباً لاستكمال شواهد المؤشر 6-2-1 لمدرسة الفاروق.',
+                'type'  => 'completion_requested',
+                'read'  => false,
+                'entity'=> 'completion_request',
+            ],
+        ];
+
+        foreach ($notificationData as $idx => $n) {
+            Notification::create([
+                'recipient_user_id'   => $n['user']->user_id,
+                'title'               => $n['title'],
+                'message'             => $n['msg'],
+                'type'                => $n['type'],
+                'related_entity_type' => $n['entity'],
+                'related_entity_id'   => $evalFarouq->evaluation_id,
+                'is_read'             => $n['read'],
+                'read_at'             => $n['read'] ? now()->subHours(2) : null,
+                'created_at'          => now()->subHours(($idx + 1) * 3),
+            ]);
+        }
+    }
+
+    /**
+     * تنظيف آمن لبيانات التقييم والخطط والوثائق الخاصة بمدرسة دون خرق قيود المفاتيح الأجنبية
+     * عند اشتراك أكثر من خطة تحسين في نفس مجال التحسين.
+     */
+    private function cleanSchoolEvaluationData(int $schoolId, int $evaluationId): void
+    {
+        EvidenceLink::where('school_id', $schoolId)->delete();
+
+        $planIds = ImprovementPlan::where('school_id', $schoolId)->pluck('plan_id');
+        if ($planIds->isNotEmpty()) {
+            PlanReviewNote::whereIn('plan_id', $planIds)->delete();
+            $areaIdsFromPlans = PlanImprovementArea::whereIn('plan_id', $planIds)->pluck('area_id');
+            ImprovementAction::whereIn('plan_id', $planIds)->delete();
+            if ($areaIdsFromPlans->isNotEmpty()) {
+                ImprovementAction::whereIn('area_id', $areaIdsFromPlans)->delete();
+            }
+            PlanImprovementArea::whereIn('plan_id', $planIds)->delete();
+            ImprovementPlan::whereIn('plan_id', $planIds)->delete();
+
+            if ($areaIdsFromPlans->isNotEmpty()) {
+                ImprovementArea::whereIn('area_id', $areaIdsFromPlans)
+                    ->whereNotIn('area_id', PlanImprovementArea::query()->select('area_id'))
+                    ->delete();
+            }
+        }
+
+        // تنظيف أي مجالات أو ملاحظات أو أساليب تحقق تابعة لنتائج التقييم
+        $resultIds = EvaluationResult::where('evaluation_id', $evaluationId)->pluck('result_id');
+        if ($resultIds->isNotEmpty()) {
+            Note::whereIn('result_id', $resultIds)->delete();
+            EvaluationResultVerificationMethod::whereIn('evaluation_result_id', $resultIds)->delete();
+            $areaIdsFromResult = ImprovementArea::whereIn('result_id', $resultIds)->pluck('area_id');
+            if ($areaIdsFromResult->isNotEmpty()) {
+                ImprovementAction::whereIn('area_id', $areaIdsFromResult)->delete();
+                PlanImprovementArea::whereIn('area_id', $areaIdsFromResult)->delete();
+                ImprovementArea::whereIn('area_id', $areaIdsFromResult)->delete();
+            }
+        }
+
+        EvaluationResult::where('evaluation_id', $evaluationId)->delete();
+
+        // تنظيف تقارير ومحاولات وطلبات استكمال التقييم
+        $reportIds = Report::where('evaluation_id', $evaluationId)->pluck('report_id');
+        if ($reportIds->isNotEmpty()) {
+            $submissionIds = EvaluationSubmission::whereIn('report_id', $reportIds)->pluck('submission_id');
+            if ($submissionIds->isNotEmpty()) {
+                $reqIds = CompletionRequest::whereIn('submission_id', $submissionIds)->pluck('request_id');
+                if ($reqIds->isNotEmpty()) {
+                    CompletionRequestItem::whereIn('request_id', $reqIds)->delete();
+                    CompletionRequest::whereIn('request_id', $reqIds)->delete();
+                }
+                SupervisorNote::whereIn('submission_id', $submissionIds)->delete();
+                EvaluationSubmission::whereIn('submission_id', $submissionIds)->delete();
+            }
+            InternalReviewNote::whereIn('report_id', $reportIds)->delete();
+            Report::whereIn('report_id', $reportIds)->delete();
+        }
+
+        $docIds = SchoolDocument::where('school_id', $schoolId)->pluck('id');
+        if ($docIds->isNotEmpty()) {
+            DocumentVersion::whereIn('school_document_id', $docIds)->delete();
+            SchoolDocument::whereIn('id', $docIds)->delete();
+        }
     }
 }

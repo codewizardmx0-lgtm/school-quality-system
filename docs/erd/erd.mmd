@@ -1,6 +1,6 @@
 %% ============================================================
 %% ERD-0 — المخطط الشامل المفصل (النظرة العامة الكاملة لقاعدة البيانات)
-%% النسخة النهائية — متوافق مع قيود 3.10.8
+%% النسخة المحدثة — متوافق مع معمارية الشواهد الثلاثية وسجل التدقيق وسير الاستكمال
 %% ============================================================
 %%{init: {'theme': 'default', 'themeVariables': {'fontSize': '13px', 'primaryColor': '#ffffff', 'primaryBorderColor': '#1F2937', 'primaryTextColor': '#111827', 'lineColor': '#374151'}}}%%
 erDiagram
@@ -193,21 +193,43 @@ erDiagram
         datetime created_at
         datetime updated_at
     }
-    EVIDENCES {
-        int evidence_id PK
-        int result_id FK
-        int indicator_id FK
-        varchar title
+    SCHOOL_DOCUMENTS {
+        int document_id PK
+        int school_id FK
+        int created_by_user_id FK
+        varchar document_title
+        varchar document_code
+        varchar document_type
         varchar description
-        varchar justification
         datetime created_at
         datetime updated_at
     }
-    EVIDENCE_VERSIONS {
-        int evidence_version_id PK
-        int evidence_id FK
-        int version_no
-        boolean current
+    DOCUMENT_VERSIONS {
+        int version_id PK
+        int document_id FK
+        int uploaded_by_user_id FK
+        int attachment_id FK
+        int version_number
+        varchar file_path
+        varchar file_name
+        bigint file_size
+        varchar mime_type
+        varchar notes
+        boolean is_current
+        datetime created_at
+        datetime updated_at
+    }
+    EVIDENCE_LINKS {
+        int link_id PK
+        int evaluation_id FK
+        int indicator_id FK
+        int document_version_id FK
+        int result_id FK
+        int linked_by_user_id FK
+        int school_id FK
+        int action_id FK
+        varchar alignment_description
+        varchar sufficiency_status
         datetime created_at
         datetime updated_at
     }
@@ -244,6 +266,7 @@ erDiagram
         varchar name
         varchar description
         varchar priority
+        int target_score
         datetime created_at
         datetime updated_at
     }
@@ -279,7 +302,7 @@ erDiagram
         datetime updated_at
     }
 
-    %% ========= (5) المخرجات والاستكمال والإشعارات والذكاء الاصطناعي =========
+    %% ========= (5) المخرجات والاستكمال والإشعارات والتدقيق والذكاء الاصطناعي =========
     REPORTS {
         int report_id PK
         int evaluation_id FK
@@ -324,6 +347,9 @@ erDiagram
         int request_id PK
         int submission_id FK
         int issued_by_user_id FK
+        datetime completion_deadline
+        datetime deadline_extended_at
+        int deadline_extensions_count
         datetime created_at
         datetime resolved_at
         datetime updated_at
@@ -333,11 +359,24 @@ erDiagram
         int request_item_id PK
         int request_id FK
         int indicator_id FK
-        int evidence_id FK
+        int evidence_link_id FK
         varchar missing_description
         varchar status
         datetime created_at
         datetime updated_at
+    }
+    AUDIT_LOGS {
+        int log_id PK
+        int user_id FK
+        int school_id FK
+        varchar action
+        varchar target_type
+        int target_id
+        json old_values
+        json new_values
+        varchar ip_address
+        text user_agent
+        datetime created_at
     }
     NOTIFICATIONS {
         int notification_id PK
@@ -399,7 +438,7 @@ erDiagram
     INDICATORS ||--o{ INDICATOR_VERIFICATION_METHODS : "يسمح بأساليب تحقق"
     VERIFICATION_TOOLS ||--o{ INDICATOR_VERIFICATION_METHODS : "مهيأة لمؤشرات محددة"
 
-    %% --- الدورات والتقييم (التصميم المركزي) ---
+    %% --- الدورات والتقييم والشواهد (المعمارية ثلاثية المستويات U-24) ---
     EVALUATION_CYCLES ||--o{ CYCLE_PARTICIPATIONS : "تضم مدارس مشاركة"
     SCHOOLS ||--o{ CYCLE_PARTICIPATIONS : "تشارك في الدورات"
     STANDARD_VERSIONS ||--o{ EVALUATION_CYCLES : "تحكم دورة التقييم"
@@ -411,16 +450,22 @@ erDiagram
     INDICATOR_SCORE_DESCRIPTORS ||--o{ EVALUATION_RESULTS : "وصف الدرجة المختارة"
     STANDARD_VERSIONS ||--o{ EVALUATION_RESULTS : "وفق إصدار رسمي"
     USERS ||--o{ EVALUATION_RESULTS : "سجلها مقيم"
-    EVALUATION_RESULTS ||--o{ EVIDENCES : "تدعمها شواهد"
-    INDICATORS ||--o{ EVIDENCES : "شواهد خاصة بمؤشر"
-    EVIDENCES ||--o{ EVIDENCE_VERSIONS : "لها نسخ تاريخية"
+    
+    SCHOOLS ||--o{ SCHOOL_DOCUMENTS : "مستندات المدرسة"
+    USERS ||--o{ SCHOOL_DOCUMENTS : "أنشأ مستنداً"
+    SCHOOL_DOCUMENTS ||--o{ DOCUMENT_VERSIONS : "نسخ المستند"
+    USERS ||--o{ DOCUMENT_VERSIONS : "رفع نسخة"
+    ATTACHMENTS ||--o{ DOCUMENT_VERSIONS : "ملف النسخة المخزن"
+    DOCUMENT_VERSIONS ||--o{ EVIDENCE_LINKS : "توظيف الشاهد"
+    EVALUATIONS ||--o{ EVIDENCE_LINKS : "شواهد التقييم"
+    INDICATORS ||--o{ EVIDENCE_LINKS : "شواهد المؤشر"
+    EVALUATION_RESULTS ||--o{ EVIDENCE_LINKS : "ربط بنتيجة تقييم"
+    USERS ||--o{ EVIDENCE_LINKS : "ربط بواسطة مقيم"
+
     EVALUATION_RESULTS ||--o{ NOTES : "لها ملاحظات"
     USERS ||--o{ NOTES : "كتبها مستخدم"
     VERIFICATION_TOOLS ||--o{ EVALUATION_RESULT_VERIFICATION_METHODS : "أسلوب مستخدم فعليًا"
     EVALUATION_RESULTS ||--o{ EVALUATION_RESULT_VERIFICATION_METHODS : "سجل لها أسلوب"
-    %% ملاحظة: ATTACHMENTS متعددة الأهداف (target_type + target_id):
-    %% ترتبط بنسخ الشواهد أو التقارير وفق نوع الهدف ومعرفه — لذا لا خط علاقة مباشر
-    %% (نفس النمط المعتمد في NOTIFICATIONS — قيد 3.10.8)
 
     %% --- خطط التحسين ---
     EVALUATION_RESULTS ||--o{ IMPROVEMENT_AREAS : "تحدد مجالات تحسين"
@@ -432,7 +477,7 @@ erDiagram
     IMPROVEMENT_AREAS ||--o{ PLAN_IMPROVEMENT_AREAS : "تستهدف عبر خطط"
     PLAN_IMPROVEMENT_AREAS ||--o{ IMPROVEMENT_ACTIONS : "تضبط بالقيد المركب (plan_id, area_id)"
 
-    %% --- المخرجات والاستكمال والإشعارات والذكاء ---
+    %% --- المخرجات والاستكمال وسجل التدقيق والإشعارات والذكاء ---
     EVALUATIONS ||--o{ REPORTS : "تنتج تقريرًا"
     REPORTS ||--o{ EVALUATION_SUBMISSIONS : "لها محاولات رفع"
     USERS ||--o{ EVALUATION_SUBMISSIONS : "يرفعها مستخدم"
@@ -446,7 +491,9 @@ erDiagram
     USERS ||--o{ COMPLETION_REQUESTS : "أصدره مشرف وزاري"
     COMPLETION_REQUESTS ||--o{ COMPLETION_REQUEST_ITEMS : "تحدد بنود استكمال"
     INDICATORS ||--o{ COMPLETION_REQUEST_ITEMS : "بند استكمال خاص بمؤشر"
-    EVIDENCES ||--o{ COMPLETION_REQUEST_ITEMS : "بند قد يستهدف شاهدًا"
+    EVIDENCE_LINKS ||--o{ COMPLETION_REQUEST_ITEMS : "بند قد يستهدف رابط شاهد محدد"
+    USERS ||--o{ AUDIT_LOGS : "فاعل العملية"
+    SCHOOLS ||--o{ AUDIT_LOGS : "مدرسة العملية"
     USERS ||--o{ NOTIFICATIONS : "يستلم إشعارات"
     EVALUATIONS ||--o{ AI_ANALYSIS : "يُطلب تحليلها بالذكاء الاصطناعي"
     USERS ||--o{ AI_ANALYSIS : "يطلب التحليل"

@@ -77,16 +77,6 @@ class Attachment extends Model
     }
 
     /**
-     * نسخة الشاهد المرتبطة بالمرفق عندما يكون target_type هو 'evidence_version'.
-     *
-     * @return BelongsTo
-     */
-    public function evidenceVersion(): BelongsTo
-    {
-        return $this->belongsTo(EvidenceVersion::class, 'target_id', 'evidence_version_id');
-    }
-
-    /**
      * ملف التقرير المرتبط بالمرفق عندما يكون target_type هو 'report'.
      *
      * @return BelongsTo

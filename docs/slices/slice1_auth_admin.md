@@ -122,7 +122,7 @@ sequenceDiagram
   AuthCtrl->>Req: التحقق من الحقول (required)
   AuthCtrl->>UserMdl: البحث عن المستخدم ومطابقة Hash::check
   alt كلمة المرور خاطئة أو اسم المستخدم غير موجود
-    AuthCtrl-->>User: 401 Unauthorized (بيانات الاعتماد غير صحيحة)
+    AuthCtrl-->>User: 401 Unauthorized (بيانات الدخول غير صحيحة)
   else المستخدم معطل (status != Active)
     AuthCtrl-->>User: 401 Unauthorized (الحساب معطل)
   else الحساب نشط وكلمة المرور صحيحة
@@ -139,7 +139,7 @@ flowchart TD
   Start([بدء تسجيل الدخول]) --> ValidateReq{مدخلات صالحة؟}
   ValidateReq -- لا --> Err422[422 خطأ في المدخلات]
   ValidateReq -- نعم --> FindUser{المستخدم موجود ومطابق لكلمة المرور؟}
-  FindUser -- لا --> Err401Creds[401 بيانات الاعتماد غير صحيحة]
+  FindUser -- لا --> Err401Creds[401 بيانات الدخول غير صحيحة]
   FindUser -- نعم --> CheckActive{حالة الحساب نشطة Active؟}
   CheckActive -- لا --> Err401Disabled[401 الحساب معطل]
   CheckActive -- نعم --> CloseOldSess[إغلاق أي جلسات نشطة سابقة للمستخدم]

@@ -1,6 +1,6 @@
 # نظام إدارة وتقويم الجودة المدرسية (School Quality System)
 
-نظام وطني متكامل لإدارة وتقويم جودة المدارس، يغطي دورات التقييم الذاتي، رصد درجات المؤشرات والمعايير، إدارة الشواهد والوثائق، إعداد ومتابعة خطط التحسين المدرسي، إنتاج التقارير والتحليلات وحساب النتائج، تنظيم وتدقيق الشواهد، وإدارة الملف التعريفي والإحصاءات والمرافق المدرسية وسياق المؤشرات الاسترشادي.
+نظام وطني متكامل لإدارة وتقويم جودة المدارس، يغطي دورات التقييم الذاتي، رصد درجات المؤشرات والمعايير، إدارة الشواهد والوثائق، إعداد ومتابعة خطط التحسين المدرسي، إنتاج التقارير والتحليلات وحساب النتائج، تنظيم وتدقيق الشواهد، وإدارة الملف التعريفي والإحصاءات والمرافق المدرسية وسياق المؤشرات الاسترشادي، وإطلاق دورات التقييم المركزية وإدارتها ومنظومة الإشعارات واستعادة الحسابات.
 
 ---
 
@@ -9,88 +9,182 @@
 ```
 school-quality-system/
 ├── school-eval-api/       # الباك إند: Laravel 11 API مع Sanctum و MySQL
-├── school-eval-web/       # الفرونت إند: تطبيق React (Vite + TailwindCSS)
-├── frontend-prototype/    # نموذج أولي تفاعلي للتحقق من تسلسل العمليات (الشرائح 1-6)
-└── docs/                  # التوثيق المعماري، الأدلة، وتوثيق الشرائح (Slices)
+├── school-eval-web/       # الفرونت إند: تطبيق React 19 (Vite + TypeScript + TailwindCSS)
+├── frontend-prototype/    # نموذج أولي تفاعلي للتحقق من تسلسل العمليات وتكامل الـ API (الشرائح 1-10)
+└── docs/                  # التوثيق المعماري، الأدلة، وتوثيق الشرائح (Slices) والأرشيف
 ```
 
 ---
 
-## الشرائح المنجزة والرسمية (Implemented Slices)
+## وسوم الإصدارات الرسمية للمراحل (Milestone Release Tags)
 
-| الشريحة | العنوان | الحالة | التوثيق |
+| الوسم (Release Tag) | نطاق المرحلة | حالة الاختبارات الآلية | التوثيق |
 |---|---|---|---|
-| **الشريحة 0** | قاعدة البيانات، النماذج Eloquent، ومصفوفة الصلاحيات الرسمية | مكتملة 100% | [`docs/slices/README.md`](docs/slices/README.md) |
-| **الشريحة 1** | المصادقة، العزل المؤسسي للمدارس، وإدارة النظام للمسؤول | مكتملة 100% | [`docs/slices/slice1_auth_admin.md`](docs/slices/slice1_auth_admin.md) |
-| **الشريحة 2** | التقييم الذاتي، رصد درجات المؤشرات، وإدارة الشواهد والنسخ التاريخية | مكتملة 100% | [`docs/slices/slice2_evaluation_evidence.md`](docs/slices/slice2_evaluation_evidence.md) |
-| **الشريحة 3** | خطط التحسين المدرسي، الإجراءات التنفيذية، وملاحظات المراجعة | مكتملة 100% | [`docs/slices/slice3_improvement_plans.md`](docs/slices/slice3_improvement_plans.md) |
-| **الشريحة 4** | التقارير والتحليلات وحساب النتائج (لوحة المعلومات، حساب الدرجات، الشواهد، تصدير JSON) | مكتملة 100% | [`docs/slices/slice4_reports_analytics.md`](docs/slices/slice4_reports_analytics.md) |
-| **الشريحة 4.1** | إنهاء وتقديم التقييم وقفل التعديل النهائي (G-01 / BR-SCH-03) | مكتملة 100% | [`gaps.md`](gaps.md) |
-| **الشريحة 5** | تنظيم الشواهد وتصنيفها وربطها بالمؤشرات وحصرها (بدون ذكاء اصطناعي) | مكتملة 100% | [`docs/slices/slice5_evidence_organization.md`](docs/slices/slice5_evidence_organization.md) |
-| **الشريحة 6** | **إدارة المدرسة: الملف التعريفي، الإحصاءات التجميعية، المرافق، وسياق المؤشرات** | **مكتملة 100%** | [`docs/slices/slice6_school_profile.md`](docs/slices/slice6_school_profile.md) |
+| [`v0.6.0`](https://github.com/codewizardmx0-lgtm/school-quality-system/releases/tag/v0.6.0) | اكتمال الشرائح 1 إلى 6 الأساسية | 112 اختبارًا ناجحًا (100%) | [`docs/slices/README.md`](docs/slices/README.md) |
+| [`v0.9.0`](https://github.com/codewizardmx0-lgtm/school-quality-system/releases/tag/v0.9.0) | اكتمال الشرائح 7 و 8 و 9 وتصدير التقارير | 208 اختبارات ناجحة (100%) | [`docs/slices/slice9_reports_export.md`](docs/slices/slice9_reports_export.md) |
+| [`v1.0.0-slices-1-to-10`](https://github.com/codewizardmx0-lgtm/school-quality-system/releases/tag/v1.0.0-slices-1-to-10) | اكتمال دورات التقييم، بدء التقييم الذاتي، الإشعارات، واستعادة الحسابات | **223 اختبارًا ناجحًا (100%)** | [`docs/slices/slice10_cycles_notifications.md`](docs/slices/slice10_cycles_notifications.md) |
 
 ---
 
-## نقطة الاسترجاع والوسم الرسمي للمرحلة (Milestone Release Tag)
+## الشرائح المنجزة والرسمية (Implemented Slices: 1 to 10)
 
-> [!TIP]
-> **الوسم المرجعي للمرحلة الأولى:** `v0.6.0-slices-1-to-6-complete`  
-> يمثل هذا الوسم نقطة استرجاع مستقرة ومكتملة 100% لنصف النظام الأساسي (الشرائح 1 إلى 6)، شاملاً:
-> 1. الباك إند المكتمل لجميع المسارات مع 160 اختباراً آلياً ناجحاً بنسبة 100% (7,793 تأكيداً).
-> 2. النموذج الأولي التفاعلي للواجهات (`frontend-prototype/`) كمرجع حي (Living Spec) يغطي الأدوار الخمسة والتوجيه التلقائي وسير العمليات بدون أخطاء.
-> 3. كافة التوثيقات وسجل الفجوات (`gaps.md`) وأدلة التحقق الميداني.
-
----
-
-## الشريحة السادسة: إدارة المدرسة (الملف التعريفي، الإحصاءات التجميعية، المرافق، وسياق المؤشرات)
-
-### نقاط النهاية المتاحة (Endpoints)
-- `GET /api/v1/schools/{id}/profile` — استعراض الملف التعريفي الممتد للمدرسة.
-- `PUT /api/v1/schools/{id}/profile` — تحديث بيانات الملف التعريفي للمدرسة.
-- `GET /api/v1/schools/{id}/staff-metrics` — استعراض إحصاءات الكادر التعليمي والإداري التجميعية للعام الدراسي.
-- `POST /api/v1/schools/{id}/staff-metrics` — حفظ أو تحديث إحصاءات الكادر التعليمي والإداري التجميعية.
-- `GET /api/v1/schools/{id}/enrollment-metrics` — استعراض إحصاءات الطلاب والشعب التجميعية للعام الدراسي.
-- `POST /api/v1/schools/{id}/enrollment-metrics` — حفظ مجمّع لإحصاءات الطلاب والشعب حسب الصفوف الدراسية.
-- `GET /api/v1/schools/{id}/facilities` — استعراض سجل مرافق المدرسة وتجهيزاتها وتوفر متطلبات السلامة.
-- `POST /api/v1/schools/{id}/facilities` — إضافة مرفق مدرسي جديد.
-- `PUT /api/v1/schools/{id}/facilities/{facilityId}` — تحديث بيانات أو حالة مرفق مدرسي.
-- `DELETE /api/v1/schools/{id}/facilities/{facilityId}` — حذف سجل مرفق مدرسي.
-- `GET /api/v1/evaluations/{id}/indicators-context` (المسار البديل: `/api/v1/schools/{school}/assessments/{assessment}/indicators-context`) — استخراج السياق الإحصائي الاسترشادي للمؤشرات مع المستويات المقترحة (مع حماية القسمة على صفر وقراءة مباشرة من Snapshot المجمدة في التقييمات المنتهية `Completed`).
-
-### واجهات النموذج الأولي التفاعلي للشريحة 6
-- **شاشة إدارة المدرسة (`Screen School Hub`):** 4 تبويبات متكاملة (الملف التعريفي، الكادر التعليمي والإداري مع الحسابات الحية لنسبة التأهيل ونصاب المعلم وقواعد التحقق، إحصاءات الطلاب والشعب مع حساب كثافة الفصول وإضافة/حذف الصفوف، وسجل المرافق والتجهيزات مع شارات الحالة واشتراطات السلامة).
-- **بطاقة الدعم الاسترشادي لسياق المؤشر (`Advisory Context Card`):** بطاقة زرقاء سماوية تظهر تلقائياً في نافذة رصد الدرجات للمؤشرات المدعومة إحصائياً لتقديم دعم القرار وتجمد قراءتها بالـ Snapshot بعد تقديم التقييم.
+| الشريحة | العنوان | الملخص الموجز | التوثيق المرجعي |
+|---|---|---|---|
+| **الشريحة 0** | **قاعدة البيانات ونماذج Eloquent** | بناء 40 جدولاً، 40 نموذجاً، والمصفوفة المعيارية الوطنية لـ 109 مؤشرات و 7 معايير و 19 صلاحية. | [`docs/models_guide.md`](docs/models_guide.md) |
+| **الشريحة 1** | **المصادقة والعزل المؤسسي** | مصادقة Sanctum Bearer Token، عزل المدارس (404)، وإدارة المستخدمين والمدارس لمسؤول النظام. | [`docs/slices/slice1_auth_admin.md`](docs/slices/slice1_auth_admin.md) |
+| **الشريحة 2** | **التقييم الذاتي والشواهد** | شجرة المعايير، رصد الدرجات (0-3)، إدارة نسخ الشواهد (is_current)، وقفل التعديل التنافسي. | [`docs/slices/slice2_evaluation_evidence.md`](docs/slices/slice2_evaluation_evidence.md) |
+| **الشريحة 3** | **خطط وإجراءات التحسين** | توليد مقترحات التحسين ديناميكياً، إدارة خطط ومجالات التحسين، تتبع التأخر، وتدوين الملاحظات. | [`docs/slices/slice3_improvement_plans.md`](docs/slices/slice3_improvement_plans.md) |
+| **الشريحة 4** | **التقارير والتحليلات واللوحة** | حساب النتيجة الموزونة بالأوزان السبعة، ملخص الشواهد والخطط، لوحة المعلومات، وتصدير JSON. | [`docs/slices/slice4_reports_analytics.md`](docs/slices/slice4_reports_analytics.md) |
+| **الشريحة 4.1** | **إنهاء وتسليم التقييم الذاتي** | فحص استيفاء الـ 109 مؤشرات والحد الأدنى للشواهد، تجميد Snapshot، وقفل التعديل (BR-SCH-03). | [`gaps.md`](gaps.md) |
+| **الشريحة 5** | **تنظيم الشواهد وتصنيفها** | تصنيف الشواهد، ربط الشاهد بعدة مؤشرات، دورة تدقيق الشاهد (Draft/Completed/Audited)، وحصر النواقص. | [`docs/slices/slice5_evidence_organization.md`](docs/slices/slice5_evidence_organization.md) |
+| **الشريحة 6** | **إدارة المدرسة وسياق المؤشرات** | الملف التعريفي، الكادر، الطلاب، المرافق، والسياق الاسترشادي الحسابي اللحظي للـ 109 مؤشرات. | [`docs/slices/slice6_school_profile.md`](docs/slices/slice6_school_profile.md) |
+| **الشريحة 7** | **إدارة المعايير والإصدارات** | دورة حياة الإصدارات (Draft/Approved/Archived)، ضبط الأوزان النسبية (100%)، واستنساخ المعايير. | [`docs/slices/slice7_standards_management.md`](docs/slices/slice7_standards_management.md) |
+| **الشريحة 8** | **الخطط التربوية والتطوير المهني** | 3 أنواع خطط تربوية، نسب إنجاز تدرجية (0-100%)، بنك الإجراءات النموذجية، وربط شواهد التنفيذ. | [`docs/slices/slice8_educational_plans.md`](docs/slices/slice8_educational_plans.md) |
+| **الشريحة 9** | **التقارير والتصدير ومقارنة الأداء** | بطاقة التقويم الرسمية PDF عبر mPDF، تصدير Excel، مقارنة الأداء بالدورة السابقة (Trend)، وتوسيع السياقات. | [`docs/slices/slice9_reports_export.md`](docs/slices/slice9_reports_export.md) |
+| **الشريحة 10** | **إدارة الدورات وبدء التقييم والإشعارات** | إدارة الدورات المركزية للمشرف (G-24)، بدء التقييم للمقيّم (G-26)، سجل الإشعارات (FR-GEN-05)، واستعادة الحسابات (G-05). | [`docs/slices/slice10_cycles_notifications.md`](docs/slices/slice10_cycles_notifications.md) |
 
 ---
 
-## الشريحة الخامسة: تنظيم الشواهد وتصنيفها وربطها بالمؤشرات (No AI)
+## خريطة الأدوار الخمسة المعتمدة والصلاحيات (RBAC Role-Permission Matrix)
 
-### نقاط النهاية المتاحة (Endpoints)
-- `GET /api/v1/evaluations/{id}/indicators/{indicatorId}/evidences` — استعراض قائمة الشواهد النشطة للمؤشر مع نسخها ومرفقاتها وملاحظات التدقيق.
-- `POST /api/v1/evaluations/{id}/indicators/{indicatorId}/evidences` — إضافة شاهد جديد للمؤشر (إمكانية تعدد الشواهد النشطة) مع إنشاء نتيجة تلقائية بحالة Pending.
-- `PATCH /api/v1/evidences/{id}/classify` — تصنيف الشاهد يدوياً (محضر، خطة، سجل، تقرير، لوحة، صورة، أخرى).
-- `POST|PATCH /api/v1/evidences/{id}/link-indicator` — ربط الشاهد بمؤشر آخر مع إنشاء نتيجة التقييم تلقائياً.
-- `PATCH /api/v1/evidences/{id}/status` — تحديث حالة تدقيق الشاهد (Draft, Completed, Audited).
-- `POST|PATCH /api/v1/evidences/{id}/review-notes` — إضافة ملاحظات المراجع وهوية وتاريخ المراجعة.
-- `GET /api/v1/evaluations/{id}/evidence-inventory` (المسار البديل: `/api/v1/schools/{school}/assessments/{assessment}/evidence-inventory`) — جرد وحصر الشواهد التفصيلي للتقييم وبيان النواقص والمكتمل وفق حالة الشاهد (Completed / Audited).
+النظام مبني على 5 أدوار مؤسسية محددة بدقة و 19 صلاحية حبيبية قانونية (Canonical Permissions)، مع الفصل التام للمسؤوليات (Separation of Concerns):
 
-* التفاصيل الكاملة للشريحة 6: [`docs/slices/slice6_school_profile.md`](docs/slices/slice6_school_profile.md)
-* التفاصيل الكاملة للشريحة 5: [`docs/slices/slice5_evidence_organization.md`](docs/slices/slice5_evidence_organization.md)
-* خارطة الطريق للشرائح المستقبلية (12 شريحة): [`docs/slices_roadmap.md`](docs/slices_roadmap.md)
-* سجل حصر الفجوات والقرارات التقنية: [`gaps.md`](gaps.md)
-* دليل التحقق اليدوي للواجهات المؤقتة (مُعاد بناؤه ومبوّب بالشرائح 1-6 مع أدلة الأدوار ومراكز الإشراف والمعايير): [`frontend-prototype/verification-guide.md`](frontend-prototype/verification-guide.md)
-* توثيق النموذج الأولي التفاعلي (21 شاشة مع شريط تنقل ديناميكي حسب الدور، مركز الإشراف، مركز المعايير، أداة التعبئة الإلزامية والدخول السريع): [`frontend-prototype/README.md`](frontend-prototype/README.md)
+| الدور الوظيفي (`role_name`) | المسمى والتوصيف | الصلاحيات الممنوحة الحبيبية | القيود المؤسسية الحاسمة |
+|---|---|---|---|
+| **`admin`** | **مسؤول النظام التقني** | `users.manage`, `schools.manage` (صلاحيتان) | **محظور تماماً (403 Forbidden)** من إنشاء أو تعديل أو تقييم المدارس أو إدارة الدورات المركزية (BR-GEN-06 والوثيقة 3.2.4). |
+| **`school_evaluator`** | **مقيّم الجودة في المدرسة** | `standards.view`, `evaluations.create`, `evaluations.view`, `evaluations.edit`, `evaluations.submit`, `evidence.manage`, `reports.generate`, `reports.view`, `plans.manage`, `plans.view`, `ai.use` (11 صلاحية) | معزول بمدرسته فقط (404 عند طلب غيرها). يملك حصرًا بدء ملف التقييم لمدرسته وتسليمه النهائي. |
+| **`school_principal`** | **مدير المدرسة (إقرار واطلاع)** | `standards.view`, `evaluations.view`, `reports.view`, `plans.view`, `reviews.write` (5 صلاحيات) | يراجع التقييم والشواهد ويدوّن الملاحظات الداخلية ويقر خطط التحسين. لا يرصد درجات ولا يسلم التقييم. |
+| **`ministry_supervisor`** | **المشرف الوزاري (إدارة الدورات والمراجعة)** | `standards.view`, `evaluations.view`, `reports.view`, `supervision.review`, `completion.request`, `cycles.launch` (المطابقة لـ `cycles.manage`), `analytics.view` (7 صلاحيات) | **المالك الحصري** لإطلاق وإغلاق دورات التقييم المركزية وإلحاق المدارس المشاركة. يدوّن ملاحظات المراجعة الخارجية ويطلب الاستكمال. |
+| **`ministry_standards_manager`** | **مدير إدارة المعايير بالوزارة** | `standards.view`, `standards.manage` (صلاحيتان) | إدارة وثيقة "معايير الاعتماد المدرسي"، ترقية الإصدارات من مسودة إلى مُقرّ، وضبط الأوزان النسبية (مجموع 100%). |
 
 ---
 
-## تشغيل الاختبارات الآلية (Testing)
+## دليل التشغيل السريع للمنظومة (Quick Start & Run Guide)
+
+### 1. المتطلبات الأساسية للتشغيل
+- **PHP:** إصدار 8.4 فما فوق (مدمج في Laragon).
+- **Node.js:** إصدار v20 فما فوق مع npm.
+- **MySQL:** إصدار 8.4 فما فوق (المنفذ الافتراضي `3306`).
+- **Composer:** لإدارة حزم ومكتبات PHP.
+
+### 2. تشغيل قاعدة البيانات (MySQL)
+تأكد من تشغيل خدمة MySQL عبر لوحة تحكم Laragon بالنقر على **Start All**، أو عبر موجه الأوامر:
+```powershell
+& "C:\laragon\bin\mysql\mysql-8.4.3-winx64\bin\mysqld.exe" --defaults-file="C:\laragon\bin\mysql\mysql-8.4.3-winx64\my.ini" --console
+```
+
+### 3. تشغيل الواجهة الخلفية (Laravel API)
+افتح نافذة طرفية أولى وتوجه إلى مجلد `school-eval-api`:
+```bash
+cd school-eval-api
+php artisan serve --port=8000
+```
+> الخادم سيعمل على: `http://127.0.0.1:8000`
+
+### 4. تشغيل تطبيق الواجهة الأمامية (React Web)
+افتح نافذة طرفية ثانية وتوجه إلى مجلد `school-eval-web`:
+```bash
+cd school-eval-web
+npm run dev
+```
+> التطبيق سيعمل على: `http://localhost:3000`
+
+### 5. حسابات التجربة والفحص المسبق (Seed Data Accounts)
+
+| الدور الوظيفي | اسم المستخدم (Username) | كلمة المرور | المدرسة / النطاق |
+|---|---|---|---|
+| **مسؤول النظام (Admin)** | `admin` | `ChangeMeDevPassword@2026` | إدارة النظام المركزية |
+| **مقيّم الجودة (بلقيس)** | `quality_belqees` | `ChangeMeDevPassword@2026` | مدرسة بلقيس النموذجية |
+| **مدير مدرسة (بلقيس)** | `principal_belqees` | `ChangeMeDevPassword@2026` | مدرسة بلقيس النموذجية |
+| **مقيّم الجودة (الفاروق)** | `quality_farouq` | `ChangeMeDevPassword@2026` | مدرسة الفاروق الأساسية |
+| **مدير مدرسة (الفاروق)** | `principal_farouq` | `ChangeMeDevPassword@2026` | مدرسة الفاروق الأساسية |
+| **مشرف تربوي وزاري** | `supervisor_ministry` | `ChangeMeDevPassword@2026` | وزارة التربية والتعليم |
+| **مدير إدارة المعايير** | `standards_manager_ministry` | `ChangeMeDevPassword@2026` | وزارة التربية والتعليم |
+
+### 6. أوامر الصيانة الدورية
+- **مسح الكاش وإعادة التهيئة:** `cd school-eval-api && php artisan optimize:clear`
+- **فحص بناء تطبيق الويب:** `cd school-eval-web && npm run build`
+- **تشغيل الاختبارات الآلية:** `cd school-eval-api && php artisan test`
+
+---
+
+## تشغيل الاختبارات الآلية (Automated Testing)
 
 ```bash
 cd school-eval-api
 php artisan test
 ```
 
-**نتيجة الاختبارات الإجمالية:**
-- **160 اختباراً ناجحاً بنسبة 100%**
-- **7,793 تأكيداً (Assertions)**
-- **0 إخفاقات / 0 أخطاء**
+**النتيجة الفعلية لحزمة الاختبارات الآلية (Ground Truth):**
+- **223 اختبارًا ناجحًا بنسبة 100% (Passed)**
+- **9,111 تأكيدًا برمجيًا (Assertions)**
+- **0 إخفاقات / 0 أخطاء (0 Failures, 0 Errors)**
+
+---
+
+## خارطة الشرائح المستقبلية المتبقية (Remaining Roadmap)
+
+* **الشريحة 11: الجاهزية للإنتاج والأمان والتحسين (Production Readiness):**
+  - إغلاق الدين التقني لتوحيد حالة الإصدار المعياري Active إلى Approved (G-23).
+  - تعزيز أداء استعلامات الشواهد والفهارس المركبة (G-15).
+  - التدقيق الأمني، وتحديد معدل الطلبات (Rate Limiting)، وتفعيل حماية الجلسات والبيئات الإنتاجية.
+* **الشريحة 12: طبقة الذكاء الاصطناعي (AI Layer) — [أساسية وليست اختيارية]:**
+  - محرك المعالجة الأساسي: **Google Gemini Flash** (عبر Gemini API)، مع خطة بديلة مدعومة عبر **OpenRouter**.
+  - الوظائف الأساسية:
+    1. استخراج النصوص آلياً من ملفات الشواهد المرفوعة (OCR Worker).
+    2. التحليل الذكي للشواهد ومطابقتها مع واصفات مؤشرات "معايير الاعتماد المدرسي" وتقديم التوصيات المبدئية.
+    3. المساعد التوليدي لبناء وتجميع مسودات خطط التحسين المدرسي بناءً على نقاط الضعف وفرص التحسين المرصودة.
+  - مبدأ الحاكمية: **التدخل البشري الإلزامي (Human-in-the-Loop)**؛ لا تعديل تلقائي للدرجات ولا إقرار للشواهد دون قرار المقيّم البشري.
+
+> [!NOTE]
+> **التوسعات الإحصائية (النمط ب من خارطة السياقات):**
+> مؤشرات الأداء الإحصائية الإضافية التي تتطلب جداول تجميعية موسعة (مثل نتائج الاختبارات الوزارية المجمعة، وساعات التدريب، ونسب الغياب السلوكي) مصنفة ومؤجلة كتوسعات هندسية لما بعد الإصدار v1.0 وفق [`docs/indicator-context-roadmap.md`](docs/indicator-context-roadmap.md).
+
+---
+
+## خريطة التوثيق المرجعي الشاملة (Master Documentation Index)
+
+الهيكل التوثيقي المعتمد للمشروع منظم وفق مبدأ المصدر المرجعي الموحد (Single Source of Truth):
+
+### 1. الوثائق التأسيسية والمعمارية (Core Specs & Guidelines)
+- [`gaps.md`](gaps.md): سجل الفجوات والانحرافات التقنية وقرارات التصميم وحالة الإغلاق (26 فجوة مستوفاة وموثقة).
+- [`docs/slices_roadmap.md`](docs/slices_roadmap.md): خارطة طريق الشرائح الهندسية لجميع الشرائح من 1 إلى 12.
+- [`docs/project_master_reference.md`](docs/project_master_reference.md): المرجع المعماري الشامل لبنية النظام، الفاعلين، ومصفوفة الصلاحيات.
+- [`docs/conventions.md`](docs/conventions.md): معايير البرمجة والتسمية، وقواعد الأمان، واستراتيجية الاختبارات.
+
+### 2. توثيق الشرائح المنفذة (Implemented Slices: 0 to 10)
+- [`docs/slices/README.md`](docs/slices/README.md): الفهرس المعماري الموحد لجميع الشرائح المنفذة.
+- [`docs/slices/slice1_auth_admin.md`](docs/slices/slice1_auth_admin.md): الشريحة 1 - المصادقة والعزل المؤسسي وإدارة المستخدمين والمدارس.
+- [`docs/slices/slice2_evaluation_evidence.md`](docs/slices/slice2_evaluation_evidence.md): الشريحة 2 - التقييم الذاتي ورصد الدرجات والشواهد.
+- [`docs/slices/slice3_improvement_plans.md`](docs/slices/slice3_improvement_plans.md): الشريحة 3 - خطط وإجراءات التحسين وتتبع التأخر.
+- [`docs/slices/slice4_reports_analytics.md`](docs/slices/slice4_reports_analytics.md): الشريحة 4 - التقارير والتحليلات والنتائج الموزونة واللوحة.
+- [`docs/slices/slice5_evidence_organization.md`](docs/slices/slice5_evidence_organization.md): الشريحة 5 - تنظيم وتصنيف وتدقيق الشواهد وحصر النواقص.
+- [`docs/slices/slice6_school_profile.md`](docs/slices/slice6_school_profile.md): الشريحة 6 - الملف التعريفي، الكادر، المرافق، وسياق المؤشرات.
+- [`docs/slices/slice7_standards_management.md`](docs/slices/slice7_standards_management.md): الشريحة 7 - إدارة المعايير وإصداراتها وأوزانها النسبية.
+- [`docs/slices/slice8_educational_plans.md`](docs/slices/slice8_educational_plans.md): الشريحة 8 - الخطط التربوية وبنك الإجراءات والشواهد التنفيذية.
+- [`docs/slices/slice9_reports_export.md`](docs/slices/slice9_reports_export.md): الشريحة 9 - تصدير PDF/Excel، مقارنة الأداء، وتوسيع السياقات.
+- [`docs/slices/slice10_cycles_notifications.md`](docs/slices/slice10_cycles_notifications.md): الشريحة 10 - إدارة الدورات، بدء التقييم، الإشعارات، واستعادة الحسابات.
+
+### 3. واجهات برمجة التطبيقات ونقاط النهاية والتسليم (API Endpoints & Handover)
+- [`docs/handover/react-integration-guide.md`](docs/handover/react-integration-guide.md): دليل التسليم البرمجي لمهندسي React (نقاط النهاية، النماذج، أخطاء الاستجابة، ورسائل التحقق).
+- [`docs/api/auth_endpoints.md`](docs/api/auth_endpoints.md): مرجع نقاط نهاية المصادقة، الملف الشخصي، استعادة كلمة المرور، وإدارة المستخدمين والمدارس.
+- [`docs/api/evaluation_endpoints.md`](docs/api/evaluation_endpoints.md): مرجع نقاط نهاية شجرة المعايير، التقييم الذاتي، الشواهد، وسياق المؤشرات، وبدء التقييم.
+- [`docs/api/improvement_endpoints.md`](docs/api/improvement_endpoints.md): مرجع نقاط نهاية خطط التحسين، الإجراءات، الملاحظات الداخلية، وبنك الإجراءات، والخطط التربوية.
+- [`docs/api/reports_analytics_endpoints.md`](docs/api/reports_analytics_endpoints.md): مرجع نقاط نهاية التقارير، التحليلات، التصدير (PDF/Excel)، والدورات، والإشعارات.
+
+### 4. سياق المؤشرات وقواعد البيانات والمعايير الوطنية (Data Layer & Standards)
+- [`docs/indicator-context-roadmap.md`](docs/indicator-context-roadmap.md): خارطة السياق الاسترشادي للـ 109 مؤشرات وتصنيفها الحسابي والمستقبلي.
+- [`docs/models_guide.md`](docs/models_guide.md): دليل نماذج البيانات (40 نموذج Eloquent) والعلاقات والسمات والقواعد.
+- [`docs/migrations_guide.md`](docs/migrations_guide.md): دليل تهيئة وتنفيذ هجرات قاعدة البيانات (40 جدولاً).
+- [`docs/المعايير/معايير_الاعتماد_المستخرجة.md`](docs/المعايير/معايير_الاعتماد_المستخرجة.md): الوثيقة المرجعية الرسمية المستخرجة للمجالات والمعايير والـ 109 مؤشرات وواصفاتها.
+- [`docs/chapter4/chapter4_system_design.md`](docs/chapter4/chapter4_system_design.md): التصميم الهندسي التفصيلي للفصل الرابع المتوافق مع الواقع البرمجي.
+
+### 5. النموذج التفاعلي وأدلة التحقق (Prototypes & Verification)
+- [`frontend-prototype/README.md`](frontend-prototype/README.md): دليل النموذج الأولي التفاعلي وهيكله وطريقة تشغيله.
+- [`frontend-prototype/verification-guide.md`](frontend-prototype/verification-guide.md): دليل التحقق السريع لسيناريوهات الفحص عبر النموذج الأولي لكافة الشرائح 1-10.
+
+### 6. الأرشيف التاريخي وتقارير المراجعة (Historical Archive)
+- [`docs/archive/chapter4/`](docs/archive/chapter4/): مسودات وسجلات المزامنة التاريخية للتصميم الهندسي قبل التوحيد.
+- [`docs/archive/seeders/`](docs/archive/seeders/): تقارير التدقيق والتنفيذ الأولية للبيانات المعيارية والـ Seeders.
+- [`docs/archive/reports/`](docs/archive/reports/): تقارير فحص واختبار النماذج والبيانات الأولية.
+- [`docs/archive/prototype/`](docs/archive/prototype/): ملاحظات التدفقات وسجلات الفجوات المبكرة للنموذج الأولي.

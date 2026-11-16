@@ -1,0 +1,67 @@
+erDiagram
+    %% =========================================================================
+    %% ERD-04: المعمارية النظيفة ثلاثية المستويات للشواهد والمستندات (U-24)
+    %% =========================================================================
+
+    SCHOOL_DOCUMENTS {
+        int id PK "المعرف الفريد للمستند المدرسي (المستوى الأول)"
+        int school_id FK "المدرسة المالكة للوثيقة (عزل مؤسسي صارم)"
+        string title "عنوان المستند المدرسي"
+        string document_type "نوع الوثيقة (minutes, plan, record, report, board, image, other)"
+        text description "وصف المحتوى العام للمستند"
+        int created_by_user_id FK "المستخدم منشئ سجل المستند"
+        datetime created_at "تاريخ إنشاء الوثيقة"
+        datetime updated_at "تاريخ آخر تحديث"
+    }
+
+    DOCUMENT_VERSIONS {
+        int id PK "المعرف الفريد لنسخة الملف المرفوع (المستوى الثاني)"
+        int school_id FK "المدرسة (عزل مؤسسي)"
+        int school_document_id FK "المستند الأب الحاوي للنسخة (RESTRICT عند الحذف)"
+        int version_no "رقم النسخة المتسلسل داخل الوثيقة (1, 2...)"
+        boolean is_current "هل هذه هي النسخة النشطة الحالية (نسخة واحدة true)"
+        string file_name "اسم الملف الأصلي المرفوع"
+        string storage_uri "مسار التخزين الفيزيائي الآمن خارج مسار التنفيذ"
+        bigint file_size "حجم الملف بالبايت (الحد الأقصى 10MB)"
+        string mime_type "نوع MIME الفعلي للملف المرفوع"
+        datetime created_at "تاريخ رفع النسخة"
+        datetime updated_at "تاريخ آخر تحديث"
+    }
+
+    EVIDENCE_LINKS {
+        int id PK "المعرف الفريد لرابط الشاهد التقييمي (المستوى الثالث)"
+        int school_id FK "المدرسة (عزل مؤسسي)"
+        int evaluation_id FK "ملف التقييم الذاتي الموظَّف فيه الشاهد"
+        int evaluation_result_id FK "نتيجة التقييم المرتبطة (اختياري)"
+        int indicator_id FK "المؤشر المستهدف بالشاهد (إلزامي)"
+        int action_id FK "إجراء التحسين الميداني المرتبط (اختياري - U-24/4أ)"
+        int document_version_id FK "نسخة المستند المستدل بها (RESTRICT لمنع حذف الشاهد)"
+        text justification "أوجه دلالة المستند على استيفاء المؤشر"
+        string status "حالة رابط الشاهد (draft, completed)"
+        datetime created_at "تاريخ ربط الشاهد"
+        datetime updated_at "تاريخ آخر تحديث"
+    }
+
+    ATTACHMENTS {
+        int attachment_id PK "المعرف الفريد للمرفق"
+        string target_type "نوع الهدف المرفق له (Polymorphic: report)"
+        int target_id "معرف الهدف المرتبط"
+        string file_name "اسم الملف المرفق"
+        string file_type "نوع MIME للملف"
+        bigint file_size "حجم الملف بالبايت"
+        string storage_uri "مسار التخزين الآمن"
+        datetime created_at "تاريخ الرفع"
+        datetime updated_at "تاريخ آخر تحديث"
+    }
+
+    %% العلاقات المعمارية
+    SCHOOL_DOCUMENTS ||--o{ DOCUMENT_VERSIONS : "يمتلك نسخاً متسلسلة (واحدة فقط is_current)"
+    DOCUMENT_VERSIONS ||--o{ EVIDENCE_LINKS : "تُستدعى كشاهد لمؤشر أو إجراء (RESTRICT)"
+
+%% القيود المعمارية المنفذة:
+%% 1. UNIQUE (school_document_id, version_no): تفرّد أرقام النسخ للمستند الواحد.
+%% 2. UNIQUE (evaluation_id, indicator_id, document_version_id): حظر تكرار ربط نفس نسخة المستند بنفس المؤشر لنفس التقييم.
+%% 3. ON DELETE RESTRICT على document_version_id لمنع كسر نزاهة الشواهد التقييمية.
+%%
+%% عدد الجداول المشمولة في هذا المخطط: 4 جداول
+%% المصدر: ملفات التهجير (2026_11_02_100000, 2026_11_02_110000, 2026_11_02_120000) ونماذج Eloquent

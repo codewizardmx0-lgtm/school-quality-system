@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
@@ -50,8 +51,11 @@ class School extends Model
      */
     protected $fillable = [
         'school_name',
+        'school_type',
         'educational_stage',
         'identification_data',
+        'governorate_id',
+        'directorate_id',
         'educational_district',
         'governorate',
         'status',
@@ -87,6 +91,24 @@ class School extends Model
     public function users(): HasMany
     {
         return $this->hasMany(User::class, 'school_id', 'school_id');
+    }
+
+    /**
+     * مدير المدرسة (علاقة واحد لواحد).
+     */
+    public function principal()
+    {
+        return $this->hasOne(User::class, 'school_id', 'school_id')
+            ->whereHas('roles', fn ($q) => $q->where('role_name', 'school_principal'));
+    }
+
+    /**
+     * مقيمو المدرسة (علاقة واحد لمتعدد).
+     */
+    public function evaluators()
+    {
+        return $this->hasMany(User::class, 'school_id', 'school_id')
+            ->whereHas('roles', fn ($q) => $q->where('role_name', 'school_evaluator'));
     }
 
     /**
@@ -164,5 +186,49 @@ class School extends Model
     public function facilities(): HasMany
     {
         return $this->hasMany(SchoolFacility::class, 'school_id', 'school_id');
+    }
+
+    /**
+     * مستندات المدرسة المرفوعة في المستودع المؤسسي (U-24).
+     *
+     * @return HasMany
+     */
+    public function documents(): HasMany
+    {
+        return $this->hasMany(SchoolDocument::class, 'school_id', 'school_id');
+    }
+
+    /**
+     * المحافظة التابعة لها المدرسة.
+     */
+    public function governorateModel(): BelongsTo
+    {
+        return $this->belongsTo(Governorate::class, 'governorate_id', 'governorate_id');
+    }
+
+    /**
+     * المديرية التابعة لها المدرسة.
+     */
+    public function directorateModel(): BelongsTo
+    {
+        return $this->belongsTo(Directorate::class, 'directorate_id', 'directorate_id');
+    }
+
+    /**
+     * روابط الشواهد الموثقة للمدرسة عبر التقييمات والمؤشرات (U-24).
+     *
+     * @return HasMany
+     */
+    public function evidenceLinks(): HasMany
+    {
+        return $this->hasMany(EvidenceLink::class, 'school_id', 'school_id');
+    }
+
+    /**
+     * الرمز الوزاري الموحد للمدرسة (School Code).
+     */
+    public function getSchoolCodeAttribute(): string
+    {
+        return $this->identification_data ?: ('SCH-' . $this->school_id);
     }
 }

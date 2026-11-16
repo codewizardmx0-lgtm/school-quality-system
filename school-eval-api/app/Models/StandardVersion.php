@@ -16,6 +16,52 @@ class StandardVersion extends Model
 {
     use HasFactory;
 
+    public const STATUS_DRAFT = 'Draft';
+    public const STATUS_APPROVED = 'Approved';
+    public const STATUS_ACTIVE = 'Active'; // متوافق مع الإصدار الأولي المُقرّ
+    public const STATUS_ARCHIVED = 'Archived';
+
+    /**
+     * هل الإصدار مسودة قابلة للتعديل؟
+     */
+    public function isDraft(): bool
+    {
+        return $this->status === self::STATUS_DRAFT;
+    }
+
+    /**
+     * هل الإصدار مُقرّ وساري المفعول؟
+     * (يدعم كلاً من Approved و Active للتوافق مع الاختبارات السابقة).
+     */
+    public function isApproved(): bool
+    {
+        return in_array($this->status, [self::STATUS_APPROVED, self::STATUS_ACTIVE], true);
+    }
+
+    /**
+     * هل الإصدار مؤرشف؟
+     */
+    public function isArchived(): bool
+    {
+        return in_array($this->status, [self::STATUS_ARCHIVED, 'Retired'], true);
+    }
+
+    /**
+     * ضابط سلامة الحالات وتفرد الإصدار النشط (ضابط G-23).
+     * يضمن على مستوى النموذج عدم وجود أكثر من إصدار معياري واحد بحالة Active في نفس الوقت.
+     * لا يؤثر إطلاقاً على حالات Approved أو Draft أو التعديلات العادية.
+     */
+    protected static function booted(): void
+    {
+        static::saving(function (StandardVersion $version) {
+            if ($version->status === self::STATUS_ACTIVE) {
+                static::where('status', self::STATUS_ACTIVE)
+                    ->when($version->exists, fn ($q) => $q->where('version_id', '!=', $version->version_id))
+                    ->update(['status' => self::STATUS_ARCHIVED]);
+            }
+        });
+    }
+
     /**
      * اسم الجدول المرتبط بالنموذج في قاعدة البيانات.
      *

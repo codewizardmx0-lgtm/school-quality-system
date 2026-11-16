@@ -26,8 +26,9 @@ use App\Models\EvaluationCycle;
 use App\Models\CycleParticipation;
 use App\Models\Evaluation;
 use App\Models\EvaluationResult;
-use App\Models\Evidence;
-use App\Models\EvidenceVersion;
+use App\Models\SchoolDocument;
+use App\Models\DocumentVersion;
+use App\Models\EvidenceLink;
 use App\Models\Attachment;
 use App\Models\Note;
 use App\Models\EvaluationResultVerificationMethod;
@@ -73,8 +74,9 @@ class ModelsFillableTest extends TestCase
         CycleParticipation::class,
         Evaluation::class,
         EvaluationResult::class,
-        Evidence::class,
-        EvidenceVersion::class,
+        SchoolDocument::class,
+        DocumentVersion::class,
+        EvidenceLink::class,
         Attachment::class,
         Note::class,
         EvaluationResultVerificationMethod::class,
@@ -95,11 +97,11 @@ class ModelsFillableTest extends TestCase
     ];
 
     /**
-     * 1. التحقق من أن عدد الموديلات 40 بالتمام والكمال.
+     * 1. التحقق من أن عدد الموديلات 41 بالتمام والكمال بعد معمارية الشواهد U-24.
      */
     public function test_there_are_exactly_forty_models(): void
     {
-        $this->assertCount(40, $this->models, 'يجب أن تحتوي المنظومة على 40 موديلاً بالتمام والكمال.');
+        $this->assertCount(41, $this->models, 'يجب أن تحتوي المنظومة على 41 موديلاً بالتمام والكمال.');
     }
 
     /**

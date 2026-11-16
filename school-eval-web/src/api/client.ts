@@ -70,6 +70,12 @@ export async function apiClient<T = unknown>(
 
   if (!response.ok) {
     // 401 Unauthorized: مسح الرمز وإشعار التطبيق بانتهاء الجلسة
+    if (response.status === 503) {
+      window.dispatchEvent(new CustomEvent('app:maintenance', {
+        detail: { message: jsonResult.message || 'النظام في وضع الصيانة المجدولة حاليًا، يرجى المحاولة لاحقًا.' },
+      }));
+    }
+
     if (response.status === 401) {
       sessionStorage.removeItem(TOKEN_STORAGE_KEY);
       window.dispatchEvent(new CustomEvent('auth:unauthorized', {

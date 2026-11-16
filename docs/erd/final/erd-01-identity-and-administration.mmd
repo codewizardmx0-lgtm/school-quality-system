@@ -1,0 +1,86 @@
+erDiagram
+    %% =========================================================================
+    %% ERD-01: الهوية والجهات والصلاحيات والإدارة
+    %% =========================================================================
+
+    ROLES {
+        int role_id PK "المعرف الفريد للدور"
+        string role_name UK "اسم الدور الوظيفي (Admin, Evaluator, Principal...)"
+        string description "وصف الدور ومسؤولياته"
+    }
+
+    PERMISSIONS {
+        int permission_id PK "المعرف الفريد للصلاحية"
+        string permission_code UK "رمز الصلاحية الذرية (e.g. evaluations.submit)"
+        string permission_name "الاسم التوصيفي للصلاحية"
+        string description "تفاصيل وضوابط استخدام الصلاحية"
+    }
+
+    ROLE_PERMISSIONS {
+        int role_id PK,FK "الدور الحاوي"
+        int permission_id PK,FK "الصلاحية الممنوحة"
+    }
+
+    SCHOOLS {
+        int school_id PK "المعرف الفريد للمدرسة"
+        string school_name "اسم المدرسة الرسمي"
+        string educational_stage "المرحلة التعليمية (أساسي / ثانوي / مشترك)"
+        string identification_data UK "الرقم التعريفي الوزاري للمدرسة"
+        string educational_district "المديرية التعليمية التابعة لها"
+        string governorate "المحافظة"
+        string status "الحالة التشغيلية (Active, Inactive) - الافتراضي Active"
+    }
+
+    MINISTRIES {
+        int ministry_id PK "المعرف الفريد للجهة الوزارية"
+        string ministry_name "اسم الوزارة أو الإدارة العامة"
+        string department_name "اسم القسم أو الإدارة التابعة"
+        string contact_info "بيانات التواصل الرسمية"
+    }
+
+    USERS {
+        int user_id PK "المعرف الفريد للمستخدم"
+        int school_id FK "المدرسة التابع لها - شرطي (XOR)"
+        int ministry_id FK "الجهة الوزارية التابع لها - شرطي (XOR)"
+        string username UK "اسم المستخدم لتسجيل الدخول"
+        string password_hash "تجزئة كلمة المرور المشفرة"
+        string full_name "الاسم الثلاثي أو الرباعي للمستخدم"
+        string email UK "البريد الإلكتروني الرسمي"
+        string user_type "نوع المستخدم (school, ministry, system)"
+        string status "حالة الحساب (Active, Disabled) - الافتراضي Active"
+        datetime created_at "تاريخ إنشاء الحساب"
+        datetime updated_at "تاريخ آخر تحديث"
+    }
+
+    USER_ROLES {
+        int user_id PK,FK "المستخدم صاحب الدور"
+        int role_id PK,FK "الدور الممنوح"
+    }
+
+    SESSIONS {
+        int session_id PK "المعرف الفريد للجلسة"
+        int user_id FK "المستخدم صاحب الجلسة"
+        string ip_address "عنوان IP المتصل منه"
+        string user_agent "بيانات متصفح وبيئة العميل"
+        datetime login_at "وقت تسجيل الدخول"
+        datetime last_activity_at "وقت آخر نشاط للجلسة (فحص الخمول 30 دقيقة)"
+        datetime ended_at "وقت انتهاء أو إنهاء الجلسة"
+        boolean active "هل الجلسة نشطة حالياً - الافتراضي true"
+        datetime created_at "تاريخ إنشاء الجلسة"
+        datetime updated_at "تاريخ آخر تحديث"
+    }
+
+    %% العلاقات بين الكيانات
+    ROLES ||--o{ ROLE_PERMISSIONS : "يمتلك عدة صلاحيات"
+    PERMISSIONS ||--o{ ROLE_PERMISSIONS : "ترتبط بعدة أدوار"
+
+    USERS ||--o{ USER_ROLES : "يمتلك دوراً أو أكثر"
+    ROLES ||--o{ USER_ROLES : "يُمنح لعدة مستخدمين"
+
+    SCHOOLS ||--o{ USERS : "ينتمي إليها موظفو المدرسة (XOR)"
+    MINISTRIES ||--o{ USERS : "ينتمي إليها موظفو الوزارة (XOR)"
+
+    USERS ||--o{ SESSIONS : "يفتح جلسة تشغيلية واحدة أو أكثر"
+
+%% عدد الجداول المشمولة في هذا المخطط: 8 جداول
+%% المصدر: ملفات التهجير (000001, 000002, 000003) ونماذج Eloquent في school-eval-api/app/Models

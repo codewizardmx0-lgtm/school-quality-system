@@ -39,6 +39,9 @@ class CompletionRequest extends Model
     protected $fillable = [
         'submission_id',
         'issued_by_user_id',
+        'completion_deadline',
+        'deadline_extended_at',
+        'deadline_extensions_count',
         'resolved_at',
         'status',
     ];
@@ -51,6 +54,9 @@ class CompletionRequest extends Model
     protected function casts(): array
     {
         return [
+            'completion_deadline' => 'datetime',
+            'deadline_extended_at' => 'datetime',
+            'deadline_extensions_count' => 'integer',
             'resolved_at' => 'datetime',
             'created_at' => 'datetime',
             'updated_at' => 'datetime',
@@ -78,6 +84,16 @@ class CompletionRequest extends Model
     }
 
     /**
+     * اسم بديل لعلاقة المشرف مصدر الطلب (للتوافق المعجمي).
+     *
+     * @return BelongsTo
+     */
+    public function requestedBy(): BelongsTo
+    {
+        return $this->issuedBy();
+    }
+
+    /**
      * بنود وتفاصيل النواقص المحددة في طلب الاستكمال.
      *
      * @return HasMany
@@ -85,5 +101,25 @@ class CompletionRequest extends Model
     public function items(): HasMany
     {
         return $this->hasMany(CompletionRequestItem::class, 'request_id', 'request_id');
+    }
+
+    /**
+     * هل انتهت مهلة استكمال الطلب الحالية؟
+     */
+    public function isExpired(): bool
+    {
+        if (!$this->completion_deadline) {
+            return false;
+        }
+
+        return now()->greaterThan($this->completion_deadline);
+    }
+
+    /**
+     * جلب ملف التقييم المرتبط عبر محاولة التسليم والتقرير.
+     */
+    public function getEvaluationAttribute(): ?Evaluation
+    {
+        return $this->submission?->report?->evaluation;
     }
 }

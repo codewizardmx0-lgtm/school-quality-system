@@ -12,6 +12,7 @@ use App\Models\Role;
 use App\Models\School;
 use App\Models\User;
 use App\Models\UserRole;
+use App\Services\AuditLoggerService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -130,6 +131,17 @@ class UserController extends Controller
 
         $newUser->load(['school', 'ministry', 'roles']);
 
+        $roleName = $newUser->roles->first()?->description ?? $newUser->roles->first()?->role_name ?? 'مستخدم';
+        (new AuditLoggerService())->log(
+            action: 'user.created',
+            targetType: 'User',
+            targetId: $newUser->user_id,
+            oldValues: null,
+            newValues: ['username' => $newUser->username, 'full_name' => $newUser->full_name, 'status' => $newUser->status],
+            userId: $request->user()?->user_id,
+            descriptionAr: "قام مسؤول النظام بإنشاء حساب مستخدم جديد ({$newUser->full_name}) بدور ({$roleName})"
+        );
+
         return ApiResponse::created(
             data: (new UserResource($newUser))->resolve($request),
             message: 'تم إنشاء حساب المستخدم بنجاح.'
@@ -152,6 +164,9 @@ class UserController extends Controller
         DB::transaction(function () use ($targetUser, $data) {
             $fields = [];
 
+            if (isset($data['username'])) {
+                $fields['username'] = $data['username'];
+            }
             if (isset($data['fullName'])) {
                 $fields['full_name'] = $data['fullName'];
             }
@@ -194,6 +209,16 @@ class UserController extends Controller
 
         $targetUser->load(['school', 'ministry', 'roles']);
 
+        (new AuditLoggerService())->log(
+            action: 'user.updated',
+            targetType: 'User',
+            targetId: $targetUser->user_id,
+            oldValues: null,
+            newValues: ['username' => $targetUser->username, 'full_name' => $targetUser->full_name, 'status' => $targetUser->status],
+            userId: $request->user()?->user_id,
+            descriptionAr: "قام مسؤول النظام بتحديث بيانات المستخدم ({$targetUser->full_name})"
+        );
+
         return ApiResponse::success(
             data: (new UserResource($targetUser->fresh()))->resolve($request),
             message: 'تم تحديث بيانات المستخدم بنجاح.'
@@ -226,6 +251,16 @@ class UserController extends Controller
         $newStatus = $targetUser->status === 'Active' ? 'Disabled' : 'Active';
         $targetUser->update(['status' => $newStatus]);
 
+        (new AuditLoggerService())->log(
+            action: 'user.status_toggled',
+            targetType: 'User',
+            targetId: $targetUser->user_id,
+            oldValues: ['status' => $targetUser->getOriginal('status')],
+            newValues: ['status' => $newStatus],
+            userId: $user->user_id,
+            descriptionAr: 'قام مسؤول النظام بـ' . ($newStatus === 'Active' ? 'تفعيل' : 'تعطيل') . " حساب المستخدم ({$targetUser->full_name})"
+        );
+
         $message = $newStatus === 'Active' 
             ? 'تم تفعيل حساب المستخدم بنجاح.' 
             : 'تم تعطيل حساب المستخدم بنجاح.';
@@ -247,9 +282,26 @@ class UserController extends Controller
         }
 
         $roles = Role::orderBy('role_id')->get()->map(function ($r) {
+            $arabicNameMap = [
+                'admin'                       => 'مدير النظام المركزي',
+                'school_evaluator'            => 'مقيم المدرسة',
+                'school_principal'            => 'مدير المدرسة',
+                'ministry_standards_manager'  => 'مسؤول إدارة المعايير',
+                'ministry_supervisor'         => 'مشرف وزاري معتمد',
+            ];
+            $codeMap = [
+                'admin'                       => 'SYS',
+                'school_evaluator'            => 'S1',
+                'school_principal'            => 'P1',
+                'ministry_standards_manager'  => 'M2',
+                'ministry_supervisor'         => 'A3',
+            ];
+
             return [
                 'roleId'      => $r->role_id,
                 'roleName'    => $r->role_name,
+                'roleNameAr'  => $arabicNameMap[$r->role_name] ?? $r->role_name,
+                'roleCode'    => $codeMap[$r->role_name] ?? ('R-' . $r->role_id),
                 'description' => $r->description,
             ];
         });

@@ -67,16 +67,20 @@ class ImprovementAreaController extends Controller
         }
 
         $validator = Validator::make($request->all(), [
-            'resultId'    => ['required', 'integer'],
-            'name'        => ['required', 'string', 'max:200'],
-            'description' => ['nullable', 'string'],
-            'priority'    => ['required', 'string', 'in:Low,Medium,High'],
+            'resultId'     => ['required', 'integer'],
+            'name'         => ['required', 'string', 'max:200'],
+            'description'  => ['nullable', 'string'],
+            'priority'     => ['required', 'string', 'in:Low,Medium,High'],
+            'target_score' => ['nullable', 'integer', 'between:1,3'],
+            'targetScore'  => ['nullable', 'integer', 'between:1,3'],
         ], [
-            'resultId.required' => 'معرف نتيجة التقييم إلزامي لربط مجال التحسين.',
-            'name.required'     => 'اسم أو عنوان مجال التحسين إلزامي.',
-            'name.max'          => 'لا يمكن أن يتجاوز اسم مجال التحسين 200 حرف.',
-            'priority.required' => 'أولوية مجال التحسين إلزامية.',
-            'priority.in'       => 'قيمة الأولوية غير صالحة. القيم المسموحة: Low, Medium, High.',
+            'resultId.required'   => 'معرف نتيجة التقييم إلزامي لربط مجال التحسين.',
+            'name.required'       => 'اسم أو عنوان مجال التحسين إلزامي.',
+            'name.max'            => 'لا يمكن أن يتجاوز اسم مجال التحسين 200 حرف.',
+            'priority.required'   => 'أولوية مجال التحسين إلزامية.',
+            'priority.in'         => 'قيمة الأولوية غير صالحة. القيم المسموحة: Low, Medium, High.',
+            'target_score.between' => 'يجب أن يكون التقدير المستهدف بين 1 و 3.',
+            'targetScore.between'  => 'يجب أن يكون التقدير المستهدف بين 1 و 3.',
         ]);
 
         if ($validator->fails()) {
@@ -93,13 +97,77 @@ class ImprovementAreaController extends Controller
             return ApiResponse::notFound('نتيجة المؤشر المطلوبة غير موجودة.');
         }
 
+        $targetScore = $request->input('target_score') ?? $request->input('targetScore') ?? 3;
+
         $area = ImprovementArea::create([
             'result_id'    => $result->result_id,
             'indicator_id' => $result->indicator_id,
             'name'         => $request->name,
             'description'  => $request->description,
             'priority'     => $request->priority,
+            'target_score' => (int) $targetScore,
         ]);
+
+        // ربط المجال بالخطة المحددة أو الخطة النشطة الافتراضية للدورة
+        $targetPlanId = $request->input('planId') ?? $request->input('plan_id');
+        $linkedPlan = null;
+        if ($targetPlanId) {
+            $targetPlan = \App\Models\ImprovementPlan::where('plan_id', (int) $targetPlanId)
+                ->where('school_id', $result->evaluation->school_id)
+                ->first();
+            if ($targetPlan) {
+                $linkedPlan = $targetPlan;
+                \App\Models\PlanImprovementArea::firstOrCreate([
+                    'plan_id' => $targetPlan->plan_id,
+                    'area_id' => $area->area_id,
+                ], [
+                    'created_at' => now(),
+                ]);
+            }
+        } else {
+            $defaultPlan = \App\Models\ImprovementPlan::where('school_id', $result->evaluation->school_id)
+                ->where('cycle_id', $result->evaluation->cycle_id)
+                ->where('status', 'Active')
+                ->orderBy('plan_id', 'desc')
+                ->first()
+                ?? \App\Models\ImprovementPlan::where('school_id', $result->evaluation->school_id)
+                    ->where('cycle_id', $result->evaluation->cycle_id)
+                    ->where('status', 'Draft')
+                    ->orderBy('plan_id', 'desc')
+                    ->first();
+
+            if ($defaultPlan) {
+                $linkedPlan = $defaultPlan;
+                \App\Models\PlanImprovementArea::firstOrCreate([
+                    'plan_id' => $defaultPlan->plan_id,
+                    'area_id' => $area->area_id,
+                ], [
+                    'created_at' => now(),
+                ]);
+            }
+        }
+
+        // إنشاء الإجراء التنفيذي تلقائياً عند التبني الموحد
+        if ($linkedPlan) {
+            $actionTitle = $request->input('actionTitle') ?? $request->input('title') ?? $request->input('name') ?? $area->name;
+            $leader = $request->input('leader') ?? $request->input('responsible_person_description') ?? 'فريق التطوير والجودة المدرسية';
+            $startDate = $request->input('startDate') ?? $request->input('start_date') ?? now()->toDateString();
+            $dueDate = $request->input('dueDate') ?? $request->input('due_date') ?? now()->addMonths(3)->toDateString();
+            $progressDescription = $request->input('progressDescription') ?? $request->input('progress_description') ?? $area->description ?? 'تم تبني الإجراء لمعالجة فجوة التقييم الذاتي.';
+
+            \App\Models\ImprovementAction::firstOrCreate([
+                'plan_id' => $linkedPlan->plan_id,
+                'area_id' => $area->area_id,
+            ], [
+                'title'                          => mb_substr($actionTitle, 0, 200),
+                'responsible_person_description' => mb_substr($leader, 0, 150),
+                'start_date'                     => $startDate,
+                'due_date'                       => $dueDate,
+                'status'                         => 'InProgress',
+                'completion_percentage'          => 0,
+                'progress_description'           => $progressDescription,
+            ]);
+        }
 
         $area->load(['result.evaluation', 'indicator', 'plans']);
 
@@ -135,14 +203,18 @@ class ImprovementAreaController extends Controller
         }
 
         $validator = Validator::make($request->all(), [
-            'name'        => ['sometimes', 'required', 'string', 'max:200'],
-            'description' => ['nullable', 'string'],
-            'priority'    => ['sometimes', 'required', 'string', 'in:Low,Medium,High'],
+            'name'         => ['sometimes', 'required', 'string', 'max:200'],
+            'description'  => ['nullable', 'string'],
+            'priority'     => ['sometimes', 'required', 'string', 'in:Low,Medium,High'],
+            'target_score' => ['sometimes', 'nullable', 'integer', 'between:1,3'],
+            'targetScore'  => ['sometimes', 'nullable', 'integer', 'between:1,3'],
         ], [
-            'name.required'     => 'اسم أو عنوان مجال التحسين إلزامي.',
-            'name.max'          => 'لا يمكن أن يتجاوز اسم مجال التحسين 200 حرف.',
-            'priority.required' => 'أولوية مجال التحسين إلزامية.',
-            'priority.in'       => 'قيمة الأولوية غير صالحة. القيم المسموحة: Low, Medium, High.',
+            'name.required'        => 'اسم أو عنوان مجال التحسين إلزامي.',
+            'name.max'             => 'لا يمكن أن يتجاوز اسم مجال التحسين 200 حرف.',
+            'priority.required'    => 'أولوية مجال التحسين إلزامية.',
+            'priority.in'          => 'قيمة الأولوية غير صالحة. القيم المسموحة: Low, Medium, High.',
+            'target_score.between' => 'يجب أن يكون التقدير المستهدف بين 1 و 3.',
+            'targetScore.between'  => 'يجب أن يكون التقدير المستهدف بين 1 و 3.',
         ]);
 
         if ($validator->fails()) {
@@ -158,6 +230,9 @@ class ImprovementAreaController extends Controller
         if ($request->has('priority')) {
             $area->priority = $request->priority;
         }
+        if ($request->has('target_score') || $request->has('targetScore')) {
+            $area->target_score = (int) ($request->input('target_score') ?? $request->input('targetScore'));
+        }
 
         $area->save();
         $area->load(['result.evaluation', 'indicator', 'plans']);
@@ -166,6 +241,40 @@ class ImprovementAreaController extends Controller
             data: $this->formatArea($area),
             message: 'تم تحديث مجال التحسين بنجاح.'
         );
+    }
+
+    /**
+     * إلغاء تبني مجال التحسين وحذفه ما لم تكن هناك إجراءات تنفيذية بدأت بالفعل.
+     *
+     * DELETE /api/v1/improvement-areas/{id}
+     */
+    public function destroy(Request $request, int $id): JsonResponse
+    {
+        $user = $request->user();
+        if (!$user->hasPermission('plans.manage')) {
+            return ApiResponse::forbidden('غير مصرح لك بإلغاء أو حذف مجال التحسين.');
+        }
+
+        $area = ImprovementArea::with(['actions', 'result.evaluation'])->find($id);
+        if (!$area) {
+            return ApiResponse::notFound('مجال التحسين المطلوب غير موجود.');
+        }
+
+        if ($user->user_type === 'school') {
+            $evalSchoolId = $area->result?->evaluation?->school_id;
+            if ($evalSchoolId && (int) $evalSchoolId !== (int) $user->school_id) {
+                return ApiResponse::forbidden('غير مصرح لك بحذف مجال تحسين لمدرسة أخرى.');
+            }
+        }
+
+        if ($area->actions()->exists()) {
+            return ApiResponse::error('لا يمكن إلغاء تبني مجال التحسين لوجود إجراءات تنفيذية مرتبطة به. يرجى حذف الإجراءات أولاً.', 422);
+        }
+
+        \App\Models\PlanImprovementArea::where('area_id', $area->area_id)->delete();
+        $area->delete();
+
+        return ApiResponse::success(null, 'تم إلغاء تبني مجال التحسين بنجاح.');
     }
 
     /**
@@ -189,6 +298,8 @@ class ImprovementAreaController extends Controller
             'description'      => $area->description,
             'priority'         => $area->priority,
             'priorityLabel'    => $priorityLabels[$area->priority] ?? $area->priority,
+            'status'           => $area->status ?? 'pending_action',
+            'targetScore'      => (int) ($area->target_score ?? 3),
             'linkedPlansCount' => $area->plans->count(),
             'createdAt'        => $area->created_at?->toIso8601String(),
         ];

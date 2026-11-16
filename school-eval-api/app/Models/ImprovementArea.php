@@ -37,6 +37,10 @@ class ImprovementArea extends Model
      */
     protected $primaryKey = 'area_id';
 
+    public const STATUS_PENDING_ACTION = 'pending_action';
+    public const STATUS_IN_PROGRESS    = 'in_progress';
+    public const STATUS_COMPLETED      = 'completed';
+
     /**
      * الحقول القابلة للتعيين الجماعي (Mass Assignment).
      *
@@ -48,6 +52,8 @@ class ImprovementArea extends Model
         'name',
         'description',
         'priority',
+        'target_score',
+        'status',
     ];
 
     /**
@@ -58,6 +64,7 @@ class ImprovementArea extends Model
     protected function casts(): array
     {
         return [
+            'target_score' => 'integer',
             'created_at' => 'datetime',
             'updated_at' => 'datetime',
         ];
@@ -108,5 +115,31 @@ class ImprovementArea extends Model
             'area_id',
             'plan_id'
         );
+    }
+
+    /**
+     * الإجراءات التنفيذية المرتبطة بمجال التحسين.
+     *
+     * @return HasMany
+     */
+    public function actions(): HasMany
+    {
+        return $this->hasMany(ImprovementAction::class, 'area_id', 'area_id');
+    }
+
+    /**
+     * مزامنة وتحديث حالة مجال التحسين بناءً على الإجراءات التنفيذية المرتبطة به.
+     */
+    public function syncStatus(): void
+    {
+        $actions = $this->actions()->where('status', '!=', 'Cancelled')->get();
+        if ($actions->isEmpty()) {
+            $this->status = self::STATUS_PENDING_ACTION;
+        } elseif ($actions->every(fn($a) => $a->status === 'Done' || (int)$a->completion_percentage === 100)) {
+            $this->status = self::STATUS_COMPLETED;
+        } else {
+            $this->status = self::STATUS_IN_PROGRESS;
+        }
+        $this->save();
     }
 }

@@ -1,0 +1,91 @@
+erDiagram
+    %% =========================================================================
+    %% ERD-05: المخرجات ومحاولات التسليم ومسار الاستكمال والمراجعات الإشرافية
+    %% =========================================================================
+
+    REPORTS {
+        int report_id PK "المعرف الفريد لتقرير التقييم"
+        int evaluation_id FK "ملف التقييم الذاتي المصدر"
+        datetime generated_at "تاريخ توليد التقرير"
+        datetime updated_at "تاريخ آخر تحديث"
+        string status "حالة التقرير (Draft عند التسليم الأول، Final عند الإغلاق النهائي)"
+    }
+
+    EVALUATION_SUBMISSIONS {
+        int submission_id PK "المعرف الفريد لمحاولة التسليم"
+        int report_id FK "التقرير المرفوع"
+        int submitted_by_user_id FK "المستخدم المسلِّم (مقيم المدرسة)"
+        int attempt_no "رقم المحاولة المتسلسل (1 عند التسليم الأول، N+1 عند resubmit)"
+        datetime submitted_at "تاريخ ووقت الإرسال الفعلي"
+        datetime updated_at "تاريخ آخر تحديث"
+        string status "حالة المحاولة (Draft, Submitted, UnderReview, NeedsCompletion, Completed)"
+    }
+
+    COMPLETION_REQUESTS {
+        int request_id PK "المعرف الفريد لطلب الاستكمال"
+        int submission_id FK "محاولة التسليم التي صدر عنها الطلب"
+        int issued_by_user_id FK "المشرف الوزاري المصدر للطلب"
+        datetime completion_deadline "المهلة الزمنية الملزمة لمعالجة النواقص (U-03/U-11)"
+        datetime deadline_extended_at "تاريخ آخر تمديد للمهلة من قبل المشرف الوزاري"
+        int deadline_extensions_count "عدد مرات تمديد المهلة (افتراضي 0)"
+        datetime created_at "تاريخ إصدار طلب الاستكمال"
+        datetime resolved_at "تاريخ إغلاق الطلب بعد استيفاء البنود"
+        datetime updated_at "تاريخ آخر تحديث"
+        string status "حالة طلب الاستكمال (Open, Resolved)"
+    }
+
+    COMPLETION_REQUEST_ITEMS {
+        int request_item_id PK "المعرف الفريد لبند الاستكمال"
+        int request_id FK "طلب الاستكمال الحاوي"
+        int indicator_id FK "المؤشر المستهدف بالاستكمال (إلزامي NOT NULL)"
+        int evidence_link_id FK "رابط الشاهد المعني بالاستكمال (اختياري nullable)"
+        text missing_description "وصف النقص أو متطلب التوضيح المطلوب من المدرسة"
+        string status "حالة البند (pending, resolved, rejected للمشرف فقط)"
+        datetime created_at "تاريخ إنشاء البند"
+        datetime updated_at "تاريخ آخر تحديث"
+    }
+
+    SUPERVISOR_NOTES {
+        int note_id PK "المعرف الفريد للملاحظة الإشرافية"
+        int submission_id FK "محاولة التسليم الموثَّقة بالملاحظة"
+        int author_user_id FK "المشرف الوزاري كاتب الملاحظة"
+        text text "نص الملاحظة الإشرافية"
+        datetime created_at "تاريخ التدوين"
+        datetime updated_at "تاريخ آخر تحديث"
+    }
+
+    INTERNAL_REVIEW_NOTES {
+        int note_id PK "المعرف الفريد لملاحظة المراجعة الداخلية"
+        int report_id FK "التقرير المراجَع"
+        int author_user_id FK "مدير المدرسة كاتب الملاحظة"
+        text text "نص الملاحظة الداخلية"
+        datetime created_at "تاريخ التدوين"
+        datetime updated_at "تاريخ آخر تحديث"
+    }
+
+    PLAN_REVIEW_NOTES {
+        int note_id PK "المعرف الفريد لملاحظة مراجعة الخطة"
+        int plan_id FK "خطة التحسين المراجَعة"
+        int author_user_id FK "مدير المدرسة كاتب الملاحظة"
+        text text "نص ملاحظة المراجعة على الخطة"
+        datetime created_at "تاريخ التدوين"
+        datetime updated_at "تاريخ آخر تحديث"
+    }
+
+    %% العلاقات
+    REPORTS ||--o{ EVALUATION_SUBMISSIONS : "يوثق محاولات رفعه للوزارة"
+    REPORTS ||--o{ INTERNAL_REVIEW_NOTES : "يدعم تدوين ملاحظات مدير المدرسة"
+
+    EVALUATION_SUBMISSIONS ||--o{ COMPLETION_REQUESTS : "ينشأ عنه طلب استكمال عند وجود نواقص"
+    EVALUATION_SUBMISSIONS ||--o{ SUPERVISOR_NOTES : "يدعم تدوين ملاحظات المشرف الوزاري"
+
+    COMPLETION_REQUESTS ||--o{ COMPLETION_REQUEST_ITEMS : "يتضمن بنود نواقص تفصيلية"
+
+%% القيود المعمارية وقواعد العمل:
+%% 1. UNIQUE (report_id, attempt_no): تفرّد رقم المحاولة داخل التقرير.
+%% 2. عند submit: التقييم -> Submitted، تقرير Draft، ومحاولة attempt_no = 1.
+%% 3. عند resubmit: يُشترط حل كافة البنود (لا يوجد pending) وضمن المهلة، وتُنشأ محاولة attempt_no = N+1 والطلب UnderReview والتقييم Submitted.
+%% 4. إغلاق المشرف (Direct Close أو Completion Close) هو الوحيد الذي ينقل التقييم إلى Completed والتقرير إلى Final.
+%%
+%% عدد الجداول المشمولة في هذا المخطط: 7 جداول
+%% المصدر: ملفات التهجير (000009, 000010, 2026_11_03_100000) ونماذج Eloquent

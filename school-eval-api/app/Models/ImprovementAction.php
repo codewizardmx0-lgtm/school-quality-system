@@ -49,7 +49,11 @@ class ImprovementAction extends Model
         'start_date',
         'due_date',
         'status',
+        'completion_percentage',
         'progress_description',
+        'baseline_score',
+        'baseline_target_score',
+        'baseline_gap',
     ];
 
     /**
@@ -60,11 +64,37 @@ class ImprovementAction extends Model
     protected function casts(): array
     {
         return [
-            'start_date' => 'date',
-            'due_date' => 'date',
-            'created_at' => 'datetime',
-            'updated_at' => 'datetime',
+            'start_date'            => 'date',
+            'due_date'              => 'date',
+            'completion_percentage' => 'integer',
+            'baseline_score'        => 'integer',
+            'baseline_target_score' => 'integer',
+            'baseline_gap'          => 'integer',
+            'created_at'            => 'datetime',
+            'updated_at'            => 'datetime',
         ];
+    }
+
+    /**
+     * مزامنة نسبة الإنجاز مع حالة الإجراء تلقائياً.
+     */
+    protected static function booted(): void
+    {
+        static::saving(function (ImprovementAction $action) {
+            if ($action->status === 'Done' && (int) ($action->completion_percentage ?? 0) < 100) {
+                $action->completion_percentage = 100;
+            } elseif ((int) ($action->completion_percentage ?? 0) === 100 && $action->status !== 'Done') {
+                $action->status = 'Done';
+            }
+        });
+
+        static::saved(function (ImprovementAction $action) {
+            $action->area?->syncStatus();
+        });
+
+        static::deleted(function (ImprovementAction $action) {
+            $action->area?->syncStatus();
+        });
     }
 
     /**
@@ -106,5 +136,15 @@ class ImprovementAction extends Model
     public function aiRecommendations(): HasMany
     {
         return $this->hasMany(AiRecommendation::class, 'improvement_action_id', 'action_id');
+    }
+
+    /**
+     * روابط الشواهد والمستندات التقييمية المرتبطة بهذا الإجراء (المعمارية الجديدة U-24).
+     *
+     * @return HasMany
+     */
+    public function evidenceLinks(): HasMany
+    {
+        return $this->hasMany(EvidenceLink::class, 'action_id', 'action_id');
     }
 }

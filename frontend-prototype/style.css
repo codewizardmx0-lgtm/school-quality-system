@@ -1116,3 +1116,109 @@ tr:hover {
   font-weight: 700;
   margin: 0.35rem 0;
 }
+
+/* ==========================================================================
+   الشريحة 10: أنماط الإشعارات واستعادة كلمة المرور وإدارة الدورات
+   ========================================================================== */
+
+/* زر جرس الإشعارات في الهيدر */
+.notification-bell-btn {
+  position: relative;
+  font-size: 1.1rem;
+  padding: 0.35rem 0.65rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: #f1f5f9;
+  border: 1px solid var(--border);
+  border-radius: 9999px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.notification-bell-btn:hover {
+  background: #e2e8f0;
+  transform: translateY(-1px);
+}
+
+.notification-badge {
+  background: #ef4444;
+  color: #ffffff;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 0.1rem 0.45rem;
+  border-radius: 9999px;
+  min-width: 18px;
+  text-align: center;
+}
+
+/* قائمة الإشعارات */
+.notification-item {
+  padding: 0.85rem;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: #ffffff;
+  margin-bottom: 0.6rem;
+  transition: background 0.15s ease;
+  cursor: pointer;
+}
+
+.notification-item.unread {
+  background: #eff6ff;
+  border-right: 4px solid var(--primary);
+}
+
+.notification-item:hover {
+  background: #f8fafc;
+}
+
+.notification-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.3rem;
+}
+
+.notification-title {
+  font-weight: 700;
+  font-size: 0.9rem;
+  color: var(--text-main);
+}
+
+.notification-time {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.notification-body {
+  font-size: 0.82rem;
+  color: #475569;
+  line-height: 1.45;
+}
+
+/* بطاقة الحث على بدء تقييم جديد للمدرسة */
+.cta-start-evaluation-card {
+  background: linear-gradient(135deg, #ecfdf5 0%, #f0fdf4 100%);
+  border: 1px solid #a7f3d0;
+  border-right: 5px solid #10b981;
+  border-radius: 8px;
+  padding: 1.25rem 1.5rem;
+  margin-bottom: 1.5rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.cta-start-evaluation-card h4 {
+  margin: 0 0 0.3rem 0;
+  color: #065f46;
+  font-size: 1.1rem;
+}
+
+.cta-start-evaluation-card p {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #047857;
+}

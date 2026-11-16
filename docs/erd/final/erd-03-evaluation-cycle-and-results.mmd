@@ -1,0 +1,73 @@
+erDiagram
+    %% =========================================================================
+    %% ERD-03: دورات التقييم وملفات المدارس ونتائج الرصد
+    %% =========================================================================
+
+    EVALUATION_CYCLES {
+        int cycle_id PK "المعرف الفريد لدورة التقييم"
+        int standard_version_id FK "الإصدار المعياري المعتمد للدورة"
+        string cycle_name "اسم الدورة التقييمية (e.g. الدورة السنوية الأولى)"
+        string academic_year "العام الدراسي للدورة"
+        date start_date "تاريخ بداية الدورة"
+        date end_date "تاريخ نهاية الدورة (أساس الفحص الزمني U-29)"
+        string status "حالة الدورة (Active, Closed, Planning)"
+        datetime created_at "تاريخ إنشاء السجل"
+        datetime updated_at "تاريخ آخر تحديث"
+    }
+
+    CYCLE_PARTICIPATIONS {
+        int cycle_id PK,FK "دورة التقييم"
+        int school_id PK,FK "المدرسة المشاركة"
+        datetime enrolled_at "تاريخ قيد المدرسة بالدورة"
+        string participation_status "حالة المشاركة (Registered, Active, Withdrawn)"
+    }
+
+    EVALUATIONS {
+        int evaluation_id PK "المعرف الفريد لملف التقييم الذاتي"
+        int cycle_id FK "الدورة التابع لها التقييم"
+        int school_id FK "المدرسة صاحبة ملف التقييم"
+        int created_by_user_id FK "مقيم المدرسة الذي أنشأ الملف"
+        string status "حالة التقييم (InProgress, Submitted, NeedsCompletion, UnderReview, Completed)"
+        datetime created_at "تاريخ بدء ملف التقييم"
+        datetime updated_at "تاريخ آخر تحديث"
+    }
+
+    EVALUATION_RESULTS {
+        int result_id PK "المعرف الفريد لنتيجة المؤشر"
+        int evaluation_id FK "ملف التقييم التابع له"
+        int indicator_id FK "المؤشر المُقيَّم"
+        int score_descriptor_id FK "وصف التقدير المختار (0 إلى 3)"
+        int standard_version_id FK "الإصدار المعياري المرجعي"
+        int evaluator_user_id FK "المستخدم المقيم الذي رصد النتيجة"
+        int score "الدرجة الرقمية المرصودة (0, 1, 2, 3)"
+        text textual_result "التعليل النصي للنتيجة وأوجه التحقق"
+        string completion_status "حالة إدخال النتيجة (Completed)"
+        datetime created_at "تاريخ إنشاء النتيجة"
+        datetime updated_at "تاريخ آخر تحديث"
+    }
+
+    NOTES {
+        int note_id PK "المعرف الفريد للملاحظة"
+        int result_id FK "نتيجة التقييم الموثَّقة"
+        int author_user_id FK "كاتب الملاحظة التوثيقية"
+        text text "نص الملاحظة"
+        datetime created_at "تاريخ التدوين"
+        datetime updated_at "تاريخ آخر تحديث"
+    }
+
+    EVALUATION_RESULT_VERIFICATION_METHODS {
+        int id PK "المعرف الفريد للسجل"
+        int evaluation_result_id FK "نتيجة التقييم"
+        int tool_id FK "أداة التحقق المستخدمة فعلياً"
+    }
+
+    %% العلاقات
+    EVALUATION_CYCLES ||--o{ CYCLE_PARTICIPATIONS : "تشارك بها عدة مدارس"
+    EVALUATION_CYCLES ||--o{ EVALUATIONS : "تضم تقييماً لكل مدرسة مشاركة"
+    EVALUATIONS ||--o{ EVALUATION_RESULTS : "يحتوي نتائج الـ 109 مؤشرات"
+
+    EVALUATION_RESULTS ||--o{ NOTES : "يدعم تدوين ملاحظات نصية توثيقية"
+    EVALUATION_RESULTS ||--o{ EVALUATION_RESULT_VERIFICATION_METHODS : "يقترن بأدوات التحقق المستخدمة فعلياً"
+
+%% عدد الجداول المشمولة في هذا المخطط: 6 جداول
+%% المصدر: ملفات التهجير (000006, 000007) ونماذج Eloquent في school-eval-api/app/Models

@@ -1,0 +1,120 @@
+erDiagram
+    %% =========================================================================
+    %% ERD-06: خطط ومجالات التحسين والتدقيق والإشعارات والذكاء الاصطناعي
+    %% =========================================================================
+
+    IMPROVEMENT_AREAS {
+        int area_id PK "المعرف الفريد لمجال التحسين"
+        int result_id FK "المصدر: نتيجة تقييم (شرطي)"
+        int indicator_id FK "المصدر: مؤشر (شرطي)"
+        string name "اسم مجال التحسين"
+        string description "وصف مجال التحسين"
+        string priority "الأولوية المقترحة (Low, Medium, High)"
+        tinyint target_score "التقدير المستهدف للتحسين (1 إلى 3، الافتراضي 3 - U-23)"
+        datetime created_at "تاريخ إنشاء السجل"
+        datetime updated_at "تاريخ آخر تحديث"
+    }
+
+    IMPROVEMENT_PLANS {
+        int plan_id PK "المعرف الفريد لخطة التحسين"
+        int cycle_id FK "دورة التقييم المرتبطة"
+        int school_id FK "المدرسة صاحبة الخطة"
+        int created_by_user_id FK "المستخدم منشئ الخطة"
+        string title "عنوان خطة التحسين"
+        date start_date "تاريخ بداية الخطة"
+        date end_date "تاريخ نهاية الخطة"
+        string status "حالة الخطة (Draft, Active, Completed, Cancelled)"
+        text progress_description "وصف التقدم نوعياً ونصياً"
+        datetime created_at "تاريخ الإنشاء"
+        datetime updated_at "تاريخ آخر تحديث"
+    }
+
+    PLAN_IMPROVEMENT_AREAS {
+        int plan_id PK,FK "خطة التحسين"
+        int area_id PK,FK "المجال المستهدف ضمن الخطة"
+        datetime created_at "تاريخ الربط"
+    }
+
+    IMPROVEMENT_ACTIONS {
+        int action_id PK "المعرف الفريد للإجراء التنفيذي"
+        int plan_id FK "الخطة الحاوية (ضمن القيد المركب)"
+        int area_id FK "المجال المستهدف (ضمن القيد المركب)"
+        string title "عنوان الإجراء التنفيذي"
+        string responsible_person_description "المسؤول عن التنفيذ والمتابعة"
+        date start_date "تاريخ بداية الإجراء"
+        date due_date "الموعد النهائي لتنفيذ الإجراء (أساس فحص التأخر)"
+        string status "حالة الإجراء (Pending, InProgress, Done, Cancelled)"
+        text progress_description "وصف مستوى التقدم"
+        datetime created_at "تاريخ إنشاء الإجراء"
+        datetime updated_at "تاريخ آخر تحديث"
+    }
+
+    NOTIFICATIONS {
+        int notification_id PK "المعرف الفريد للإشعار"
+        int recipient_user_id FK "المستخدم المستلم للإشعار"
+        string title "عنوان الإشعار والتنبيه"
+        text message "نص الإشعار التفصيلي"
+        string type "نوع الحدث (cycle_launched, completion_requested...)"
+        string related_entity_type "نوع الكيان المصدر (Polymorphic)"
+        int related_entity_id "معرف الكيان المصدر"
+        boolean is_read "هل قُرئ الإشعار (الافتراضي false)"
+        datetime created_at "تاريخ إصدار الإشعار (سجل دائم لا يُحذف)"
+        datetime read_at "تاريخ ووقت القراءة"
+    }
+
+    AUDIT_LOGS {
+        int log_id PK "المعرف الفريد لسجل التدقيق (U-08)"
+        int user_id FK "المستخدم المنفذ للعملية (nullable عند فشل الدخول أو الحذف)"
+        int school_id FK "المدرسة المعنية بالعملية (لأغراض العزل والفلترة)"
+        string action "اسم العملية المدققة من بين العمليات الـ 12 المعتمدة"
+        string target_type "نوع الكيان الهدف (Evaluation, CompletionRequest...)"
+        int target_id "معرف الكيان الهدف"
+        json old_values "القيم السابقة للعملية (تستثنى كلمات المرور والبيانات الحساسة)"
+        json new_values "القيم الجديدة بعد العملية"
+        string ip_address "عنوان IP للمستخدم المنفذ"
+        text user_agent "بيانات متصفح وبيئة العميل"
+        datetime created_at "الطابع الزمني الدقيق للتدوين (جدول إضافة فقط Append-Only)"
+    }
+
+    AI_ANALYSIS {
+        int analysis_id PK "المعرف الفريد لعملية التحليل الذكي"
+        int evaluation_id FK "ملف التقييم المحلَّل"
+        int requested_by_user_id FK "المستخدم طالب التحليل"
+        datetime analysis_date "تاريخ تنفيذ التحليل"
+        string input_scope "نطاق المدخلات (results, results_and_notes)"
+        text summary "الملخص العام للتحليل"
+        string status "حالة العملية (Pending, Completed, Failed)"
+        datetime created_at "تاريخ إنشاء الطلب"
+        datetime updated_at "تاريخ آخر تحديث"
+    }
+
+    AI_RECOMMENDATIONS {
+        int recommendation_id PK "المعرف الفريد للتوصية الذكية"
+        int analysis_id FK "جلسة التحليل المصدر"
+        int improvement_action_id FK "الإجراء المدعوم (يُربط بعد القبول البشري فقط)"
+        string type "نوع المخرج (strength, improvement, recommendation)"
+        string title "عنوان التوصية"
+        text description "نص التوصية التفصيلي"
+        string priority "الأولوية المقترحة (Low, Medium, High)"
+        text human_modifications "نص التعديل البشري المحفوظ للمراجعة"
+        string status "قرار المراجعة البشرية (PendingReview, Accepted, Modified, Ignored)"
+        datetime created_at "تاريخ التوليد"
+        datetime updated_at "تاريخ آخر تحديث"
+    }
+
+    %% العلاقات
+    IMPROVEMENT_PLANS ||--o{ PLAN_IMPROVEMENT_AREAS : "تستهدف عدة مجالات"
+    IMPROVEMENT_AREAS ||--o{ PLAN_IMPROVEMENT_AREAS : "ترتبط بعدة خطط"
+
+    PLAN_IMPROVEMENT_AREAS ||--o{ IMPROVEMENT_ACTIONS : "تضم إجراءات تنفيذية محكومة بقيد مركب"
+
+    AI_ANALYSIS ||--o{ AI_RECOMMENDATIONS : "يولد توصيات ذكية تخضع للمراجعة البشرية"
+
+%% القيود المعمارية:
+%% 1. FOREIGN KEY (plan_id, area_id) REFERENCES plan_improvement_areas (قيد مركب يمنع خروج الإجراء عن خطته).
+%% 2. CHECK: (result_id IS NOT NULL OR indicator_id IS NOT NULL) لمجال التحسين.
+%% 3. audit_logs: جدول محصن للإضافة فقط متاح للمسؤول والمشرف الوزاري حصراً (U-08).
+%% 4. AI Recommendations: لا تتحول لإجراء تنفيذي إلا بعد المراجعة والقبول البشري الصريح (BR-AI-02).
+%%
+%% عدد الجداول المشمولة في هذا المخطط: 8 جداول
+%% المصدر: ملفات التهجير (000008, 000011, 2026_11_03_200000, 2026_11_03_200001) ونماذج Eloquent

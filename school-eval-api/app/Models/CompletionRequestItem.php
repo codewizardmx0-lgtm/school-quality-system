@@ -43,7 +43,7 @@ class CompletionRequestItem extends Model
     protected $fillable = [
         'request_id',
         'indicator_id',
-        'evidence_id',
+        'evidence_link_id',
         'missing_description',
         'status',
     ];
@@ -56,6 +56,8 @@ class CompletionRequestItem extends Model
     protected function casts(): array
     {
         return [
+            'indicator_id' => 'integer',
+            'evidence_link_id' => 'integer',
             'created_at' => 'datetime',
             'updated_at' => 'datetime',
         ];
@@ -72,7 +74,7 @@ class CompletionRequestItem extends Model
     }
 
     /**
-     * المؤشر المستهدف بالنقص (إن وُجد).
+     * المؤشر المستهدف بالنقص.
      *
      * @return BelongsTo
      */
@@ -82,12 +84,61 @@ class CompletionRequestItem extends Model
     }
 
     /**
-     * الشاهد أو الدليل المستهدف بالنقص (إن وُجد).
+     * رابط الشاهد المعين المستهدف بالنقص (إن وُجد).
      *
      * @return BelongsTo
      */
-    public function evidence(): BelongsTo
+    public function evidenceLink(): BelongsTo
     {
-        return $this->belongsTo(Evidence::class, 'evidence_id', 'evidence_id');
+        return $this->belongsTo(EvidenceLink::class, 'evidence_link_id', 'id');
+    }
+
+    /**
+     * الفحص والتحول الآلي لحالة البند بناءً على استيفاء الشواهد المطلوبة.
+     */
+    public function refreshResolutionStatus(): string
+    {
+        // 1. إذا كان البند محدداً برابط شاهد معين
+        if ($this->evidence_link_id) {
+            $link = EvidenceLink::find($this->evidence_link_id);
+            if ($link && strtolower($link->status ?? '') === 'completed') {
+                if ($this->status !== 'resolved') {
+                    $this->update(['status' => 'resolved']);
+                }
+                return 'resolved';
+            }
+
+            if ($this->status === 'resolved') {
+                $this->update(['status' => 'pending']);
+            }
+            return $this->status;
+        }
+
+        // 2. إذا كان البند يستهدف كفاية المؤشر العام
+        $evaluation = $this->request?->submission?->report?->evaluation;
+        if ($evaluation && $this->indicator_id) {
+            $sufficiencyService = app(\App\Services\EvidenceSufficiencyService::class);
+            $indicator = Indicator::find($this->indicator_id);
+            if ($indicator) {
+                $result = EvaluationResult::where('evaluation_id', $evaluation->evaluation_id)
+                    ->where('indicator_id', $this->indicator_id)
+                    ->first();
+                $requirements = IndicatorEvidenceRequirement::where('indicator_id', $this->indicator_id)->get();
+                $evaluated = $sufficiencyService->evaluateIndicator($indicator, $result, $requirements);
+
+                if (!empty($evaluated['is_sufficient'])) {
+                    if ($this->status !== 'resolved') {
+                        $this->update(['status' => 'resolved']);
+                    }
+                    return 'resolved';
+                }
+            }
+        }
+
+        if ($this->status === 'resolved') {
+            $this->update(['status' => 'pending']);
+        }
+
+        return $this->status;
     }
 }

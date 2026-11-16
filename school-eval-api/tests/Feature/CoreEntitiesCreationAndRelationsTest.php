@@ -19,8 +19,9 @@ use App\Models\IndicatorVerificationMethod;
 use App\Models\EvaluationCycle;
 use App\Models\Evaluation;
 use App\Models\EvaluationResult;
-use App\Models\Evidence;
-use App\Models\EvidenceVersion;
+use App\Models\SchoolDocument;
+use App\Models\DocumentVersion;
+use App\Models\EvidenceLink;
 use App\Models\Note;
 use App\Models\EvaluationResultVerificationMethod;
 use App\Models\ImprovementPlan;
@@ -226,17 +227,33 @@ class CoreEntitiesCreationAndRelationsTest extends TestCase
             'completion_status' => 'Completed',
         ]);
 
-        $evidence = Evidence::create([
-            'result_id' => $result->result_id,
-            'indicator_id' => $indicator->indicator_id,
-            'title' => 'كشف حضور ورش العمل',
-            'description' => 'كشوفات موقعة من المعلمين والمدرب',
+        $document = SchoolDocument::create([
+            'school_id'          => $school->school_id,
+            'title'              => 'كشف حضور ورش العمل',
+            'description'        => 'كشوفات موقعة من المعلمين والمدرب',
+            'document_type'      => 'record',
+            'created_by_user_id' => $user->user_id,
         ]);
 
-        $evidenceVersion = EvidenceVersion::create([
-            'evidence_id' => $evidence->evidence_id,
-            'version_no' => 1,
-            'current' => true,
+        $docVersion = DocumentVersion::create([
+            'school_id'          => $school->school_id,
+            'school_document_id' => $document->id,
+            'version_no'         => 1,
+            'is_current'         => true,
+            'file_name'          => 'attendance.pdf',
+            'storage_uri'        => 'documents/' . $school->school_id . '/attendance.pdf',
+            'file_size'          => 1024,
+            'mime_type'          => 'application/pdf',
+        ]);
+
+        $evidenceLink = EvidenceLink::create([
+            'school_id'            => $school->school_id,
+            'evaluation_id'        => $evaluation->evaluation_id,
+            'evaluation_result_id' => $result->result_id,
+            'indicator_id'         => $indicator->indicator_id,
+            'document_version_id'  => $docVersion->id,
+            'justification'        => 'إثبات توثيق ورش العمل',
+            'status'               => 'completed',
         ]);
 
         $note = Note::create([
@@ -280,7 +297,6 @@ class CoreEntitiesCreationAndRelationsTest extends TestCase
         $item = CompletionRequestItem::create([
             'request_id' => $completionReq->request_id,
             'indicator_id' => $indicator->indicator_id,
-            'evidence_id' => $evidence->evidence_id,
             'missing_description' => 'إرفاق استمارات قياس الأثر بعد التدريب',
             'status' => 'Pending',
         ]);
@@ -288,9 +304,9 @@ class CoreEntitiesCreationAndRelationsTest extends TestCase
         // التحقق من صحة الربط والعلاقات في الاتجاهين
         $this->assertEquals($evaluation->evaluation_id, $result->evaluation->evaluation_id);
         $this->assertEquals($indicator->indicator_id, $result->indicator->indicator_id);
-        $this->assertTrue($result->evidences->contains($evidence->evidence_id));
-        $this->assertTrue($evidence->versions->contains($evidenceVersion->evidence_version_id));
-        $this->assertEquals($evidenceVersion->evidence_version_id, $evidence->currentVersion->evidence_version_id);
+        $this->assertTrue($result->evidenceLinks->contains($evidenceLink->id));
+        $this->assertEquals($document->id, $evidenceLink->document->id);
+        $this->assertEquals($docVersion->id, $evidenceLink->documentVersion->id);
 
         $this->assertTrue($result->notes->contains($note->note_id));
         $this->assertEquals($user->user_id, $note->author->user_id);
@@ -302,7 +318,6 @@ class CoreEntitiesCreationAndRelationsTest extends TestCase
         $this->assertTrue($submission->completionRequests->contains($completionReq->request_id));
         $this->assertTrue($completionReq->items->contains($item->request_item_id));
         $this->assertEquals($indicator->indicator_id, $item->indicator->indicator_id);
-        $this->assertEquals($evidence->evidence_id, $item->evidence->evidence_id);
     }
 
     /**

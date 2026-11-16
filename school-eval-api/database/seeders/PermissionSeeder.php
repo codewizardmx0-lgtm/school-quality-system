@@ -46,7 +46,7 @@ class PermissionSeeder extends Seeder
             ],
             [
                 'permission_code' => 'evaluations.submit',
-                'permission_name' => 'تقديم التقييم للاعتماد',
+                'permission_name' => 'تسليم التقييم الذاتي النهائي',
                 'description'     => 'صلاحية رفع التقييم المكتمل وإرساله للمراجعة الإشرافية',
             ],
             [

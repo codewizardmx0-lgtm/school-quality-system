@@ -40,6 +40,9 @@ class StandardVersionController extends Controller
                 $q->orderBy('display_order', 'asc');
             },
             'standards.subStandards.indicators.scoreDescriptors.scoreLevel',
+            'standards.subStandards.indicators.evidenceRequirements' => function ($q) {
+                $q->orderBy('display_order', 'asc');
+            },
         ])->find($id);
 
         if (!$version) {
@@ -52,20 +55,20 @@ class StandardVersionController extends Controller
             'issueYear'   => $version->issue_year,
             'status'      => $version->status,
             'createdAt'   => $version->created_at?->toIso8601ZuluString(),
-            'standards'   => $version->standards->map(function ($std) {
+            'standards'   => $version->standards->map(function ($std) use ($version) {
                 return [
                     'standardId'   => $std->standard_id,
                     'code'         => $std->code,
                     'name'         => $std->name,
                     'description'  => $std->description,
                     'weight'       => (float) $std->weight,
-                    'subStandards' => $std->subStandards->map(function ($sub) {
+                    'subStandards' => $std->subStandards->map(function ($sub) use ($version) {
                         return [
                             'subStandardId' => $sub->sub_standard_id,
                             'code'          => $sub->code,
                             'name'          => $sub->name,
                             'description'   => $sub->description,
-                            'indicators'    => $sub->indicators->map(function ($ind) {
+                            'indicators'    => $sub->indicators->map(function ($ind) use ($version) {
                                 return [
                                     'indicatorId'      => $ind->indicator_id,
                                     'code'             => $ind->code,
@@ -73,16 +76,29 @@ class StandardVersionController extends Controller
                                     'description'      => $ind->description,
                                     'weight'           => (float) $ind->weight,
                                     'status'           => $ind->status,
-                                    'scoreDescriptors' => $ind->scoreDescriptors->map(function ($desc) {
-                                        return [
-                                            'descriptorId' => $desc->descriptor_id,
-                                            'scoreLevelId' => $desc->score_level_id,
-                                            'scoreValue'   => $desc->scoreLevel?->score_value,
-                                            'label'        => $desc->label,
-                                            'description'  => $desc->description,
-                                            'displayOrder' => $desc->display_order,
-                                        ];
-                                    }),
+                                    'scoreDescriptors' => $ind->scoreDescriptors
+                                        ->where('standard_version_id', $version->version_id)
+                                        ->map(function ($desc) {
+                                            return [
+                                                'descriptorId' => $desc->descriptor_id,
+                                                'scoreLevelId' => $desc->score_level_id,
+                                                'scoreValue'   => $desc->scoreLevel?->score_value,
+                                                'label'        => $desc->label,
+                                                'description'  => $desc->description,
+                                                'displayOrder' => $desc->display_order,
+                                            ];
+                                        })->values(),
+                                    'evidenceRequirements' => $ind->evidenceRequirements
+                                        ->where('standard_version_id', $version->version_id)
+                                        ->map(function ($req) {
+                                            return [
+                                                'requirementId' => $req->requirement_id,
+                                                'title'         => $req->title,
+                                                'description'   => $req->description,
+                                                'required'      => (bool) $req->required,
+                                                'displayOrder'  => $req->display_order,
+                                            ];
+                                        })->values(),
                                 ];
                             }),
                         ];

@@ -15,8 +15,6 @@ use App\Models\Indicator;
 use App\Models\EvaluationCycle;
 use App\Models\Evaluation;
 use App\Models\EvaluationResult;
-use App\Models\Evidence;
-use App\Models\EvidenceVersion;
 use App\Models\Report;
 use App\Models\IndicatorScoreDescriptor;
 use App\Models\ScoreLevel;
@@ -117,33 +115,10 @@ class PolymorphicRelationsTest extends TestCase
             'completion_status' => 'Completed',
         ]);
 
-        $evidence = Evidence::create([
-            'result_id' => $result->result_id,
-            'indicator_id' => $indicator->indicator_id,
-            'title' => 'خطة الإخلاء',
-            'description' => 'مخطط كروكي معتمد',
-        ]);
-
-        $evidenceVersion = EvidenceVersion::create([
-            'evidence_id' => $evidence->evidence_id,
-            'version_no' => 1,
-            'current' => true,
-        ]);
-
         $report = Report::create([
             'evaluation_id' => $evaluation->evaluation_id,
             'generated_at' => now()->format('Y-m-d H:i:s'),
             'status' => 'Draft',
-        ]);
-
-        // ربط مرفق بنسخة الشاهد
-        $attachmentForEvidence = Attachment::create([
-            'target_type' => 'evidence_version',
-            'target_id' => $evidenceVersion->evidence_version_id,
-            'file_name' => 'evacuation_plan.pdf',
-            'file_type' => 'application/pdf',
-            'file_size' => 204800,
-            'storage_uri' => 'uploads/evidences/evacuation_plan.pdf',
         ]);
 
         // ربط مرفق بالتقرير
@@ -157,11 +132,9 @@ class PolymorphicRelationsTest extends TestCase
         ]);
 
         // التحقق من العلاقة من جانب المرفق
-        $this->assertEquals($evidenceVersion->evidence_version_id, $attachmentForEvidence->evidenceVersion->evidence_version_id);
         $this->assertEquals($report->report_id, $attachmentForReport->report->report_id);
 
         // التحقق من العلاقة من جانب الكيان الهدف
-        $this->assertTrue($evidenceVersion->attachments->contains($attachmentForEvidence->attachment_id));
         $this->assertTrue($report->attachments->contains($attachmentForReport->attachment_id));
     }
 

@@ -62,6 +62,8 @@ class EvaluationSubmission extends Model
         'attempt_no',
         'submitted_at',
         'status',
+        'tracking_code',
+        'digital_hash',
     ];
 
     /**
@@ -116,5 +118,13 @@ class EvaluationSubmission extends Model
     public function completionRequests(): HasMany
     {
         return $this->hasMany(CompletionRequest::class, 'submission_id', 'submission_id');
+    }
+
+    /**
+     * أحدث طلب استكمال مرتبط بهذه المحاولة.
+     */
+    public function latestCompletionRequest(): ?CompletionRequest
+    {
+        return $this->completionRequests()->orderBy('request_id', 'desc')->first();
     }
 }

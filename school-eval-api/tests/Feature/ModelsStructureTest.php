@@ -24,8 +24,9 @@ use App\Models\EvaluationCycle;
 use App\Models\CycleParticipation;
 use App\Models\Evaluation;
 use App\Models\EvaluationResult;
-use App\Models\Evidence;
-use App\Models\EvidenceVersion;
+use App\Models\SchoolDocument;
+use App\Models\DocumentVersion;
+use App\Models\EvidenceLink;
 use App\Models\Attachment;
 use App\Models\Note;
 use App\Models\EvaluationResultVerificationMethod;
@@ -73,8 +74,9 @@ class ModelsStructureTest extends TestCase
             CycleParticipation::class => ['table' => 'cycle_participations', 'pk' => ['cycle_id', 'school_id']],
             Evaluation::class => ['table' => 'evaluations', 'pk' => 'evaluation_id'],
             EvaluationResult::class => ['table' => 'evaluation_results', 'pk' => 'result_id'],
-            Evidence::class => ['table' => 'evidences', 'pk' => 'evidence_id'],
-            EvidenceVersion::class => ['table' => 'evidence_versions', 'pk' => 'evidence_version_id'],
+            SchoolDocument::class => ['table' => 'school_documents', 'pk' => 'id'],
+            DocumentVersion::class => ['table' => 'document_versions', 'pk' => 'id'],
+            EvidenceLink::class => ['table' => 'evidence_links', 'pk' => 'id'],
             Attachment::class => ['table' => 'attachments', 'pk' => 'attachment_id'],
             Note::class => ['table' => 'notes', 'pk' => 'note_id'],
             EvaluationResultVerificationMethod::class => ['table' => 'evaluation_result_verification_methods', 'pk' => 'id'],
@@ -94,7 +96,7 @@ class ModelsStructureTest extends TestCase
             AiRecommendation::class => ['table' => 'ai_recommendations', 'pk' => 'recommendation_id'],
         ];
 
-        $this->assertCount(40, $expectedModels, 'يجب أن يكون عدد الموديلات 40 موديلاً بالتمام.');
+        $this->assertCount(41, $expectedModels, 'يجب أن يكون عدد الموديلات 41 موديلاً بالتمام بعد اعتماد معمارية الشواهد U-24.');
 
         foreach ($expectedModels as $modelClass => $meta) {
             $model = new $modelClass();

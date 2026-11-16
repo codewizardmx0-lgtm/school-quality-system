@@ -308,7 +308,20 @@ class User extends Authenticatable
      */
     public function hasPermission(string $permissionCode): bool
     {
-        return in_array($permissionCode, $this->getPermissionCodes(), true);
+        $codes = $this->getPermissionCodes();
+        if (in_array($permissionCode, $codes, true)) {
+            return true;
+        }
+
+        // مطابقة بديلة لصلاحية إدارة وإطلاق الدورات (cycles.manage <-> cycles.launch)
+        if ($permissionCode === 'cycles.manage' && in_array('cycles.launch', $codes, true)) {
+            return true;
+        }
+        if ($permissionCode === 'cycles.launch' && in_array('cycles.manage', $codes, true)) {
+            return true;
+        }
+
+        return false;
     }
 }
 

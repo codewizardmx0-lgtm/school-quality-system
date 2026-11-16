@@ -4,7 +4,6 @@ namespace App\Services;
 
 use App\Models\Evaluation;
 use App\Models\EvaluationResult;
-use App\Models\Evidence;
 use App\Models\ImprovementPlan;
 use App\Models\Indicator;
 use App\Models\IndicatorEvidenceRequirement;
@@ -141,7 +140,7 @@ class ReportsAnalyticsService
 
         $resultsMap = EvaluationResult::query()
             ->where('evaluation_id', $evaluation->evaluation_id)
-            ->with(['scoreDescriptor', 'evidences'])
+            ->with(['scoreDescriptor', 'evidenceLinks'])
             ->get()
             ->keyBy('indicator_id');
 
@@ -192,7 +191,7 @@ class ReportsAnalyticsService
                     'percentage' => $scorePercentage,
                     'level_label' => $levelLabel,
                     'descriptor' => $result?->scoreDescriptor?->description,
-                    'evidences_count' => $result ? $result->evidences->count() : 0,
+                    'evidences_count' => $result ? $result->evidenceLinks->count() : 0,
                     'is_evaluated' => $hasScore,
                 ];
             }

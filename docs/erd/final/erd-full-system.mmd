@@ -1,0 +1,321 @@
+erDiagram
+    %% =========================================================================
+    %% المخطط الشامل لكافة جداول نظام إدارة الجودة المدرسية (42 جدولاً أساسياً)
+    %% =========================================================================
+
+    %% الحزمة الأولى: الهوية والإدارة (8 جداول)
+    ROLES {
+        int role_id PK
+        string role_name UK
+    }
+    PERMISSIONS {
+        int permission_id PK
+        string permission_code UK
+    }
+    ROLE_PERMISSIONS {
+        int role_id PK,FK
+        int permission_id PK,FK
+    }
+    SCHOOLS {
+        int school_id PK
+        string school_name
+        string status
+    }
+    MINISTRIES {
+        int ministry_id PK
+        string ministry_name
+    }
+    USERS {
+        int user_id PK
+        int school_id FK
+        int ministry_id FK
+        string username UK
+        string user_type
+    }
+    USER_ROLES {
+        int user_id PK,FK
+        int role_id PK,FK
+    }
+    SESSIONS {
+        int session_id PK
+        int user_id FK
+        boolean active
+    }
+
+    %% الحزمة الثانية: المعايير والمؤشرات (9 جداول)
+    STANDARD_VERSIONS {
+        int version_id PK
+        string version_name
+        string status
+    }
+    STANDARDS {
+        int standard_id PK
+        int version_id FK
+        string code
+    }
+    SUB_STANDARDS {
+        int sub_standard_id PK
+        int standard_id FK
+        string code
+    }
+    INDICATORS {
+        int indicator_id PK
+        int sub_standard_id FK
+        string code
+        decimal weight
+    }
+    SCORE_LEVELS {
+        int score_level_id PK
+        int version_id FK
+        int score_value
+    }
+    INDICATOR_SCORE_DESCRIPTORS {
+        int descriptor_id PK
+        int indicator_id FK
+        int score_level_id FK
+    }
+    INDICATOR_EVIDENCE_REQUIREMENTS {
+        int requirement_id PK
+        int indicator_id FK
+    }
+    VERIFICATION_TOOLS {
+        int tool_id PK
+        string name UK
+    }
+    INDICATOR_VERIFICATION_METHODS {
+        int id PK
+        int indicator_id FK
+        int tool_id FK
+    }
+
+    %% الحزمة الثالثة: دورات التقييم والنتائج (6 جداول)
+    EVALUATION_CYCLES {
+        int cycle_id PK
+        int standard_version_id FK
+        string status
+    }
+    CYCLE_PARTICIPATIONS {
+        int cycle_id PK,FK
+        int school_id PK,FK
+    }
+    EVALUATIONS {
+        int evaluation_id PK
+        int cycle_id FK
+        int school_id FK
+        string status
+    }
+    EVALUATION_RESULTS {
+        int result_id PK
+        int evaluation_id FK
+        int indicator_id FK
+        int score
+    }
+    NOTES {
+        int note_id PK
+        int result_id FK
+    }
+    EVALUATION_RESULT_VERIFICATION_METHODS {
+        int id PK
+        int evaluation_result_id FK
+        int tool_id FK
+    }
+
+    %% الحزمة الرابعة: معمارية الشواهد النظيفة (4 جداول)
+    SCHOOL_DOCUMENTS {
+        int id PK
+        int school_id FK
+        string title
+        string document_type
+    }
+    DOCUMENT_VERSIONS {
+        int id PK
+        int school_document_id FK
+        int version_no
+        boolean is_current
+    }
+    EVIDENCE_LINKS {
+        int id PK
+        int school_id FK
+        int evaluation_id FK
+        int indicator_id FK
+        int document_version_id FK
+        int action_id FK
+        string status
+    }
+    ATTACHMENTS {
+        int attachment_id PK
+        string target_type
+        int target_id
+    }
+
+    %% الحزمة الخامسة: المخرجات والاستكمال ومحاولات التسليم (7 جداول)
+    REPORTS {
+        int report_id PK
+        int evaluation_id FK
+        string status
+    }
+    EVALUATION_SUBMISSIONS {
+        int submission_id PK
+        int report_id FK
+        int attempt_no
+        string status
+    }
+    COMPLETION_REQUESTS {
+        int request_id PK
+        int submission_id FK
+        datetime completion_deadline
+        string status
+    }
+    COMPLETION_REQUEST_ITEMS {
+        int request_item_id PK
+        int request_id FK
+        int indicator_id FK
+        int evidence_link_id FK
+        string status
+    }
+    SUPERVISOR_NOTES {
+        int note_id PK
+        int submission_id FK
+    }
+    INTERNAL_REVIEW_NOTES {
+        int note_id PK
+        int report_id FK
+    }
+    PLAN_REVIEW_NOTES {
+        int note_id PK
+        int plan_id FK
+    }
+
+    %% الحزمة السادسة: خطط التحسين والتدقيق والذكاء (8 جداول)
+    IMPROVEMENT_AREAS {
+        int area_id PK
+        int result_id FK
+        int indicator_id FK
+        tinyint target_score
+    }
+    IMPROVEMENT_PLANS {
+        int plan_id PK
+        int cycle_id FK
+        int school_id FK
+        string status
+    }
+    PLAN_IMPROVEMENT_AREAS {
+        int plan_id PK,FK
+        int area_id PK,FK
+    }
+    IMPROVEMENT_ACTIONS {
+        int action_id PK
+        int plan_id FK
+        int area_id FK
+        string status
+    }
+    NOTIFICATIONS {
+        int notification_id PK
+        int recipient_user_id FK
+        boolean is_read
+    }
+    AUDIT_LOGS {
+        int log_id PK
+        int user_id FK
+        int school_id FK
+        string action
+        datetime created_at
+    }
+    AI_ANALYSIS {
+        int analysis_id PK
+        int evaluation_id FK
+        string status
+    }
+    AI_RECOMMENDATIONS {
+        int recommendation_id PK
+        int analysis_id FK
+        int improvement_action_id FK
+        string status
+    }
+
+    %% =========================================================================
+    %% العلاقات الهيكلية الرئيسية في النظام
+    %% =========================================================================
+
+    %% الهوية والصلاحيات
+    ROLES ||--o{ ROLE_PERMISSIONS : ""
+    PERMISSIONS ||--o{ ROLE_PERMISSIONS : ""
+    USERS ||--o{ USER_ROLES : ""
+    ROLES ||--o{ USER_ROLES : ""
+    SCHOOLS ||--o{ USERS : ""
+    MINISTRIES ||--o{ USERS : ""
+    USERS ||--o{ SESSIONS : ""
+
+    %% المعايير
+    STANDARD_VERSIONS ||--o{ STANDARDS : ""
+    STANDARDS ||--o{ SUB_STANDARDS : ""
+    SUB_STANDARDS ||--o{ INDICATORS : ""
+    STANDARD_VERSIONS ||--o{ SCORE_LEVELS : ""
+    INDICATORS ||--o{ INDICATOR_SCORE_DESCRIPTORS : ""
+    SCORE_LEVELS ||--o{ INDICATOR_SCORE_DESCRIPTORS : ""
+    INDICATORS ||--o{ INDICATOR_EVIDENCE_REQUIREMENTS : ""
+    INDICATORS ||--o{ INDICATOR_VERIFICATION_METHODS : ""
+    VERIFICATION_TOOLS ||--o{ INDICATOR_VERIFICATION_METHODS : ""
+
+    %% التقييم والنتائج
+    STANDARD_VERSIONS ||--o{ EVALUATION_CYCLES : ""
+    EVALUATION_CYCLES ||--o{ CYCLE_PARTICIPATIONS : ""
+    SCHOOLS ||--o{ CYCLE_PARTICIPATIONS : ""
+    EVALUATION_CYCLES ||--o{ EVALUATIONS : ""
+    SCHOOLS ||--o{ EVALUATIONS : ""
+    EVALUATIONS ||--o{ EVALUATION_RESULTS : ""
+    INDICATORS ||--o{ EVALUATION_RESULTS : ""
+    INDICATOR_SCORE_DESCRIPTORS ||--o{ EVALUATION_RESULTS : ""
+    EVALUATION_RESULTS ||--o{ NOTES : ""
+    EVALUATION_RESULTS ||--o{ EVALUATION_RESULT_VERIFICATION_METHODS : ""
+    VERIFICATION_TOOLS ||--o{ EVALUATION_RESULT_VERIFICATION_METHODS : ""
+
+    %% معمارية الشواهد النظيفة ثلاثية المستويات
+    SCHOOLS ||--o{ SCHOOL_DOCUMENTS : ""
+    SCHOOL_DOCUMENTS ||--o{ DOCUMENT_VERSIONS : ""
+    EVALUATIONS ||--o{ EVIDENCE_LINKS : ""
+    INDICATORS ||--o{ EVIDENCE_LINKS : ""
+    DOCUMENT_VERSIONS ||--o{ EVIDENCE_LINKS : ""
+    EVALUATION_RESULTS ||--o{ EVIDENCE_LINKS : ""
+
+    %% المخرجات والاستكمال
+    EVALUATIONS ||--o{ REPORTS : ""
+    REPORTS ||--o{ EVALUATION_SUBMISSIONS : ""
+    REPORTS ||--o{ INTERNAL_REVIEW_NOTES : ""
+    EVALUATION_SUBMISSIONS ||--o{ COMPLETION_REQUESTS : ""
+    EVALUATION_SUBMISSIONS ||--o{ SUPERVISOR_NOTES : ""
+    COMPLETION_REQUESTS ||--o{ COMPLETION_REQUEST_ITEMS : ""
+    INDICATORS ||--o{ COMPLETION_REQUEST_ITEMS : ""
+    EVIDENCE_LINKS ||--o{ COMPLETION_REQUEST_ITEMS : ""
+
+    %% التحسين والذكاء والتدقيق
+    EVALUATION_RESULTS ||--o{ IMPROVEMENT_AREAS : ""
+    INDICATORS ||--o{ IMPROVEMENT_AREAS : ""
+    EVALUATION_CYCLES ||--o{ IMPROVEMENT_PLANS : ""
+    SCHOOLS ||--o{ IMPROVEMENT_PLANS : ""
+    IMPROVEMENT_PLANS ||--o{ PLAN_IMPROVEMENT_AREAS : ""
+    IMPROVEMENT_AREAS ||--o{ PLAN_IMPROVEMENT_AREAS : ""
+    PLAN_IMPROVEMENT_AREAS ||--o{ IMPROVEMENT_ACTIONS : ""
+    IMPROVEMENT_PLANS ||--o{ PLAN_REVIEW_NOTES : ""
+    IMPROVEMENT_ACTIONS ||--o{ EVIDENCE_LINKS : ""
+
+    EVALUATIONS ||--o{ AI_ANALYSIS : ""
+    AI_ANALYSIS ||--o{ AI_RECOMMENDATIONS : ""
+    IMPROVEMENT_ACTIONS ||--o{ AI_RECOMMENDATIONS : ""
+
+    USERS ||--o{ NOTIFICATIONS : ""
+    USERS ||--o{ AUDIT_LOGS : ""
+    SCHOOLS ||--o{ AUDIT_LOGS : ""
+
+%% =========================================================================
+%% إحصاءات المخطط الشامل:
+%% عدد الجداول: 42 جدولاً أساسياً بالتمام والكمال
+%% توزيع الجداول:
+%%   - ERD-01: 8 جداول (الهوية والإدارة)
+%%   - ERD-02: 9 جداول (المعايير والمؤشرات)
+%%   - ERD-03: 6 جداول (دورات التقييم والنتائج)
+%%   - ERD-04: 4 جداول (معمارية الشواهد النظيفة)
+%%   - ERD-05: 7 جداول (المخرجات والاستكمال وسجل المحاولات)
+%%   - ERD-06: 8 جداول (خطط التحسين وسجل التدقيق والذكاء)
+%% المصدر: ملفات التهجير الفعلية ونماذج Eloquent في school-eval-api
+%% =========================================================================

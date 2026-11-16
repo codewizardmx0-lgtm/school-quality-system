@@ -48,6 +48,8 @@ class EvaluationResult extends Model
         'score',
         'textual_result',
         'completion_status',
+        'is_excluded',
+        'excluded_at',
     ];
 
     /**
@@ -64,6 +66,8 @@ class EvaluationResult extends Model
             'standard_version_id' => 'integer',
             'evaluator_user_id' => 'integer',
             'score' => 'integer',
+            'is_excluded' => 'boolean',
+            'excluded_at' => 'datetime',
             'created_at' => 'datetime',
             'updated_at' => 'datetime',
         ];
@@ -120,16 +124,6 @@ class EvaluationResult extends Model
     }
 
     /**
-     * الشواهد والأدلة الداعمة المسجلة لهذه النتيجة.
-     *
-     * @return HasMany
-     */
-    public function evidences(): HasMany
-    {
-        return $this->hasMany(Evidence::class, 'result_id', 'result_id');
-    }
-
-    /**
      * الملاحظات التوثيقية المسجلة على هذه النتيجة.
      *
      * @return HasMany
@@ -174,5 +168,15 @@ class EvaluationResult extends Model
     public function improvementAreas(): HasMany
     {
         return $this->hasMany(ImprovementArea::class, 'result_id', 'result_id');
+    }
+
+    /**
+     * روابط الشواهد المقترنة بنتيجة هذا التقييم (U-24).
+     *
+     * @return HasMany
+     */
+    public function evidenceLinks(): HasMany
+    {
+        return $this->hasMany(EvidenceLink::class, 'evaluation_result_id', 'result_id');
     }
 }
