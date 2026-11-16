@@ -3797,7 +3797,7 @@ class EvaluatorApiController extends Controller
             ?? StandardVersion::orderBy('version_id', 'desc')->first();
 
         $standards = Standard::where('version_id', $version?->version_id ?? 1)
-            ->with(['subStandards.indicators'])
+            ->with(['subStandards.indicators.evidenceRequirements'])
             ->orderBy('code')
             ->get();
 
@@ -3807,13 +3807,12 @@ class EvaluatorApiController extends Controller
             ->get()
             ->keyBy('indicator_id');
 
-        // 4. جلب عدد الشواهد المربوطة لكل مؤشر
-        $evidencesCountByInd = EvidenceLink::where('evaluation_id', $evaluation->evaluation_id)
-            ->selectRaw('indicator_id, count(*) as count')
-            ->groupBy('indicator_id')
-            ->pluck('count', 'indicator_id');
+        // 4. جلب روابط الشواهد المربوطة لحساب تغطية المتطلبات بدقة
+        $linksByIndicator = EvidenceLink::where('evaluation_id', $evaluation->evaluation_id)
+            ->get()
+            ->groupBy('indicator_id');
 
-        // 5. بناء قائمة المؤشرات الـ 109 مع فحص مراجعة المدير
+        // 5. بناء قائمة المؤشرات الـ 109 مع فحص مراجعة المدير وتغطية المتطلبات
         $indicatorsList = [];
         $reviewedCount = 0;
 
@@ -3822,6 +3821,38 @@ class EvaluatorApiController extends Controller
                 foreach ($sub->indicators as $ind) {
                     $res = $results->get($ind->indicator_id);
                     $notes = $res ? $res->notes : collect();
+
+                    // حساب تغطية المتطلبات لهذا المؤشر بدقة
+                    $indLinks = $linksByIndicator->get($ind->indicator_id, collect());
+                    $evCount = $indLinks->count();
+                    $mandatoryIds = $ind->evidenceRequirements->where('required', true)->pluck('requirement_id')->map(fn($x) => (int)$x)->all();
+                    $mandatoryCnt = count($mandatoryIds);
+                    $totalReqsCnt = $ind->evidenceRequirements->count();
+
+                    $explicitIds = [];
+                    $legacyCnt = 0;
+                    foreach ($indLinks as $lnk) {
+                        if (strtolower($lnk->status ?? '') !== 'completed') {
+                            continue;
+                        }
+                        $cov = $lnk->covered_requirements;
+                        if (is_array($cov)) {
+                            foreach ($cov as $rid) {
+                                $intId = (int)$rid;
+                                if (in_array($intId, $mandatoryIds, true)) {
+                                    $explicitIds[$intId] = true;
+                                }
+                            }
+                        } elseif ($cov === null) {
+                            $legacyCnt++;
+                        }
+                    }
+
+                    $coveredCnt = $mandatoryCnt > 0
+                        ? min($mandatoryCnt, count($explicitIds) + $legacyCnt)
+                        : ($totalReqsCnt > 0 ? min($totalReqsCnt, count($explicitIds) + $legacyCnt) : $evCount);
+
+                    $isFullyCovered = $mandatoryCnt > 0 ? ($coveredCnt >= $mandatoryCnt) : ($evCount > 0);
 
                     // فحص هل توجد ملاحظة مدونة من قبل مدير المدرسة
                     $principalNotes = $notes->filter(function ($n) use ($principalUser) {
@@ -3859,27 +3890,31 @@ class EvaluatorApiController extends Controller
                     };
 
                     $indicatorsList[] = [
-                        'indicatorId'          => (int) $ind->indicator_id,
-                        'indicatorCode'        => $ind->code,
-                        'indicatorName'        => $ind->name,
-                        'standardId'           => (int) $std->standard_id,
-                        'standardCode'         => $std->code,
-                        'standardName'         => $std->name,
-                        'subStandardCode'      => $sub->code,
-                        'subStandardName'      => $sub->name,
-                        'resultId'             => $res ? (int) $res->result_id : null,
-                        'score'                => $score !== null ? (int) $score : null,
-                        'scoreLabel'           => $scoreLabel,
-                        'evidenceCount'        => (int) ($evidencesCountByInd->get($ind->indicator_id) ?? 0),
-                        'hasPrincipalReview'   => $hasReview,
-                        'principalNotesCount'  => $principalNotes->count(),
-                        'latestPrincipalNote'  => $latestPrincipalNote ? [
+                        'indicatorId'                => (int) $ind->indicator_id,
+                        'indicatorCode'              => $ind->code,
+                        'indicatorName'              => $ind->name,
+                        'standardId'                 => (int) $std->standard_id,
+                        'standardCode'               => $std->code,
+                        'standardName'               => $std->name,
+                        'subStandardCode'            => $sub->code,
+                        'subStandardName'            => $sub->name,
+                        'resultId'                   => $res ? (int) $res->result_id : null,
+                        'score'                      => $score !== null ? (int) $score : null,
+                        'scoreLabel'                 => $scoreLabel,
+                        'evidenceCount'              => $evCount,
+                        'mandatoryRequirementsCount' => $mandatoryCnt,
+                        'totalRequirementsCount'     => $totalReqsCnt,
+                        'coveredRequirementsCount'   => $coveredCnt,
+                        'isRequirementFullyCovered'  => $isFullyCovered,
+                        'hasPrincipalReview'         => $hasReview,
+                        'principalNotesCount'        => $principalNotes->count(),
+                        'latestPrincipalNote'        => $latestPrincipalNote ? [
                             'noteId'     => $latestPrincipalNote->note_id,
                             'authorName' => $latestPrincipalNote->author?->full_name ?? 'مدير المدرسة',
                             'text'       => $latestPrincipalNote->text ?? $latestPrincipalNote->content ?? '',
                             'createdAt'  => $latestPrincipalNote->created_at?->toIso8601String(),
                         ] : null,
-                        'allNotes'             => $allFormattedNotes,
+                        'allNotes'                   => $allFormattedNotes,
                     ];
                 }
             }

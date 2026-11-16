@@ -31,7 +31,7 @@ interface AuditReviewHubPageProps {
   isPrincipal?: boolean;
 }
 
-type IndicatorSortKey = 'code' | 'standard' | 'score' | 'evidenceCount' | 'reviewStatus';
+type IndicatorSortKey = 'code' | 'standard' | 'score' | 'requirementsCoverage' | 'reviewStatus';
 type SortDirection = 'asc' | 'desc';
 
 export const AuditReviewHubPage: React.FC<AuditReviewHubPageProps> = ({
@@ -138,9 +138,12 @@ export const AuditReviewHubPage: React.FC<AuditReviewHubPageProps> = ({
           comparison = scoreA - scoreB;
           break;
         }
-        case 'evidenceCount':
-          comparison = a.evidenceCount - b.evidenceCount;
+        case 'requirementsCoverage': {
+          const ratioA = a.mandatoryRequirementsCount > 0 ? (a.coveredRequirementsCount / a.mandatoryRequirementsCount) : (a.evidenceCount > 0 ? 1 : 0);
+          const ratioB = b.mandatoryRequirementsCount > 0 ? (b.coveredRequirementsCount / b.mandatoryRequirementsCount) : (b.evidenceCount > 0 ? 1 : 0);
+          comparison = ratioA - ratioB;
           break;
+        }
         case 'reviewStatus': {
           const valA = a.hasPrincipalReview ? 1 : 0;
           const valB = b.hasPrincipalReview ? 1 : 0;
@@ -702,12 +705,12 @@ export const AuditReviewHubPage: React.FC<AuditReviewHubPageProps> = ({
                       </div>
                     </th>
                     <th
-                      onClick={() => handleSort('evidenceCount')}
-                      style={{ padding: '12px 16px', cursor: 'pointer', userSelect: 'none', width: '110px' }}
+                      onClick={() => handleSort('requirementsCoverage')}
+                      style={{ padding: '12px 16px', cursor: 'pointer', userSelect: 'none', width: '150px' }}
                     >
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <span>الشواهد</span>
-                        {renderSortArrow('evidenceCount')}
+                        <span>تغطية المتطلبات</span>
+                        {renderSortArrow('requirementsCoverage')}
                       </div>
                     </th>
                     <th
@@ -779,23 +782,46 @@ export const AuditReviewHubPage: React.FC<AuditReviewHubPageProps> = ({
                           {getScoreBadge(ind.score)}
                         </td>
 
-                        {/* Column 4: Evidences */}
+                        {/* Column 4: Requirements Coverage */}
                         <td style={{ padding: '12px 16px', verticalAlign: 'top' }}>
-                          <span
-                            style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '4px',
-                              backgroundColor: ind.evidenceCount > 0 ? '#EFF6FF' : '#F1F5F9',
-                              color: ind.evidenceCount > 0 ? '#1D4ED8' : '#94A3B8',
-                              padding: '3px 8px',
-                              borderRadius: '6px',
-                              fontSize: '12px',
-                              fontWeight: 700,
-                            }}
-                          >
-                            {ind.evidenceCount} شواهد
-                          </span>
+                          {ind.mandatoryRequirementsCount > 0 ? (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                              <span
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  backgroundColor: ind.isRequirementFullyCovered ? '#DCFCE7' : ind.coveredRequirementsCount > 0 ? '#FEF3C7' : '#FEE2E2',
+                                  color: ind.isRequirementFullyCovered ? '#15803D' : ind.coveredRequirementsCount > 0 ? '#92400E' : '#991B1B',
+                                  padding: '3px 8px',
+                                  borderRadius: '6px',
+                                  fontSize: '11.5px',
+                                  fontWeight: 700,
+                                }}
+                              >
+                                <span>{ind.coveredRequirementsCount} / {ind.mandatoryRequirementsCount} متطلبات</span>
+                              </span>
+                              <span style={{ fontSize: '10.5px', color: '#64748B' }}>
+                                {ind.isRequirementFullyCovered ? '✓ مستوفٍ للشواهد' : ind.coveredRequirementsCount > 0 ? 'مستوفٍ جزئياً' : 'غير مستوفٍ'}
+                              </span>
+                            </div>
+                          ) : (
+                            <span
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                backgroundColor: ind.evidenceCount > 0 ? '#EFF6FF' : '#F1F5F9',
+                                color: ind.evidenceCount > 0 ? '#1D4ED8' : '#94A3B8',
+                                padding: '3px 8px',
+                                borderRadius: '6px',
+                                fontSize: '11px',
+                                fontWeight: 600,
+                              }}
+                            >
+                              {ind.evidenceCount > 0 ? `مرفق (${ind.evidenceCount} شواهد)` : 'لا يتطلب شواهد'}
+                            </span>
+                          )}
                         </td>
 
                         {/* Column 5: Review Status */}

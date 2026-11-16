@@ -428,6 +428,12 @@ class SchoolPrincipalWorkflowTest extends TestCase
         $this->assertGreaterThan(0, $summary['reviewedIndicatorsCount']);
         $this->assertNotEmpty($resPrincipal->json('data.plans'));
 
+        // فحص تغطية المتطلبات في المؤشرات
+        $firstIndicator = $resPrincipal->json('data.indicators.0');
+        $this->assertArrayHasKey('mandatoryRequirementsCount', $firstIndicator);
+        $this->assertArrayHasKey('coveredRequirementsCount', $firstIndicator);
+        $this->assertArrayHasKey('isRequirementFullyCovered', $firstIndicator);
+
         // فحص وصول مقيم المدرسة لسجل التدقيق
         $resEvaluator = $this->actingAs($evaluator, 'sanctum')
             ->getJson('/api/v1/evaluator/audit-hub');

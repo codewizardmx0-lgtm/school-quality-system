@@ -360,8 +360,8 @@ export const EvaluatorLayout: React.FC<EvaluatorLayoutProps> = ({
             </div>
           )}
 
-          {/* Distinct Banner for Ministerial Supervisor Completion Request */}
-          {hasOpenCompletionRequest && (
+          {/* 1. تنبيه طلب الاستكمال الموحد (يظهر فقط في الشاشات العادية التي لا تعالج الاستكمال ذاتياً لتجنب التكرار والازدواج) */}
+          {hasOpenCompletionRequest && !['completion-request', 'dashboard', 'final-review', 'audit-hub'].includes(activeScreen) && (
             <div
               style={{
                 backgroundColor: '#FEF2F2',
@@ -380,12 +380,14 @@ export const EvaluatorLayout: React.FC<EvaluatorLayoutProps> = ({
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                 <AlertTriangle size={19} color="#DC2626" style={{ flexShrink: 0 }} />
                 <span>
-                  يوجد طلب استكمال شواهد وملاحظات وارد من المشرف الوزاري بحاجة إلى معالجتك واستيفاء الشواهد المطلوبة.
+                  {isPrincipal
+                    ? 'تنبيه إداري: يوجد طلب استكمال شواهد وملاحظات وارد من المشرف الوزاري يتطلب المراجعة والاستيفاء.'
+                    : 'يوجد طلب استكمال شواهد وملاحظات وارد من المشرف الوزاري بحاجة إلى معالجتك واستيفاء الشواهد المطلوبة.'}
                 </span>
               </div>
               <button
                 type="button"
-                onClick={() => setActiveScreen('completion-request')}
+                onClick={() => handleNavigate('completion-request')}
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',
@@ -407,8 +409,8 @@ export const EvaluatorLayout: React.FC<EvaluatorLayoutProps> = ({
             </div>
           )}
 
-          {/* Prominent Banner for School Principal View & Internal Review Mode */}
-          {isPrincipal && (
+          {/* 2. شريط الحوكمة الإدارية لمدير المدرسة (يظهر في غياب طلب الاستكمال العاجل ولا يظهر في شاشات المراجعة أو التدقيق لتجنب الازدواج) */}
+          {isPrincipal && !hasOpenCompletionRequest && !['final-review', 'audit-hub'].includes(activeScreen) && (
             <div
               style={{
                 backgroundColor: '#FFFBEB',
@@ -464,31 +466,29 @@ export const EvaluatorLayout: React.FC<EvaluatorLayoutProps> = ({
                   </p>
                 </div>
               </div>
-              {activeScreen !== 'final-review' && (
-                <button
-                  type="button"
-                  onClick={() => handleNavigate('final-review')}
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    backgroundColor: '#D97706',
-                    color: '#FFFFFF',
-                    border: 'none',
-                    borderRadius: '8px',
-                    padding: '7px 16px',
-                    fontSize: '12.5px',
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                    whiteSpace: 'nowrap',
-                    boxShadow: '0 2px 8px rgba(217, 119, 6, 0.25)',
-                  }}
-                  title="الانتقال المباشر لصفحة المراجعة وتدوين ملاحظات مدير المدرسة"
-                >
-                  <span>المراجعة والاعتماد الداخلي</span>
-                  <ArrowLeft size={14} />
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={() => handleNavigate('audit-hub')}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  backgroundColor: '#D97706',
+                  color: '#FFFFFF',
+                  border: 'none',
+                  borderRadius: '8px',
+                  padding: '7px 16px',
+                  fontSize: '12.5px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                  boxShadow: '0 2px 8px rgba(217, 119, 6, 0.25)',
+                }}
+                title="الانتقال المباشر لمركز التدقيق والمراجعة الشاملة لمدير المدرسة"
+              >
+                <span>مركز التدقيق والمراجعة</span>
+                <ArrowLeft size={14} />
+              </button>
             </div>
           )}
 

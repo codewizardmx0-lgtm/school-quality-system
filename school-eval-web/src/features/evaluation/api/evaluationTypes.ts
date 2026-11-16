@@ -890,6 +890,10 @@ export interface AuditHubIndicator {
   score: number | null;
   scoreLabel: string;
   evidenceCount: number;
+  mandatoryRequirementsCount: number;
+  totalRequirementsCount: number;
+  coveredRequirementsCount: number;
+  isRequirementFullyCovered: boolean;
   hasPrincipalReview: boolean;
   principalNotesCount: number;
   latestPrincipalNote: {
