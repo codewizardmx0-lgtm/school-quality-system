@@ -46,6 +46,9 @@ class ImprovementPlan extends Model
         'cycle_id',
         'school_id',
         'plan_type',
+        'version_number',
+        'parent_plan_id',
+        'version_tag',
         'created_by_user_id',
         'title',
         'start_date',
@@ -62,11 +65,33 @@ class ImprovementPlan extends Model
     protected function casts(): array
     {
         return [
+            'version_number' => 'integer',
+            'parent_plan_id' => 'integer',
             'start_date' => 'date',
             'end_date' => 'date',
             'created_at' => 'datetime',
             'updated_at' => 'datetime',
         ];
+    }
+
+    /**
+     * الخطة الأصلية السابقة التي استُنسخ منها هذا الإصدار.
+     *
+     * @return BelongsTo
+     */
+    public function parentPlan(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'parent_plan_id', 'plan_id');
+    }
+
+    /**
+     * الإصدارات اللاحقة المستنسخة من هذه الخطة.
+     *
+     * @return HasMany
+     */
+    public function versions(): HasMany
+    {
+        return $this->hasMany(self::class, 'parent_plan_id', 'plan_id');
     }
 
     /**

@@ -639,8 +639,8 @@ class EvaluationAndEvidenceFeatureTest extends TestCase
         $disallowedRes->assertStatus(422)
             ->assertJsonValidationErrors(['file']);
 
-        // 2. ملف يتجاوز الحد الأقصى المسموح (أكثر من 20 ميغابايت)
-        $oversizedFile = UploadedFile::fake()->create('large.pdf', 25000, 'application/pdf');
+        // 2. ملف يتجاوز الحد الأقصى المسموح (أكثر من 25 ميغابايت)
+        $oversizedFile = UploadedFile::fake()->create('large.pdf', 30000, 'application/pdf');
         $oversizedRes = $this->postJson("/api/v1/evaluations/{$this->evaluationBelqees->evaluation_id}/indicators/{$this->firstIndicator->indicator_id}/evidence-links/upload", [
             'title' => 'ملف ضخم',
             'file'  => $oversizedFile,

@@ -108,6 +108,16 @@ export const usersApi = {
   },
 
   /**
+   * Update current user profile
+   */
+  async updateProfile(dto: {
+    fullName: string;
+    email?: string;
+  }): Promise<ApiResponse<User>> {
+    return await put<User>('/auth/profile', dto);
+  },
+
+  /**
    * Fetch users meta (roles, schools, ministries) from real API
    */
   async getUsersMeta(): Promise<ApiResponse<{

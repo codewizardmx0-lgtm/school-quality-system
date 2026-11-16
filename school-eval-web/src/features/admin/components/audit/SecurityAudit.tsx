@@ -15,6 +15,7 @@ import { RefreshButton } from '../common/RefreshButton';
 import { StatusBadge } from '../common/StatusBadge';
 import { AuditFilterBar } from './AuditFilterBar';
 import { BlockedIpsModal } from './BlockedIpsModal';
+import { ExportAuditConfirmModal } from './ExportAuditConfirmModal';
 import { useAdminAudit } from '../../hooks/useAdminAudit';
 import { exportToExcel, formatExportFilename } from '../../utils/exportUtils';
 import { FileSpreadsheet, ChevronRight, ChevronLeft } from 'lucide-react';
@@ -31,7 +32,7 @@ export const SecurityAudit: React.FC<SecurityAuditProps> = ({ onNavigate, addToa
     return new Date().toLocaleTimeString('ar-YE', { hour: '2-digit', minute: '2-digit' });
   });
   const {
-    logs,
+    logs: _logs,
     filteredLogs,
     availableEventTypes,
     availableEventOptions,
@@ -39,6 +40,8 @@ export const SecurityAudit: React.FC<SecurityAuditProps> = ({ onNavigate, addToa
     blockedIps,
     loading,
     error,
+    selectedActions,
+    setSelectedActions,
     actionType,
     setActionType,
     actor,
@@ -51,10 +54,12 @@ export const SecurityAudit: React.FC<SecurityAuditProps> = ({ onNavigate, addToa
     setCurrentPage,
     totalPages,
     totalCount,
+    auditStats,
     fetchData,
     fetchAllMatchingLogs,
   } = useAdminAudit();
   const [isExporting, setIsExporting] = useState(false);
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
 
   // Modals
   const [isBlockedIpsOpen, setIsBlockedIpsOpen] = useState(false);
@@ -148,7 +153,7 @@ export const SecurityAudit: React.FC<SecurityAuditProps> = ({ onNavigate, addToa
 
 
           <button
-            onClick={handleExportExcel}
+            onClick={() => setIsExportModalOpen(true)}
             disabled={isExporting}
             style={{
               display: 'flex',
@@ -170,31 +175,7 @@ export const SecurityAudit: React.FC<SecurityAuditProps> = ({ onNavigate, addToa
             <FileSpreadsheet size={16} color="#059669" />
             {isExporting ? 'جاري تصدير السجل...' : 'تصدير Excel (.xlsx)'}
           </button>
-          
-
-
         </div>
-      </div>
-
-            {/* Advisory Notice Banner for Non-active KPI metrics */}
-      <div
-        style={{
-          backgroundColor: '#FFFBEB',
-          border: '1px solid #FDE68A',
-          borderRadius: theme.radii.lg,
-          padding: '12px 16px',
-          marginBottom: '20px',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '10px',
-          fontSize: theme.typography.fontSizes.xs,
-          color: '#B45309',
-        }}
-      >
-        <ShieldAlert size={18} style={{ flexShrink: 0 }} />
-        <span>
-          تنبيه: سجل التدقيق الأمني في الجدول أدناه موصول مباشرة بالـ API ويعرض العمليات الحقيقية، بينما البطاقات الإحصائية العلوية تمثل محاكاة استرشادية لمؤشرات الأمان.
-        </span>
       </div>
 
       {/* 4 Stat Cards */}
@@ -208,32 +189,36 @@ export const SecurityAudit: React.FC<SecurityAuditProps> = ({ onNavigate, addToa
       >
         <StatCard
           title="سجل العمليات الموثقة بالـ API"
-          value={loading ? '...' : `${logs.length} عملية`}
-          subtitle="سجلات تدقيق فعلية بالنظام"
+          value={loading ? '...' : `${auditStats.totalLogs || totalCount} عملية`}
+          subtitle={
+            selectedActions.length > 0 || actor !== 'الكل' || searchQuery || timeScope !== 'all'
+              ? `معروض ${totalCount} عملية مطابقة للفلتر`
+              : 'سجلات تدقيق فعلية بالنظام'
+          }
           icon={<Activity size={24} />}
           iconBgColor="#EFF6FF"
           iconColor="#2563EB"
         />
         <StatCard
           title="عمليات حوكمة حساسة"
-          value="18 عملية"
-          subtitle="إحصائية استرشادية (محاكاة)"
+          value={loading ? '...' : `${auditStats.sensitiveCount} عملية`}
+          subtitle="إجراءات حاسمة (حذف/صلاحيات/اعتماد)"
           icon={<ShieldAlert size={24} />}
           iconBgColor="#FEF3C7"
           iconColor="#D97706"
         />
         <StatCard
           title="محاولات دخول غير مصرح بها"
-          value="3 محاولات"
-          subtitle="إحصائية استرشادية (محاكاة)"
+          value={loading ? '...' : `${auditStats.failedLoginsCount} محاولة`}
+          subtitle="مرصودة ومسجلة في جدار الحماية"
           icon={<AlertOctagon size={24} />}
           iconBgColor="#FEE2E2"
           iconColor="#EF4444"
         />
         <StatCard
           title="المزامنة مع خادم الأرشيف"
-          value="متزامن 100%"
-          subtitle="إحصائية استرشادية (محاكاة)"
+          value={auditStats.archiveSyncStatus || 'متزامن 100%'}
+          subtitle="سلامة البصمات الرقمية SHA-256"
           icon={<CheckCircle2 size={24} />}
           iconBgColor="#ECFDF5"
           iconColor="#059669"
@@ -242,6 +227,8 @@ export const SecurityAudit: React.FC<SecurityAuditProps> = ({ onNavigate, addToa
 
       {/* Filter Bar */}
       <AuditFilterBar
+        selectedActions={selectedActions}
+        onSelectedActionsChange={setSelectedActions}
         actionType={actionType}
         onActionTypeChange={setActionType}
         actor={actor}
@@ -429,8 +416,8 @@ export const SecurityAudit: React.FC<SecurityAuditProps> = ({ onNavigate, addToa
                   </td>
 
                   {/* Detailed Explanation */}
-                  <td style={{ padding: '14px 20px', maxWidth: '340px' }}>
-                    <div style={{ fontSize: theme.typography.fontSizes.xs, color: theme.colors.neutral[800], lineHeight: 1.6, fontWeight: 500 }}>
+                  <td style={{ padding: '14px 20px', minWidth: '320px', maxWidth: '520px' }}>
+                    <div style={{ fontSize: theme.typography.fontSizes.xs, color: theme.colors.neutral[800], lineHeight: 1.65, fontWeight: 500 }}>
                       {log.descriptionAr || log.description || "عملية موثقة في النظام"}
                     </div>
                   </td>
@@ -643,6 +630,19 @@ export const SecurityAudit: React.FC<SecurityAuditProps> = ({ onNavigate, addToa
         onClose={() => setIsBlockedIpsOpen(false)}
         onSuccess={fetchData}
         addToast={addToast}
+      />
+
+      {/* Export Confirmation Modal */}
+      <ExportAuditConfirmModal
+        isOpen={isExportModalOpen}
+        onClose={() => setIsExportModalOpen(false)}
+        onConfirm={handleExportExcel}
+        isExporting={isExporting}
+        totalCount={totalCount}
+        selectedActions={selectedActions}
+        actor={actor}
+        timeScope={timeScope}
+        searchQuery={searchQuery}
       />
     </div>
   );

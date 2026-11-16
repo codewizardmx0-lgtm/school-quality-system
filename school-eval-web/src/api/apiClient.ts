@@ -21,6 +21,11 @@ apiClient.interceptors.request.use(
       config.headers = config.headers || {};
       config.headers.Authorization = `Bearer ${token}`;
     }
+    const archiveEvalId = sessionStorage.getItem('active_archive_evaluation_id');
+    if (archiveEvalId) {
+      config.headers = config.headers || {};
+      config.headers['X-Evaluation-Id'] = archiveEvalId;
+    }
     return config;
   },
   (error) => Promise.reject(error)

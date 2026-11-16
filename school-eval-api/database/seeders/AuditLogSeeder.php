@@ -257,12 +257,12 @@ class AuditLogSeeder extends Seeder
             // 18
             [
                 'user_id'     => $admin?->user_id,
-                'school_id'   => 1,
+                'school_id'   => $belqees?->school_id,
                 'action'      => 'school.assigned_principal',
                 'target_type' => 'App\Models\User',
                 'target_id'   => $principalBelqees?->user_id,
                 'old_values'  => ['school_id' => null],
-                'new_values'  => ['school_id' => 1],
+                'new_values'  => ['school_id' => $belqees?->school_id],
                 'ip_address'  => '192.168.1.10',
                 'user_agent'  => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/119.0',
                 'created_at'  => now()->subHours(14),
@@ -270,12 +270,12 @@ class AuditLogSeeder extends Seeder
             // 19
             [
                 'user_id'     => $admin?->user_id,
-                'school_id'   => 1,
+                'school_id'   => $belqees?->school_id,
                 'action'      => 'school.assigned_evaluator',
                 'target_type' => 'App\Models\User',
                 'target_id'   => $evaluatorBelqees?->user_id,
                 'old_values'  => ['school_id' => null],
-                'new_values'  => ['school_id' => 1],
+                'new_values'  => ['school_id' => $belqees?->school_id],
                 'ip_address'  => '192.168.1.10',
                 'user_agent'  => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/119.0',
                 'created_at'  => now()->subHours(15),

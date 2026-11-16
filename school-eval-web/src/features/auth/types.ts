@@ -19,6 +19,7 @@ export interface UserRole {
 export interface SchoolBrief {
   schoolId: number;
   schoolName: string;
+  schoolCode?: string;
   status: string;
 }
 

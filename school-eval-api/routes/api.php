@@ -41,6 +41,7 @@ Route::prefix('v1')->group(function () {
         Route::prefix('auth')->group(function () {
             Route::post('/logout', [AuthController::class, 'logout'])->name('api.v1.auth.logout');
             Route::get('/me', [AuthController::class, 'me'])->name('api.v1.auth.me');
+            Route::put('/profile', [AuthController::class, 'updateProfile'])->name('api.v1.auth.profile.update');
             Route::post('/password/change', [AuthController::class, 'changePassword'])
                 ->middleware('throttle:auth.password.change')
                 ->name('api.v1.auth.password.change');
@@ -116,6 +117,7 @@ Route::prefix('v1')->group(function () {
             Route::get('/', [\App\Http\Controllers\Api\V1\AdminController::class, 'backups'])->name('api.v1.backups.index');
             Route::post('/', [\App\Http\Controllers\Api\V1\AdminController::class, 'triggerBackup'])->name('api.v1.backups.trigger');
             Route::post('/{id}/verify', [\App\Http\Controllers\Api\V1\AdminController::class, 'verifyBackup'])->name('api.v1.backups.verify');
+            Route::get('/{id}/download', [\App\Http\Controllers\Api\V1\AdminController::class, 'downloadBackup'])->name('api.v1.backups.download');
         });
 
         Route::prefix('system-settings')->group(function () {
@@ -129,6 +131,66 @@ Route::prefix('v1')->group(function () {
             Route::get('/dashboard-stats', [\App\Http\Controllers\Api\V1\AdminController::class, 'dashboardStats'])->name('api.v1.admin.dashboard-stats');
             Route::get('/export-report-pdf', [\App\Http\Controllers\Api\V1\AdminController::class, 'exportReportPdf'])->name('api.v1.admin.export-report-pdf');
         });
+
+        // --------------------------------------------------------------------------
+        // بوابة مستخدم التقييم بالمدرسة (School Evaluator Suite - ERTEQA)
+        // --------------------------------------------------------------------------
+        Route::prefix('evaluator')->group(function () {
+            Route::get('/dashboard-stats', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'dashboardStats'])->name('api.v1.evaluator.dashboard-stats');
+            Route::get('/export-report-pdf', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'exportReportPdf'])->name('api.v1.evaluator.export-report-pdf');
+            Route::get('/export-detailed-pdf', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'exportDetailedReportPdf'])->name('api.v1.evaluator.export-detailed-pdf');
+            Route::get('/export-detailed-excel', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'exportDetailedReportExcel'])->name('api.v1.evaluator.export-detailed-excel');
+            Route::get('/export-improvement-workbook', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'exportImprovementWorkbook'])->name('api.v1.evaluator.export-improvement-workbook');
+            Route::get('/export-seal-certificate-pdf', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'exportSealCertificatePdf'])->name('api.v1.evaluator.export-seal-certificate-pdf');
+            Route::get('/export-evidences-zip', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'exportEvidenceZip'])->name('api.v1.evaluator.export-evidences-zip');
+            Route::get('/export-evidence-inventory-excel', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'exportEvidenceInventoryExcel'])->name('api.v1.evaluator.export-evidence-inventory-excel');
+            Route::get('/trend', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'getHistoricalTrend'])->name('api.v1.evaluator.trend');
+            Route::get('/internal-review-note', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'getInternalReviewNote'])->name('api.v1.evaluator.internal-review-note.show');
+            Route::post('/internal-review-note', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'saveInternalReviewNote'])->name('api.v1.evaluator.internal-review-note.store');
+            Route::get('/evidence-inventory', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'getEvidenceInventory'])->name('api.v1.evaluator.evidence-inventory');
+            Route::get('/improvement-suggestions', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'getImprovementSuggestions'])->name('api.v1.evaluator.improvement-suggestions');
+            Route::post('/evidence-links/multi', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'multiLinkEvidence'])->name('api.v1.evaluator.evidence-links.multi');
+            Route::post('/indicators/{indicatorId}/reset', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'resetIndicator'])->name('api.v1.evaluator.indicators.reset');
+            Route::post('/standards/{standardId}/reset', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'resetStandard'])->name('api.v1.evaluator.standards.reset');
+            Route::get('/discrepancies/audit', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'auditDiscrepancies'])->name('api.v1.evaluator.discrepancies.audit');
+        });
+
+        Route::get('/standard-versions/active/tree', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'activeStandardsTree'])->name('api.v1.standard-versions.active.tree');
+        Route::get('/evaluation-results/{indicatorId}', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'getEvaluationResult'])->name('api.v1.evaluation-results.indicator.show');
+        Route::post('/evaluation-results', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'saveEvaluationResult'])->name('api.v1.evaluation-results.store');
+
+        Route::post('/evidences/upload', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'uploadEvidence'])->name('api.v1.evidences.upload');
+        Route::get('/evidences', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'getEvidences'])->name('api.v1.evidences.index');
+        Route::get('/evidences/versions-archive', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'getVersionsArchive'])->name('api.v1.evidences.versions.archive');
+        Route::delete('/evidences/versions/{versionId}/file', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'pruneVersionPhysicalFile'])->name('api.v1.evidences.versions.prune-file');
+        Route::get('/evidences/documents/{documentId}/versions', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'getDocumentVersions'])->name('api.v1.evidences.documents.versions');
+        Route::patch('/evidences/documents/{documentId}', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'updateDocumentMetadata'])->name('api.v1.evidences.documents.update');
+        Route::delete('/evidences/documents/{documentId}', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'deleteUnlinkedDocument'])->name('api.v1.evidences.documents.delete');
+        Route::patch('/evidence-links/{id}/covered-requirements', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'updateLinkCoveredRequirements'])->name('api.v1.evidence-links.covered-requirements');
+
+        Route::prefix('ai')->group(function () {
+            Route::post('/analyses', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'triggerAiAnalysis'])->name('api.v1.ai.analyses.store');
+            Route::get('/analyses/{id}/recommendations', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'getAiRecommendations'])->name('api.v1.ai.analyses.recommendations');
+            Route::patch('/recommendations/{id}', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'updateAiRecommendation'])->name('api.v1.ai.recommendations.update');
+        });
+
+        Route::get('/improvement-plans/current', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'getCurrentImprovementPlan'])->name('api.v1.improvement-plans.current');
+        Route::get('/evaluator/improvement-plans', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'getSchoolImprovementPlans'])->name('api.v1.evaluator.improvement-plans.index');
+        Route::post('/evaluator/improvement-plans/{id}/clone-version', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'clonePlanVersion'])->name('api.v1.evaluator.improvement-plans.clone-version');
+        Route::post('/evaluator/suggestions/{resultId}/exclude', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'excludeSuggestion'])->name('api.v1.evaluator.suggestions.exclude');
+        Route::post('/evaluator/suggestions/{resultId}/restore', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'restoreSuggestion'])->name('api.v1.evaluator.suggestions.restore');
+        Route::post('/evaluator/improvement-plans', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'createImprovementPlan'])->name('api.v1.evaluator.improvement-plans.store');
+        Route::post('/evaluator/improvement-plans/{id}/review-notes', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'storePlanReviewNote'])->name('api.v1.evaluator.improvement-plans.review-notes.store');
+        Route::post('/improvement-actions', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'createImprovementAction'])->name('api.v1.improvement-actions.store');
+        Route::put('/improvement-actions/{id}', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'updateImprovementAction'])->name('api.v1.improvement-actions.update');
+        Route::post('/improvement-actions/{id}/evidences', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'attachActionEvidence'])->name('api.v1.improvement-actions.evidences.store');
+
+        Route::get('/evaluations/current/preflight-check', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'preflightCheck'])->name('api.v1.evaluations.current.preflight-check');
+        Route::post('/evaluation-submissions/submit', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'submitEvaluation'])->name('api.v1.evaluation-submissions.submit');
+
+        Route::get('/completion-requests/current', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'getCurrentCompletionRequest'])->name('api.v1.completion-requests.current');
+        Route::post('/completion-request-items/{id}/resolve', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'resolveCompletionRequestItem'])->name('api.v1.completion-request-items.resolve');
+        Route::post('/completion-requests/{id}/resubmit', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'resubmitCompletionRequest'])->name('api.v1.completion-requests.resubmit.evaluator');
         // الإصدارات المعيارية وإدارة معايير الاعتماد المدرسي (Standard Versions Management - الشريحة 7)
         Route::prefix('standard-versions')->group(function () {
             Route::get('/', [\App\Http\Controllers\Api\V1\StandardManagementController::class, 'index'])->name('api.v1.standard-versions.index');
@@ -225,6 +287,7 @@ Route::prefix('v1')->group(function () {
             Route::get('/', [\App\Http\Controllers\Api\V1\ImprovementAreaController::class, 'index'])->name('api.v1.improvement-areas.index');
             Route::post('/', [\App\Http\Controllers\Api\V1\ImprovementAreaController::class, 'store'])->name('api.v1.improvement-areas.store');
             Route::patch('/{id}', [\App\Http\Controllers\Api\V1\ImprovementAreaController::class, 'update'])->name('api.v1.improvement-areas.update');
+            Route::delete('/{id}', [\App\Http\Controllers\Api\V1\ImprovementAreaController::class, 'destroy'])->name('api.v1.improvement-areas.destroy');
         });
 
         // خطط التحسين المدرسي والتطوير المهني وإجراءاتها وملاحظات المراجعة (الشريحة 3 والشريحة 8)

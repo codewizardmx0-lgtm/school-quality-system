@@ -223,4 +223,12 @@ class School extends Model
     {
         return $this->hasMany(EvidenceLink::class, 'school_id', 'school_id');
     }
+
+    /**
+     * الرمز الوزاري الموحد للمدرسة (School Code).
+     */
+    public function getSchoolCodeAttribute(): string
+    {
+        return $this->identification_data ?: ('SCH-' . $this->school_id);
+    }
 }

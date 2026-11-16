@@ -105,7 +105,7 @@ class AuthController extends Controller
             newValues: ['session_id' => $session->session_id],
             userId: $user->user_id,
             schoolId: $user->school_id,
-            descriptionAr: "تغيير كلمة المرور لحساب المستخدم ({$user->full_name})"
+            descriptionAr: "تسجيل دخول ناجح للمستخدم ({$user->full_name}) إلى المنصة"
         );
 
         $responseData = [
@@ -248,6 +248,42 @@ class AuthController extends Controller
         return ApiResponse::success(
             data: (new UserResource($user))->resolve($request),
             message: null
+        );
+    }
+
+    /**
+     * تحديث البيانات الشخصية للمستخدم المصادق.
+     *
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function updateProfile(Request $request): JsonResponse
+    {
+        $user = $request->user();
+
+        if (!$user) {
+            return ApiResponse::unauthorized();
+        }
+
+        $validated = $request->validate([
+            'fullName' => 'required|string|min:3|max:150',
+            'email'    => 'nullable|email|max:150',
+        ], [
+            'fullName.required' => 'الاسم الكامل مطلوب.',
+            'fullName.min'      => 'يجب ألا يقل الاسم عن 3 أحرف.',
+            'fullName.max'      => 'يجب ألا يزيد الاسم عن 150 حرفاً.',
+            'email.email'       => 'صيغة البريد الإلكتروني غير صالحة.',
+        ]);
+
+        $user->full_name = $validated['fullName'];
+        if (array_key_exists('email', $validated) && !empty($validated['email'])) {
+            $user->email = $validated['email'];
+        }
+        $user->save();
+
+        return ApiResponse::success(
+            data: (new UserResource($user))->resolve($request),
+            message: 'تم تحديث البيانات الشخصية بنجاح.'
         );
     }
 }

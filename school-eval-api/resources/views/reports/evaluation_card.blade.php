@@ -212,60 +212,9 @@
         </tr>
         <tr>
             <td class="meta-label">نوع المبنى والفترة:</td>
-            <td>{{ $school['building_type'] ?? 'حكومي' }} (الفترة: {{ $school['shift_type'] ?? 'صباحي' }})</td>
-            <td class="meta-label">المساحة الإجمالية:</td>
-            <td>{{ $school['total_area'] ? $school['total_area'] . ' م²' : 'غير مسجلة' }}</td>
+            <td colspan="3">{{ $school['building_type'] ?? 'حكومي' }} (الفترة: {{ $school['shift_type'] ?? 'صباحي' }})</td>
         </tr>
     </table>
-
-    <!-- الملخص الإحصائي المعتمد (Context Snapshot) -->
-    <div class="section-box">
-        <div class="section-title">الملخص الإحصائي المعتمد للمدرسة</div>
-        <table class="stats-grid">
-            <tr>
-                <td>
-                    <div class="stat-value">{{ $summary['enrollment']['total_students'] ?? 0 }}</div>
-                    <div class="stat-label">إجمالي الطلاب</div>
-                </td>
-                <td>
-                    <div class="stat-value">{{ $summary['facilities']['classrooms_count'] ?? 0 }}</div>
-                    <div class="stat-label">الفصول الصالحة</div>
-                </td>
-                <td>
-                    <div class="stat-value">
-                        {{ ($summary['facilities']['classrooms_count'] ?? 0) > 0 ? round(($summary['enrollment']['total_students'] ?? 0) / $summary['facilities']['classrooms_count'], 1) : 0 }}
-                    </div>
-                    <div class="stat-label">متوسط الكثافة الصفية</div>
-                </td>
-                <td>
-                    <div class="stat-value">{{ $summary['staff']['total_teachers'] ?? 0 }}</div>
-                    <div class="stat-label">إجمالي المعلمين</div>
-                </td>
-            </tr>
-            <tr>
-                <td>
-                    <div class="stat-value">
-                        {{ ($summary['staff']['total_teachers'] ?? 0) > 0 ? round((($summary['staff']['qualified_teachers_count'] ?? 0) / $summary['staff']['total_teachers']) * 100, 1) : 0 }}%
-                    </div>
-                    <div class="stat-label">نسبة التأهيل التربوي</div>
-                </td>
-                <td>
-                    <div class="stat-value">
-                        {{ ($summary['staff']['total_teachers'] ?? 0) > 0 ? round((($summary['staff']['matched_specialization_count'] ?? 0) / $summary['staff']['total_teachers']) * 100, 1) : 0 }}%
-                    </div>
-                    <div class="stat-label">مطابقة التخصص للمادة</div>
-                </td>
-                <td>
-                    <div class="stat-value">{{ $summary['facilities']['science_labs_count'] ?? 0 }} / {{ $summary['facilities']['computer_labs_count'] ?? 0 }}</div>
-                    <div class="stat-label">معامل علوم / حاسوب</div>
-                </td>
-                <td>
-                    <div class="stat-value">{{ $summary['facilities']['restrooms_count'] ?? 0 }}</div>
-                    <div class="stat-label">المرافق الصحية الصالحة</div>
-                </td>
-            </tr>
-        </table>
-    </div>
 
     <!-- النتيجة الإجمالية والتصنيف النوعي المحايد -->
     <div class="result-banner">

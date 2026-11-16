@@ -1,0 +1,920 @@
+import React, { useState, useEffect } from 'react';
+import {
+  CheckCircle2,
+  AlertTriangle,
+  RefreshCw,
+  Search,
+  ChevronDown,
+  ChevronUp,
+  Link2,
+  ExternalLink,
+  RotateCcw,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+  Filter,
+  X,
+} from 'lucide-react';
+import { evaluatorApi } from '../../api/evaluatorApi';
+import type {
+  EvidenceInventoryData,
+  EvidenceInventoryStandard,
+  EvidenceItem,
+  EvaluatorScreen,
+} from '../../api/evaluationTypes';
+import { LinkEvidenceModal } from './LinkEvidenceModal';
+
+interface EvidenceInventoryPageProps {
+  onSuccessToast?: (msg: string) => void;
+  onErrorToast?: (msg: string) => void;
+  onNavigate?: (screen: EvaluatorScreen, param?: number) => void;
+  readOnly?: boolean;
+}
+
+export const EvidenceInventoryPage: React.FC<EvidenceInventoryPageProps> = ({
+  onSuccessToast,
+  onErrorToast,
+  onNavigate,
+  readOnly = false,
+}) => {
+  const [data, setData] = useState<EvidenceInventoryData | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [filterType, setFilterType] = useState<'all' | 'missing' | 'sufficient'>('all');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [expandedStandards, setExpandedStandards] = useState<Record<number, boolean>>({});
+  const [selectedEvidenceForLinking, setSelectedEvidenceForLinking] = useState<EvidenceItem | null>(null);
+  const [isLinkModalOpen, setIsLinkModalOpen] = useState(false);
+
+  type InvSortKey = 'code' | 'title' | 'coverage' | 'status' | 'evidences_count';
+  type SortDirection = 'asc' | 'desc';
+  const [sortKey, setSortKey] = useState<InvSortKey>('code');
+  const [sortDir, setSortDir] = useState<SortDirection>('asc');
+
+  const handleHeaderSort = (key: InvSortKey) => {
+    if (sortKey === key) {
+      setSortDir((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortKey(key);
+      setSortDir(key === 'coverage' || key === 'status' || key === 'evidences_count' ? 'desc' : 'asc');
+    }
+  };
+
+  const renderSortIcon = (key: InvSortKey) => {
+    if (sortKey !== key) {
+      return <ArrowUpDown size={12} color="#94A3B8" />;
+    }
+    return sortDir === 'asc' ? <ArrowUp size={12} color="#059669" /> : <ArrowDown size={12} color="#059669" />;
+  };
+
+  const fetchInventory = async () => {
+    setIsLoading(true);
+    try {
+      const res = await evaluatorApi.getEvidenceInventory();
+      setData(res);
+      // Expand all standards by default
+      const initialExpanded: Record<number, boolean> = {};
+      res.standards.forEach((std) => {
+        initialExpanded[std.standardId] = true;
+      });
+      setExpandedStandards(initialExpanded);
+    } catch (err) {
+      console.error('Failed to load evidence inventory:', err);
+      onErrorToast?.('فشل تحميل بيانات جرد الشواهد.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchInventory();
+  }, []);
+
+  const toggleStandard = (id: number) => {
+    setExpandedStandards((prev) => ({ ...prev, [id]: !prev[id] }));
+  };
+
+  const handleOpenLinkModal = (ev: {
+    evidenceId: number;
+    title: string;
+    evidenceType: string;
+  }, ind: { indicatorId: number; indicatorCode: string; indicatorName: string }, std: EvidenceInventoryStandard) => {
+    setSelectedEvidenceForLinking({
+      id: ev.evidenceId,
+      documentId: ev.evidenceId,
+      linkId: ev.evidenceId,
+      indicatorId: ind.indicatorId,
+      title: ev.title,
+      fileName: `${ev.title}.pdf`,
+      mimeType: 'application/pdf',
+      fileSize: 1024 * 1024,
+      formattedSize: '1.2 MB',
+      versionNumber: 1,
+      standardCode: std.standardCode,
+      standardName: std.standardName,
+      indicatorCode: ind.indicatorCode,
+      indicatorTitle: ind.indicatorName,
+      uploadedAt: new Date().toISOString().split('T')[0],
+      uploadedBy: 'مسؤول الجودة',
+      verificationStatus: 'Compliant',
+      verificationStatusArabic: 'مطابق ومعتمد',
+    });
+    setIsLinkModalOpen(true);
+  };
+
+  if (isLoading || !data) {
+    return (
+      <div style={{ padding: '24px', textAlign: 'center', direction: 'rtl' }}>
+        <RefreshCw size={28} className="animate-spin" style={{ color: '#3b82f6', margin: '30px auto 12px auto' }} />
+        <div style={{ color: '#64748b', fontSize: '14px', fontWeight: 600 }}>جارِ تحميل سجل جرد الشواهد والوثائق...</div>
+      </div>
+    );
+  }
+
+  const { summary } = data;
+
+  return (
+    <div style={{ direction: 'rtl', padding: '0 4px' }}>
+      {/* Top Banner / Summary KPIs */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+          gap: '14px',
+          marginBottom: '20px',
+        }}
+      >
+        <div
+          style={{
+            backgroundColor: '#ffffff',
+            borderRadius: '12px',
+            padding: '16px',
+            border: '1px solid #e2e8f0',
+            borderRight: '4px solid #3b82f6',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+          }}
+        >
+          <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 600, marginBottom: '6px' }}>
+            نسبة استيفاء الشواهد الإجمالية
+          </div>
+          <div style={{ fontSize: '26px', fontWeight: 800, color: '#1e293b' }}>
+            {data.overallEvidenceCompletionRate}%
+          </div>
+          <div style={{ fontSize: '11px', color: '#16a34a', marginTop: '4px' }}>
+            حالة السجل: {data.inventoryStatus === 'InProgress' ? 'قيد التوثيق والاستيفاء' : 'مستوفٍ بالكامل'}
+          </div>
+        </div>
+
+        <div
+          style={{
+            backgroundColor: '#ffffff',
+            borderRadius: '12px',
+            padding: '16px',
+            border: '1px solid #e2e8f0',
+            borderRight: '4px solid #10b981',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+          }}
+        >
+          <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 600, marginBottom: '6px' }}>
+            مؤشرات مستوفية الشواهد
+          </div>
+          <div style={{ fontSize: '26px', fontWeight: 800, color: '#059669' }}>
+            {summary.indicatorsWithSufficientEvidence}{' '}
+            <span style={{ fontSize: '14px', color: '#94a3b8', fontWeight: 500 }}>
+              من {summary.totalIndicators}
+            </span>
+          </div>
+          <div style={{ fontSize: '11px', color: '#64748b', marginTop: '4px' }}>
+            حسب متطلبات الاعتماد الإلزامية
+          </div>
+        </div>
+
+        <div
+          style={{
+            backgroundColor: '#ffffff',
+            borderRadius: '12px',
+            padding: '16px',
+            border: '1px solid #e2e8f0',
+            borderRight: '4px solid #ef4444',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+          }}
+        >
+          <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 600, marginBottom: '6px' }}>
+            مؤشرات بحاجة لاستكمال الشواهد
+          </div>
+          <div style={{ fontSize: '26px', fontWeight: 800, color: '#dc2626' }}>
+            {summary.indicatorsMissingEvidence}
+          </div>
+          <div style={{ fontSize: '11px', color: '#dc2626', marginTop: '4px' }}>
+            مؤشرات تفتقر للحد الأدنى الإلزامي
+          </div>
+        </div>
+
+        <div
+          style={{
+            backgroundColor: '#ffffff',
+            borderRadius: '12px',
+            padding: '16px',
+            border: '1px solid #e2e8f0',
+            borderRight: '4px solid #8b5cf6',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+          }}
+        >
+          <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 600, marginBottom: '6px' }}>
+            إجمالي الشواهد والوثائق المودعة
+          </div>
+          <div style={{ fontSize: '26px', fontWeight: 800, color: '#7c3aed' }}>
+            {summary.totalEvidencesUploaded}
+          </div>
+          <div style={{ fontSize: '11px', color: '#64748b', marginTop: '4px' }}>
+            {summary.totalValidEvidences} معتمدة | {summary.totalDraftEvidences} مسودة
+          </div>
+        </div>
+      </div>
+
+      {/* Filter and Search Bar */}
+      <div
+        style={{
+          backgroundColor: '#ffffff',
+          borderRadius: '12px',
+          padding: '14px 18px',
+          border: '1px solid #e2e8f0',
+          marginBottom: '20px',
+          display: 'flex',
+          flexWrap: 'wrap',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '12px',
+        }}
+      >
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            onClick={() => setFilterType('all')}
+            style={{
+              padding: '6px 14px',
+              borderRadius: '8px',
+              fontSize: '12.5px',
+              fontWeight: 600,
+              cursor: 'pointer',
+              border: filterType === 'all' ? '1px solid #3b82f6' : '1px solid #e2e8f0',
+              backgroundColor: filterType === 'all' ? '#eff6ff' : '#ffffff',
+              color: filterType === 'all' ? '#1d4ed8' : '#64748b',
+            }}
+          >
+            كافة المؤشرات ({summary.totalIndicators})
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setFilterType('missing')}
+            style={{
+              padding: '6px 14px',
+              borderRadius: '8px',
+              fontSize: '12.5px',
+              fontWeight: 600,
+              cursor: 'pointer',
+              border: filterType === 'missing' ? '1px solid #ef4444' : '1px solid #e2e8f0',
+              backgroundColor: filterType === 'missing' ? '#fef2f2' : '#ffffff',
+              color: filterType === 'missing' ? '#b91c1c' : '#64748b',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+            }}
+          >
+            <AlertTriangle size={14} />
+            المؤشرات الناقصة الشواهد ({summary.indicatorsMissingEvidence})
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setFilterType('sufficient')}
+            style={{
+              padding: '6px 14px',
+              borderRadius: '8px',
+              fontSize: '12.5px',
+              fontWeight: 600,
+              cursor: 'pointer',
+              border: filterType === 'sufficient' ? '1px solid #10b981' : '1px solid #e2e8f0',
+              backgroundColor: filterType === 'sufficient' ? '#ecfdf5' : '#ffffff',
+              color: filterType === 'sufficient' ? '#047857' : '#64748b',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+            }}
+          >
+            <CheckCircle2 size={14} />
+            المؤشرات المستوفية ({summary.indicatorsWithSufficientEvidence})
+          </button>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: '240px', flex: 1, maxWidth: '360px' }}>
+          <div style={{ position: 'relative', width: '100%' }}>
+            <Search size={15} style={{ position: 'absolute', right: '10px', top: '9px', color: '#94a3b8' }} />
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="ابحث برمز المؤشر أو الاسم..."
+              style={{
+                width: '100%',
+                padding: '6px 32px 6px 10px',
+                borderRadius: '8px',
+                border: '1px solid #cbd5e1',
+                fontSize: '12.5px',
+                outline: 'none',
+              }}
+            />
+          </div>
+          {/* زر إعادة ضبط الفلاتر */}
+          {(filterType !== 'all' || searchTerm.trim()) && (
+            <button
+              type="button"
+              onClick={() => {
+                setFilterType('all');
+                setSearchTerm('');
+              }}
+              style={{
+                padding: '6px 12px',
+                borderRadius: '8px',
+                backgroundColor: '#FEF2F2',
+                border: '1px solid #FECACA',
+                color: '#DC2626',
+                fontSize: '12px',
+                fontWeight: 700,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                whiteSpace: 'nowrap',
+              }}
+              title="إعادة ضبط الفلاتر والبحث"
+            >
+              <RotateCcw size={13} />
+              <span>إعادة ضبط الفلاتر</span>
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={fetchInventory}
+            title="تحديث البيانات"
+            style={{
+              padding: '7px 10px',
+              borderRadius: '8px',
+              border: '1px solid #cbd5e1',
+              backgroundColor: '#ffffff',
+              color: '#64748b',
+              cursor: 'pointer',
+            }}
+          >
+            <RefreshCw size={15} />
+          </button>
+        </div>
+      </div>
+
+      {/* Active Filter Chips Bar */}
+      {(filterType !== 'all' || searchTerm.trim()) && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            flexWrap: 'wrap',
+            padding: '10px 16px',
+            backgroundColor: '#F8FAFC',
+            borderRadius: '10px',
+            border: '1px solid #E2E8F0',
+            marginBottom: '16px',
+          }}
+        >
+          <span style={{ fontSize: '11.5px', fontWeight: 700, color: '#64748B', display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <Filter size={12} />
+            الفلاتر النشطة:
+          </span>
+
+          {searchTerm.trim() && (
+            <span
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px',
+                padding: '3px 8px',
+                borderRadius: '6px',
+                backgroundColor: '#EFF6FF',
+                border: '1px solid #BFDBFE',
+                color: '#1E40AF',
+                fontSize: '11.5px',
+                fontWeight: 600,
+              }}
+            >
+              <span>البحث: &quot;{searchTerm}&quot;</span>
+              <X size={12} style={{ cursor: 'pointer' }} onClick={() => setSearchTerm('')} />
+            </span>
+          )}
+
+          {filterType !== 'all' && (
+            <span
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px',
+                padding: '3px 8px',
+                borderRadius: '6px',
+                backgroundColor: filterType === 'missing' ? '#FEF2F2' : '#ECFDF5',
+                border: `1px solid ${filterType === 'missing' ? '#FECACA' : '#A7F3D0'}`,
+                color: filterType === 'missing' ? '#DC2626' : '#059669',
+                fontSize: '11.5px',
+                fontWeight: 600,
+              }}
+            >
+              <span>{filterType === 'missing' ? 'المؤشرات الناقصة الشواهد' : 'المؤشرات المستوفية'}</span>
+              <X size={12} style={{ cursor: 'pointer' }} onClick={() => setFilterType('all')} />
+            </span>
+          )}
+
+          <button
+            type="button"
+            onClick={() => {
+              setFilterType('all');
+              setSearchTerm('');
+            }}
+            style={{
+              padding: '3px 8px',
+              borderRadius: '6px',
+              backgroundColor: '#FEF2F2',
+              border: '1px solid #FECACA',
+              color: '#DC2626',
+              fontSize: '11px',
+              fontWeight: 700,
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '4px',
+              marginRight: 'auto',
+            }}
+          >
+            <RotateCcw size={11} />
+            <span>مسح كافة الفلاتر</span>
+          </button>
+        </div>
+      )}
+
+      {/* Standards & Indicators List */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+        {data.standards.map((std) => {
+          // Filter indicators based on active filter and search
+          const filteredIndicators = std.indicators.filter((ind) => {
+            if (filterType === 'missing' && ind.isSufficient) return false;
+            if (filterType === 'sufficient' && !ind.isSufficient) return false;
+            if (searchTerm.trim()) {
+              const term = searchTerm.toLowerCase();
+              return (
+                ind.indicatorCode.toLowerCase().includes(term) ||
+                ind.indicatorName.toLowerCase().includes(term) ||
+                (ind.domainName && ind.domainName.toLowerCase().includes(term))
+              );
+            }
+            return true;
+          });
+
+          if (filteredIndicators.length === 0) return null;
+
+          const sortedIndicators = [...filteredIndicators].sort((a, b) => {
+            if (sortKey === 'code') {
+              const comp = a.indicatorCode.localeCompare(b.indicatorCode, undefined, { numeric: true });
+              return sortDir === 'asc' ? comp : -comp;
+            }
+            if (sortKey === 'title') {
+              const comp = (a.indicatorName || '').localeCompare(b.indicatorName || '', 'ar');
+              return sortDir === 'asc' ? comp : -comp;
+            }
+            if (sortKey === 'coverage') {
+              const getCovered = (item: any) =>
+                Array.isArray(item.coveredRequirementIds)
+                  ? item.coveredRequirementIds.length
+                  : Array.isArray(item.requirements)
+                  ? item.requirements.filter((r: any) => r.isCovered).length
+                  : 0;
+              const diff = getCovered(a) - getCovered(b);
+              return sortDir === 'asc' ? diff : -diff;
+            }
+            if (sortKey === 'status') {
+              const vA = a.isSufficient ? 1 : 0;
+              const vB = b.isSufficient ? 1 : 0;
+              const diff = vA - vB;
+              return sortDir === 'asc' ? diff : -diff;
+            }
+            if (sortKey === 'evidences_count') {
+              const diff = (a.evidences?.length ?? 0) - (b.evidences?.length ?? 0);
+              return sortDir === 'asc' ? diff : -diff;
+            }
+            return 0;
+          });
+
+          const isExpanded = !!expandedStandards[std.standardId];
+
+          return (
+            <div
+              key={std.standardId}
+              style={{
+                backgroundColor: '#ffffff',
+                borderRadius: '12px',
+                border: '1px solid #e2e8f0',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+                overflow: 'hidden',
+              }}
+            >
+              {/* Standard Header */}
+              <div
+                onClick={() => toggleStandard(std.standardId)}
+                style={{
+                  padding: '14px 20px',
+                  backgroundColor: '#f8fafc',
+                  borderBottom: isExpanded ? '1px solid #e2e8f0' : 'none',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  cursor: 'pointer',
+                  userSelect: 'none',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <span
+                    style={{
+                      padding: '3px 8px',
+                      borderRadius: '6px',
+                      backgroundColor: '#e0e7ff',
+                      color: '#4338ca',
+                      fontSize: '11.5px',
+                      fontWeight: 700,
+                    }}
+                  >
+                    {std.standardCode}
+                  </span>
+                  <span style={{ fontSize: '14px', fontWeight: 700, color: '#1e293b' }}>
+                    {std.standardName}
+                  </span>
+                  <span style={{ fontSize: '12px', color: '#64748b' }}>
+                    ({filteredIndicators.length} مؤشر)
+                  </span>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                  <div style={{ fontSize: '12px', color: '#64748b' }}>
+                    إنجاز المعيار:{' '}
+                    <strong style={{ color: std.completionRate >= 100 ? '#16a34a' : '#d97706' }}>
+                      {std.completionRate}%
+                    </strong>
+                  </div>
+                  {isExpanded ? <ChevronUp size={18} color="#64748b" /> : <ChevronDown size={18} color="#64748b" />}
+                </div>
+              </div>
+
+              {/* Indicators Table / Accordion Body */}
+              {isExpanded && (
+                <div style={{ padding: '8px 16px', overflowX: 'auto', WebkitOverflowScrolling: 'touch', width: '100%' }}>
+                  <table style={{ width: '100%', minWidth: '750px', borderCollapse: 'collapse', fontSize: '13px' }}>
+                    <thead>
+                      <tr style={{ borderBottom: '1px solid #e2e8f0', color: '#64748b', textAlign: 'right' }}>
+                        <th
+                          onClick={() => handleHeaderSort('code')}
+                          style={{ padding: '10px 8px', width: '100px', cursor: 'pointer', userSelect: 'none' }}
+                          title="انقر للفرز حسب الرمز"
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px' }}>
+                            <span>الرمز</span>
+                            {renderSortIcon('code')}
+                          </div>
+                        </th>
+                        <th
+                          onClick={() => handleHeaderSort('title')}
+                          style={{ padding: '10px 8px', cursor: 'pointer', userSelect: 'none' }}
+                          title="انقر للفرز حسب المؤشر ومجال التحقق"
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px' }}>
+                            <span>المؤشر ومجال التحقق</span>
+                            {renderSortIcon('title')}
+                          </div>
+                        </th>
+                        <th
+                          onClick={() => handleHeaderSort('coverage')}
+                          style={{ padding: '10px 8px', width: '180px', textAlign: 'center', cursor: 'pointer', userSelect: 'none' }}
+                          title="انقر للفرز حسب استيفاء المتطلبات"
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
+                            <span>استيفاء المتطلبات الوطنية</span>
+                            {renderSortIcon('coverage')}
+                          </div>
+                        </th>
+                        <th
+                          onClick={() => handleHeaderSort('status')}
+                          style={{ padding: '10px 8px', width: '110px', textAlign: 'center', cursor: 'pointer', userSelect: 'none' }}
+                          title="انقر للفرز حسب الحالة"
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
+                            <span>الحالة</span>
+                            {renderSortIcon('status')}
+                          </div>
+                        </th>
+                        <th
+                          onClick={() => handleHeaderSort('evidences_count')}
+                          style={{ padding: '10px 8px', width: '180px', cursor: 'pointer', userSelect: 'none' }}
+                          title="انقر للفرز حسب عدد الشواهد"
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px' }}>
+                            <span>الشواهد المرتبطة</span>
+                            {renderSortIcon('evidences_count')}
+                          </div>
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {sortedIndicators.map((ind) => (
+                        <tr
+                          key={ind.indicatorId}
+                          style={{
+                            borderBottom: '1px solid #f1f5f9',
+                            backgroundColor: ind.isSufficient ? '#ffffff' : '#fffdfa',
+                          }}
+                        >
+                          <td style={{ padding: '12px 8px', fontWeight: 700, color: '#2563eb' }}>
+                            {ind.indicatorCode}
+                          </td>
+                          <td style={{ padding: '12px 8px' }}>
+                            <div style={{ fontWeight: 600, color: '#1e293b', marginBottom: '2px' }}>
+                              {ind.indicatorName}
+                            </div>
+                            {ind.domainName && (
+                              <div style={{ fontSize: '11.5px', color: '#64748b' }}>المجال: {ind.domainName}</div>
+                            )}
+                            {ind.adoptedPlanTitle && (
+                              <button
+                                type="button"
+                                onClick={() => onNavigate?.('improvement-plan')}
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  marginTop: '5px',
+                                  padding: '2px 8px',
+                                  borderRadius: '6px',
+                                  backgroundColor: '#EFF6FF',
+                                  color: '#1D4ED8',
+                                  border: '1px solid #BFDBFE',
+                                  fontSize: '11px',
+                                  fontWeight: 700,
+                                  cursor: 'pointer',
+                                  width: 'fit-content',
+                                  transition: 'all 0.2s',
+                                }}
+                                onMouseEnter={(e) => {
+                                  e.currentTarget.style.backgroundColor = '#DBEAFE';
+                                }}
+                                onMouseLeave={(e) => {
+                                  e.currentTarget.style.backgroundColor = '#EFF6FF';
+                                }}
+                                title="الانتقال إلى خطة التحسين"
+                              >
+                                📋 متبنى في: {ind.adoptedPlanTitle}
+                              </button>
+                            )}
+
+                            {/* تفصيل متطلبات المؤشر والشواهد المغطية لكل متطلب */}
+                            {Array.isArray((ind as any).requirements) && (ind as any).requirements.length > 0 && (
+                              <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                                {(ind as any).requirements.map((req: any) => (
+                                  <div
+                                    key={req.requirementId}
+                                    style={{
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: '6px',
+                                      fontSize: '11px',
+                                      padding: '2px 6px',
+                                      borderRadius: '4px',
+                                      backgroundColor: req.isCovered ? '#F0FDF4' : '#FEF2F2',
+                                      border: `1px solid ${req.isCovered ? '#BBF7D0' : '#FECACA'}`,
+                                    }}
+                                  >
+                                    <span style={{ color: req.isCovered ? '#15803D' : '#DC2626', fontWeight: 700 }}>
+                                      {req.isCovered ? '✓' : '✗'}
+                                    </span>
+                                    <span style={{ fontWeight: 600, color: '#1E293B' }}>{req.title}:</span>
+                                    <span style={{ color: req.isCovered ? '#166534' : '#991B1B' }}>
+                                      {req.isCovered && req.coveringLinks && req.coveringLinks.length > 0
+                                        ? `يغطيه: ${req.coveringLinks.map((cl: any) => cl.title).join('، ')}`
+                                        : 'غير مستوفى بشاهد معتمد'}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+
+                            {onNavigate && (
+                              <button
+                                type="button"
+                                onClick={() => onNavigate('rubric-assessment', ind.indicatorId)}
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  padding: '3px 8px',
+                                  borderRadius: '5px',
+                                  backgroundColor: '#EFF6FF',
+                                  border: '1px solid #BFDBFE',
+                                  color: '#1D4ED8',
+                                  fontSize: '11px',
+                                  fontWeight: 700,
+                                  cursor: 'pointer',
+                                  marginTop: '6px',
+                                }}
+                                title="الانتقال إلى استمارة رصد المؤشر"
+                              >
+                                <ExternalLink size={11} />
+                                <span>الانتقال للمؤشر</span>
+                              </button>
+                            )}
+                          </td>
+                          <td style={{ padding: '12px 8px', textAlign: 'center' }}>
+                            {(() => {
+                              const coveredCount = Array.isArray((ind as any).coveredRequirementIds)
+                                ? (ind as any).coveredRequirementIds.length
+                                : (Array.isArray((ind as any).requirements)
+                                    ? (ind as any).requirements.filter((r: any) => r.isCovered).length
+                                    : 0);
+                              const reqCount = ind.mandatoryRequiredCount ?? 0;
+                              const missingCount = Math.max(0, reqCount - coveredCount);
+
+                              return (
+                                <div style={{ fontSize: '11.5px', fontWeight: 700, whiteSpace: 'nowrap' }}>
+                                  <span style={{ color: '#475569' }}>مطلوب {reqCount}</span>
+                                  <span style={{ color: '#CBD5E1', margin: '0 4px' }}>•</span>
+                                  <span style={{ color: coveredCount >= reqCount && reqCount > 0 ? '#16A34A' : '#D97706' }}>
+                                    مغطى {coveredCount}
+                                  </span>
+                                  <span style={{ color: '#CBD5E1', margin: '0 4px' }}>•</span>
+                                  <span style={{ color: missingCount > 0 ? '#DC2626' : '#16A34A' }}>
+                                    ناقص {missingCount}
+                                  </span>
+                                </div>
+                              );
+                            })()}
+                          </td>
+                          <td style={{ padding: '12px 8px', textAlign: 'center' }}>
+                            {ind.isSufficient ? (
+                              <span
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  padding: '3px 8px',
+                                  borderRadius: '6px',
+                                  backgroundColor: '#ecfdf5',
+                                  color: '#047857',
+                                  fontSize: '11.5px',
+                                  fontWeight: 600,
+                                }}
+                              >
+                                <CheckCircle2 size={13} />
+                                مستوفٍ
+                              </span>
+                            ) : (
+                              <span
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  padding: '3px 8px',
+                                  borderRadius: '6px',
+                                  backgroundColor: '#fef2f2',
+                                  color: '#b91c1c',
+                                  fontSize: '11.5px',
+                                  fontWeight: 600,
+                                }}
+                              >
+                                <AlertTriangle size={13} />
+                                ناقص ({ind.missingCount ?? Math.max(0, ind.mandatoryRequiredCount - (ind.effectiveCoveredCount ?? ind.uploadedEvidenceCount))})
+                              </span>
+                            )}
+                          </td>
+                          <td style={{ padding: '12px 8px' }}>
+                            {ind.evidences.length > 0 ? (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                {ind.evidences.map((ev) => (
+                                  <div
+                                    key={ev.evidenceId}
+                                    style={{
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'space-between',
+                                      padding: '5px 8px',
+                                      borderRadius: '6px',
+                                      backgroundColor: '#f8fafc',
+                                      border: '1px solid #e2e8f0',
+                                      fontSize: '11px',
+                                      gap: '8px',
+                                    }}
+                                  >
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0, flex: 1 }}>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                        <span
+                                          title={ev.title}
+                                          style={{
+                                            overflow: 'hidden',
+                                            textOverflow: 'ellipsis',
+                                            whiteSpace: 'nowrap',
+                                            maxWidth: '130px',
+                                            color: '#1e293b',
+                                            fontWeight: 600,
+                                          }}
+                                        >
+                                          {ev.title}
+                                        </span>
+                                        {ev.evidenceTypeArabic && (
+                                          <span
+                                            style={{
+                                              padding: '1px 5px',
+                                              borderRadius: '4px',
+                                              backgroundColor: '#f1f5f9',
+                                              color: '#475569',
+                                              fontSize: '9.5px',
+                                              fontWeight: 600,
+                                            }}
+                                          >
+                                            {ev.evidenceTypeArabic}
+                                          </span>
+                                        )}
+                                      </div>
+                                      {ev.justification && (
+                                        <div
+                                          title={ev.justification}
+                                          style={{
+                                            fontSize: '10px',
+                                            color: '#64748b',
+                                            overflow: 'hidden',
+                                            textOverflow: 'ellipsis',
+                                            whiteSpace: 'nowrap',
+                                            maxWidth: '170px',
+                                          }}
+                                        >
+                                          مبرر الربط: {ev.justification}
+                                        </div>
+                                      )}
+                                    </div>
+                                    {!readOnly && (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleOpenLinkModal(ev, ind, std)}
+                                        title="إدارة علاقات وربط هذا الشاهد"
+                                        style={{
+                                          padding: '2px 5px',
+                                          borderRadius: '4px',
+                                          backgroundColor: '#eff6ff',
+                                          border: '1px solid #bfdbfe',
+                                          color: '#1d4ed8',
+                                          fontSize: '10.5px',
+                                          cursor: 'pointer',
+                                          display: 'inline-flex',
+                                          alignItems: 'center',
+                                          gap: '3px',
+                                        }}
+                                      >
+                                        <Link2 size={11} />
+                                        إدارة
+                                      </button>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <span style={{ fontSize: '11.5px', color: '#94a3b8' }}>لا توجد شواهد</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Link Evidence Modal */}
+      <LinkEvidenceModal
+        isOpen={isLinkModalOpen}
+        onClose={() => {
+          setIsLinkModalOpen(false);
+          setSelectedEvidenceForLinking(null);
+        }}
+        evidence={selectedEvidenceForLinking}
+        onSuccess={(msg) => {
+          onSuccessToast?.(msg);
+          fetchInventory();
+        }}
+        onError={(err) => onErrorToast?.(err)}
+      />
+    </div>
+  );
+};

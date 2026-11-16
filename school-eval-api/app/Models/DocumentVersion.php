@@ -45,6 +45,7 @@ class DocumentVersion extends Model
         'storage_uri',
         'file_size',
         'mime_type',
+        'notes',
     ];
 
     /**

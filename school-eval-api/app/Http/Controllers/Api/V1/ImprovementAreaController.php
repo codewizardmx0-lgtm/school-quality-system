@@ -108,6 +108,67 @@ class ImprovementAreaController extends Controller
             'target_score' => (int) $targetScore,
         ]);
 
+        // ربط المجال بالخطة المحددة أو الخطة النشطة الافتراضية للدورة
+        $targetPlanId = $request->input('planId') ?? $request->input('plan_id');
+        $linkedPlan = null;
+        if ($targetPlanId) {
+            $targetPlan = \App\Models\ImprovementPlan::where('plan_id', (int) $targetPlanId)
+                ->where('school_id', $result->evaluation->school_id)
+                ->first();
+            if ($targetPlan) {
+                $linkedPlan = $targetPlan;
+                \App\Models\PlanImprovementArea::firstOrCreate([
+                    'plan_id' => $targetPlan->plan_id,
+                    'area_id' => $area->area_id,
+                ], [
+                    'created_at' => now(),
+                ]);
+            }
+        } else {
+            $defaultPlan = \App\Models\ImprovementPlan::where('school_id', $result->evaluation->school_id)
+                ->where('cycle_id', $result->evaluation->cycle_id)
+                ->where('status', 'Active')
+                ->orderBy('plan_id', 'desc')
+                ->first()
+                ?? \App\Models\ImprovementPlan::where('school_id', $result->evaluation->school_id)
+                    ->where('cycle_id', $result->evaluation->cycle_id)
+                    ->where('status', 'Draft')
+                    ->orderBy('plan_id', 'desc')
+                    ->first();
+
+            if ($defaultPlan) {
+                $linkedPlan = $defaultPlan;
+                \App\Models\PlanImprovementArea::firstOrCreate([
+                    'plan_id' => $defaultPlan->plan_id,
+                    'area_id' => $area->area_id,
+                ], [
+                    'created_at' => now(),
+                ]);
+            }
+        }
+
+        // إنشاء الإجراء التنفيذي تلقائياً عند التبني الموحد
+        if ($linkedPlan) {
+            $actionTitle = $request->input('actionTitle') ?? $request->input('title') ?? $request->input('name') ?? $area->name;
+            $leader = $request->input('leader') ?? $request->input('responsible_person_description') ?? 'فريق التطوير والجودة المدرسية';
+            $startDate = $request->input('startDate') ?? $request->input('start_date') ?? now()->toDateString();
+            $dueDate = $request->input('dueDate') ?? $request->input('due_date') ?? now()->addMonths(3)->toDateString();
+            $progressDescription = $request->input('progressDescription') ?? $request->input('progress_description') ?? $area->description ?? 'تم تبني الإجراء لمعالجة فجوة التقييم الذاتي.';
+
+            \App\Models\ImprovementAction::firstOrCreate([
+                'plan_id' => $linkedPlan->plan_id,
+                'area_id' => $area->area_id,
+            ], [
+                'title'                          => mb_substr($actionTitle, 0, 200),
+                'responsible_person_description' => mb_substr($leader, 0, 150),
+                'start_date'                     => $startDate,
+                'due_date'                       => $dueDate,
+                'status'                         => 'InProgress',
+                'completion_percentage'          => 0,
+                'progress_description'           => $progressDescription,
+            ]);
+        }
+
         $area->load(['result.evaluation', 'indicator', 'plans']);
 
         return ApiResponse::success(
@@ -180,6 +241,40 @@ class ImprovementAreaController extends Controller
             data: $this->formatArea($area),
             message: 'تم تحديث مجال التحسين بنجاح.'
         );
+    }
+
+    /**
+     * إلغاء تبني مجال التحسين وحذفه ما لم تكن هناك إجراءات تنفيذية بدأت بالفعل.
+     *
+     * DELETE /api/v1/improvement-areas/{id}
+     */
+    public function destroy(Request $request, int $id): JsonResponse
+    {
+        $user = $request->user();
+        if (!$user->hasPermission('plans.manage')) {
+            return ApiResponse::forbidden('غير مصرح لك بإلغاء أو حذف مجال التحسين.');
+        }
+
+        $area = ImprovementArea::with(['actions', 'result.evaluation'])->find($id);
+        if (!$area) {
+            return ApiResponse::notFound('مجال التحسين المطلوب غير موجود.');
+        }
+
+        if ($user->user_type === 'school') {
+            $evalSchoolId = $area->result?->evaluation?->school_id;
+            if ($evalSchoolId && (int) $evalSchoolId !== (int) $user->school_id) {
+                return ApiResponse::forbidden('غير مصرح لك بحذف مجال تحسين لمدرسة أخرى.');
+            }
+        }
+
+        if ($area->actions()->exists()) {
+            return ApiResponse::error('لا يمكن إلغاء تبني مجال التحسين لوجود إجراءات تنفيذية مرتبطة به. يرجى حذف الإجراءات أولاً.', 422);
+        }
+
+        \App\Models\PlanImprovementArea::where('area_id', $area->area_id)->delete();
+        $area->delete();
+
+        return ApiResponse::success(null, 'تم إلغاء تبني مجال التحسين بنجاح.');
     }
 
     /**

@@ -108,6 +108,7 @@ export const Sidebar: React.FC<{ activeTab: string; onSelectTab: (tab: string) =
 
   return (
     <aside
+      className="app-sidebar"
       style={{
         width: '270px',
         minWidth: '270px',
@@ -115,14 +116,16 @@ export const Sidebar: React.FC<{ activeTab: string; onSelectTab: (tab: string) =
         borderLeft: `1px solid ${theme.colors.neutral[200]}`,
         display: 'flex',
         flexDirection: 'column',
-        justifyContent: 'space-between',
         height: '100vh',
         position: 'sticky',
         top: 0,
         zIndex: 20,
+        flexShrink: 0,
+        overflow: 'hidden',
       }}
     >
-      <div>
+      {/* 1. Header & User Role Info (flexShrink: 0) */}
+      <div style={{ flexShrink: 0 }}>
         {/* ترويسة القائمة وشعار المنظومة */}
         <div
           style={{
@@ -230,76 +233,89 @@ export const Sidebar: React.FC<{ activeTab: string; onSelectTab: (tab: string) =
             </div>
           )}
         </div>
-
-        {/* روابط التنقل الشجرية */}
-        <nav style={{ padding: '16px 12px' }}>
-          <div
-            style={{
-              fontSize: '11px',
-              fontWeight: theme.typography.fontWeights.bold,
-              color: theme.colors.neutral[400],
-              padding: '0 12px 8px',
-            }}
-          >
-            قائمة المهام المتاحة
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-            {navItems.map((item) => {
-              const isActive = activeTab === item.id;
-              return (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => onSelectTab(item.id)}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    width: '100%',
-                    padding: '10px 14px',
-                    borderRadius: theme.radii.md,
-                    fontSize: theme.typography.fontSizes.sm,
-                    fontWeight: isActive
-                      ? theme.typography.fontWeights.bold
-                      : theme.typography.fontWeights.medium,
-                    backgroundColor: isActive
-                      ? theme.colors.primary[50]
-                      : 'transparent',
-                    color: isActive
-                      ? theme.colors.primary[700]
-                      : theme.colors.neutral[700],
-                    border: isActive
-                      ? `1px solid ${theme.colors.primary[200]}`
-                      : '1px solid transparent',
-                    transition: theme.transitions.fast,
-                    textAlign: 'right',
-                  }}
-                  onMouseEnter={(e) => {
-                    if (!isActive) e.currentTarget.style.backgroundColor = theme.colors.neutral[50];
-                  }}
-                  onMouseLeave={(e) => {
-                    if (!isActive) e.currentTarget.style.backgroundColor = 'transparent';
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <span style={{ color: isActive ? theme.colors.primary[600] : theme.colors.neutral[500] }}>
-                      {item.icon}
-                    </span>
-                    <span>{item.label}</span>
-                  </div>
-                  {isActive && <ChevronLeft size={16} color={theme.colors.primary[600]} />}
-                </button>
-              );
-            })}
-          </div>
-        </nav>
       </div>
 
-      {/* زر تسجيل الخروج والحاشية السفلية */}
+      {/* 2. روابط التنقل الشجرية (Scrollable middle with hidden scrollbar) */}
+      <nav
+        className="hide-scrollbar"
+        style={{
+          flex: 1,
+          minHeight: 0,
+          overflowY: 'auto',
+          padding: '16px 12px',
+          scrollbarWidth: 'none',
+          msOverflowStyle: 'none',
+        }}
+      >
+        <div
+          style={{
+            fontSize: '11px',
+            fontWeight: theme.typography.fontWeights.bold,
+            color: theme.colors.neutral[400],
+            padding: '0 12px 8px',
+          }}
+        >
+          قائمة المهام المتاحة
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+          {navItems.map((item) => {
+            const isActive = activeTab === item.id;
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => onSelectTab(item.id)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  width: '100%',
+                  padding: '10px 14px',
+                  borderRadius: theme.radii.md,
+                  fontSize: theme.typography.fontSizes.sm,
+                  fontWeight: isActive
+                    ? theme.typography.fontWeights.bold
+                    : theme.typography.fontWeights.medium,
+                  backgroundColor: isActive
+                    ? theme.colors.primary[50]
+                    : 'transparent',
+                  color: isActive
+                    ? theme.colors.primary[700]
+                    : theme.colors.neutral[700],
+                  border: isActive
+                    ? `1px solid ${theme.colors.primary[200]}`
+                    : '1px solid transparent',
+                  transition: theme.transitions.fast,
+                  textAlign: 'right',
+                }}
+                onMouseEnter={(e) => {
+                  if (!isActive) e.currentTarget.style.backgroundColor = theme.colors.neutral[50];
+                }}
+                onMouseLeave={(e) => {
+                  if (!isActive) e.currentTarget.style.backgroundColor = 'transparent';
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <span style={{ color: isActive ? theme.colors.primary[600] : theme.colors.neutral[500] }}>
+                    {item.icon}
+                  </span>
+                  <span>{item.label}</span>
+                </div>
+                {isActive && <ChevronLeft size={16} color={theme.colors.primary[600]} />}
+              </button>
+            );
+          })}
+        </div>
+      </nav>
+
+      {/* 3. زر تسجيل الخروج والحاشية السفلية (Fixed bottom with mt-auto, flexShrink: 0) */}
       <div
         style={{
+          marginTop: 'auto',
+          flexShrink: 0,
           padding: '16px',
           borderTop: `1px solid ${theme.colors.neutral[200]}`,
+          backgroundColor: theme.colors.neutral.white,
         }}
       >
         <button

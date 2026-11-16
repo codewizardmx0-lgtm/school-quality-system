@@ -111,4 +111,14 @@ class ImprovementArea extends Model
             'plan_id'
         );
     }
+
+    /**
+     * الإجراءات التنفيذية المرتبطة بمجال التحسين.
+     *
+     * @return HasMany
+     */
+    public function actions(): HasMany
+    {
+        return $this->hasMany(ImprovementAction::class, 'area_id', 'area_id');
+    }
 }

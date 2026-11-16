@@ -317,16 +317,33 @@ class SecurityAuditCorrectionTest extends TestCase
     public function test_evaluation_trend_service_handles_deprecated_indicators_and_text_changes(): void
     {
         $version = StandardVersion::first();
-        $cycle1 = EvaluationCycle::first();
-        $cycle2 = EvaluationCycle::skip(1)->first() ?? EvaluationCycle::create([
-            'academic_year' => '2026-2027',
-            'version_id' => $version->version_id,
-            'standard_version_id' => $version->version_id,
-            'status' => 'Open',
-            'start_date' => now()->addYear(),
-            'end_date' => now()->addYears(2),
-            'created_by_user_id' => $this->adminUser->user_id,
-        ]);
+        $cycle1 = EvaluationCycle::firstOrCreate(
+            ['academic_year' => '2023-2024-TEST'],
+            [
+                'version_id' => $version->version_id,
+                'standard_version_id' => $version->version_id,
+                'status' => 'Closed',
+                'start_date' => now()->subYears(2),
+                'end_date' => now()->subYear(),
+                'created_by_user_id' => $this->adminUser->user_id,
+            ]
+        );
+        $cycle2 = EvaluationCycle::firstOrCreate(
+            ['academic_year' => '2024-2025-TEST'],
+            [
+                'version_id' => $version->version_id,
+                'standard_version_id' => $version->version_id,
+                'status' => 'Open',
+                'start_date' => now()->subYear(),
+                'end_date' => now(),
+                'created_by_user_id' => $this->adminUser->user_id,
+            ]
+        );
+
+        // تنظيف أي بيانات سابقة من اختبارات مسبقة لنفس الدورتين
+        Evaluation::whereIn('cycle_id', [$cycle1->cycle_id, $cycle2->cycle_id])
+            ->where('school_id', $this->school->school_id)
+            ->delete();
 
         // تقييم سابق مكتمل
         $evalPrev = Evaluation::create([
@@ -394,5 +411,10 @@ class SecurityAuditCorrectionTest extends TestCase
         // التحقق من وجود المؤشر المستبعد في deprecated_indicators
         $deprecated = collect($trend['trend']['deprecated_indicators']);
         $this->assertTrue($deprecated->contains('indicator_code', $ind2->code ?? (string) $ind2->indicator_id));
+
+        // تنظيف تقييمات الاختبار
+        EvaluationResult::whereIn('evaluation_id', [$evalPrev->evaluation_id, $evalCurr->evaluation_id])->delete();
+        $evalPrev->delete();
+        $evalCurr->delete();
     }
 }

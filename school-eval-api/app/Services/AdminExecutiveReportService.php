@@ -113,7 +113,7 @@ class AdminExecutiveReportService
             'orientation'      => 'P',
             'margin_left'      => 12,
             'margin_right'     => 12,
-            'margin_top'       => 46,
+            'margin_top'       => 54,
             'margin_bottom'    => 20,
             'margin_header'    => 10,
             'margin_footer'    => 10,

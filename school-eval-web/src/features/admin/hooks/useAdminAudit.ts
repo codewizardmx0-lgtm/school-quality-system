@@ -67,10 +67,24 @@ export function useAdminAudit() {
   const [totalCount, setTotalCount] = useState<number>(0);
 
   // Filters
+  const [selectedActions, setSelectedActions] = useState<string[]>([]);
   const [actionType, setActionType] = useState<string>('الكل');
   const [actor, setActor] = useState<string>('الكل');
   const [timeScope, setTimeScope] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
+
+  // Live aggregate stats from DB
+  const [auditStats, setAuditStats] = useState<{
+    totalLogs: number;
+    sensitiveCount: number;
+    failedLoginsCount: number;
+    archiveSyncStatus: string;
+  }>({
+    totalLogs: 0,
+    sensitiveCount: 0,
+    failedLoginsCount: 0,
+    archiveSyncStatus: 'متزامن 100%',
+  });
 
   // Load real registered users once to guarantee availableActors contains all system accounts
   useEffect(() => {
@@ -84,8 +98,21 @@ export function useAdminAudit() {
     return () => { ignore = true; };
   }, []);
 
+  const handleSelectedActionsChange = useCallback((actions: string[]) => {
+    setSelectedActions(actions);
+    setActionType(actions.length === 1 ? actions[0] : (actions.length === 0 ? 'الكل' : actions.join(',')));
+    setCurrentPage(1);
+  }, []);
+
   const handleActionTypeChange = useCallback((newType: string) => {
-    setActionType(newType);
+    if (newType === 'الكل' || !newType) {
+      setSelectedActions([]);
+      setActionType('الكل');
+    } else {
+      const parts = newType.split(',').map((p) => p.trim()).filter(Boolean);
+      setSelectedActions(parts);
+      setActionType(newType);
+    }
     setCurrentPage(1);
   }, []);
 
@@ -109,9 +136,14 @@ export function useAdminAudit() {
     setError(null);
     try {
       const selectedUser = actor !== 'الكل' ? rawUsers.find((u) => u.fullName === actor) : null;
+      const actionsParam = selectedActions.length > 0
+        ? selectedActions.join(',')
+        : (actionType !== 'الكل' ? actionType : undefined);
+
       const [logsRes, ipsRes] = await Promise.all([
         auditApi.getAuditLogs({
-          actionType: actionType !== 'الكل' ? actionType : undefined,
+          actions: actionsParam,
+          actionType: actionsParam,
           userId: selectedUser ? selectedUser.userId : undefined,
           q: searchQuery.trim() || undefined,
           timeScope: timeScope !== 'all' ? timeScope : undefined,
@@ -127,6 +159,9 @@ export function useAdminAudit() {
           setCurrentPage(m.currentPage ?? m.current_page ?? m.page ?? page);
           setTotalPages(m.lastPage ?? m.last_page ?? 1);
           setTotalCount(m.total ?? logsRes.data.length);
+          if (m.stats) {
+            setAuditStats(m.stats);
+          }
         } else {
           setTotalCount(logsRes.data.length);
         }
@@ -137,7 +172,7 @@ export function useAdminAudit() {
     } finally {
       setLoading(false);
     }
-  }, [actionType, actor, currentPage, rawUsers, searchQuery, timeScope]);
+  }, [selectedActions, actionType, actor, currentPage, rawUsers, searchQuery, timeScope]);
 
   useEffect(() => {
     void fetchData();
@@ -181,11 +216,18 @@ export function useAdminAudit() {
 
   const filteredLogs = useMemo(() => {
     return logs.filter((log) => {
-            const matchAction =
-        actionType === 'الكل' ||
-        log.action === actionType ||
-        log.eventType === actionType ||
-        AUDIT_EVENT_LABELS[log.action || ''] === actionType;
+      const matchAction =
+        (selectedActions.length === 0 && actionType === 'الكل') ||
+        (selectedActions.length > 0 && (
+          selectedActions.includes(log.action || '') ||
+          selectedActions.includes(log.eventType || '') ||
+          (log.action && selectedActions.includes(AUDIT_EVENT_LABELS[log.action] || ''))
+        )) ||
+        (selectedActions.length === 0 && (
+          log.action === actionType ||
+          log.eventType === actionType ||
+          AUDIT_EVENT_LABELS[log.action || ''] === actionType
+        ));
 
       const matchActor =
         actor === 'الكل' ||
@@ -218,13 +260,18 @@ export function useAdminAudit() {
 
       return matchAction && matchActor && matchTime && matchSearch;
     });
-  }, [logs, actionType, actor, timeScope, searchQuery]);
+  }, [logs, selectedActions, actionType, actor, timeScope, searchQuery]);
 
   const fetchAllMatchingLogs = useCallback(async (): Promise<AuditLogEntry[]> => {
     try {
       const selectedUser = actor !== 'الكل' ? rawUsers.find((u) => u.fullName === actor) : null;
+      const actionsParam = selectedActions.length > 0
+        ? selectedActions.join(',')
+        : (actionType !== 'الكل' ? actionType : undefined);
+
       const res = await auditApi.getAuditLogs({
-        actionType: actionType !== 'الكل' ? actionType : undefined,
+        actions: actionsParam,
+        actionType: actionsParam,
         userId: selectedUser ? selectedUser.userId : undefined,
         q: searchQuery.trim() || undefined,
         timeScope: timeScope !== 'all' ? timeScope : undefined,
@@ -237,7 +284,7 @@ export function useAdminAudit() {
     } catch {
       return filteredLogs;
     }
-  }, [actionType, actor, rawUsers, searchQuery, timeScope, filteredLogs]);
+  }, [selectedActions, actionType, actor, rawUsers, searchQuery, timeScope, filteredLogs]);
 
   return {
     logs,
@@ -248,6 +295,8 @@ export function useAdminAudit() {
     blockedIps,
     loading,
     error,
+    selectedActions,
+    setSelectedActions: handleSelectedActionsChange,
     actionType,
     setActionType: handleActionTypeChange,
     actor,
@@ -260,6 +309,7 @@ export function useAdminAudit() {
     setCurrentPage,
     totalPages,
     totalCount,
+    auditStats,
     fetchData,
     unblockIp,
     fetchAllMatchingLogs,

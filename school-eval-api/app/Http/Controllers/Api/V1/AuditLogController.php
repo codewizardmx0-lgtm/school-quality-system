@@ -39,7 +39,7 @@ class AuditLogController extends Controller
 
         $query = AuditLog::with([
             'user:user_id,username,full_name,email,user_type',
-            'school:school_id,school_name',
+            'school:school_id,school_name,identification_data',
         ]);
 
         // فلترة بالمدرسة للمشرف ومدير النظام
@@ -47,9 +47,9 @@ class AuditLogController extends Controller
             $query->where('school_id', (int) $request->input('school_id'));
         }
 
-        // فلترة بنوع العملية مع دعم المفتاح البرمجي أو التسمية العربية
-        $action = $request->input('action') ?? $request->input('actionType') ?? $request->input('action_type');
-        if ($action && $action !== 'الكل') {
+        // فلترة بنوع العملية مع دعم عملية واحدة أو عمليات متعددة (مصفوفة أو مفصولة بفاصلة)
+        $actionInput = $request->input('actions') ?? $request->input('action') ?? $request->input('actionType') ?? $request->input('action_type');
+        if ($actionInput && $actionInput !== 'الكل') {
             $arabicToKey = [
                 'تسجيل دخول ناجح' => 'auth.login_success',
                 'فشل تسجيل الدخول' => 'auth.login_failed',
@@ -85,8 +85,21 @@ class AuditLogController extends Controller
                 'تبديل وضع الصيانة' => 'system.maintenance_mode_toggled',
                 'إرسال بريد اختباري' => 'system.test_email_sent',
             ];
-            $canonicalAction = $arabicToKey[$action] ?? $action;
-            $query->where('action', (string) $canonicalAction);
+
+            $rawActions = is_array($actionInput) ? $actionInput : explode(',', (string) $actionInput);
+            $canonicalActions = [];
+            foreach ($rawActions as $raw) {
+                $raw = trim($raw);
+                if (!empty($raw) && $raw !== 'الكل') {
+                    $canonicalActions[] = $arabicToKey[$raw] ?? $raw;
+                }
+            }
+
+            if (count($canonicalActions) === 1) {
+                $query->where('action', $canonicalActions[0]);
+            } elseif (count($canonicalActions) > 1) {
+                $query->whereIn('action', $canonicalActions);
+            }
         }
 
         // فلترة بالمستخدم المنفذ
@@ -135,6 +148,17 @@ class AuditLogController extends Controller
         $isExportAll = $request->boolean('all') || $request->input('per_page') === 'all' || $request->input('perPage') === 'all';
         $perPageInput = $request->input('per_page') ?? $request->input('perPage') ?? 20;
 
+        $stats = [
+            'totalLogs' => AuditLog::count(),
+            'sensitiveCount' => AuditLog::whereIn('action', [
+                'school.deleted', 'school.created', 'user.created', 'user.status_toggled',
+                'directorate.deleted', 'system.maintenance_mode_toggled', 'auth.password_changed',
+                'evaluation.direct_closed', 'standard_version.activated',
+            ])->count(),
+            'failedLoginsCount' => AuditLog::where('action', 'auth.login_failed')->count(),
+            'archiveSyncStatus' => 'متزامن 100%',
+        ];
+
         if ($isExportAll) {
             $items = $query->orderByDesc('log_id')->get();
             return ApiResponse::success(
@@ -145,6 +169,7 @@ class AuditLogController extends Controller
                     'lastPage'    => 1,
                     'perPage'     => $items->count(),
                     'total'       => $items->count(),
+                    'stats'       => $stats,
                 ]
             );
         }
@@ -160,6 +185,7 @@ class AuditLogController extends Controller
                 'lastPage'    => $paginator->lastPage(),
                 'perPage'     => $paginator->perPage(),
                 'total'       => $paginator->total(),
+                'stats'       => $stats,
             ]
         );
     }

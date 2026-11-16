@@ -27,15 +27,23 @@ return new class extends Migration
     {
         // 1. ترقية جدول completion_requests
         Schema::table('completion_requests', function (Blueprint $table) {
-            $table->dateTime('completion_deadline')->nullable()->after('issued_by_user_id');
-            $table->dateTime('deadline_extended_at')->nullable()->after('completion_deadline');
-            $table->unsignedInteger('deadline_extensions_count')->default(0)->after('deadline_extended_at');
+            if (!Schema::hasColumn('completion_requests', 'completion_deadline')) {
+                $table->dateTime('completion_deadline')->nullable()->after('issued_by_user_id');
+            }
+            if (!Schema::hasColumn('completion_requests', 'deadline_extended_at')) {
+                $table->dateTime('deadline_extended_at')->nullable()->after('completion_deadline');
+            }
+            if (!Schema::hasColumn('completion_requests', 'deadline_extensions_count')) {
+                $table->unsignedInteger('deadline_extensions_count')->default(0)->after('deadline_extended_at');
+            }
         });
 
         // 2. ترقية جدول completion_request_items
         // أ. إسقاط قيد الفحص القديم
         try {
-            DB::statement('ALTER TABLE completion_request_items DROP CHECK chk_completion_item_target');
+            if (DB::getDriverName() !== 'sqlite') {
+                DB::statement('ALTER TABLE completion_request_items DROP CHECK chk_completion_item_target');
+            }
         } catch (\Throwable $e) {
             // في حال كان القيد محذوفاً مسبقاً
         }
@@ -47,18 +55,24 @@ return new class extends Migration
             }
 
             // ج. إضافة عمود evidence_link_id
-            $table->unsignedInteger('evidence_link_id')->nullable()->after('indicator_id');
-            $table->foreign('evidence_link_id')
-                ->references('id')
-                ->on('evidence_links')
-                ->nullOnDelete();
+            if (!Schema::hasColumn('completion_request_items', 'evidence_link_id')) {
+                $table->unsignedInteger('evidence_link_id')->nullable()->after('indicator_id');
+                $table->foreign('evidence_link_id')
+                    ->references('id')
+                    ->on('evidence_links')
+                    ->nullOnDelete();
+            }
 
             // د. جعل indicator_id إلزامياً
-            $table->unsignedInteger('indicator_id')->nullable(false)->change();
+            if (DB::getDriverName() !== 'sqlite') {
+                $table->unsignedInteger('indicator_id')->nullable(false)->change();
+            }
         });
 
-        // هـ. إضافة قيد الفحص الجديد
-        DB::statement('ALTER TABLE completion_request_items ADD CONSTRAINT chk_completion_item_indicator CHECK (indicator_id IS NOT NULL)');
+        // هـ. إضافة قيد الفحص الجديد (تجاوز في sqlite لعدم دعمه ADD CONSTRAINT بعد الإنشاء)
+        if (DB::getDriverName() !== 'sqlite') {
+            DB::statement('ALTER TABLE completion_request_items ADD CONSTRAINT chk_completion_item_indicator CHECK (indicator_id IS NOT NULL)');
+        }
     }
 
     /**

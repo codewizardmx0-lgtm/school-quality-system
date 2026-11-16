@@ -47,6 +47,7 @@ class EvidenceLink extends Model
         'document_version_id',
         'action_id',
         'justification',
+        'covered_requirements',
         'status',
     ];
 
@@ -64,6 +65,7 @@ class EvidenceLink extends Model
             'indicator_id'         => 'integer',
             'document_version_id'  => 'integer',
             'action_id'            => 'integer',
+            'covered_requirements' => 'array',
             'created_at'           => 'datetime',
             'updated_at'           => 'datetime',
         ];

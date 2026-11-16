@@ -75,4 +75,29 @@ export const backupApi = {
   async sendTestEmail(email?: string): Promise<ApiResponse<{ sent: boolean; recipient: string }>> {
     return await post<{ sent: boolean; recipient: string }>('/system-settings/test-email', { email });
   },
+
+  /**
+   * Download real encrypted backup archive from server
+   */
+  async downloadBackup(backupId: number, fileName: string): Promise<void> {
+    const token = localStorage.getItem('token') || sessionStorage.getItem('token') || '';
+    const res = await fetch(`/api/v1/backups/${backupId}/download`, {
+      headers: {
+        Authorization: token ? `Bearer ${token}` : '',
+        Accept: 'application/octet-stream',
+      },
+    });
+    if (!res.ok) {
+      throw new Error('فشل تنزيل ملف النسخة الاحتياطية');
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  },
 };

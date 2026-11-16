@@ -1,3 +1,5 @@
+> **تنبيه:** تم أرشفة هذا الملف في 7 نوفمبر 2026م — لم يعد مستخدمًا وتم استبداله بملفات التتبع المحدثة (`docs/issues-tracking.md`, `docs/frontend-gaps.md`, `docs/backend-gaps.md`).
+
 # سجل حصر الفجوات والانحرافات التقنية (Project Gaps & Discrepancies Register)
 
 **المشروع:** نظام إدارة وتقويم الجودة المدرسية (`school-quality-system`)  
