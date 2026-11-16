@@ -41,6 +41,8 @@ import {
   ArrowUp,
   ArrowDown,
   RotateCcw,
+  Lock,
+  AlertTriangle,
 } from 'lucide-react';
 
 interface ImprovementPlanPageProps {
@@ -98,6 +100,14 @@ export const ImprovementPlanPage: React.FC<ImprovementPlanPageProps> = ({
   const [isCloningVersion, setIsCloningVersion] = useState(false);
   const [showExplanations, setShowExplanations] = useState(false);
   const [completionRequest, setCompletionRequest] = useState<CompletionRequestData | null>(null);
+  const [preselectedAreaId, setPreselectedAreaId] = useState<number | null>(null);
+
+  // مجالات التحسين المتبناة بالخطة الحالية التي لا تزال بحالة pending_action أو ليس لها أي إجراءات تنفيذية بعد
+  const areasWithoutActions = React.useMemo(() => {
+    if (!planData?.areas || planData.areas.length === 0) return [];
+    const scheduledAreaIds = new Set((planData.actions || []).map((a) => a.areaId));
+    return planData.areas.filter((area) => area.status === 'pending_action' || !scheduledAreaIds.has(area.areaId));
+  }, [planData?.areas, planData?.actions]);
 
   // قائمة خطط النوع المحدد بالتبويب فقط للسجل الماستر
   const tabPlansList = React.useMemo(() => {
@@ -1104,7 +1114,10 @@ export const ImprovementPlanPage: React.FC<ImprovementPlanPageProps> = ({
               </button>
 
               <button
-                onClick={() => setIsAddModalOpen(true)}
+                onClick={() => {
+                  setPreselectedAreaId(null);
+                  setIsAddModalOpen(true);
+                }}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -1232,6 +1245,198 @@ export const ImprovementPlanPage: React.FC<ImprovementPlanPageProps> = ({
           </div>
         </div>
       </div>
+
+      {/* 2.5 Unscheduled Adopted Areas Alert Banner (شريط تنبيهي: مجالات متبناة بانتظار صياغة إجراءاتها التنفيذية - الخيار ب) */}
+      {areasWithoutActions.length > 0 && (
+        <div
+          data-testid="unscheduled-areas-banner"
+          style={{
+            backgroundColor: '#FFFBEB',
+            border: '1px solid #FCD34D',
+            borderRadius: '14px',
+            padding: '18px 22px',
+            marginBottom: '20px',
+            boxShadow: '0 2px 6px rgba(217, 119, 6, 0.08)',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+              <div
+                style={{
+                  width: '38px',
+                  height: '38px',
+                  borderRadius: '10px',
+                  backgroundColor: '#FEF3C7',
+                  border: '1px solid #FDE68A',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                  marginTop: '2px',
+                }}
+              >
+                <AlertTriangle size={20} color="#D97706" />
+              </div>
+              <div>
+                <h4 style={{ margin: 0, fontSize: '15px', fontWeight: 800, color: '#92400E' }}>
+                  يوجد ({areasWithoutActions.length}) مجالات تحسين متبناة بانتظار صياغة إجراءاتها التنفيذية
+                </h4>
+                <p style={{ margin: '4px 0 0', fontSize: '12.5px', color: '#B45309', lineHeight: 1.5 }}>
+                  تم اعتماد هذه المجالات من نتائج ومقترحات التقييم الذاتي ولكن لم تُحدد لها بعد مهام أو مسؤولين لتنفيذها ميدانياً. يمكنك صياغة إجراء تنفيذي مباشر لكل مجال لتفعيله ضمن مصفوفة العمل أدناه.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '16px' }}>
+            {areasWithoutActions.map((area) => (
+              <div
+                key={area.areaId}
+                style={{
+                  backgroundColor: '#FFFFFF',
+                  borderRadius: '10px',
+                  border: '1px solid #FDE68A',
+                  padding: '12px 16px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  flexWrap: 'wrap',
+                  gap: '12px',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: '1 1 340px' }}>
+                  {area.indicatorCode && (
+                    <span
+                      style={{
+                        padding: '3px 8px',
+                        borderRadius: '6px',
+                        backgroundColor: '#F1F5F9',
+                        color: '#334155',
+                        fontSize: '11px',
+                        fontWeight: 800,
+                        border: '1px solid #E2E8F0',
+                        fontFamily: 'monospace',
+                        flexShrink: 0,
+                      }}
+                    >
+                      {area.indicatorCode}
+                    </span>
+                  )}
+                  <div>
+                    <div style={{ fontSize: '13.5px', fontWeight: 800, color: '#0F172A' }}>
+                      {area.name}
+                    </div>
+                    {area.description && (
+                      <div style={{ fontSize: '11.5px', color: '#64748B', marginTop: '2px' }}>
+                        {area.description}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                  {/* شارة الحالة الصريحة للمجال */}
+                  <span
+                    style={{
+                      padding: '4px 10px',
+                      borderRadius: '6px',
+                      fontSize: '11px',
+                      fontWeight: 800,
+                      backgroundColor:
+                        area.status === 'completed'
+                          ? '#ECFDF5'
+                          : area.status === 'in_progress'
+                          ? '#EFF6FF'
+                          : '#FEF3C7',
+                      color:
+                        area.status === 'completed'
+                          ? '#059669'
+                          : area.status === 'in_progress'
+                          ? '#2563EB'
+                          : '#D97706',
+                      border:
+                        area.status === 'completed'
+                          ? '1px solid #A7F3D0'
+                          : area.status === 'in_progress'
+                          ? '1px solid #BFDBFE'
+                          : '1px solid #FDE68A',
+                    }}
+                  >
+                    {area.status === 'completed'
+                      ? '✓ مكتمل التنفيذ'
+                      : area.status === 'in_progress'
+                      ? '🔄 قيد التنفيذ'
+                      : '⏳ بانتظار صياغة إجراء'}
+                  </span>
+
+                  <span
+                    style={{
+                      padding: '4px 10px',
+                      borderRadius: '6px',
+                      fontSize: '11px',
+                      fontWeight: 700,
+                      backgroundColor:
+                        area.priority === 'High' ? '#FEF2F2' : area.priority === 'Medium' ? '#EFF6FF' : '#F8FAFC',
+                      color:
+                        area.priority === 'High' ? '#DC2626' : area.priority === 'Medium' ? '#2563EB' : '#64748B',
+                      border:
+                        area.priority === 'High' ? '1px solid #FECACA' : area.priority === 'Medium' ? '1px solid #BFDBFE' : '1px solid #E2E8F0',
+                    }}
+                  >
+                    أولوية {area.priority === 'High' ? 'عالية' : area.priority === 'Medium' ? 'متوسطة' : 'منخفضة'}
+                  </span>
+
+                  {!readOnly && !isPrincipal ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPreselectedAreaId(area.areaId);
+                        setIsAddModalOpen(true);
+                      }}
+                      style={{
+                        padding: '7px 14px',
+                        borderRadius: '8px',
+                        backgroundColor: '#059669',
+                        color: '#FFFFFF',
+                        border: 'none',
+                        fontSize: '12px',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        boxShadow: '0 1px 2px rgba(5, 150, 105, 0.2)',
+                      }}
+                    >
+                      <Plus size={14} />
+                      <span>صياغة إجراء تنفيذي لهذا المجال</span>
+                    </button>
+                  ) : (
+                    <span
+                      style={{
+                        padding: '6px 12px',
+                        borderRadius: '8px',
+                        backgroundColor: '#FEF3C7',
+                        color: '#92400E',
+                        border: '1px solid #FDE68A',
+                        fontSize: '11.5px',
+                        fontWeight: 700,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                      }}
+                      title="وضع الملاحظة والإقرار: صياغة الإجراءات محصورة بالمقيم المعتمد"
+                    >
+                      <Lock size={12} />
+                      <span>للاطلاع الإداري (بانتظار جدولة المقيم)</span>
+                    </span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* 3. Actions Management Table */}
       <div
@@ -1793,12 +1998,50 @@ export const ImprovementPlanPage: React.FC<ImprovementPlanPageProps> = ({
               {sortedActions.length === 0 ? (
                 <tr>
                   <td colSpan={11} style={{ padding: '48px 20px', textAlign: 'center', color: '#64748B' }}>
-                    <div style={{ fontSize: '15px', fontWeight: 700, color: '#0F172A', marginBottom: '6px' }}>
-                      لا توجد إجراءات مطابقة لشروط البحث أو التصفية الحالية
-                    </div>
-                    <div style={{ fontSize: '12.5px' }}>
-                      يمكنك إعادة تعيين الفلاتر أو النقر على «إضافة إجراء تنفيذي جديد».
-                    </div>
+                    {actions.length === 0 && areasWithoutActions.length > 0 ? (
+                      <div data-testid="empty-actions-unscheduled-hint">
+                        <div style={{ fontSize: '15.5px', fontWeight: 800, color: '#0F172A', marginBottom: '6px' }}>
+                          الخطة لا تتضمن أي إجراءات تنفيذية مجدولة بعد
+                        </div>
+                        <div style={{ fontSize: '13px', color: '#64748B', maxWidth: '520px', margin: '0 auto 16px', lineHeight: 1.6 }}>
+                          يوجد ({areasWithoutActions.length}) مجالات تحسين متبناة في هذه الخطة بانتظار صياغة مهامها ومسؤوليها في الشريط التنبيهي أعلاه.
+                        </div>
+                        {!readOnly && !isPrincipal && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setPreselectedAreaId(areasWithoutActions[0]?.areaId || null);
+                              setIsAddModalOpen(true);
+                            }}
+                            style={{
+                              padding: '8px 18px',
+                              borderRadius: '8px',
+                              backgroundColor: '#059669',
+                              color: '#FFFFFF',
+                              border: 'none',
+                              fontSize: '12.5px',
+                              fontWeight: 700,
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                            }}
+                          >
+                            <Plus size={14} />
+                            <span>صياغة أول إجراء تنفيذي الآن</span>
+                          </button>
+                        )}
+                      </div>
+                    ) : (
+                      <div>
+                        <div style={{ fontSize: '15px', fontWeight: 700, color: '#0F172A', marginBottom: '6px' }}>
+                          لا توجد إجراءات مطابقة لشروط البحث أو التصفية الحالية
+                        </div>
+                        <div style={{ fontSize: '12.5px' }}>
+                          يمكنك إعادة تعيين الفلاتر أو النقر على «إضافة إجراء تنفيذي جديد».
+                        </div>
+                      </div>
+                    )}
                   </td>
                 </tr>
               ) : (
@@ -2355,7 +2598,11 @@ export const ImprovementPlanPage: React.FC<ImprovementPlanPageProps> = ({
       {/* Add Action Modal - Pass all available areas for school/evaluation */}
       <AddActionModal
         isOpen={isAddModalOpen}
-        onClose={() => setIsAddModalOpen(false)}
+        onClose={() => {
+          setIsAddModalOpen(false);
+          setPreselectedAreaId(null);
+        }}
+        initialAreaId={preselectedAreaId}
         areas={planData?.availableAreas && planData.availableAreas.length > 0 ? planData.availableAreas : planData?.areas || []}
         onAddAction={async (payload) => {
           await addAction(payload);

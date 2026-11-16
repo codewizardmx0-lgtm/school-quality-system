@@ -298,6 +298,7 @@ class ImprovementAreaController extends Controller
             'description'      => $area->description,
             'priority'         => $area->priority,
             'priorityLabel'    => $priorityLabels[$area->priority] ?? $area->priority,
+            'status'           => $area->status ?? 'pending_action',
             'targetScore'      => (int) ($area->target_score ?? 3),
             'linkedPlansCount' => $area->plans->count(),
             'createdAt'        => $area->created_at?->toIso8601String(),

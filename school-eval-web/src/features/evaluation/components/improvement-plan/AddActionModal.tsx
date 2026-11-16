@@ -6,6 +6,7 @@ interface AddActionModalProps {
   isOpen: boolean;
   onClose: () => void;
   areas?: ImprovementAreaBrief[];
+  initialAreaId?: number | null;
   onAddAction: (payload: CreateImprovementActionPayload) => Promise<void>;
   isSubmitting?: boolean;
 }
@@ -14,6 +15,7 @@ export const AddActionModal: React.FC<AddActionModalProps> = ({
   isOpen,
   onClose,
   areas = [],
+  initialAreaId = null,
   onAddAction,
   isSubmitting = false,
 }) => {
@@ -36,10 +38,14 @@ export const AddActionModal: React.FC<AddActionModalProps> = ({
   const popoverRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (isOpen && areas.length > 0 && !selectedAreaId) {
-      setSelectedAreaId(String(areas[0].areaId));
+    if (isOpen) {
+      if (initialAreaId) {
+        setSelectedAreaId(String(initialAreaId));
+      } else if (areas.length > 0 && !selectedAreaId) {
+        setSelectedAreaId(String(areas[0].areaId));
+      }
     }
-  }, [isOpen, areas, selectedAreaId]);
+  }, [isOpen, initialAreaId, areas, selectedAreaId]);
 
   // إغلاق النافذة المنبثقة عند النقر خارجها
   useEffect(() => {
@@ -93,6 +99,7 @@ export const AddActionModal: React.FC<AddActionModalProps> = ({
     if (isSubmitting) return;
     setTitle('');
     setLeader('');
+    setSelectedAreaId('');
     setStartDate(new Date().toISOString().split('T')[0]);
     setDueDate('2026-12-31');
     setStatus('InProgress');
@@ -328,6 +335,41 @@ export const AddActionModal: React.FC<AddActionModalProps> = ({
                       ? 'أولوية متوسطة'
                       : 'أولوية منخفضة'}
                   </span>
+                  {selectedArea.status && (
+                    <span
+                      style={{
+                        fontSize: '11px',
+                        padding: '2px 7px',
+                        borderRadius: '6px',
+                        backgroundColor:
+                          selectedArea.status === 'completed'
+                            ? '#ECFDF5'
+                            : selectedArea.status === 'in_progress'
+                            ? '#EFF6FF'
+                            : '#FEF3C7',
+                        color:
+                          selectedArea.status === 'completed'
+                            ? '#059669'
+                            : selectedArea.status === 'in_progress'
+                            ? '#2563EB'
+                            : '#D97706',
+                        border:
+                          selectedArea.status === 'completed'
+                            ? '1px solid #A7F3D0'
+                            : selectedArea.status === 'in_progress'
+                            ? '1px solid #BFDBFE'
+                            : '1px solid #FDE68A',
+                        fontWeight: 700,
+                        flexShrink: 0,
+                      }}
+                    >
+                      {selectedArea.status === 'completed'
+                        ? 'مكتمل'
+                        : selectedArea.status === 'in_progress'
+                        ? 'قيد التنفيذ'
+                        : 'بانتظار إجراء'}
+                    </span>
+                  )}
                   {selectedArea.existingLinks && selectedArea.existingLinks.length > 0 ? (
                     <span
                       style={{

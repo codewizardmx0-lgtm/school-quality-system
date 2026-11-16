@@ -184,4 +184,128 @@ class SchoolPrincipalWorkflowTest extends TestCase
 
         $crossRes->assertStatus(404);
     }
+
+    /**
+     * 8. التحقق من بيانات البذر التجريبية (إجراءات 25% و 60% مع وجود مجال غير مجدول للشريط التنبيهي)
+     */
+    public function test_demo_seeder_populates_realistic_actions_and_preserves_unscheduled_area(): void
+    {
+        $planQuality = ImprovementPlan::where('school_id', $this->schoolFarouq->school_id)
+            ->where('plan_type', ImprovementPlan::TYPE_QUALITY_IMPROVEMENT)
+            ->firstOrFail();
+
+        $res = $this->actingAs($this->principalFarouq, 'sanctum')
+            ->getJson("/api/v1/improvement-plans/{$planQuality->plan_id}");
+
+        $res->assertStatus(200);
+        $actions = $res->json('data.actions');
+        $areas = $res->json('data.areas');
+
+        $this->assertNotEmpty($actions, 'يجب أن تحتوي خطة الجودة على إجراءات تجريبية واقعية.');
+        $percentages = array_column($actions, 'completionPercentage');
+        $this->assertContains(60, $percentages, 'يجب أن تتضمن الإجراءات نسبة إنجاز 60%.');
+        $this->assertContains(25, $percentages, 'يجب أن تتضمن الإجراءات نسبة إنجاز 25%.');
+
+        // التحقق من وجود مجال واحد على الأقل بانتظار صياغة الإجراءات (الخيار ب)
+        $scheduledAreaIds = array_column($actions, 'areaId');
+        $unscheduledAreas = array_filter($areas, fn($a) => !in_array($a['areaId'], $scheduledAreaIds));
+        $this->assertNotEmpty($unscheduledAreas, 'يجب أن يتبقى مجال تحسين واحد على الأقل بانتظار صياغة إجراءاته لاختبار الشريط التنبيهي.');
+    }
+
+    /**
+     * 9. حوكمة الصلاحيات: مدير المدرسة ممنوع من إنشاء إجراء تنفيذي (403) بينما المقيم المعتمد مصرح له (201)
+     */
+    public function test_principal_cannot_create_improvement_action_while_evaluator_can(): void
+    {
+        $planQuality = ImprovementPlan::where('school_id', $this->schoolFarouq->school_id)
+            ->where('plan_type', ImprovementPlan::TYPE_QUALITY_IMPROVEMENT)
+            ->firstOrFail();
+
+        $evaluator = User::where('username', 'quality_farouq')->firstOrFail();
+        $area = $planQuality->areas()->firstOrFail();
+
+        // 1. محاولة المدير إضافة إجراء -> 403 Forbidden
+        $principalRes = $this->actingAs($this->principalFarouq, 'sanctum')
+            ->postJson("/api/v1/improvement-plans/{$planQuality->plan_id}/actions", [
+                'areaId'                       => $area->area_id,
+                'title'                        => 'محاولة غير مصرح بها من المدير لإضافة إجراء',
+                'responsiblePersonDescription' => 'مدير المدرسة',
+                'startDate'                    => now()->toDateString(),
+                'dueDate'                      => now()->addMonths(2)->toDateString(),
+            ]);
+
+        $principalRes->assertStatus(403);
+
+        // 2. المقيم المعتمد يضيف الإجراء بنجاح -> 201 Created
+        $evaluatorRes = $this->actingAs($evaluator, 'sanctum')
+            ->postJson("/api/v1/improvement-plans/{$planQuality->plan_id}/actions", [
+                'areaId'                       => $area->area_id,
+                'title'                        => 'إجراء تنفيذي مضاف من المقيم المعتمد لمعالجة الفجوة',
+                'responsiblePersonDescription' => 'فريق التطوير والتحسين المدرسي',
+                'startDate'                    => now()->toDateString(),
+                'dueDate'                      => now()->addMonths(2)->toDateString(),
+                'completionPercentage'         => 10,
+                'status'                       => 'InProgress',
+            ]);
+
+        $evaluatorRes->assertStatus(201)
+            ->assertJsonPath('data.title', 'إجراء تنفيذي مضاف من المقيم المعتمد لمعالجة الفجوة');
+    }
+
+    /**
+     * 10. التحقق من الحالة الصريحة للمجال (status) وانتقالاتها التلقائية (pending_action -> in_progress -> completed)
+     */
+    public function test_improvement_area_explicit_status_transitions_and_api_payload(): void
+    {
+        $planQuality = ImprovementPlan::where('school_id', $this->schoolFarouq->school_id)
+            ->where('plan_type', ImprovementPlan::TYPE_QUALITY_IMPROVEMENT)
+            ->firstOrFail();
+
+        $evaluator = User::where('username', 'quality_farouq')->firstOrFail();
+
+        // 1. استعلام الخطة والتحقق من وجود حقل status في مصفوفة areas
+        $res = $this->actingAs($evaluator, 'sanctum')
+            ->getJson("/api/v1/improvement-plans/{$planQuality->plan_id}");
+
+        $res->assertStatus(200);
+        $areas = $res->json('data.areas');
+        $this->assertNotEmpty($areas);
+        foreach ($areas as $areaItem) {
+            $this->assertArrayHasKey('status', $areaItem, 'يجب أن يتضمن كل مجال حالة صريحة (status)');
+            $this->assertContains($areaItem['status'], ['pending_action', 'in_progress', 'completed']);
+        }
+
+        // 2. التحقق من وجود مجال بحالة pending_action
+        $pendingArea = collect($areas)->firstWhere('status', 'pending_action');
+        $this->assertNotNull($pendingArea, 'يجب أن يتوفر مجال تحسين بحالة pending_action لاختبار الانتقال');
+
+        // 3. إضافة إجراء لهذا المجال -> ينتقل تلقائياً إلى in_progress
+        $actionRes = $this->actingAs($evaluator, 'sanctum')
+            ->postJson("/api/v1/improvement-plans/{$planQuality->plan_id}/actions", [
+                'areaId'                       => $pendingArea['areaId'],
+                'title'                        => 'إجراء تجريبي لاختبار انتقال حالة المجال',
+                'responsiblePersonDescription' => 'منسق الجودة',
+                'startDate'                    => now()->toDateString(),
+                'dueDate'                      => now()->addMonths(1)->toDateString(),
+                'completionPercentage'         => 30,
+                'status'                       => 'InProgress',
+            ]);
+
+        $actionRes->assertStatus(201);
+        $actionId = $actionRes->json('data.actionId');
+
+        $areaModel = \App\Models\ImprovementArea::find($pendingArea['areaId']);
+        $this->assertEquals('in_progress', $areaModel->status, 'إضافة إجراء يجب أن تنقل حالة المجال إلى in_progress');
+
+        // 4. تحديث الإجراء ليكتمل بنسبة 100% -> ينتقل المجال إلى completed
+        $updateRes = $this->actingAs($evaluator, 'sanctum')
+            ->patchJson("/api/v1/improvement-plans/{$planQuality->plan_id}/actions/{$actionId}", [
+                'completionPercentage' => 100,
+                'status'               => 'Done',
+            ]);
+
+        $updateRes->assertStatus(200);
+        $areaModel->refresh();
+        $this->assertEquals('completed', $areaModel->status, 'اكتمال كافة إجراءات المجال يجب أن ينقل حالته إلى completed');
+    }
 }

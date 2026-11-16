@@ -71,7 +71,7 @@ export const EvaluatorSidebar: React.FC<EvaluatorSidebarProps> = ({
 
   const navSections: NavSection[] = [
     {
-      title: isPrincipal ? 'الملاحظة الإدارية والمعايير' : 'التقييم الذاتي والرصد',
+      title: isPrincipal ? 'الملاحظة الإدارية والمعايير' : '1. الرصد والتقييم الذاتي',
       items: [
         {
           id: 'dashboard',
@@ -95,7 +95,7 @@ export const EvaluatorSidebar: React.FC<EvaluatorSidebarProps> = ({
       ],
     },
     {
-      title: isPrincipal ? 'التحسين والاعتماد الداخلي' : 'التحسين والمراجعة',
+      title: isPrincipal ? 'متابعة خطط التحسين' : '2. التحسين والتطوير',
       items: [
         {
           id: 'ai-assistant',
@@ -104,11 +104,16 @@ export const EvaluatorSidebar: React.FC<EvaluatorSidebarProps> = ({
         },
         {
           id: 'improvement-plan',
-          label: isPrincipal ? 'متابعة خطة التحسين' : 'خطة التحسين',
+          label: isPrincipal ? 'متابعة خطة التحسين' : 'خطة التحسين المدرسية',
           icon: <Target size={19} />,
           badge: isPrincipal ? 'متابعة' : undefined,
           badgeColor: '#2563EB',
         },
+      ],
+    },
+    {
+      title: isPrincipal ? 'الاعتماد الداخلي والحوكمة' : '3. المراجعة والاعتماد',
+      items: [
         {
           id: 'final-review',
           label: isPrincipal ? 'المراجعة والاعتماد الداخلي' : 'المراجعة والختم',
@@ -118,7 +123,7 @@ export const EvaluatorSidebar: React.FC<EvaluatorSidebarProps> = ({
         },
         {
           id: 'completion-request',
-          label: 'طلب الاستكمال',
+          label: 'طلبات الاستكمال الوزارية',
           icon: <AlertCircle size={19} />,
           badge: hasOpenCompletionRequest ? 'تنبيه' : undefined,
           badgeColor: '#F59E0B',
@@ -126,7 +131,7 @@ export const EvaluatorSidebar: React.FC<EvaluatorSidebarProps> = ({
       ],
     },
     {
-      title: isPrincipal ? 'التقارير والمخرجات التنفيذية' : 'المخرجات والتقارير',
+      title: isPrincipal ? 'التقارير والمخرجات التنفيذية' : '4. المخرجات وسجل الإشعارات',
       items: [
         {
           id: 'reports',

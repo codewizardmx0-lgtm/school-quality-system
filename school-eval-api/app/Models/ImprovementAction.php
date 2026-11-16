@@ -87,6 +87,14 @@ class ImprovementAction extends Model
                 $action->status = 'Done';
             }
         });
+
+        static::saved(function (ImprovementAction $action) {
+            $action->area?->syncStatus();
+        });
+
+        static::deleted(function (ImprovementAction $action) {
+            $action->area?->syncStatus();
+        });
     }
 
     /**

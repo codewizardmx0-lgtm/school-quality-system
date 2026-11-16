@@ -376,9 +376,13 @@ export interface AiRecommendationsResponse {
 
 export type PlanType = 'QualityImprovement' | 'StaffProfessionalDevelopment' | 'AnnualOperational';
 
+export type ImprovementAreaStatus = 'pending_action' | 'in_progress' | 'completed';
+
 export interface ImprovementAreaBrief {
   areaId: number;
   name: string;
+  description?: string;
+  status?: ImprovementAreaStatus;
   priority: PriorityLevel;
   score?: number | null;
   targetScore?: number;

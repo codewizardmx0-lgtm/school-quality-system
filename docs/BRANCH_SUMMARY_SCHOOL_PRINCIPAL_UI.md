@@ -89,27 +89,71 @@
 
 ---
 
+### المرحلة الخامسة: معالجة فجوة مجالات التحسين غير المجدولة وبيانات العرض التجريبية
+- **شريط تنبيهي ذكي للمجالات المتبناة غير المجدولة (الخيار ب)**:
+  - إضافة حساب `areasWithoutActions` في `ImprovementPlanPage.tsx` لرصد المجالات المتبناة بالخطة التي لا تملك إجراءات تنفيذية بعد.
+  - إظهار شريط تنبيهي كهرماني ذكي `[يوجد X مجالات تحسين متبناة بانتظار صياغة إجراءاتها التنفيذية]` مع بطاقات فرعية لكل مجال تبرز رمزه وأولويته وزر مباشر `[+ صياغة إجراء تنفيذي لهذا المجال]`.
+  - لمدير المدرسة، يتحول الزر تلقائياً إلى كبسولة قراءة محوكمة: `[🔒 للاطلاع الإداري (بانتظار جدولة المقيم)]`.
+  - تحسين الحالة الفارغة لجدول الإجراءات لتوضح وجود المجالات المتبناة وتتيح صياغة أول إجراء بضغطة زر واحدة.
+- **التحديد التلقائي للمجال المستهدف في نافذة إضافة الإجراء**:
+  - ترقية `AddActionModal.tsx` لدعم `initialAreaId`، لتقوم بالفتح التلقائي على المجال المختار من الشريط التنبيهي دون الحاجة لإعادة البحث اليدوي.
+- **إدراج بيانات تجريبية واقعية في الـ Seeder (الخيار أ)**:
+  - تحديث `DemoEvaluationSeeder.php` لغرس إجراءات ميدانية واقعية للمجالات المتبناة بنسب إنجاز 25% و 60% مع مسؤولي تنفيذ وتواريخ دقيقة.
+  - الإبقاء على مجال تحسين واحد دون إجراءات في خطة الجودة لتمكين اختبار وملاحظة الشريط التنبيهي الذكي والزر المباشر فور فتح الواجهة.
+  - إعادة احتساب التقدم الإجمالي للخطط عبر `ImprovementPlanController::calculateOverallProgress`.
+
+### المرحلة السادسة: الحل المعماري النهائي للحالة الصريحة وتقسيم القائمة الجانبية إلى 4 أقسام
+- **إضافة الحالة الصريحة للمجال (`status` في `improvement_areas`)**:
+  - إنشاء ترحيل `2026_11_16_200001_add_status_to_improvement_areas_table.php` لإضافة حقل `status` بقيم:
+    - `pending_action`: بانتظار صياغة إجراء تنفيذي.
+    - `in_progress`: قيد التنفيذ ولديه إجراءات نشطة.
+    - `completed`: مكتمل التنفيذ بنسبة 100%.
+  - إضافة دالة `syncStatus()` في نموذج `ImprovementArea` لتقوم بحساب الحالة ذاتياً عند إنشاء أو تعديل أو اكتمال أو حذف أي إجراء تنفيذي.
+  - ربط خطافات الأحداث التلقائية (`saved`, `deleted`) في نموذج `ImprovementAction` لتحديث حالة المجال المرتبط تلقائياً.
+  - إرجاع حقل `status` في كافة نقاط الـ API: `ImprovementAreaController`, `ImprovementPlanController`, `EvaluatorApiController`.
+- **تحديث الواجهة لتعكس الحالة الصريحة**:
+  - عرض شارة الحالة الملونة (`pending_action` / `in_progress` / `completed`) في بطاقات الشريط التنبيهي وفي نافذة إضافة الإجراء `AddActionModal`.
+  - تحديث منطق الشريط التنبيهي ليعتمد على الحالة الصريحة `area.status === 'pending_action'`.
+- **إعادة هيكلة القائمة الجانبية إلى 4 أقسام رئيسية (`EvaluatorSidebar.tsx`)**:
+  - فصل مرحلة التحسين عن مرحلة المراجعة والاعتماد لتصبح القائمة متطابقة بدقة مع دورة حياة التقويم المعتمدة في الدراسة:
+    1. **1. الرصد والتقييم الذاتي** (لوحة التحكم، دليل وتقييم المعايير، مستودع الشواهد).
+    2. **2. التحسين والتطوير** (مقترحات ومبادرات AI، خطة التحسين المدرسية).
+    3. **3. المراجعة والاعتماد** (المراجعة الداخلية والختم، طلبات الاستكمال الوزارية).
+    4. **4. المخرجات وسجل الإشعارات** (مركز التقارير، مقارنة الأداء التاريخي، مركز التنبيهات).
+  - تكييف العناوين المقابلة لمدير المدرسة: `الملاحظة الإدارية والمعايير`، `متابعة خطط التحسين`، `الاعتماد الداخلي والحوكمة`، `التقارير والمخرجات التنفيذية`.
+
+---
+
 ## 3. قائمة الملفات المنفذة والمعدلة في هذا الفرع
 
 | المسار | نوع التعديل | الغرض |
 | :--- | :--- | :--- |
 | `school-eval-web/src/features/evaluation/components/layout/EvaluatorLayout.tsx` | تحديث جوهري | شريط الحوكمة الإدارية، تمرير `isPrincipal` لكافة الشاشات الفرعية |
 | `school-eval-web/src/features/evaluation/components/layout/EvaluatorTopBar.tsx` | تحديث | مسار `بوابة مدير المدرسة`، عناوين إدارية، وشارة الملاحظة والإقرار |
-| `school-eval-web/src/features/evaluation/components/layout/EvaluatorSidebar.tsx` | تحديث | تكييف أقسام القائمة، وسوم الشارات، وعنوان بوابة مدير المدرسة |
+| `school-eval-web/src/features/evaluation/components/layout/EvaluatorSidebar.tsx` | تحديث جوهري | إعادة هيكلة القائمة إلى 4 أقسام دورة حياة، وتكييف الشارات والعناوين |
 | `school-eval-web/src/features/evaluation/components/self-evaluation/RubricAssessmentPage.tsx` | تحديث جوهري | شريط تنبيه المدير، تلميحات البطاقات، إخفاء الحفظ والتصفير، كبسولة الملاحظة |
 | `school-eval-web/src/features/evaluation/components/self-evaluation/UnifiedStandardsAssessmentPage.tsx` | تحديث | تمرير `isPrincipal` لشجرة المعايير واستمارة الرصد |
 | `school-eval-web/src/features/evaluation/components/self-evaluation/StandardsTreePage.tsx` | تحديث | حظر تصفير المعيار للمدير، تعديل زر المؤشر إلى "استعراض" |
 | `school-eval-web/src/features/evaluation/components/evidences/EvidencesRepository.tsx` | تحديث | كبسولة `وضع استعراض الشواهد` بدلاً من زر الرفع، استيراد أيقونة `Lock` |
 | `school-eval-web/src/features/evaluation/components/ai-assistant/FormulaSuggestionsSection.tsx` | تحديث | تلميحات أزرار المقترحات، شارة "للاطلاع" بدلاً من الحذف |
-| `school-eval-web/src/features/evaluation/components/improvement-plan/ImprovementPlanPage.tsx` | تحديث جوهري | تمكين المدير من تدوين ملاحظات الخطة، شارات كهرمانية لملاحظات المدير |
+| `school-eval-web/src/features/evaluation/components/improvement-plan/ImprovementPlanPage.tsx` | تحديث جوهري | شريط المجالات غير المجدولة، شارات الحالة الصريحة، الزر المباشر للصياغة |
+| `school-eval-web/src/features/evaluation/components/improvement-plan/AddActionModal.tsx` | تحديث | دعم `initialAreaId` وعرض شارة حالة المجال في القائمة المنسدلة |
+| `school-eval-web/src/features/evaluation/api/evaluationTypes.ts` | تحديث | إضافة نموذج `ImprovementAreaStatus` وخصائص `status` و `description` |
 | `school-eval-web/src/features/evaluation/components/dashboard/EvaluatorDashboard.tsx` | تحديث | إزالة البيانات الوهمية، شارة لوحة الإشراف والمتابعة الإدارية |
 | `school-eval-web/src/features/evaluation/components/dashboard/PendingIndicatorsTable.tsx` | تحديث | تكييف زر الفتح لمدير المدرسة ليكون "استعراض" |
-| `school-eval-api/tests/Feature/SchoolPrincipalWorkflowTest.php` | **جديد** | 7 اختبارات تكاملية لحوكمة وصلاحيات وعزل مدير المدرسة |
+| `school-eval-api/database/migrations/2026_11_16_200001_add_status_to_improvement_areas_table.php` | **جديد** | إضافة حقل `status` لجدول مجالات التحسين مع القيمة الافتراضية `pending_action` |
+| `school-eval-api/app/Models/ImprovementArea.php` | تحديث | ثوابت الحالة الصريحة ودالة المزامنة التلقائية `syncStatus()` |
+| `school-eval-api/app/Models/ImprovementAction.php` | تحديث | ربط أحداث النموذج (`saved`, `deleted`) بمزامنة حالة المجال |
+| `school-eval-api/app/Http/Controllers/Api/V1/ImprovementAreaController.php` | تحديث | إرجاع `status` في مصفوفة تنسيق المجال |
+| `school-eval-api/app/Http/Controllers/Api/V1/ImprovementPlanController.php` | تحديث | إرجاع `status` في تفاصيل خطة التحسين |
+| `school-eval-api/app/Http/Controllers/Api/V1/EvaluatorApiController.php` | تحديث | إرجاع `status` في قوائم مجالات الخطة والمجالات المتاحة |
+| `school-eval-api/database/seeders/DemoEvaluationSeeder.php` | تحديث | بذر الحالة الصريحة للمجالات وتوليد الإجراءات التجريبية بنسب 25% و 60% |
+| `school-eval-api/tests/Feature/SchoolPrincipalWorkflowTest.php` | **جديد** | 10 اختبارات تكاملية تشمل حوكمة الصلاحيات والحالة الصريحة وانتقالاتها |
 
 ---
 
 ## 4. نتائج الفحص والاختبارات الكاملة
 - **بناء الواجهة الأمامية (`npm run build`)**:
-  - النتيجة: **ناجح بنسبة 100% (0 أخطاء، 0 تحذيرات، زمن البناء 732ms)**.
+  - النتيجة: **ناجح بنسبة 100% (0 أخطاء، 0 تحذيرات، زمن البناء 765ms)**.
 - **حزمة اختبارات الواجهة الخلفية (`php vendor/bin/phpunit`)**:
-  - النتيجة: **426 اختباراً ناجحاً بالكامل (11,838 تأكيداً، 0 فشل، 0 أخطاء، مدة التنفيذ 121 ثانية)**.
+  - النتيجة: **429 اختباراً ناجحاً بالكامل (11,858 تأكيداً، 0 فشل، 0 أخطاء)**.

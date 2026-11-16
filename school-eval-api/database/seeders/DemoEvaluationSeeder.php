@@ -337,7 +337,7 @@ class DemoEvaluationSeeder extends Seeder
             'created_by_user_id'   => $evaluatorFarouq->user_id,
         ]);
 
-        // هـ. مجالات التحسين المنبثقة عن المؤشرات المتدنية وربطها بالخطط دون إدراج إجراءات مسبقة
+        // هـ. مجالات التحسين المنبثقة عن المؤشرات المتدنية وربطها بالخطط
         $areaDefs = [
             ['name' => 'تطوير معمل الحاسوب وتجهيزات التقنية التعليمية', 'priority' => 'High', 'target' => 3, 'plan' => $planQuality],
             ['name' => 'تعزيز منظومة الأمن والسلامة وتدريب فرق الطوارئ', 'priority' => 'High', 'target' => 3, 'plan' => $planOperational],
@@ -345,6 +345,7 @@ class DemoEvaluationSeeder extends Seeder
             ['name' => 'تفعيل لجان الشراكة المجتمعية ومجلس الآباء والمعلمين', 'priority' => 'Medium', 'target' => 2, 'plan' => $planOperational],
         ];
 
+        $createdAreas = [];
         foreach ($areaDefs as $i => $aDef) {
             $linkedRes = $lowScoreResults[$i] ?? null;
             $area = ImprovementArea::create([
@@ -353,6 +354,7 @@ class DemoEvaluationSeeder extends Seeder
                 'name'         => $aDef['name'],
                 'priority'     => $aDef['priority'],
                 'target_score' => $aDef['target'],
+                'status'       => ImprovementArea::STATUS_PENDING_ACTION,
                 'description'  => "مجال تحسين ذو أولوية للعام الدراسي لرفع مستوى الأداء المؤسسي.",
             ]);
 
@@ -360,10 +362,120 @@ class DemoEvaluationSeeder extends Seeder
                 'plan_id' => $aDef['plan']->plan_id,
                 'area_id' => $area->area_id,
             ]);
+
+            $createdAreas[] = $area;
         }
 
-        // و. تفريغ جدول improvement_actions تماماً لتبدأ الإجراءات نظيفة من الصفر بنسبة 100%
-        // (لا توجد أي سجلات تجريبية أو مكررة في جدول improvement_actions)
+        // و. إدراج إجراءات تجريبية واقعية محدودة بنسب إنجاز 25% و 60% (الخيار أ للعرض والتجربة)
+        // مع إبقاء مجال تحسين واحد دون إجراءات لإظهار شريط التنبيه الذكي بالواجهة (الخيار ب)
+        if (isset($createdAreas[0])) {
+            ImprovementAction::create([
+                'plan_id'                        => $planQuality->plan_id,
+                'area_id'                        => $createdAreas[0]->area_id,
+                'title'                          => 'تحديث أجهزة الحاسوب وتمديد شبكة الإنترنت للأجنحة التعليمية',
+                'responsible_person_description' => 'أمين مركز مصادر التعلم ومعلم الحاسب',
+                'start_date'                     => now()->subDays(20)->toDateString(),
+                'due_date'                       => now()->addDays(40)->toDateString(),
+                'status'                         => 'InProgress',
+                'completion_percentage'          => 60,
+                'progress_description'           => \App\Enums\ProgressLevel::Moderate->value,
+                'baseline_score'                 => 1,
+                'baseline_target_score'          => 3,
+                'baseline_gap'                   => 2,
+            ]);
+
+            ImprovementAction::create([
+                'plan_id'                        => $planQuality->plan_id,
+                'area_id'                        => $createdAreas[0]->area_id,
+                'title'                          => 'تأمين حزم البرمجيات التعليمية وتفعيل منصة التدريب الرقمي',
+                'responsible_person_description' => 'رائد النشاط ومعلم الحاسب الآلي',
+                'start_date'                     => now()->subDays(10)->toDateString(),
+                'due_date'                       => now()->addDays(50)->toDateString(),
+                'status'                         => 'InProgress',
+                'completion_percentage'          => 25,
+                'progress_description'           => \App\Enums\ProgressLevel::Limited->value,
+                'baseline_score'                 => 1,
+                'baseline_target_score'          => 3,
+                'baseline_gap'                   => 2,
+            ]);
+        }
+
+        if (isset($createdAreas[1])) {
+            ImprovementAction::create([
+                'plan_id'                        => $planOperational->plan_id,
+                'area_id'                        => $createdAreas[1]->area_id,
+                'title'                          => 'صيانة وتحديث طفايات الحريق وأجهزة الإنذار ومخارج الطوارئ',
+                'responsible_person_description' => 'مسؤول الأمن والسلامة المدرسية',
+                'start_date'                     => now()->subDays(15)->toDateString(),
+                'due_date'                       => now()->addDays(45)->toDateString(),
+                'status'                         => 'InProgress',
+                'completion_percentage'          => 60,
+                'progress_description'           => \App\Enums\ProgressLevel::Moderate->value,
+                'baseline_score'                 => 1,
+                'baseline_target_score'          => 3,
+                'baseline_gap'                   => 2,
+            ]);
+
+            ImprovementAction::create([
+                'plan_id'                        => $planOperational->plan_id,
+                'area_id'                        => $createdAreas[1]->area_id,
+                'title'                          => 'تنفيذ خطة إخلاء فرضية وتدريب الطلاب ومنسوبي المدرسة',
+                'responsible_person_description' => 'لجنة الطوارئ المدرسية ورائد النشاط',
+                'start_date'                     => now()->subDays(5)->toDateString(),
+                'due_date'                       => now()->addDays(55)->toDateString(),
+                'status'                         => 'InProgress',
+                'completion_percentage'          => 25,
+                'progress_description'           => \App\Enums\ProgressLevel::Limited->value,
+                'baseline_score'                 => 1,
+                'baseline_target_score'          => 3,
+                'baseline_gap'                   => 2,
+            ]);
+        }
+
+        if (isset($createdAreas[3])) {
+            ImprovementAction::create([
+                'plan_id'                        => $planOperational->plan_id,
+                'area_id'                        => $createdAreas[3]->area_id,
+                'title'                          => 'عقد اللقاء التعريفي الأول لمجلس الآباء والمعلمين وإقرار خطة اللقاءات',
+                'responsible_person_description' => 'المرشد الطلابي ولجنة التوجيه الطلابي',
+                'start_date'                     => now()->subDays(12)->toDateString(),
+                'due_date'                       => now()->addDays(30)->toDateString(),
+                'status'                         => 'InProgress',
+                'completion_percentage'          => 60,
+                'progress_description'           => \App\Enums\ProgressLevel::Moderate->value,
+                'baseline_score'                 => 2,
+                'baseline_target_score'          => 3,
+                'baseline_gap'                   => 1,
+            ]);
+        }
+
+        // تحديث الحالة الصريحة للمجالات (status): in_progress للمجالات المجدولة، و pending_action للمجال الشاغر
+        if (isset($createdAreas[0])) {
+            $createdAreas[0]->status = ImprovementArea::STATUS_IN_PROGRESS;
+            $createdAreas[0]->save();
+        }
+        if (isset($createdAreas[1])) {
+            $createdAreas[1]->status = ImprovementArea::STATUS_IN_PROGRESS;
+            $createdAreas[1]->save();
+        }
+        if (isset($createdAreas[2])) {
+            $createdAreas[2]->status = ImprovementArea::STATUS_PENDING_ACTION;
+            $createdAreas[2]->save();
+        }
+        if (isset($createdAreas[3])) {
+            $createdAreas[3]->status = ImprovementArea::STATUS_IN_PROGRESS;
+            $createdAreas[3]->save();
+        }
+
+        // تحديث وصف مستوى التقدم الإجمالي للخطط بناءً على الإجراءات
+        foreach ([$planQuality, $planOperational] as $p) {
+            $planActions = ImprovementAction::where('plan_id', $p->plan_id)->get();
+            if ($planActions->isNotEmpty()) {
+                $overall = \App\Http\Controllers\Api\V1\ImprovementPlanController::calculateOverallProgress($planActions);
+                $p->progress_description = $overall['code'];
+                $p->save();
+            }
+        }
 
         // ز. إنشاء التقرير المعتمد ومحاولة التسليم مع طلب استكمال مفتوح على المؤشر 6-2-1 (اختبار الدورة الكاملة)
         $reportFarouq = Report::create([

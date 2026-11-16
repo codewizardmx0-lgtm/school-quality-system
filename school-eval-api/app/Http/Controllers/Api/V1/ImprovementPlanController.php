@@ -1115,6 +1115,7 @@ class ImprovementPlanController extends Controller
                 'description'   => $area->description,
                 'priority'      => $area->priority,
                 'priorityLabel' => $priorityLabels[$area->priority] ?? $area->priority,
+                'status'        => $area->status ?? 'pending_action',
             ];
         })->values();
 
