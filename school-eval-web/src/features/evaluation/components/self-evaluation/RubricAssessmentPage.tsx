@@ -1132,6 +1132,8 @@ export const RubricAssessmentPage: React.FC<RubricAssessmentPageProps> = ({
           >
             <EvidenceUploader
               indicatorId={indicator?.indicatorId}
+              indicatorCode={indicator?.code}
+              standardCode={standard?.code}
               evidenceLinks={currentResult?.evidenceLinks || []}
               evidenceRequirements={currentResult?.evidenceRequirements || indicator?.evidenceRequirements || []}
               onUploadFile={handleUploadIndicatorEvidence}

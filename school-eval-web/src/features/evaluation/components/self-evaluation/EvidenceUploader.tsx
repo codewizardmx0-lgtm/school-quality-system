@@ -1,10 +1,18 @@
 import React, { useState, useRef, useEffect } from 'react';
 import type { LinkedEvidenceBrief, EvidenceRequirementItem } from '../../api/evaluationTypes';
-import { UploadCloud, File, RefreshCw, AlertCircle, FileCheck, Link2, Download, Pencil } from 'lucide-react';
+import { UploadCloud, File, RefreshCw, AlertCircle, FileCheck, Link2, Download, Pencil, FileDown, Eye, X, Copy, Check } from 'lucide-react';
 import { evaluatorApi } from '../../api/evaluatorApi';
+import {
+  findEvidenceTemplate,
+  getTemplatesForStandard,
+  downloadTemplateFile,
+  type EvidenceTemplate,
+} from '../../data/evidenceTemplates';
 
 interface EvidenceUploaderProps {
   indicatorId?: number;
+  indicatorCode?: string;
+  standardCode?: string;
   evidenceLinks: LinkedEvidenceBrief[];
   evidenceRequirements?: EvidenceRequirementItem[];
   onUploadFile: (
@@ -24,6 +32,8 @@ interface EvidenceUploaderProps {
 
 export const EvidenceUploader: React.FC<EvidenceUploaderProps> = ({
   indicatorId,
+  indicatorCode,
+  standardCode,
   evidenceLinks,
   evidenceRequirements = [],
   onUploadFile,
@@ -41,14 +51,23 @@ export const EvidenceUploader: React.FC<EvidenceUploaderProps> = ({
   const [unlinkingId, setUnlinkingId] = useState<number | null>(null);
   const [selectedUploadReqIds, setSelectedUploadReqIds] = useState<number[]>([]);
   const [updatingReqLinkId, setUpdatingReqLinkId] = useState<number | null>(null);
+  const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
+  const [selectedTemplate, setSelectedTemplate] = useState<EvidenceTemplate | null>(null);
+  const [isCopied, setIsCopied] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const mandatoryRequirements = evidenceRequirements.filter((r) => r.required === true);
 
+  const matchedTemplate = findEvidenceTemplate(indicatorCode, standardCode);
+  const availableTemplates = getTemplatesForStandard(standardCode);
+  const activeTemplate = selectedTemplate || matchedTemplate;
+
   useEffect(() => {
     setSelectedUploadReqIds([]);
     setErrorMessage(null);
-  }, [indicatorId]);
+    setSelectedTemplate(null);
+    setIsCopied(false);
+  }, [indicatorId, indicatorCode]);
 
   const handleToggleUploadReq = (reqId: number) => {
     setSelectedUploadReqIds((prev) =>
@@ -168,6 +187,16 @@ export const EvidenceUploader: React.FC<EvidenceUploaderProps> = ({
     }
   };
 
+  const isPreliminaryCover = (item: { title?: string; fileName?: string; documentType?: string }) => {
+    const text = `${item.title || ''} ${item.fileName || ''} ${item.documentType || ''}`.toLowerCase();
+    return (
+      text.includes('غلاف') ||
+      text.includes('تمهيدي') ||
+      text.includes('cover') ||
+      item.documentType === 'cover'
+    );
+  };
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
       {/* 1. Official Evidence Requirements specific to this Indicator (FR-SCH-12 / Prototype feature) */}
@@ -225,6 +254,97 @@ export const EvidenceUploader: React.FC<EvidenceUploaderProps> = ({
         ) : (
           <div style={{ fontSize: '12px', color: '#64748B' }}>
             يمكن إرفاق وثائق، خطط تشغيلية، محاضر اجتماعات، تقارير، أو صور ميدانية معتمدة تثبت استيفاء أداء المؤشر.
+          </div>
+        )}
+
+        {/* Official Evidence Template Box (Download & Preview) */}
+        {activeTemplate && (
+          <div
+            style={{
+              marginTop: '14px',
+              padding: '12px 14px',
+              borderRadius: '8px',
+              backgroundColor: '#F0FDF4',
+              border: '1px solid #BBF7D0',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '12px',
+              flexWrap: 'wrap',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
+              <div
+                style={{
+                  width: '36px',
+                  height: '36px',
+                  borderRadius: '8px',
+                  backgroundColor: '#DCFCE7',
+                  color: '#15803D',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                }}
+              >
+                <FileDown size={18} />
+              </div>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: '13px', fontWeight: 800, color: '#14532D' }}>
+                  نموذج القالب المعتمد: {activeTemplate.title}
+                </div>
+                <div style={{ fontSize: '11px', color: '#166534', marginTop: '2px' }}>
+                  {activeTemplate.standardCode} ({activeTemplate.standardTitle}) • رمز الشاهد المقترح: {activeTemplate.id}
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                onClick={() => setIsTemplateModalOpen(true)}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  padding: '6px 12px',
+                  borderRadius: '6px',
+                  backgroundColor: '#FFFFFF',
+                  color: '#15803D',
+                  border: '1px solid #86EFAC',
+                  fontSize: '11.5px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  transition: 'background-color 0.15s',
+                }}
+              >
+                <Eye size={13} />
+                <span>معاينة القالب</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => downloadTemplateFile(activeTemplate)}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  padding: '6px 14px',
+                  borderRadius: '6px',
+                  backgroundColor: '#059669',
+                  color: '#FFFFFF',
+                  border: 'none',
+                  fontSize: '11.5px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  boxShadow: '0 1px 3px rgba(5, 150, 105, 0.25)',
+                  transition: 'background-color 0.15s',
+                }}
+              >
+                <Download size={13} />
+                <span>تحميل نموذج القالب المعتمد (.md)</span>
+              </button>
+            </div>
           </div>
         )}
       </div>
@@ -446,11 +566,31 @@ export const EvidenceUploader: React.FC<EvidenceUploaderProps> = ({
                     <div style={{ fontSize: '13px', fontWeight: 700, color: '#1E293B' }}>
                       {link.title}
                     </div>
-                    <div style={{ fontSize: '11px', color: '#64748B', display: 'flex', gap: '8px', marginTop: '2px' }}>
+                    <div style={{ fontSize: '11px', color: '#64748B', display: 'flex', gap: '8px', marginTop: '2px', flexWrap: 'wrap' }}>
                       <span>{link.fileName}</span>
                       <span>•</span>
                       <span style={{ color: '#059669', fontWeight: 600 }}>الإصدار v{link.versionNumber}</span>
                     </div>
+                    {/* Amber badge for preliminary cover documents */}
+                    {isPreliminaryCover(link) && (
+                      <div
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          backgroundColor: '#FFFBEB',
+                          border: '1px solid #FDE68A',
+                          color: '#B45309',
+                          fontSize: '11px',
+                          fontWeight: 700,
+                          padding: '2px 8px',
+                          borderRadius: '5px',
+                          marginTop: '6px',
+                        }}
+                      >
+                        <span>⚠️ شاهد تمهيدي (غلاف فقط) - بحاجة لاستكمال الصفحات الداخلية المعبأة</span>
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -626,6 +766,232 @@ export const EvidenceUploader: React.FC<EvidenceUploaderProps> = ({
               )}
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Modal: معاينة وتحميل قالب الشاهد المعتمد */}
+      {isTemplateModalOpen && activeTemplate && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(15, 23, 42, 0.65)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+            padding: '16px',
+            backdropFilter: 'blur(3px)',
+          }}
+          onClick={() => setIsTemplateModalOpen(false)}
+        >
+          <div
+            style={{
+              backgroundColor: '#FFFFFF',
+              borderRadius: '16px',
+              width: '100%',
+              maxWidth: '820px',
+              maxHeight: '88vh',
+              display: 'flex',
+              flexDirection: 'column',
+              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+              border: '1px solid #E2E8F0',
+              overflow: 'hidden',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div
+              style={{
+                padding: '18px 24px',
+                borderBottom: '1px solid #E2E8F0',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                backgroundColor: '#F8FAFC',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div
+                  style={{
+                    width: '36px',
+                    height: '36px',
+                    borderRadius: '8px',
+                    backgroundColor: '#DCFCE7',
+                    color: '#15803D',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <FileDown size={20} />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 800, color: '#0F172A' }}>
+                    {activeTemplate.title}
+                  </h3>
+                  <div style={{ fontSize: '11.5px', color: '#64748B', marginTop: '2px', display: 'flex', gap: '8px' }}>
+                    <span>{activeTemplate.standardCode} — {activeTemplate.standardTitle}</span>
+                    <span>•</span>
+                    <span style={{ color: '#059669', fontWeight: 700 }}>معتمد للاعتماد المدرسي ({activeTemplate.id})</span>
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsTemplateModalOpen(false)}
+                style={{
+                  border: 'none',
+                  background: 'transparent',
+                  cursor: 'pointer',
+                  padding: '6px',
+                  borderRadius: '6px',
+                  color: '#64748B',
+                }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Multiple templates selector if standard has multiple */}
+            {availableTemplates.length > 1 && (
+              <div
+                style={{
+                  padding: '10px 24px',
+                  backgroundColor: '#F1F5F9',
+                  borderBottom: '1px solid #E2E8F0',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  flexWrap: 'wrap',
+                }}
+              >
+                <span style={{ fontSize: '11.5px', fontWeight: 700, color: '#475569' }}>
+                  قوالب إضافية للمعيار:
+                </span>
+                {availableTemplates.map((tpl) => (
+                  <button
+                    key={tpl.id}
+                    type="button"
+                    onClick={() => setSelectedTemplate(tpl)}
+                    style={{
+                      fontSize: '11px',
+                      fontWeight: 700,
+                      padding: '3px 10px',
+                      borderRadius: '6px',
+                      border: `1px solid ${tpl.id === activeTemplate.id ? '#10B981' : '#CBD5E1'}`,
+                      backgroundColor: tpl.id === activeTemplate.id ? '#ECFDF5' : '#FFFFFF',
+                      color: tpl.id === activeTemplate.id ? '#047857' : '#334155',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {tpl.id}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* Modal Content - Scrollable Markdown Preview */}
+            <div
+              style={{
+                padding: '24px',
+                overflowY: 'auto',
+                flex: 1,
+                fontFamily: 'system-ui, -apple-system, sans-serif',
+                lineHeight: 1.6,
+                color: '#1E293B',
+                fontSize: '13px',
+                backgroundColor: '#FFFFFF',
+              }}
+            >
+              <div
+                style={{
+                  backgroundColor: '#F8FAFC',
+                  border: '1px solid #E2E8F0',
+                  borderRadius: '10px',
+                  padding: '18px',
+                  whiteSpace: 'pre-wrap',
+                  fontFamily: 'Consolas, Monaco, "Courier New", monospace',
+                  fontSize: '12.5px',
+                  direction: 'rtl',
+                  maxHeight: '450px',
+                  overflowY: 'auto',
+                }}
+              >
+                {activeTemplate.content}
+              </div>
+            </div>
+
+            {/* Modal Footer Actions */}
+            <div
+              style={{
+                padding: '14px 24px',
+                borderTop: '1px solid #E2E8F0',
+                backgroundColor: '#F8FAFC',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: '10px',
+              }}
+            >
+              <div style={{ fontSize: '11.5px', color: '#64748B' }}>
+                يمكنك نسخ محتوى النموذج وتعديله، أو تحميله كملف Markdown لتعبئته ورفعه كشاهد.
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText(activeTemplate.content);
+                    setIsCopied(true);
+                    setTimeout(() => setIsCopied(false), 2000);
+                  }}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '7px 14px',
+                    borderRadius: '8px',
+                    backgroundColor: '#FFFFFF',
+                    color: '#334155',
+                    border: '1px solid #CBD5E1',
+                    fontSize: '12px',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                  }}
+                >
+                  {isCopied ? <Check size={14} color="#059669" /> : <Copy size={14} />}
+                  <span>{isCopied ? 'تم النسخ!' : 'نسخ النص'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => downloadTemplateFile(activeTemplate)}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '7px 16px',
+                    borderRadius: '8px',
+                    backgroundColor: '#059669',
+                    color: '#FFFFFF',
+                    border: 'none',
+                    fontSize: '12px',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    boxShadow: '0 1px 3px rgba(5, 150, 105, 0.3)',
+                  }}
+                >
+                  <Download size={14} />
+                  <span>تحميل القالب ({activeTemplate.fileName})</span>
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>
