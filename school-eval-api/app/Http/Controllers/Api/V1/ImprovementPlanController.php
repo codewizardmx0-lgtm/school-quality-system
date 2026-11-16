@@ -269,6 +269,13 @@ class ImprovementPlanController extends Controller
             return ApiResponse::notFound('خطة التحسين المطلوبة غير موجودة.');
         }
 
+        // قفل الخطط المؤرشفة والمرفوعة: لا يمكن تعديل بيانات خطة مؤرشفة أو مرفوعة
+        if (in_array($plan->status, ['Archived', 'Submitted'])) {
+            return ApiResponse::validationError([
+                'status' => ['لا يمكن تعديل بيانات خطة تحسين مؤرشفة أو مرفوعة مسبقاً.'],
+            ]);
+        }
+
         $validator = Validator::make($request->all(), [
             'title'     => ['sometimes', 'required', 'string', 'max:200'],
             'startDate' => ['sometimes', 'required', 'date'],
@@ -450,6 +457,13 @@ class ImprovementPlanController extends Controller
             return ApiResponse::notFound('خطة التحسين المطلوبة غير موجودة.');
         }
 
+        // قفل الخطط المؤرشفة والمرفوعة: لا يمكن إضافة إجراءات إلى خطة مؤرشفة أو مرفوعة
+        if (in_array($plan->status, ['Archived', 'Submitted'])) {
+            return ApiResponse::validationError([
+                'status' => ['لا يمكن إضافة إجراءات تنفيذية إلى خطة تحسين مؤرشفة أو مرفوعة مسبقاً.'],
+            ]);
+        }
+
         $validator = Validator::make($request->all(), [
             'areaId'                       => ['required', 'integer'],
             'title'                        => ['required', 'string', 'max:200'],
@@ -556,6 +570,13 @@ class ImprovementPlanController extends Controller
         // عزل المدارس (القرار المعماري 9)
         if ($user->user_type === 'school' && (int) $user->school_id !== (int) $plan->school_id) {
             return ApiResponse::notFound('خطة التحسين المطلوبة غير موجودة.');
+        }
+
+        // قفل الخطط المؤرشفة والمرفوعة: لا يمكن تعديل إجراءات خطة مؤرشفة أو مرفوعة
+        if (in_array($plan->status, ['Archived', 'Submitted'])) {
+            return ApiResponse::validationError([
+                'status' => ['لا يمكن تعديل إجراءات خطة تحسين مؤرشفة أو مرفوعة مسبقاً.'],
+            ]);
         }
 
         $action = ImprovementAction::where('plan_id', $plan->plan_id)
@@ -929,6 +950,13 @@ class ImprovementPlanController extends Controller
             return ApiResponse::notFound('خطة التحسين المطلوبة غير موجودة.');
         }
 
+        // قفل الخطط المؤرشفة والمرفوعة: لا يمكن تعديل بيانات خطة مؤرشفة أو مرفوعة
+        if (in_array($plan->status, ['Archived', 'Submitted'])) {
+            return ApiResponse::validationError([
+                'status' => ['لا يمكن تعديل بيانات خطة تحسين مؤرشفة أو مرفوعة مسبقاً.'],
+            ]);
+        }
+
         $validator = Validator::make($request->all(), [
             'text'          => ['required', 'string', 'max:2000'],
             'reviewerRole'  => ['nullable', 'string', 'in:school_principal,ministry_supervisor'],
@@ -1115,6 +1143,7 @@ class ImprovementPlanController extends Controller
                 'description'   => $area->description,
                 'priority'      => $area->priority,
                 'priorityLabel' => $priorityLabels[$area->priority] ?? $area->priority,
+                'status'        => $area->status ?? 'pending_action',
             ];
         })->values();
 

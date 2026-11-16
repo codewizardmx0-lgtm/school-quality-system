@@ -153,6 +153,8 @@ Route::prefix('v1')->group(function () {
             Route::post('/indicators/{indicatorId}/reset', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'resetIndicator'])->name('api.v1.evaluator.indicators.reset');
             Route::post('/standards/{standardId}/reset', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'resetStandard'])->name('api.v1.evaluator.standards.reset');
             Route::get('/discrepancies/audit', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'auditDiscrepancies'])->name('api.v1.evaluator.discrepancies.audit');
+            Route::get('/audit-hub', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'getAuditHub'])->name('api.v1.evaluator.audit-hub');
+            Route::post('/audit-hub/indicators/{indicatorId}/review-note', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'storeIndicatorReviewNote'])->name('api.v1.evaluator.audit-hub.indicator-review-note');
         });
 
         Route::get('/standard-versions/active/tree', [\App\Http\Controllers\Api\V1\EvaluatorApiController::class, 'activeStandardsTree'])->name('api.v1.standard-versions.active.tree');

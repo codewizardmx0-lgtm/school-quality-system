@@ -11,6 +11,7 @@ import { HandleCompletionPage } from '../completion-request/HandleCompletionPage
 import { NotificationsCenter } from '../notifications/NotificationsCenter';
 import { ReportsHubPage } from '../reports/ReportsHubPage';
 import { HistoricalPerformancePage } from '../historical/HistoricalPerformancePage';
+import { AuditReviewHubPage } from '../audit-hub/AuditReviewHubPage';
 import { ChangePasswordModal } from '../../../auth/ChangePasswordModal';
 import { ProfileModal } from '../../../auth/ProfileModal';
 import { useAuth } from '../../../auth/AuthContext';
@@ -46,6 +47,7 @@ export const EvaluatorLayout: React.FC<EvaluatorLayoutProps> = ({
   const [notifRefreshKey, setNotifRefreshKey] = useState<number>(0);
   const [isChangePasswordOpen, setIsChangePasswordOpen] = useState<boolean>(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState<boolean>(false);
+  const [navigatedFromHub, setNavigatedFromHub] = useState<boolean>(false);
   const { toasts, addToast, dismissToast } = useToast();
 
   const isPrincipal = Boolean(
@@ -115,9 +117,14 @@ export const EvaluatorLayout: React.FC<EvaluatorLayoutProps> = ({
     };
   }, [user?.userId, selectedArchiveEvalId]);
 
-  const handleNavigate = (screen: EvaluatorScreen, param?: number) => {
+  const handleNavigate = (screen: EvaluatorScreen, param?: number, fromHub?: boolean) => {
     if (param !== undefined) {
       setSelectedIndicatorId(param);
+    }
+    if (fromHub) {
+      setNavigatedFromHub(true);
+    } else {
+      setNavigatedFromHub(false);
     }
     setActiveScreen(screen);
     if (isMobile) {
@@ -138,6 +145,7 @@ export const EvaluatorLayout: React.FC<EvaluatorLayoutProps> = ({
           <EvaluatorDashboard
             onNavigate={handleNavigate}
             isLocked={effectiveReadOnly}
+            isPrincipal={isPrincipal}
           />
         );
       case 'standards-tree':
@@ -150,6 +158,7 @@ export const EvaluatorLayout: React.FC<EvaluatorLayoutProps> = ({
             }}
             onNavigate={handleNavigate}
             isLocked={effectiveReadOnly}
+            isPrincipal={isPrincipal}
           />
         );
       case 'rubric-assessment':
@@ -162,6 +171,7 @@ export const EvaluatorLayout: React.FC<EvaluatorLayoutProps> = ({
             }}
             onNavigate={handleNavigate}
             isLocked={effectiveReadOnly}
+            isPrincipal={isPrincipal}
           />
         );
       case 'evidences':
@@ -183,6 +193,14 @@ export const EvaluatorLayout: React.FC<EvaluatorLayoutProps> = ({
           <ImprovementPlanPage
             onNavigate={handleNavigate}
             readOnly={effectiveReadOnly}
+            isPrincipal={isPrincipal}
+          />
+        );
+      case 'audit-hub':
+        return (
+          <AuditReviewHubPage
+            onNavigate={handleNavigate}
+            isPrincipal={isPrincipal}
           />
         );
       case 'final-review':
@@ -258,6 +276,7 @@ export const EvaluatorLayout: React.FC<EvaluatorLayoutProps> = ({
         isMobile={isMobile}
         isMobileOpen={isMobileOpen}
         onCloseMobile={() => setIsMobileOpen(false)}
+        isPrincipal={isPrincipal}
       />
 
       {/* 2. Main Content Area */}
@@ -295,6 +314,7 @@ export const EvaluatorLayout: React.FC<EvaluatorLayoutProps> = ({
           archiveEvaluations={archiveEvaluations}
           selectedArchiveEvalId={selectedArchiveEvalId}
           onSelectArchiveEvaluation={handleSelectArchiveEvaluation}
+          isPrincipal={isPrincipal}
         />
 
         <main style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', minWidth: 0 }}>
@@ -340,8 +360,8 @@ export const EvaluatorLayout: React.FC<EvaluatorLayoutProps> = ({
             </div>
           )}
 
-          {/* Distinct Banner for Ministerial Supervisor Completion Request */}
-          {hasOpenCompletionRequest && (
+          {/* 1. تنبيه طلب الاستكمال الموحد (يظهر فقط في الشاشات العادية التي لا تعالج الاستكمال ذاتياً لتجنب التكرار والازدواج) */}
+          {hasOpenCompletionRequest && !['completion-request', 'dashboard', 'final-review', 'audit-hub'].includes(activeScreen) && (
             <div
               style={{
                 backgroundColor: '#FEF2F2',
@@ -360,12 +380,14 @@ export const EvaluatorLayout: React.FC<EvaluatorLayoutProps> = ({
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                 <AlertTriangle size={19} color="#DC2626" style={{ flexShrink: 0 }} />
                 <span>
-                  يوجد طلب استكمال شواهد وملاحظات وارد من المشرف الوزاري بحاجة إلى معالجتك واستيفاء الشواهد المطلوبة.
+                  {isPrincipal
+                    ? 'تنبيه إداري: يوجد طلب استكمال شواهد وملاحظات وارد من المشرف الوزاري يتطلب المراجعة والاستيفاء.'
+                    : 'يوجد طلب استكمال شواهد وملاحظات وارد من المشرف الوزاري بحاجة إلى معالجتك واستيفاء الشواهد المطلوبة.'}
                 </span>
               </div>
               <button
                 type="button"
-                onClick={() => setActiveScreen('completion-request')}
+                onClick={() => handleNavigate('completion-request')}
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',
@@ -387,25 +409,150 @@ export const EvaluatorLayout: React.FC<EvaluatorLayoutProps> = ({
             </div>
           )}
 
-          {/* Prominent Banner for School Principal View & Internal Review Mode */}
-          {isPrincipal && (
+          {/* 2. شريط الحوكمة الإدارية لمدير المدرسة (يظهر في غياب طلب الاستكمال العاجل ولا يظهر في شاشات المراجعة أو التدقيق لتجنب الازدواج) */}
+          {isPrincipal && !hasOpenCompletionRequest && !['final-review', 'audit-hub'].includes(activeScreen) && (
             <div
               style={{
-                backgroundColor: '#FEF3C7',
-                borderBottom: '1px solid #FCD34D',
+                backgroundColor: '#FFFBEB',
+                borderBottom: '1px solid #FDE68A',
                 padding: '12px 24px',
                 display: 'flex',
                 alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
                 gap: '12px',
                 color: '#92400E',
                 fontSize: '13px',
                 fontWeight: 700,
               }}
             >
-              <ShieldAlert size={19} color="#D97706" style={{ flexShrink: 0 }} />
-              <span>
-                أنت في وضع استعراض التقييم والمراجعة الداخلية — صلاحيات الرصد محصورة بمقيم المدرسة.
-              </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
+                <div
+                  style={{
+                    width: '36px',
+                    height: '36px',
+                    borderRadius: '8px',
+                    backgroundColor: '#FEF3C7',
+                    border: '1px solid #FCD34D',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0,
+                  }}
+                >
+                  <ShieldAlert size={20} color="#D97706" />
+                </div>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '2px' }}>
+                    <span style={{ fontSize: '13.5px', fontWeight: 800, color: '#78350F' }}>
+                      وضع الملاحظة والإقرار الإداري (مدير المدرسة)
+                    </span>
+                    <span
+                      style={{
+                        fontSize: '11px',
+                        padding: '1px 7px',
+                        borderRadius: '4px',
+                        backgroundColor: '#FEF3C7',
+                        border: '1px solid #FCD34D',
+                        color: '#B45309',
+                        fontWeight: 800,
+                      }}
+                    >
+                      صلاحية الملاحظة والاعتماد
+                    </span>
+                  </div>
+                  <p style={{ margin: 0, fontSize: '12px', color: '#92400E', fontWeight: 500, lineHeight: 1.5 }}>
+                    تتيح لك هذه اللوحة الاطلاع الكامل على سير التقييم والشواهد، تدوين الملاحظات الإدارية المعتمدة، ومتابعة تنفيذ خطة التحسين. (صلاحيات الرصد المباشر والختم الرقمي محصورة بمقيم المدرسة المعتمد).
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => handleNavigate('audit-hub')}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  backgroundColor: '#D97706',
+                  color: '#FFFFFF',
+                  border: 'none',
+                  borderRadius: '8px',
+                  padding: '7px 16px',
+                  fontSize: '12.5px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                  boxShadow: '0 2px 8px rgba(217, 119, 6, 0.25)',
+                }}
+                title="الانتقال المباشر لمركز التدقيق والمراجعة الشاملة لمدير المدرسة"
+              >
+                <span>مركز التدقيق والمراجعة</span>
+                <ArrowLeft size={14} />
+              </button>
+            </div>
+          )}
+
+          {/* زر العودة المختصر إلى مركز التدقيق والمراجعة الإدارية (يظهر حصرياً عند الانتقال من المركز) */}
+          {navigatedFromHub && activeScreen !== 'audit-hub' && (
+            <div
+              style={{
+                position: 'sticky',
+                top: 0,
+                zIndex: 45,
+                backgroundColor: '#0F172A',
+                color: '#FFFFFF',
+                padding: '10px 24px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: '12px',
+                borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+                boxShadow: '0 4px 14px rgba(0, 0, 0, 0.2)',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <span
+                  style={{
+                    backgroundColor: isPrincipal ? '#0284C7' : '#059669',
+                    color: '#FFFFFF',
+                    padding: '2px 8px',
+                    borderRadius: '6px',
+                    fontSize: '11px',
+                    fontWeight: 700,
+                  }}
+                >
+                  {isPrincipal ? 'بوابة المدير' : 'سجل التدقيق'}
+                </span>
+                <span style={{ fontSize: '13px', fontWeight: 600 }}>
+                  أنت تتصفح تفاصيل منبثقة من {isPrincipal ? 'مركز التدقيق والمراجعة الإدارية' : 'سجل تدقيق ومراجعات المدير'}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setNavigatedFromHub(false);
+                  setActiveScreen('audit-hub');
+                }}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  backgroundColor: isPrincipal ? '#0284C7' : '#059669',
+                  color: '#FFFFFF',
+                  border: 'none',
+                  borderRadius: '8px',
+                  padding: '7px 18px',
+                  fontSize: '13px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  boxShadow: '0 2px 6px rgba(0, 0, 0, 0.25)',
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                <span>العودة إلى {isPrincipal ? 'مركز التدقيق والمراجعة' : 'سجل التدقيق والمراجعات'}</span>
+                <span style={{ fontSize: '16px' }}>↩</span>
+              </button>
             </div>
           )}
 

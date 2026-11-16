@@ -631,7 +631,7 @@ class EvaluationController extends Controller
     {
         $user = $request->user();
 
-        if (!$user->hasPermission('evaluations.edit')) {
+        if (!$user->hasPermission('evaluations.edit') && !$user->hasPermission('reviews.write')) {
             return ApiResponse::forbidden('غير مصرح لك بإضافة ملاحظات.');
         }
 
@@ -647,16 +647,8 @@ class EvaluationController extends Controller
             return ApiResponse::notFound('نتيجة المؤشر المطلوبة غير موجودة.');
         }
 
-        if ($user->cannot('update', $evaluation)) {
-            $lockCheck = EvaluationLockChecker::canModifyIndicator($evaluation, $result->indicator_id);
-            if (!$lockCheck['allowed']) {
-                $key = $lockCheck['errorKey'] ?? 'evaluation';
-                return ApiResponse::validationError([
-                    $key => [$lockCheck['message']],
-                ], $lockCheck['message']);
-            }
-
-            return ApiResponse::forbidden('غير مصرح لك بتعديل هذا التقييم.');
+        if ($user->cannot('review', $evaluation) && $user->cannot('update', $evaluation)) {
+            return ApiResponse::forbidden('غير مصرح لك بتدوين ملاحظات على هذا التقييم.');
         }
 
         // فحص قفل التقييم أو إغلاق الدورة

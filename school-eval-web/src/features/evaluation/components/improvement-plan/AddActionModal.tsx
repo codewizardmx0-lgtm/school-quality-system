@@ -6,6 +6,7 @@ interface AddActionModalProps {
   isOpen: boolean;
   onClose: () => void;
   areas?: ImprovementAreaBrief[];
+  initialAreaId?: number | null;
   onAddAction: (payload: CreateImprovementActionPayload) => Promise<void>;
   isSubmitting?: boolean;
 }
@@ -14,6 +15,7 @@ export const AddActionModal: React.FC<AddActionModalProps> = ({
   isOpen,
   onClose,
   areas = [],
+  initialAreaId = null,
   onAddAction,
   isSubmitting = false,
 }) => {
@@ -35,11 +37,24 @@ export const AddActionModal: React.FC<AddActionModalProps> = ({
   const [targetScoreFilter, setTargetScoreFilter] = useState<string>('ALL');
   const popoverRef = useRef<HTMLDivElement>(null);
 
+  const uniqueAreas = useMemo(() => {
+    const seen = new Set<number>();
+    return areas.filter((a) => {
+      if (!a.areaId || seen.has(a.areaId)) return false;
+      seen.add(a.areaId);
+      return true;
+    });
+  }, [areas]);
+
   useEffect(() => {
-    if (isOpen && areas.length > 0 && !selectedAreaId) {
-      setSelectedAreaId(String(areas[0].areaId));
+    if (isOpen) {
+      if (initialAreaId) {
+        setSelectedAreaId(String(initialAreaId));
+      } else if (uniqueAreas.length > 0 && !selectedAreaId) {
+        setSelectedAreaId(String(uniqueAreas[0].areaId));
+      }
     }
-  }, [isOpen, areas, selectedAreaId]);
+  }, [isOpen, initialAreaId, uniqueAreas, selectedAreaId]);
 
   // إغلاق النافذة المنبثقة عند النقر خارجها
   useEffect(() => {
@@ -57,11 +72,11 @@ export const AddActionModal: React.FC<AddActionModalProps> = ({
   }, [isPopoverOpen]);
 
   const selectedArea = useMemo(() => {
-    return areas.find((a) => String(a.areaId) === selectedAreaId) || null;
-  }, [areas, selectedAreaId]);
+    return uniqueAreas.find((a) => String(a.areaId) === selectedAreaId) || null;
+  }, [uniqueAreas, selectedAreaId]);
 
   const filteredAreas = useMemo(() => {
-    return areas.filter((area) => {
+    return uniqueAreas.filter((area) => {
       if (priorityFilter !== 'ALL' && area.priority !== priorityFilter) {
         return false;
       }
@@ -85,7 +100,7 @@ export const AddActionModal: React.FC<AddActionModalProps> = ({
       const stdNameMatch = area.standardName ? area.standardName.toLowerCase().includes(q) : false;
       return nameMatch || codeMatch || indNameMatch || stdNameMatch;
     });
-  }, [areas, areaSearch, priorityFilter, currentScoreFilter, targetScoreFilter]);
+  }, [uniqueAreas, areaSearch, priorityFilter, currentScoreFilter, targetScoreFilter]);
 
   if (!isOpen) return null;
 
@@ -93,6 +108,7 @@ export const AddActionModal: React.FC<AddActionModalProps> = ({
     if (isSubmitting) return;
     setTitle('');
     setLeader('');
+    setSelectedAreaId('');
     setStartDate(new Date().toISOString().split('T')[0]);
     setDueDate('2026-12-31');
     setStatus('InProgress');
@@ -328,6 +344,41 @@ export const AddActionModal: React.FC<AddActionModalProps> = ({
                       ? 'أولوية متوسطة'
                       : 'أولوية منخفضة'}
                   </span>
+                  {selectedArea.status && (
+                    <span
+                      style={{
+                        fontSize: '11px',
+                        padding: '2px 7px',
+                        borderRadius: '6px',
+                        backgroundColor:
+                          selectedArea.status === 'completed'
+                            ? '#ECFDF5'
+                            : selectedArea.status === 'in_progress'
+                            ? '#EFF6FF'
+                            : '#FEF3C7',
+                        color:
+                          selectedArea.status === 'completed'
+                            ? '#059669'
+                            : selectedArea.status === 'in_progress'
+                            ? '#2563EB'
+                            : '#D97706',
+                        border:
+                          selectedArea.status === 'completed'
+                            ? '1px solid #A7F3D0'
+                            : selectedArea.status === 'in_progress'
+                            ? '1px solid #BFDBFE'
+                            : '1px solid #FDE68A',
+                        fontWeight: 700,
+                        flexShrink: 0,
+                      }}
+                    >
+                      {selectedArea.status === 'completed'
+                        ? 'مكتمل'
+                        : selectedArea.status === 'in_progress'
+                        ? 'قيد التنفيذ'
+                        : 'بانتظار إجراء'}
+                    </span>
+                  )}
                   {selectedArea.existingLinks && selectedArea.existingLinks.length > 0 ? (
                     <span
                       style={{
@@ -583,37 +634,45 @@ export const AddActionModal: React.FC<AddActionModalProps> = ({
                                 {area.standardName || area.indicatorName}
                               </span>
                             )}
-                            {/* Repeating links for all plans and persons */}
-                            {area.existingLinks && area.existingLinks.length > 0 ? (
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', marginTop: '4px' }}>
-                                {area.existingLinks.map((link, idx) => (
-                                  <span
-                                    key={idx}
-                                    style={{
-                                      display: 'inline-flex',
-                                      alignItems: 'center',
-                                      gap: '4px',
-                                      padding: '2px 7px',
-                                      borderRadius: '5px',
-                                      backgroundColor: '#EFF6FF',
-                                      color: '#1D4ED8',
-                                      border: '1px solid #BFDBFE',
-                                      fontSize: '11px',
-                                      fontWeight: 700,
-                                      width: 'fit-content',
-                                    }}
-                                  >
-                                    <span>🏷️ مضاف بالفعل في:</span>
-                                    <strong style={{ color: '#1E40AF' }}>{link.planTitle}</strong>
-                                    {link.person && link.person !== 'قيد التعيين' && (
-                                      <span style={{ color: '#4338CA', marginRight: '4px' }}>
-                                        مع <strong>{link.person}</strong>
+                            {/* Repeating links for all plans and persons (deduplicated by planId) */}
+                            {(() => {
+                              const distinctLinks = (area.existingLinks || []).filter(
+                                (l, idx, arr) => arr.findIndex((x) => x.planId === l.planId) === idx
+                              );
+                              if (distinctLinks.length > 0) {
+                                return (
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', marginTop: '4px' }}>
+                                    {distinctLinks.map((link, idx) => (
+                                      <span
+                                        key={idx}
+                                        style={{
+                                          display: 'inline-flex',
+                                          alignItems: 'center',
+                                          gap: '4px',
+                                          padding: '2px 7px',
+                                          borderRadius: '5px',
+                                          backgroundColor: '#EFF6FF',
+                                          color: '#1D4ED8',
+                                          border: '1px solid #BFDBFE',
+                                          fontSize: '11px',
+                                          fontWeight: 700,
+                                          width: 'fit-content',
+                                        }}
+                                      >
+                                        <span>🏷️ مضاف بالفعل في:</span>
+                                        <strong style={{ color: '#1E40AF' }}>{link.planTitle}</strong>
+                                        {link.person && link.person !== 'قيد التعيين' && (
+                                          <span style={{ color: '#4338CA', marginRight: '4px' }}>
+                                            مع <strong>{link.person}</strong>
+                                          </span>
+                                        )}
                                       </span>
-                                    )}
-                                  </span>
-                                ))}
-                              </div>
-                            ) : area.alreadyAdoptedPlanTitle ? (
+                                    ))}
+                                  </div>
+                                );
+                              }
+                              return null;
+                            })() || (area.alreadyAdoptedPlanTitle && (
                               <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', marginTop: '4px' }}>
                                 <span
                                   style={{
@@ -639,7 +698,7 @@ export const AddActionModal: React.FC<AddActionModalProps> = ({
                                   )}
                                 </span>
                               </div>
-                            ) : null}
+                            ))}
                           </div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
                             <span

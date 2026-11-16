@@ -41,16 +41,20 @@ import {
   ArrowUp,
   ArrowDown,
   RotateCcw,
+  Lock,
+  AlertTriangle,
 } from 'lucide-react';
 
 interface ImprovementPlanPageProps {
   onNavigate?: (screen: EvaluatorScreen, param?: number) => void;
   readOnly?: boolean;
+  isPrincipal?: boolean;
 }
 
 export const ImprovementPlanPage: React.FC<ImprovementPlanPageProps> = ({
   onNavigate,
   readOnly = false,
+  isPrincipal = false,
 }) => {
   const {
     selectedPlanType,
@@ -96,11 +100,26 @@ export const ImprovementPlanPage: React.FC<ImprovementPlanPageProps> = ({
   const [isCloningVersion, setIsCloningVersion] = useState(false);
   const [showExplanations, setShowExplanations] = useState(false);
   const [completionRequest, setCompletionRequest] = useState<CompletionRequestData | null>(null);
+  const [preselectedAreaId, setPreselectedAreaId] = useState<number | null>(null);
+
+  // مجالات التحسين المتبناة بالخطة الحالية التي لا تزال بحالة pending_action أو ليس لها أي إجراءات تنفيذية بعد
+  const areasWithoutActions = React.useMemo(() => {
+    if (!planData?.areas || planData.areas.length === 0) return [];
+    const scheduledAreaIds = new Set((planData.actions || []).map((a) => a.areaId));
+    return planData.areas.filter((area) => area.status === 'pending_action' || !scheduledAreaIds.has(area.areaId));
+  }, [planData?.areas, planData?.actions]);
 
   // قائمة خطط النوع المحدد بالتبويب فقط للسجل الماستر
   const tabPlansList = React.useMemo(() => {
     return plansList.filter((p) => p.planType === selectedPlanType);
   }, [plansList, selectedPlanType]);
+
+  // التحقق من حالة الخطة وقفل التعديل
+  const isPlanReadOnly = readOnly || isPrincipal || planData?.status === 'Archived' || planData?.status === 'Submitted';
+  const isCurrentVersionActive = planData?.status === 'Active' || planData?.status === 'Draft';
+  const newerVersion = React.useMemo(() => {
+    return tabPlansList.find((p) => (p.versionNumber || 1) > (planData?.versionNumber || 1)) || null;
+  }, [tabPlansList, planData?.versionNumber]);
 
   // دالة مساعدة لتنسيق التاريخ بالعربية مع اسم اليوم
   const formatArabicDateWithDay = (dateStr?: string | null): string => {
@@ -403,68 +422,225 @@ export const ImprovementPlanPage: React.FC<ImprovementPlanPageProps> = ({
   return (
     <div style={{ padding: '24px', maxWidth: '1440px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '22px', direction: 'rtl' }}>
       
-      {/* Supervisor Completion Request Warning Banner */}
+      {/* Supervisor Completion Request / Plan Version Status Banner */}
       {completionRequest && (
+        isCurrentVersionActive ? (
+          <div
+            style={{
+              padding: '16px 20px',
+              borderRadius: '12px',
+              backgroundColor: '#F0FDF4',
+              border: '1.5px solid #86EFAC',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: '12px',
+              boxShadow: '0 2px 8px rgba(16, 185, 129, 0.12)',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div
+                style={{
+                  width: '40px',
+                  height: '40px',
+                  borderRadius: '10px',
+                  backgroundColor: '#DCFCE7',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#059669',
+                }}
+              >
+                <CheckCircle2 size={22} />
+              </div>
+              <div>
+                <h4 style={{ margin: 0, fontSize: '14.5px', fontWeight: 800, color: '#166534' }}>
+                  طلب استكمال نشط — أنت تعمل الآن على الإصدار الأحدث المستنسخ (v{planData?.versionNumber || 1})
+                </h4>
+                <p style={{ margin: '3px 0 0 0', fontSize: '12.5px', color: '#15803D' }}>
+                  الخطة الحالية مفتوحة للتعديل استجابةً لملاحظات المشرف الوزاري ({completionRequest.supervisorName}). يمكنك استكمال وإضافة الإجراءات التنفيذية لمعالجة الفجوات قبل إعادة الاعتماد.
+                </p>
+              </div>
+            </div>
+          </div>
+        ) : newerVersion ? (
+          <div
+            style={{
+              padding: '16px 20px',
+              borderRadius: '12px',
+              backgroundColor: '#EFF6FF',
+              border: '1.5px solid #93C5FD',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: '12px',
+              boxShadow: '0 2px 8px rgba(37, 99, 235, 0.12)',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div
+                style={{
+                  width: '40px',
+                  height: '40px',
+                  borderRadius: '10px',
+                  backgroundColor: '#DBEAFE',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#2563EB',
+                }}
+              >
+                <Lock size={22} />
+              </div>
+              <div>
+                <h4 style={{ margin: 0, fontSize: '14.5px', fontWeight: 800, color: '#1E40AF' }}>
+                  نسخة سابقة مؤرشفة — تم استنساخ إصدار أحدث بالفعل (v{newerVersion.versionNumber})
+                </h4>
+                <p style={{ margin: '3px 0 0 0', fontSize: '12.5px', color: '#1D4ED8' }}>
+                  هذه النسخة (v{planData?.versionNumber || 1}) مقفلة ومؤرشفة للقراءة فقط بعد استنساخ الإصدار الجديد لمعالجة ملاحظات المشرف الوزاري ({completionRequest.supervisorName}).
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                switchPlan(newerVersion.planType, newerVersion.planId);
+              }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '9px 18px',
+                borderRadius: '8px',
+                backgroundColor: '#2563EB',
+                color: '#FFFFFF',
+                border: 'none',
+                fontSize: '13px',
+                fontWeight: 800,
+                cursor: 'pointer',
+                boxShadow: '0 2px 6px rgba(37, 99, 235, 0.25)',
+              }}
+            >
+              <GitBranch size={16} />
+              <span>الانتقال إلى النسخة الأحدث (v{newerVersion.versionNumber})</span>
+            </button>
+          </div>
+        ) : (
+          <div
+            style={{
+              padding: '16px 20px',
+              borderRadius: '12px',
+              backgroundColor: '#FFFBEB',
+              border: '1.5px solid #F59E0B',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: '12px',
+              boxShadow: '0 2px 8px rgba(245, 158, 11, 0.15)',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div
+                style={{
+                  width: '40px',
+                  height: '40px',
+                  borderRadius: '10px',
+                  backgroundColor: '#FEF3C7',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#D97706',
+                }}
+              >
+                <ShieldAlert size={22} />
+              </div>
+              <div>
+                <h4 style={{ margin: 0, fontSize: '14.5px', fontWeight: 800, color: '#92400E' }}>
+                  طلب استكمال رسمي من المشرف الوزاري ({completionRequest.supervisorName})
+                </h4>
+                <p style={{ margin: '3px 0 0 0', fontSize: '12.5px', color: '#B45309' }}>
+                  الخطة الحالية مقفلة بعد التسليم السابق. يمكنك الضغط على «إنشاء نسخة جديدة (v{(planData?.versionNumber || 1) + 1})» لاستنساخ الخطة ومتابعة التعديلات المطلوبة.
+                </p>
+              </div>
+            </div>
+            {!isPrincipal && (
+              <button
+                type="button"
+                onClick={handleCloneVersion}
+                disabled={isCloningVersion}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '9px 18px',
+                  borderRadius: '8px',
+                  backgroundColor: '#D97706',
+                  color: '#FFFFFF',
+                  border: 'none',
+                  fontSize: '13px',
+                  fontWeight: 800,
+                  cursor: isCloningVersion ? 'not-allowed' : 'pointer',
+                  boxShadow: '0 2px 6px rgba(217, 119, 6, 0.3)',
+                }}
+              >
+                <GitBranch size={16} />
+                <span>{isCloningVersion ? 'جاري الاستنساخ...' : `إنشاء نسخة جديدة (v${(planData?.versionNumber || 1) + 1})`}</span>
+              </button>
+            )}
+          </div>
+        )
+      )}
+
+      {/* ReadOnly banner for archived/submitted plans without completion request */}
+      {!completionRequest && (planData?.status === 'Archived' || planData?.status === 'Submitted') && (
         <div
           style={{
-            padding: '16px 20px',
-            borderRadius: '12px',
-            backgroundColor: '#FFFBEB',
-            border: '1.5px solid #F59E0B',
+            padding: '14px 18px',
+            borderRadius: '10px',
+            backgroundColor: '#F8FAFC',
+            border: '1.5px solid #CBD5E1',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
             flexWrap: 'wrap',
             gap: '12px',
-            boxShadow: '0 2px 8px rgba(245, 158, 11, 0.15)',
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <div
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <Lock size={18} color="#64748B" />
+            <span style={{ fontSize: '13px', color: '#475569', fontWeight: 600 }}>
+              {planData?.status === 'Archived'
+                ? '🔒 هذه النسخة من خطة التحسين مؤرشفة كمرجع تاريخي للقراءة فقط.'
+                : '📤 هذه الخطة مرفوعة للاعتماد الوزاري ومقفلة عن التعديل.'}
+            </span>
+          </div>
+          {newerVersion && (
+            <button
+              type="button"
+              onClick={() => {
+                switchPlan(newerVersion.planType, newerVersion.planId);
+              }}
               style={{
-                width: '40px',
-                height: '40px',
-                borderRadius: '10px',
-                backgroundColor: '#FEF3C7',
-                display: 'flex',
+                display: 'inline-flex',
                 alignItems: 'center',
-                justifyContent: 'center',
-                color: '#D97706',
+                gap: '5px',
+                padding: '6px 14px',
+                borderRadius: '6px',
+                backgroundColor: '#2563EB',
+                color: '#FFFFFF',
+                border: 'none',
+                fontSize: '12px',
+                fontWeight: 700,
+                cursor: 'pointer',
               }}
             >
-              <ShieldAlert size={22} />
-            </div>
-            <div>
-              <h4 style={{ margin: 0, fontSize: '14.5px', fontWeight: 800, color: '#92400E' }}>
-                طلب استكمال رسمي من المشرف الوزاري ({completionRequest.supervisorName})
-              </h4>
-              <p style={{ margin: '3px 0 0 0', fontSize: '12.5px', color: '#B45309' }}>
-                الخطة الحالية مقفلة بعد التسليم السابق. يمكنك الضغط على «إنشاء نسخة جديدة (v2)» لاستنساخ الخطة ومتابعة التعديلات المطلوبة.
-              </p>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={handleCloneVersion}
-            disabled={isCloningVersion}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '9px 18px',
-              borderRadius: '8px',
-              backgroundColor: '#D97706',
-              color: '#FFFFFF',
-              border: 'none',
-              fontSize: '13px',
-              fontWeight: 800,
-              cursor: isCloningVersion ? 'not-allowed' : 'pointer',
-              boxShadow: '0 2px 6px rgba(217, 119, 6, 0.3)',
-            }}
-          >
-            <GitBranch size={16} />
-            <span>{isCloningVersion ? 'جاري الاستنساخ...' : `إنشاء نسخة جديدة (v${(planData?.versionNumber || 1) + 1})`}</span>
-          </button>
+              <GitBranch size={14} />
+              الانتقال للنسخة الأحدث (v{newerVersion.versionNumber})
+            </button>
+          )}
         </div>
       )}
 
@@ -1078,7 +1254,7 @@ export const ImprovementPlanPage: React.FC<ImprovementPlanPageProps> = ({
             <span>{isExportingWorkbook ? 'جاري التصدير...' : '📗 تصدير إكسل شامل (المصنف الموحد)'}</span>
           </button>
 
-          {!readOnly && planData?.status !== 'Archived' && planData?.status !== 'Submitted' && (
+          {!isPlanReadOnly && (
             <>
               <button
                 type="button"
@@ -1102,7 +1278,10 @@ export const ImprovementPlanPage: React.FC<ImprovementPlanPageProps> = ({
               </button>
 
               <button
-                onClick={() => setIsAddModalOpen(true)}
+                onClick={() => {
+                  setPreselectedAreaId(null);
+                  setIsAddModalOpen(true);
+                }}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -1230,6 +1409,198 @@ export const ImprovementPlanPage: React.FC<ImprovementPlanPageProps> = ({
           </div>
         </div>
       </div>
+
+      {/* 2.5 Unscheduled Adopted Areas Alert Banner (شريط تنبيهي: مجالات متبناة بانتظار صياغة إجراءاتها التنفيذية - الخيار ب) */}
+      {areasWithoutActions.length > 0 && (
+        <div
+          data-testid="unscheduled-areas-banner"
+          style={{
+            backgroundColor: '#FFFBEB',
+            border: '1px solid #FCD34D',
+            borderRadius: '14px',
+            padding: '18px 22px',
+            marginBottom: '20px',
+            boxShadow: '0 2px 6px rgba(217, 119, 6, 0.08)',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+              <div
+                style={{
+                  width: '38px',
+                  height: '38px',
+                  borderRadius: '10px',
+                  backgroundColor: '#FEF3C7',
+                  border: '1px solid #FDE68A',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                  marginTop: '2px',
+                }}
+              >
+                <AlertTriangle size={20} color="#D97706" />
+              </div>
+              <div>
+                <h4 style={{ margin: 0, fontSize: '15px', fontWeight: 800, color: '#92400E' }}>
+                  يوجد ({areasWithoutActions.length}) مجالات تحسين متبناة بانتظار صياغة إجراءاتها التنفيذية
+                </h4>
+                <p style={{ margin: '4px 0 0', fontSize: '12.5px', color: '#B45309', lineHeight: 1.5 }}>
+                  تم اعتماد هذه المجالات من نتائج ومقترحات التقييم الذاتي ولكن لم تُحدد لها بعد مهام أو مسؤولين لتنفيذها ميدانياً. يمكنك صياغة إجراء تنفيذي مباشر لكل مجال لتفعيله ضمن مصفوفة العمل أدناه.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '16px' }}>
+            {areasWithoutActions.map((area) => (
+              <div
+                key={area.areaId}
+                style={{
+                  backgroundColor: '#FFFFFF',
+                  borderRadius: '10px',
+                  border: '1px solid #FDE68A',
+                  padding: '12px 16px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  flexWrap: 'wrap',
+                  gap: '12px',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: '1 1 340px' }}>
+                  {area.indicatorCode && (
+                    <span
+                      style={{
+                        padding: '3px 8px',
+                        borderRadius: '6px',
+                        backgroundColor: '#F1F5F9',
+                        color: '#334155',
+                        fontSize: '11px',
+                        fontWeight: 800,
+                        border: '1px solid #E2E8F0',
+                        fontFamily: 'monospace',
+                        flexShrink: 0,
+                      }}
+                    >
+                      {area.indicatorCode}
+                    </span>
+                  )}
+                  <div>
+                    <div style={{ fontSize: '13.5px', fontWeight: 800, color: '#0F172A' }}>
+                      {area.name}
+                    </div>
+                    {area.description && (
+                      <div style={{ fontSize: '11.5px', color: '#64748B', marginTop: '2px' }}>
+                        {area.description}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                  {/* شارة الحالة الصريحة للمجال */}
+                  <span
+                    style={{
+                      padding: '4px 10px',
+                      borderRadius: '6px',
+                      fontSize: '11px',
+                      fontWeight: 800,
+                      backgroundColor:
+                        area.status === 'completed'
+                          ? '#ECFDF5'
+                          : area.status === 'in_progress'
+                          ? '#EFF6FF'
+                          : '#FEF3C7',
+                      color:
+                        area.status === 'completed'
+                          ? '#059669'
+                          : area.status === 'in_progress'
+                          ? '#2563EB'
+                          : '#D97706',
+                      border:
+                        area.status === 'completed'
+                          ? '1px solid #A7F3D0'
+                          : area.status === 'in_progress'
+                          ? '1px solid #BFDBFE'
+                          : '1px solid #FDE68A',
+                    }}
+                  >
+                    {area.status === 'completed'
+                      ? '✓ مكتمل التنفيذ'
+                      : area.status === 'in_progress'
+                      ? '🔄 قيد التنفيذ'
+                      : '⏳ بانتظار صياغة إجراء'}
+                  </span>
+
+                  <span
+                    style={{
+                      padding: '4px 10px',
+                      borderRadius: '6px',
+                      fontSize: '11px',
+                      fontWeight: 700,
+                      backgroundColor:
+                        area.priority === 'High' ? '#FEF2F2' : area.priority === 'Medium' ? '#EFF6FF' : '#F8FAFC',
+                      color:
+                        area.priority === 'High' ? '#DC2626' : area.priority === 'Medium' ? '#2563EB' : '#64748B',
+                      border:
+                        area.priority === 'High' ? '1px solid #FECACA' : area.priority === 'Medium' ? '1px solid #BFDBFE' : '1px solid #E2E8F0',
+                    }}
+                  >
+                    أولوية {area.priority === 'High' ? 'عالية' : area.priority === 'Medium' ? 'متوسطة' : 'منخفضة'}
+                  </span>
+
+                  {!isPlanReadOnly ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPreselectedAreaId(area.areaId);
+                        setIsAddModalOpen(true);
+                      }}
+                      style={{
+                        padding: '7px 14px',
+                        borderRadius: '8px',
+                        backgroundColor: '#059669',
+                        color: '#FFFFFF',
+                        border: 'none',
+                        fontSize: '12px',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        boxShadow: '0 1px 2px rgba(5, 150, 105, 0.2)',
+                      }}
+                    >
+                      <Plus size={14} />
+                      <span>صياغة إجراء تنفيذي لهذا المجال</span>
+                    </button>
+                  ) : (
+                    <span
+                      style={{
+                        padding: '6px 12px',
+                        borderRadius: '8px',
+                        backgroundColor: '#FEF3C7',
+                        color: '#92400E',
+                        border: '1px solid #FDE68A',
+                        fontSize: '11.5px',
+                        fontWeight: 700,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                      }}
+                      title="وضع الملاحظة والإقرار: صياغة الإجراءات محصورة بالمقيم المعتمد"
+                    >
+                      <Lock size={12} />
+                      <span>للاطلاع الإداري (بانتظار جدولة المقيم)</span>
+                    </span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* 3. Actions Management Table */}
       <div
@@ -1791,12 +2162,50 @@ export const ImprovementPlanPage: React.FC<ImprovementPlanPageProps> = ({
               {sortedActions.length === 0 ? (
                 <tr>
                   <td colSpan={11} style={{ padding: '48px 20px', textAlign: 'center', color: '#64748B' }}>
-                    <div style={{ fontSize: '15px', fontWeight: 700, color: '#0F172A', marginBottom: '6px' }}>
-                      لا توجد إجراءات مطابقة لشروط البحث أو التصفية الحالية
-                    </div>
-                    <div style={{ fontSize: '12.5px' }}>
-                      يمكنك إعادة تعيين الفلاتر أو النقر على «إضافة إجراء تنفيذي جديد».
-                    </div>
+                    {actions.length === 0 && areasWithoutActions.length > 0 ? (
+                      <div data-testid="empty-actions-unscheduled-hint">
+                        <div style={{ fontSize: '15.5px', fontWeight: 800, color: '#0F172A', marginBottom: '6px' }}>
+                          الخطة لا تتضمن أي إجراءات تنفيذية مجدولة بعد
+                        </div>
+                        <div style={{ fontSize: '13px', color: '#64748B', maxWidth: '520px', margin: '0 auto 16px', lineHeight: 1.6 }}>
+                          يوجد ({areasWithoutActions.length}) مجالات تحسين متبناة في هذه الخطة بانتظار صياغة مهامها ومسؤوليها في الشريط التنبيهي أعلاه.
+                        </div>
+                        {!isPlanReadOnly && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setPreselectedAreaId(areasWithoutActions[0]?.areaId || null);
+                              setIsAddModalOpen(true);
+                            }}
+                            style={{
+                              padding: '8px 18px',
+                              borderRadius: '8px',
+                              backgroundColor: '#059669',
+                              color: '#FFFFFF',
+                              border: 'none',
+                              fontSize: '12.5px',
+                              fontWeight: 700,
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                            }}
+                          >
+                            <Plus size={14} />
+                            <span>صياغة أول إجراء تنفيذي الآن</span>
+                          </button>
+                        )}
+                      </div>
+                    ) : (
+                      <div>
+                        <div style={{ fontSize: '15px', fontWeight: 700, color: '#0F172A', marginBottom: '6px' }}>
+                          لا توجد إجراءات مطابقة لشروط البحث أو التصفية الحالية
+                        </div>
+                        <div style={{ fontSize: '12.5px' }}>
+                          يمكنك إعادة تعيين الفلاتر أو النقر على «إضافة إجراء تنفيذي جديد».
+                        </div>
+                      </div>
+                    )}
                   </td>
                 </tr>
               ) : (
@@ -2156,10 +2565,10 @@ export const ImprovementPlanPage: React.FC<ImprovementPlanPageProps> = ({
                             cursor: 'pointer',
                             transition: 'all 0.15s ease',
                           }}
-                          title={readOnly ? 'استعراض تفاصيل الإجراء' : 'تعديل كافة بيانات الإجراء والمتابعة الميدانية'}
+                          title={isPlanReadOnly ? 'استعراض تفاصيل الإجراء (للقراءة فقط)' : 'تعديل كافة بيانات الإجراء والمتابعة الميدانية'}
                         >
                           <Edit2 size={12} />
-                          {readOnly ? 'تفاصيل' : 'تعديل'}
+                          {isPlanReadOnly ? 'استعراض' : 'تعديل'}
                         </button>
                       </td>
                     </tr>
@@ -2261,13 +2670,14 @@ export const ImprovementPlanPage: React.FC<ImprovementPlanPageProps> = ({
                       style={{
                         padding: '1px 8px',
                         borderRadius: '4px',
-                        backgroundColor: '#DBEAFE',
-                        color: '#1E40AF',
+                        backgroundColor: note.reviewerRole === 'school_principal' ? '#FEF3C7' : '#DBEAFE',
+                        color: note.reviewerRole === 'school_principal' ? '#92400E' : '#1E40AF',
+                        border: `1px solid ${note.reviewerRole === 'school_principal' ? '#FCD34D' : '#BFDBFE'}`,
                         fontSize: '11px',
                         fontWeight: 700,
                       }}
                     >
-                      {note.roleArabic}
+                      {note.roleArabic || (note.reviewerRole === 'school_principal' ? 'مدير مدرسة' : 'مقيم')}
                     </span>
                   </div>
                   {note.createdAt && (
@@ -2284,14 +2694,14 @@ export const ImprovementPlanPage: React.FC<ImprovementPlanPageProps> = ({
           </div>
         )}
 
-        {/* Add Note Input if not ReadOnly */}
-        {!readOnly && planData && planData.planId > 0 && (
+        {/* Add Note Input if not ReadOnly OR if isPrincipal */}
+        {(!readOnly || isPrincipal) && planData && planData.planId > 0 && planData.status !== 'Archived' && (
           <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginTop: '6px' }}>
             <input
               type="text"
               value={newReviewNoteText}
               onChange={(e) => setNewReviewNoteText(e.target.value)}
-              placeholder="اكتب ملاحظة أو توجيهاً داخلياً على الخطة..."
+              placeholder={isPrincipal ? 'اكتب ملاحظة أو توجيهاً إدارياً من مدير المدرسة على الخطة...' : 'اكتب ملاحظة أو توجيهاً داخلياً على الخطة...'}
               style={{
                 flex: 1,
                 padding: '9px 14px',
@@ -2314,7 +2724,7 @@ export const ImprovementPlanPage: React.FC<ImprovementPlanPageProps> = ({
               style={{
                 padding: '9px 18px',
                 borderRadius: '8px',
-                backgroundColor: '#2563EB',
+                backgroundColor: isPrincipal ? '#D97706' : '#2563EB',
                 color: '#FFFFFF',
                 border: 'none',
                 fontSize: '13px',
@@ -2328,7 +2738,7 @@ export const ImprovementPlanPage: React.FC<ImprovementPlanPageProps> = ({
               }}
             >
               <Send size={14} />
-              <span>{isSubmittingReviewNote ? 'جاري الإرسال...' : 'إضافة ملاحظة'}</span>
+              <span>{isSubmittingReviewNote ? 'جاري الإرسال...' : isPrincipal ? 'إضافة ملاحظة المدير' : 'إضافة ملاحظة'}</span>
             </button>
           </div>
         )}
@@ -2352,7 +2762,11 @@ export const ImprovementPlanPage: React.FC<ImprovementPlanPageProps> = ({
       {/* Add Action Modal - Pass all available areas for school/evaluation */}
       <AddActionModal
         isOpen={isAddModalOpen}
-        onClose={() => setIsAddModalOpen(false)}
+        onClose={() => {
+          setIsAddModalOpen(false);
+          setPreselectedAreaId(null);
+        }}
+        initialAreaId={preselectedAreaId}
         areas={planData?.availableAreas && planData.availableAreas.length > 0 ? planData.availableAreas : planData?.areas || []}
         onAddAction={async (payload) => {
           await addAction(payload);
@@ -2372,7 +2786,7 @@ export const ImprovementPlanPage: React.FC<ImprovementPlanPageProps> = ({
           addToast('success', 'تم حفظ وتحديث بيانات الإجراء التنفيذي بنجاح.');
         }}
         isSubmitting={isSubmitting}
-        readOnly={readOnly || planData?.status === 'Archived' || planData?.status === 'Submitted'}
+        readOnly={isPlanReadOnly}
       />
 
       {/* Toasts */}

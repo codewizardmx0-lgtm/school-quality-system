@@ -20,6 +20,7 @@ interface StandardsTreePageProps {
   onSelectIndicator: (indicatorId: number) => void;
   onNavigate: (screen: EvaluatorScreen, param?: number) => void;
   isLocked?: boolean;
+  isPrincipal?: boolean;
   onResetSuccess?: () => void;
 }
 
@@ -27,6 +28,7 @@ export const StandardsTreePage: React.FC<StandardsTreePageProps> = ({
   onSelectIndicator,
   onNavigate,
   isLocked = false,
+  isPrincipal = false,
   onResetSuccess,
 }) => {
   const { user } = useAuth();
@@ -408,7 +410,7 @@ export const StandardsTreePage: React.FC<StandardsTreePageProps> = ({
                       </span>
                     )}
 
-                    {!isLocked && (stats.scoredIndicators > 0 || stats.totalEvidences > 0) && (
+                    {!isLocked && !isPrincipal && (stats.scoredIndicators > 0 || stats.totalEvidences > 0) && (
                       <button
                         type="button"
                         onClick={(e) => {
@@ -588,7 +590,7 @@ export const StandardsTreePage: React.FC<StandardsTreePageProps> = ({
                                   }}
                                 >
                                   <SlidersHorizontal size={14} />
-                                  <span>{isScored ? 'تعديل التقدير والشواهد' : 'رصد التقدير والشواهد'}</span>
+                                  <span>{isPrincipal ? (isScored ? 'استعراض التقدير والشواهد' : 'استعراض مؤشر التقييم') : (isScored ? 'تعديل التقدير والشواهد' : 'رصد التقدير والشواهد')}</span>
                                   <ArrowLeft size={14} />
                                 </button>
                               </div>

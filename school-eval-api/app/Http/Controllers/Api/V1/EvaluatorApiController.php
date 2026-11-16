@@ -28,6 +28,7 @@ use App\Models\SchoolDocument;
 use App\Models\ScoreLevel;
 use App\Models\Standard;
 use App\Models\StandardVersion;
+use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -1702,6 +1703,7 @@ class EvaluatorApiController extends Controller
                 'areaId' => $a->area_id,
                 'name' => $a->name,
                 'priority' => $a->priority,
+                'status' => $a->status ?? 'pending_action',
                 'targetScore' => $a->target_score ?? 3,
                 'indicatorId' => $a->indicator_id,
                 'indicatorCode' => $a->indicator?->code ?? '',
@@ -1819,6 +1821,7 @@ class EvaluatorApiController extends Controller
                     }
                 }
 
+                $existingLinks = collect($existingLinks)->unique('planId')->values()->all();
                 $firstValidLink = !empty($existingLinks) ? $existingLinks[0] : null;
 
                 $currentScore = $a->result?->score;
@@ -1832,6 +1835,7 @@ class EvaluatorApiController extends Controller
                     'areaId' => $a->area_id,
                     'name' => $a->name,
                     'priority' => $a->priority,
+                    'status' => $a->status ?? 'pending_action',
                     'score' => $currentScore,
                     'targetScore' => $a->target_score ?? 3,
                     'indicatorId' => $a->indicator_id,
@@ -3771,5 +3775,309 @@ class EvaluatorApiController extends Controller
             'resetResultsCount' => $summary['resetResultsCount'],
             'unlinkedEvidencesCount' => $summary['unlinkedEvidencesCount'],
         ], "تم تصفير المعيار ({$standard->name}) بنجاح وإعادة مؤشراته لقائمة الاستيفاء.");
+    }
+
+    /**
+     * GET /api/v1/evaluator/audit-hub
+     * Comprehensive Executive Audit and Review Hub for school principal and evaluator
+     */
+    public function getAuditHub(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        $evaluation = $this->getActiveEvaluation($request);
+        $schoolId = $evaluation->school_id;
+
+        // 1. تحديد المستخدمين المعنيين (مدير المدرسة والمقيم)
+        $principalUser = User::where('school_id', $schoolId)
+            ->whereHas('roles', fn($q) => $q->where('role_name', 'school_principal'))
+            ->first();
+
+        // 2. جلب شجرة المعايير والمؤشرات الـ 109
+        $version = StandardVersion::where('status', 'Active')->orderBy('version_id', 'desc')->first()
+            ?? StandardVersion::orderBy('version_id', 'desc')->first();
+
+        $standards = Standard::where('version_id', $version?->version_id ?? 1)
+            ->with(['subStandards.indicators.evidenceRequirements'])
+            ->orderBy('code')
+            ->get();
+
+        // 3. جلب نتائج التقييم مع الملاحظات وكتابها
+        $results = EvaluationResult::where('evaluation_id', $evaluation->evaluation_id)
+            ->with(['notes.author'])
+            ->get()
+            ->keyBy('indicator_id');
+
+        // 4. جلب روابط الشواهد المربوطة لحساب تغطية المتطلبات بدقة
+        $linksByIndicator = EvidenceLink::where('evaluation_id', $evaluation->evaluation_id)
+            ->get()
+            ->groupBy('indicator_id');
+
+        // 5. بناء قائمة المؤشرات الـ 109 مع فحص مراجعة المدير وتغطية المتطلبات
+        $indicatorsList = [];
+        $reviewedCount = 0;
+
+        foreach ($standards as $std) {
+            foreach ($std->subStandards as $sub) {
+                foreach ($sub->indicators as $ind) {
+                    $res = $results->get($ind->indicator_id);
+                    $notes = $res ? $res->notes : collect();
+
+                    // حساب تغطية المتطلبات لهذا المؤشر بدقة
+                    $indLinks = $linksByIndicator->get($ind->indicator_id, collect());
+                    $evCount = $indLinks->count();
+                    $mandatoryIds = $ind->evidenceRequirements->where('required', true)->pluck('requirement_id')->map(fn($x) => (int)$x)->all();
+                    $mandatoryCnt = count($mandatoryIds);
+                    $totalReqsCnt = $ind->evidenceRequirements->count();
+
+                    $explicitIds = [];
+                    $legacyCnt = 0;
+                    foreach ($indLinks as $lnk) {
+                        if (strtolower($lnk->status ?? '') !== 'completed') {
+                            continue;
+                        }
+                        $cov = $lnk->covered_requirements;
+                        if (is_array($cov)) {
+                            foreach ($cov as $rid) {
+                                $intId = (int)$rid;
+                                if (in_array($intId, $mandatoryIds, true)) {
+                                    $explicitIds[$intId] = true;
+                                }
+                            }
+                        } elseif ($cov === null) {
+                            $legacyCnt++;
+                        }
+                    }
+
+                    $coveredCnt = $mandatoryCnt > 0
+                        ? min($mandatoryCnt, count($explicitIds) + $legacyCnt)
+                        : ($totalReqsCnt > 0 ? min($totalReqsCnt, count($explicitIds) + $legacyCnt) : $evCount);
+
+                    $isFullyCovered = $mandatoryCnt > 0 ? ($coveredCnt >= $mandatoryCnt) : ($evCount > 0);
+
+                    // فحص هل توجد ملاحظة مدونة من قبل مدير المدرسة
+                    $principalNotes = $notes->filter(function ($n) use ($principalUser) {
+                        if ($principalUser && (int)$n->author_user_id === (int)$principalUser->user_id) {
+                            return true;
+                        }
+                        $author = $n->author;
+                        if (!$author) return false;
+                        return in_array($author->role ?? '', ['school_principal', 'principal'])
+                            || ($author->user_type === 'school' && $author->hasRole('school_principal'));
+                    })->values();
+
+                    $hasReview = $principalNotes->isNotEmpty();
+                    if ($hasReview) {
+                        $reviewedCount++;
+                    }
+
+                    $latestPrincipalNote = $principalNotes->sortByDesc('note_id')->first();
+                    $allFormattedNotes = $notes->map(fn($n) => [
+                        'noteId'     => $n->note_id,
+                        'authorName' => $n->author?->full_name ?? $n->author?->username ?? 'مراجع',
+                        'authorRole' => $n->author?->hasRole('school_principal') ? 'مدير المدرسة' : 'مقيم جودة',
+                        'isPrincipal'=> $n->author?->hasRole('school_principal') || ($principalUser && (int)$n->author_user_id === (int)$principalUser->user_id),
+                        'text'       => $n->text ?? $n->content ?? '',
+                        'createdAt'  => $n->created_at?->toIso8601String(),
+                    ])->values()->all();
+
+                    $score = $res?->score;
+                    $scoreLabel = match ($score) {
+                        3 => 'متقدم',
+                        2 => 'كافٍ',
+                        1 => 'محدود',
+                        0 => 'غير متوفر',
+                        default => 'غير مرصود',
+                    };
+
+                    $indicatorsList[] = [
+                        'indicatorId'                => (int) $ind->indicator_id,
+                        'indicatorCode'              => $ind->code,
+                        'indicatorName'              => $ind->name,
+                        'standardId'                 => (int) $std->standard_id,
+                        'standardCode'               => $std->code,
+                        'standardName'               => $std->name,
+                        'subStandardCode'            => $sub->code,
+                        'subStandardName'            => $sub->name,
+                        'resultId'                   => $res ? (int) $res->result_id : null,
+                        'score'                      => $score !== null ? (int) $score : null,
+                        'scoreLabel'                 => $scoreLabel,
+                        'evidenceCount'              => $evCount,
+                        'mandatoryRequirementsCount' => $mandatoryCnt,
+                        'totalRequirementsCount'     => $totalReqsCnt,
+                        'coveredRequirementsCount'   => $coveredCnt,
+                        'isRequirementFullyCovered'  => $isFullyCovered,
+                        'hasPrincipalReview'         => $hasReview,
+                        'principalNotesCount'        => $principalNotes->count(),
+                        'latestPrincipalNote'        => $latestPrincipalNote ? [
+                            'noteId'     => $latestPrincipalNote->note_id,
+                            'authorName' => $latestPrincipalNote->author?->full_name ?? 'مدير المدرسة',
+                            'text'       => $latestPrincipalNote->text ?? $latestPrincipalNote->content ?? '',
+                            'createdAt'  => $latestPrincipalNote->created_at?->toIso8601String(),
+                        ] : null,
+                        'allNotes'                   => $allFormattedNotes,
+                    ];
+                }
+            }
+        }
+
+        $totalIndicators = count($indicatorsList);
+        $pendingIndicators = max(0, $totalIndicators - $reviewedCount);
+        $coveragePercentage = $totalIndicators > 0 ? round(($reviewedCount / $totalIndicators) * 100) : 0;
+
+        // 6. جلب خطط التحسين المدرسية الثلاث مع مراجعاتها
+        $plans = ImprovementPlan::where('school_id', $schoolId)
+            ->where('cycle_id', $evaluation->cycle_id)
+            ->with(['reviewNotes.author', 'actions'])
+            ->orderBy('plan_id', 'desc')
+            ->get()
+            ->map(function ($p) use ($principalUser) {
+                $pNotes = $p->reviewNotes->filter(function ($n) use ($principalUser) {
+                    if ($principalUser && (int)$n->author_user_id === (int)$principalUser->user_id) return true;
+                    return in_array($n->reviewer_role ?? '', ['school_principal', 'principal']);
+                })->values();
+
+                $latestNote = $pNotes->sortByDesc('note_id')->first() ?? $p->reviewNotes->sortByDesc('note_id')->first();
+
+                return [
+                    'planId'               => (int) $p->plan_id,
+                    'title'                => $p->title,
+                    'planType'             => $p->plan_type,
+                    'versionNumber'        => (int) ($p->version_number ?? 1),
+                    'versionTag'           => $p->version_tag,
+                    'status'               => $p->status,
+                    'progressDescription'  => $p->progress_description,
+                    'actionsCount'         => $p->actions->count(),
+                    'hasPrincipalReview'   => $pNotes->isNotEmpty(),
+                    'reviewNotesCount'     => $p->reviewNotes->count(),
+                    'principalNotesCount'  => $pNotes->count(),
+                    'latestNote'           => $latestNote ? [
+                        'authorName' => $latestNote->author?->full_name ?? 'المراجع',
+                        'role'       => $latestNote->reviewer_role ?? 'مدير المدرسة',
+                        'text'       => $latestNote->text ?? '',
+                        'createdAt'  => $latestNote->created_at?->toIso8601String(),
+                    ] : null,
+                ];
+            });
+
+        // 7. طلبات الاستكمال المفتوحة
+        $submission = EvaluationSubmission::whereHas('report', fn($q) => $q->where('evaluation_id', $evaluation->evaluation_id))
+            ->orderBy('submission_id', 'desc')
+            ->first();
+
+        $completionRequestData = null;
+        if ($submission) {
+            $req = CompletionRequest::where('submission_id', $submission->submission_id)
+                ->with(['items.indicator', 'issuedBy'])
+                ->first();
+
+            if ($req) {
+                $completionRequestData = [
+                    'requestId'      => (int) $req->request_id,
+                    'status'         => $req->status,
+                    'supervisorName' => $req->issuedBy?->full_name ?? 'المشرف الوزاري',
+                    'notes'          => $req->notes ?? '',
+                    'totalItems'     => $req->items->count(),
+                    'pendingItems'   => $req->items->where('status', 'Pending')->count(),
+                    'completedItems' => $req->items->where('status', 'Completed')->count(),
+                ];
+            }
+        }
+
+        // 8. حالة المراجعة النهائية والإقرار الإداري
+        $report = Report::where('evaluation_id', $evaluation->evaluation_id)
+            ->with(['internalReviewNotes.author'])
+            ->orderBy('report_id', 'desc')
+            ->first();
+
+        $principalAckNote = null;
+        if ($report) {
+            $principalAckNote = $report->internalReviewNotes->first(function ($n) use ($principalUser) {
+                if ($principalUser && (int)$n->author_user_id === (int)$principalUser->user_id) return true;
+                return $n->author?->hasRole('school_principal');
+            });
+        }
+
+        $finalReviewData = [
+            'reportId'                  => $report ? (int) $report->report_id : null,
+            'isGenerated'               => (bool) $report,
+            'isLocked'                  => (bool) ($evaluation->status === 'Completed' || $submission),
+            'hasPrincipalAcknowledgment'=> (bool) $principalAckNote,
+            'acknowledgedAt'            => $principalAckNote?->created_at?->toIso8601String(),
+            'acknowledgmentText'        => $principalAckNote?->content ?? $principalAckNote?->text ?? null,
+        ];
+
+        return ApiResponse::success([
+            'schoolId'   => (int) $schoolId,
+            'schoolName' => $evaluation->school?->school_name ?? 'مدرسة الفاروق الأساسية للبنين',
+            'summary'    => [
+                'totalIndicators'            => $totalIndicators,
+                'reviewedIndicatorsCount'    => $reviewedCount,
+                'pendingIndicatorsCount'     => $pendingIndicators,
+                'reviewCoveragePercentage'   => $coveragePercentage,
+                'plansCount'                 => $plans->count(),
+                'reviewedPlansCount'         => $plans->where('hasPrincipalReview', true)->count(),
+                'hasOpenCompletionRequest'   => $completionRequestData !== null && $completionRequestData['status'] === 'Pending',
+                'finalReviewAcknowledged'    => $finalReviewData['hasPrincipalAcknowledgment'],
+            ],
+            'indicators'         => $indicatorsList,
+            'plans'              => $plans,
+            'completionRequest'  => $completionRequestData,
+            'finalReview'        => $finalReviewData,
+        ]);
+    }
+
+    /**
+     * POST /api/v1/evaluator/audit-hub/indicators/{indicatorId}/review-note
+     * Quick review submission from the Audit Hub
+     */
+    public function storeIndicatorReviewNote(Request $request, int $indicatorId): JsonResponse
+    {
+        $user = $request->user();
+
+        if (!$user->hasPermission('reviews.write') && !$user->hasPermission('evaluations.edit')) {
+            return ApiResponse::forbidden('غير مصرح لك بتدوين ملاحظات المراجعة الإدارية.');
+        }
+
+        $validator = Validator::make($request->all(), [
+            'text' => ['required', 'string', 'min:3', 'max:2000'],
+        ], [
+            'text.required' => 'نص ملاحظة المراجعة إلزامي.',
+            'text.min'      => 'يجب ألا يقل نص الملاحظة عن 3 أحرف.',
+            'text.max'      => 'لا يمكن أن يتجاوز نص الملاحظة 2000 حرف.',
+        ]);
+
+        if ($validator->fails()) {
+            return ApiResponse::validationError($validator->errors()->toArray());
+        }
+
+        $evaluation = $this->getActiveEvaluation($request);
+
+        // جلب أو إنشاء نتيجة التقييم لهذا المؤشر لربط الملاحظة بها
+        $result = EvaluationResult::firstOrCreate([
+            'evaluation_id' => $evaluation->evaluation_id,
+            'indicator_id'  => $indicatorId,
+        ], [
+            'standard_version_id' => $evaluation->cycle?->version_id ?? 1,
+            'evaluator_user_id'   => $user->user_id,
+            'score'               => null,
+            'completion_status'   => 'Pending',
+            'textual_result'      => 'بانتظار استكمال الرصد والمراجعة',
+        ]);
+
+        $note = Note::create([
+            'result_id'      => $result->result_id,
+            'author_user_id' => $user->user_id,
+            'text'           => $request->input('text'),
+        ]);
+
+        return ApiResponse::success([
+            'noteId'     => $note->note_id,
+            'indicatorId'=> $indicatorId,
+            'resultId'   => $result->result_id,
+            'authorName' => $user->full_name ?? $user->username ?? 'مدير المدرسة',
+            'authorRole' => $user->hasRole('school_principal') ? 'مدير المدرسة' : 'مقيم جودة',
+            'text'       => $note->text,
+            'createdAt'  => $note->created_at?->toIso8601String(),
+        ], 'تم تسجيل ملاحظة المراجعة الإدارية للمؤشر بنجاح.');
     }
 }

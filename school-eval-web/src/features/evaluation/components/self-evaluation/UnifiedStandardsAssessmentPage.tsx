@@ -17,6 +17,7 @@ interface UnifiedStandardsAssessmentPageProps {
   onSelectIndicator: (indicatorId: number) => void;
   onNavigate: (screen: EvaluatorScreen, param?: number) => void;
   isLocked?: boolean;
+  isPrincipal?: boolean;
 }
 
 export const UnifiedStandardsAssessmentPage: React.FC<UnifiedStandardsAssessmentPageProps> = ({
@@ -25,6 +26,7 @@ export const UnifiedStandardsAssessmentPage: React.FC<UnifiedStandardsAssessment
   onSelectIndicator,
   onNavigate,
   isLocked = false,
+  isPrincipal = false,
 }) => {
   const [activeTab, setActiveTab] = useState<'tree' | 'rubric' | 'pending'>(initialTab);
   const [currentIndicatorId, setCurrentIndicatorId] = useState<number | null>(selectedIndicatorId ?? null);
@@ -218,6 +220,7 @@ export const UnifiedStandardsAssessmentPage: React.FC<UnifiedStandardsAssessment
             onSelectIndicator={handleIndicatorSelect}
             onNavigate={onNavigate}
             isLocked={isLocked}
+            isPrincipal={isPrincipal}
             onResetSuccess={refreshDashboard}
           />
         )}
@@ -235,6 +238,7 @@ export const UnifiedStandardsAssessmentPage: React.FC<UnifiedStandardsAssessment
             }}
             onNavigate={onNavigate}
             isLocked={isLocked}
+            isPrincipal={isPrincipal}
             onResetSuccess={refreshDashboard}
           />
         )}

@@ -376,9 +376,13 @@ export interface AiRecommendationsResponse {
 
 export type PlanType = 'QualityImprovement' | 'StaffProfessionalDevelopment' | 'AnnualOperational';
 
+export type ImprovementAreaStatus = 'pending_action' | 'in_progress' | 'completed';
+
 export interface ImprovementAreaBrief {
   areaId: number;
   name: string;
+  description?: string;
+  status?: ImprovementAreaStatus;
   priority: PriorityLevel;
   score?: number | null;
   targetScore?: number;
@@ -615,6 +619,7 @@ export type EvaluatorScreen =
   | 'evidences'
   | 'ai-assistant'
   | 'improvement-plan'
+  | 'audit-hub'
   | 'final-review'
   | 'completion-request'
   | 'notifications'
@@ -651,6 +656,7 @@ export interface ImprovementSuggestion {
   priorityLabel: string;
   suggestedName: string;
   isAdopted: boolean;
+  isPreviouslyAdopted?: boolean;
   adoptedAreaId?: number | null;
   adoptedPlan?: {
     planId: number;
@@ -658,6 +664,8 @@ export interface ImprovementSuggestion {
     planType?: string;
     versionNumber?: number;
     versionTag?: string | null;
+    status?: string;
+    isCurrentPlan?: boolean;
   } | null;
   isExcluded?: boolean;
   excludedAt?: string | null;
@@ -858,4 +866,101 @@ export interface HistoricalTrendData {
   previous_cycle?: string | null;
   notice: string;
   trend: HistoricalTrendSummary | null;
+}
+
+export interface AuditHubIndicatorNote {
+  noteId: number;
+  authorName: string;
+  authorRole: string;
+  isPrincipal: boolean;
+  text: string;
+  createdAt?: string;
+}
+
+export interface AuditHubIndicator {
+  indicatorId: number;
+  indicatorCode: string;
+  indicatorName: string;
+  standardId: number;
+  standardCode: string;
+  standardName: string;
+  subStandardCode: string;
+  subStandardName: string;
+  resultId: number | null;
+  score: number | null;
+  scoreLabel: string;
+  evidenceCount: number;
+  mandatoryRequirementsCount: number;
+  totalRequirementsCount: number;
+  coveredRequirementsCount: number;
+  isRequirementFullyCovered: boolean;
+  hasPrincipalReview: boolean;
+  principalNotesCount: number;
+  latestPrincipalNote: {
+    noteId: number;
+    authorName: string;
+    text: string;
+    createdAt?: string;
+  } | null;
+  allNotes: AuditHubIndicatorNote[];
+}
+
+export interface AuditHubPlan {
+  planId: number;
+  title: string;
+  planType: string;
+  versionNumber: number;
+  versionTag?: string;
+  status: string;
+  progressDescription?: string;
+  actionsCount: number;
+  hasPrincipalReview: boolean;
+  reviewNotesCount: number;
+  principalNotesCount: number;
+  latestNote: {
+    authorName: string;
+    role: string;
+    text: string;
+    createdAt?: string;
+  } | null;
+}
+
+export interface AuditHubCompletionRequest {
+  requestId: number;
+  status: string;
+  supervisorName: string;
+  notes: string;
+  totalItems: number;
+  pendingItems: number;
+  completedItems: number;
+}
+
+export interface AuditHubFinalReview {
+  reportId: number | null;
+  isGenerated: boolean;
+  isLocked: boolean;
+  hasPrincipalAcknowledgment: boolean;
+  acknowledgedAt?: string | null;
+  acknowledgmentText?: string | null;
+}
+
+export interface AuditHubSummary {
+  totalIndicators: number;
+  reviewedIndicatorsCount: number;
+  pendingIndicatorsCount: number;
+  reviewCoveragePercentage: number;
+  plansCount: number;
+  reviewedPlansCount: number;
+  hasOpenCompletionRequest: boolean;
+  finalReviewAcknowledged: boolean;
+}
+
+export interface AuditHubData {
+  schoolId: number;
+  schoolName: string;
+  summary: AuditHubSummary;
+  indicators: AuditHubIndicator[];
+  plans: AuditHubPlan[];
+  completionRequest: AuditHubCompletionRequest | null;
+  finalReview: AuditHubFinalReview;
 }

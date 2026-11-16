@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useAuth } from '../../../auth/AuthContext';
 import type { PendingIndicatorItem } from '../../api/evaluationTypes';
 import {
   AlertCircle,
@@ -22,6 +23,8 @@ export const PendingIndicatorsTable: React.FC<PendingIndicatorsTableProps> = ({
   indicators,
   onOpenIndicator,
 }) => {
+  const { user } = useAuth();
+  const isPrincipal = user?.roles?.some((r) => r.roleName === 'school_principal');
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<'all' | 'unscored' | 'missing-evidence'>('all');
   type SortKey = 'code' | 'name' | 'standard' | 'score' | 'evidence';
@@ -561,7 +564,7 @@ export const PendingIndicatorsTable: React.FC<PendingIndicatorsTableProps> = ({
                       onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#047857')}
                       onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#059669')}
                     >
-                      <span>استكمال</span>
+                      <span>{isPrincipal ? 'استعراض' : 'استكمال'}</span>
                       <ArrowLeft size={14} />
                     </button>
                   </td>

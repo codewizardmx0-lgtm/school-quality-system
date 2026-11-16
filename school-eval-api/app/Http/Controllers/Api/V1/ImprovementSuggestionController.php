@@ -70,20 +70,36 @@ class ImprovementSuggestionController extends Controller
             ->with(['plans' => function ($q) {
                 $q->orderBy('version_number', 'desc')->orderBy('plan_id', 'desc');
             }])
-            ->get(['area_id', 'result_id']);
+            ->get(['area_id', 'result_id', 'status']);
 
         $adoptedAreaMap = [];
         $adoptedPlanMap = [];
         foreach ($adoptedAreas as $area) {
-            $adoptedAreaMap[$area->result_id] = $area->area_id;
-            $plan = $area->plans->first();
-            if ($plan) {
+            // فحص هل توجد خطة نشطة أو مسودة جارية
+            $activePlan = $area->plans->first(fn($p) => in_array($p->status, ['Active', 'Draft']));
+            $latestPlan = $area->plans->first();
+
+            if ($activePlan) {
+                $adoptedAreaMap[$area->result_id] = $area->area_id;
                 $adoptedPlanMap[$area->result_id] = [
-                    'planId'        => (int) $plan->plan_id,
-                    'planTitle'     => $plan->title,
-                    'planType'      => $plan->plan_type,
-                    'versionNumber' => (int) ($plan->version_number ?? 1),
-                    'versionTag'    => $plan->version_tag,
+                    'planId'        => (int) $activePlan->plan_id,
+                    'planTitle'     => $activePlan->title,
+                    'planType'      => $activePlan->plan_type,
+                    'versionNumber' => (int) ($activePlan->version_number ?? 1),
+                    'versionTag'    => $activePlan->version_tag,
+                    'status'        => $activePlan->status,
+                    'isCurrentPlan' => true,
+                ];
+            } elseif ($latestPlan) {
+                // متبنى سابقاً في خطة مؤرشفة أو مكتملة دون وجود خطة نشطة حالية
+                $adoptedPlanMap[$area->result_id] = [
+                    'planId'        => (int) $latestPlan->plan_id,
+                    'planTitle'     => $latestPlan->title,
+                    'planType'      => $latestPlan->plan_type,
+                    'versionNumber' => (int) ($latestPlan->version_number ?? 1),
+                    'versionTag'    => $latestPlan->version_tag,
+                    'status'        => $latestPlan->status,
+                    'isCurrentPlan' => false,
                 ];
             }
         }
@@ -93,24 +109,29 @@ class ImprovementSuggestionController extends Controller
             $suggestedPriority = $isHigh ? 'High' : 'Medium';
             $priorityLabel = $isHigh ? 'عالية' : 'متوسطة';
 
+            $planInfo = $adoptedPlanMap[$result->result_id] ?? null;
+            $isCurrentAdopted = isset($adoptedAreaMap[$result->result_id]);
+            $isPreviouslyAdopted = !$isCurrentAdopted && !empty($planInfo);
+
             return [
-                'resultId'          => (int) $result->result_id,
-                'indicatorId'       => (int) $result->indicator_id,
-                'indicatorCode'     => $result->indicator?->code ?? '',
-                'indicatorName'     => $result->indicator?->name ?? '',
-                'standardCode'      => $result->indicator?->subStandard?->standard?->code ?? '',
-                'standardName'      => $result->indicator?->subStandard?->standard?->name ?? 'المعايير الوطنية',
-                'score'             => (int) $result->score,
-                'targetScore'       => $targetScore,
-                'gap'               => $targetScore - (int) $result->score,
-                'suggestedPriority' => $suggestedPriority,
-                'priorityLabel'     => $priorityLabel,
-                'suggestedName'     => 'تحسين أداء: ' . ($result->indicator?->name ?? 'المؤشر'),
-                'isAlreadyAdopted'  => isset($adoptedAreaMap[$result->result_id]),
-                'adoptedAreaId'     => $adoptedAreaMap[$result->result_id] ?? null,
-                'adoptedPlan'       => $adoptedPlanMap[$result->result_id] ?? null,
-                'isExcluded'        => (bool) ($result->is_excluded ?? false),
-                'excludedAt'        => $result->excluded_at?->toIso8601String(),
+                'resultId'            => (int) $result->result_id,
+                'indicatorId'         => (int) $result->indicator_id,
+                'indicatorCode'       => $result->indicator?->code ?? '',
+                'indicatorName'       => $result->indicator?->name ?? '',
+                'standardCode'        => $result->indicator?->subStandard?->standard?->code ?? '',
+                'standardName'        => $result->indicator?->subStandard?->standard?->name ?? 'المعايير الوطنية',
+                'score'               => (int) $result->score,
+                'targetScore'         => $targetScore,
+                'gap'                 => $targetScore - (int) $result->score,
+                'suggestedPriority'   => $suggestedPriority,
+                'priorityLabel'       => $priorityLabel,
+                'suggestedName'       => 'تحسين أداء: ' . ($result->indicator?->name ?? 'المؤشر'),
+                'isAlreadyAdopted'    => $isCurrentAdopted,
+                'isPreviouslyAdopted' => $isPreviouslyAdopted,
+                'adoptedAreaId'       => $adoptedAreaMap[$result->result_id] ?? null,
+                'adoptedPlan'         => $planInfo,
+                'isExcluded'          => (bool) ($result->is_excluded ?? false),
+                'excludedAt'          => $result->excluded_at?->toIso8601String(),
             ];
         })->values();
 

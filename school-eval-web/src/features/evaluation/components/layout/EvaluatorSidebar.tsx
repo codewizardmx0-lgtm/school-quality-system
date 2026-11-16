@@ -18,6 +18,7 @@ import {
   Lightbulb,
   Archive,
   BarChart3,
+  ClipboardCheck,
 } from 'lucide-react';
 import { SYSTEM_SHORT_NAME } from '../../../../constants/systemConstants';
 import { useAuth } from '../../../auth/AuthContext';
@@ -34,6 +35,7 @@ interface EvaluatorSidebarProps {
   isMobile?: boolean;
   isMobileOpen?: boolean;
   onCloseMobile?: () => void;
+  isPrincipal?: boolean;
 }
 
 export const EvaluatorSidebar: React.FC<EvaluatorSidebarProps> = ({
@@ -48,9 +50,12 @@ export const EvaluatorSidebar: React.FC<EvaluatorSidebarProps> = ({
   isMobile = false,
   isMobileOpen = false,
   onCloseMobile,
+  isPrincipal: isPrincipalProp,
 }) => {
   const { user, hasPermission } = useAuth();
-  const isPrincipal = user?.roles?.some((r) => r.roleName === 'school_principal') || (!hasPermission('evaluations.edit') && user?.userType === 'school');
+  const isPrincipal = isPrincipalProp !== undefined
+    ? isPrincipalProp
+    : (user?.roles?.some((r) => r.roleName === 'school_principal') || (!hasPermission('evaluations.edit') && user?.userType === 'school'));
 
   interface NavItem {
     id: EvaluatorScreen;
@@ -67,19 +72,17 @@ export const EvaluatorSidebar: React.FC<EvaluatorSidebarProps> = ({
 
   const navSections: NavSection[] = [
     {
-      title: 'التقييم الذاتي والرصد',
+      title: isPrincipal ? 'الملاحظة الإدارية والمعايير' : '1. الرصد والتقييم الذاتي',
       items: [
         {
           id: 'dashboard',
-          label: 'لوحة التحكم',
+          label: isPrincipal ? 'لوحة المتابعة الإدارية' : 'لوحة التحكم',
           icon: <LayoutDashboard size={19} />,
         },
         {
           id: 'standards-tree',
-          label: 'دليل وتقييم المعايير',
+          label: isPrincipal ? 'دليل واستعراض المعايير' : 'دليل وتقييم المعايير',
           icon: <ClipboardList size={19} />,
-          badge: isPrincipal ? 'للاطلاع' : isLocked ? 'مقفل' : undefined,
-          badgeColor: isPrincipal ? '#64748B' : '#EF4444',
         },
         {
           id: 'evidences',
@@ -89,7 +92,7 @@ export const EvaluatorSidebar: React.FC<EvaluatorSidebarProps> = ({
       ],
     },
     {
-      title: 'التحسين والمراجعة',
+      title: isPrincipal ? 'متابعة خطط التحسين' : '2. التحسين والتطوير',
       items: [
         {
           id: 'ai-assistant',
@@ -98,41 +101,47 @@ export const EvaluatorSidebar: React.FC<EvaluatorSidebarProps> = ({
         },
         {
           id: 'improvement-plan',
-          label: 'خطة التحسين',
+          label: isPrincipal ? 'متابعة خطة التحسين' : 'خطة التحسين المدرسية',
           icon: <Target size={19} />,
-        },
-        {
-          id: 'final-review',
-          label: isPrincipal ? 'المراجعة والاعتماد' : 'المراجعة والختم',
-          icon: <FileCheck2 size={19} />,
-          badge: isLocked ? 'مختوم' : undefined,
-          badgeColor: '#10B981',
-        },
-        {
-          id: 'completion-request',
-          label: 'طلب الاستكمال',
-          icon: <AlertCircle size={19} />,
-          badge: hasOpenCompletionRequest ? 'تنبيه' : undefined,
-          badgeColor: '#F59E0B',
         },
       ],
     },
     {
-      title: 'المخرجات والتقارير',
+      title: isPrincipal ? 'الاعتماد الداخلي والحوكمة' : '3. المراجعة والاعتماد',
+      items: [
+        {
+          id: 'audit-hub',
+          label: isPrincipal ? 'مركز التدقيق والمراجعة' : 'سجل تدقيق ومراجعات المدير',
+          icon: <ClipboardCheck size={19} />,
+        },
+        {
+          id: 'final-review',
+          label: isPrincipal ? 'المراجعة والاعتماد الداخلي' : 'المراجعة والختم',
+          icon: <FileCheck2 size={19} />,
+          badge: isLocked ? 'مختوم' : isPrincipal ? 'مطلوب إقرارك' : undefined,
+          badgeColor: isLocked ? '#10B981' : '#D97706',
+        },
+        {
+          id: 'completion-request',
+          label: 'طلبات الاستكمال الوزارية',
+          icon: <AlertCircle size={19} />,
+          badge: hasOpenCompletionRequest ? 'تنبيه' : undefined,
+          badgeColor: '#DC2626',
+        },
+      ],
+    },
+    {
+      title: isPrincipal ? 'التقارير والمخرجات التنفيذية' : '4. المخرجات وسجل الإشعارات',
       items: [
         {
           id: 'reports',
           label: 'مركز التقارير',
           icon: <Archive size={19} />,
-          badge: '5 حزم',
-          badgeColor: '#0F766E',
         },
         {
           id: 'historical',
           label: 'مقارنة الأداء التاريخي',
           icon: <BarChart3 size={19} />,
-          badge: 'مسار التطور',
-          badgeColor: '#2563EB',
         },
         {
           id: 'notifications',
@@ -233,8 +242,8 @@ export const EvaluatorSidebar: React.FC<EvaluatorSidebarProps> = ({
                 <div style={{ fontSize: '15px', fontWeight: 800, color: '#FFFFFF', letterSpacing: '-0.3px', whiteSpace: 'nowrap' }}>
                   {SYSTEM_SHORT_NAME}
                 </div>
-                <div style={{ fontSize: '11px', color: '#10B981', fontWeight: 600, whiteSpace: 'nowrap' }}>
-                  بوابة التقييم والتحسين
+                <div style={{ fontSize: '11px', color: isPrincipal ? '#F59E0B' : '#10B981', fontWeight: 700, whiteSpace: 'nowrap' }}>
+                  {isPrincipal ? 'بوابة مدير المدرسة' : 'بوابة التقييم والتحسين'}
                 </div>
               </div>
             )}
