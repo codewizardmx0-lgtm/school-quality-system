@@ -46,11 +46,13 @@ import {
 interface ImprovementPlanPageProps {
   onNavigate?: (screen: EvaluatorScreen, param?: number) => void;
   readOnly?: boolean;
+  isPrincipal?: boolean;
 }
 
 export const ImprovementPlanPage: React.FC<ImprovementPlanPageProps> = ({
   onNavigate,
   readOnly = false,
+  isPrincipal = false,
 }) => {
   const {
     selectedPlanType,
@@ -2261,13 +2263,14 @@ export const ImprovementPlanPage: React.FC<ImprovementPlanPageProps> = ({
                       style={{
                         padding: '1px 8px',
                         borderRadius: '4px',
-                        backgroundColor: '#DBEAFE',
-                        color: '#1E40AF',
+                        backgroundColor: note.reviewerRole === 'school_principal' ? '#FEF3C7' : '#DBEAFE',
+                        color: note.reviewerRole === 'school_principal' ? '#92400E' : '#1E40AF',
+                        border: `1px solid ${note.reviewerRole === 'school_principal' ? '#FCD34D' : '#BFDBFE'}`,
                         fontSize: '11px',
                         fontWeight: 700,
                       }}
                     >
-                      {note.roleArabic}
+                      {note.roleArabic || (note.reviewerRole === 'school_principal' ? 'مدير مدرسة' : 'مقيم')}
                     </span>
                   </div>
                   {note.createdAt && (
@@ -2284,14 +2287,14 @@ export const ImprovementPlanPage: React.FC<ImprovementPlanPageProps> = ({
           </div>
         )}
 
-        {/* Add Note Input if not ReadOnly */}
-        {!readOnly && planData && planData.planId > 0 && (
+        {/* Add Note Input if not ReadOnly OR if isPrincipal */}
+        {(!readOnly || isPrincipal) && planData && planData.planId > 0 && planData.status !== 'Archived' && (
           <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginTop: '6px' }}>
             <input
               type="text"
               value={newReviewNoteText}
               onChange={(e) => setNewReviewNoteText(e.target.value)}
-              placeholder="اكتب ملاحظة أو توجيهاً داخلياً على الخطة..."
+              placeholder={isPrincipal ? 'اكتب ملاحظة أو توجيهاً إدارياً من مدير المدرسة على الخطة...' : 'اكتب ملاحظة أو توجيهاً داخلياً على الخطة...'}
               style={{
                 flex: 1,
                 padding: '9px 14px',
@@ -2314,7 +2317,7 @@ export const ImprovementPlanPage: React.FC<ImprovementPlanPageProps> = ({
               style={{
                 padding: '9px 18px',
                 borderRadius: '8px',
-                backgroundColor: '#2563EB',
+                backgroundColor: isPrincipal ? '#D97706' : '#2563EB',
                 color: '#FFFFFF',
                 border: 'none',
                 fontSize: '13px',
@@ -2328,7 +2331,7 @@ export const ImprovementPlanPage: React.FC<ImprovementPlanPageProps> = ({
               }}
             >
               <Send size={14} />
-              <span>{isSubmittingReviewNote ? 'جاري الإرسال...' : 'إضافة ملاحظة'}</span>
+              <span>{isSubmittingReviewNote ? 'جاري الإرسال...' : isPrincipal ? 'إضافة ملاحظة المدير' : 'إضافة ملاحظة'}</span>
             </button>
           </div>
         )}

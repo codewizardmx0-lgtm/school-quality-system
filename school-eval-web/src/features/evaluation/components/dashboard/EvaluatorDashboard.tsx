@@ -28,11 +28,13 @@ import { DetailedReportExportModal } from '../reports/DetailedReportExportModal'
 interface EvaluatorDashboardProps {
   onNavigate: (screen: EvaluatorScreen, param?: number) => void;
   isLocked?: boolean;
+  isPrincipal?: boolean;
 }
 
 export const EvaluatorDashboard: React.FC<EvaluatorDashboardProps> = ({
   onNavigate,
   isLocked = false,
+  isPrincipal = false,
 }) => {
   const { user } = useAuth();
   const { dashboardData, isLoading, error, refreshDashboard } = useEvaluatorDashboard();
@@ -236,10 +238,25 @@ export const EvaluatorDashboard: React.FC<EvaluatorDashboardProps> = ({
             <School size={28} color="#FFFFFF" />
           </div>
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
               <h2 style={{ fontSize: '20px', fontWeight: 800, margin: 0, letterSpacing: '-0.3px' }}>
-                {school?.schoolName || 'مدرسة الأمل النموذجية الثانوية'}
+                {school?.schoolName || user?.school?.schoolName || 'مدرسة معتمدة'}
               </h2>
+              {isPrincipal && (
+                <span
+                  style={{
+                    fontSize: '11px',
+                    fontWeight: 800,
+                    padding: '3px 10px',
+                    borderRadius: '20px',
+                    backgroundColor: 'rgba(217, 119, 6, 0.35)',
+                    border: '1px solid rgba(253, 230, 138, 0.5)',
+                    color: '#FEF3C7',
+                  }}
+                >
+                  لوحة الإشراف والمتابعة الإدارية (مدير المدرسة)
+                </span>
+              )}
               <span
                 style={{
                   fontSize: '11px',
@@ -253,15 +270,15 @@ export const EvaluatorDashboard: React.FC<EvaluatorDashboardProps> = ({
                 {isLocked ? 'مرفوع للقراءة فقط' : school?.statusArabic || 'مسودة قيد الإدخال'}
               </span>
             </div>
-            <div style={{ fontSize: '13px', color: '#D1FAE5', marginTop: '6px', display: 'flex', alignItems: 'center', gap: '14px' }}>
+            <div style={{ fontSize: '13px', color: '#D1FAE5', marginTop: '6px', display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
               <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
                 <UserCheck size={15} />
-                المقيّم المسؤول: {school?.currentEvaluator || 'عمار عمر عبدالله'}
+                المقيّم المسؤول: {school?.currentEvaluator || 'قيد التعيين'}
               </span>
               <span>•</span>
               <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
                 <Calendar size={15} />
-                العام الدراسي {school?.academicYear || '2026/2027'}
+                العام الدراسي {school?.academicYear || 'الدورة الحالية'}
               </span>
             </div>
           </div>

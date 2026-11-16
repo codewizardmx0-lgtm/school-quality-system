@@ -138,6 +138,7 @@ export const EvaluatorLayout: React.FC<EvaluatorLayoutProps> = ({
           <EvaluatorDashboard
             onNavigate={handleNavigate}
             isLocked={effectiveReadOnly}
+            isPrincipal={isPrincipal}
           />
         );
       case 'standards-tree':
@@ -150,6 +151,7 @@ export const EvaluatorLayout: React.FC<EvaluatorLayoutProps> = ({
             }}
             onNavigate={handleNavigate}
             isLocked={effectiveReadOnly}
+            isPrincipal={isPrincipal}
           />
         );
       case 'rubric-assessment':
@@ -162,6 +164,7 @@ export const EvaluatorLayout: React.FC<EvaluatorLayoutProps> = ({
             }}
             onNavigate={handleNavigate}
             isLocked={effectiveReadOnly}
+            isPrincipal={isPrincipal}
           />
         );
       case 'evidences':
@@ -183,6 +186,7 @@ export const EvaluatorLayout: React.FC<EvaluatorLayoutProps> = ({
           <ImprovementPlanPage
             onNavigate={handleNavigate}
             readOnly={effectiveReadOnly}
+            isPrincipal={isPrincipal}
           />
         );
       case 'final-review':
@@ -258,6 +262,7 @@ export const EvaluatorLayout: React.FC<EvaluatorLayoutProps> = ({
         isMobile={isMobile}
         isMobileOpen={isMobileOpen}
         onCloseMobile={() => setIsMobileOpen(false)}
+        isPrincipal={isPrincipal}
       />
 
       {/* 2. Main Content Area */}
@@ -295,6 +300,7 @@ export const EvaluatorLayout: React.FC<EvaluatorLayoutProps> = ({
           archiveEvaluations={archiveEvaluations}
           selectedArchiveEvalId={selectedArchiveEvalId}
           onSelectArchiveEvaluation={handleSelectArchiveEvaluation}
+          isPrincipal={isPrincipal}
         />
 
         <main style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', minWidth: 0 }}>
@@ -391,21 +397,84 @@ export const EvaluatorLayout: React.FC<EvaluatorLayoutProps> = ({
           {isPrincipal && (
             <div
               style={{
-                backgroundColor: '#FEF3C7',
-                borderBottom: '1px solid #FCD34D',
+                backgroundColor: '#FFFBEB',
+                borderBottom: '1px solid #FDE68A',
                 padding: '12px 24px',
                 display: 'flex',
                 alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
                 gap: '12px',
                 color: '#92400E',
                 fontSize: '13px',
                 fontWeight: 700,
               }}
             >
-              <ShieldAlert size={19} color="#D97706" style={{ flexShrink: 0 }} />
-              <span>
-                أنت في وضع استعراض التقييم والمراجعة الداخلية — صلاحيات الرصد محصورة بمقيم المدرسة.
-              </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
+                <div
+                  style={{
+                    width: '36px',
+                    height: '36px',
+                    borderRadius: '8px',
+                    backgroundColor: '#FEF3C7',
+                    border: '1px solid #FCD34D',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0,
+                  }}
+                >
+                  <ShieldAlert size={20} color="#D97706" />
+                </div>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '2px' }}>
+                    <span style={{ fontSize: '13.5px', fontWeight: 800, color: '#78350F' }}>
+                      وضع الملاحظة والإقرار الإداري (مدير المدرسة)
+                    </span>
+                    <span
+                      style={{
+                        fontSize: '11px',
+                        padding: '1px 7px',
+                        borderRadius: '4px',
+                        backgroundColor: '#FEF3C7',
+                        border: '1px solid #FCD34D',
+                        color: '#B45309',
+                        fontWeight: 800,
+                      }}
+                    >
+                      صلاحية الملاحظة والاعتماد
+                    </span>
+                  </div>
+                  <p style={{ margin: 0, fontSize: '12px', color: '#92400E', fontWeight: 500, lineHeight: 1.5 }}>
+                    تتيح لك هذه اللوحة الاطلاع الكامل على سير التقييم والشواهد، تدوين الملاحظات الإدارية المعتمدة، ومتابعة تنفيذ خطة التحسين. (صلاحيات الرصد المباشر والختم الرقمي محصورة بمقيم المدرسة المعتمد).
+                  </p>
+                </div>
+              </div>
+              {activeScreen !== 'final-review' && (
+                <button
+                  type="button"
+                  onClick={() => handleNavigate('final-review')}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    backgroundColor: '#D97706',
+                    color: '#FFFFFF',
+                    border: 'none',
+                    borderRadius: '8px',
+                    padding: '7px 16px',
+                    fontSize: '12.5px',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    whiteSpace: 'nowrap',
+                    boxShadow: '0 2px 8px rgba(217, 119, 6, 0.25)',
+                  }}
+                  title="الانتقال المباشر لصفحة المراجعة وتدوين ملاحظات مدير المدرسة"
+                >
+                  <span>المراجعة والاعتماد الداخلي</span>
+                  <ArrowLeft size={14} />
+                </button>
+              )}
             </div>
           )}
 

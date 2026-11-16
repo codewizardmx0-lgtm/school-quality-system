@@ -16,6 +16,7 @@ import { designTokens } from '../../../../styles/designTokens';
 import type { EvidenceItem, EvaluatorScreen } from '../../api/evaluationTypes';
 import {
   FolderLock,
+  Lock,
   CheckCircle2,
   AlertTriangle,
   HardDrive,
@@ -1332,7 +1333,7 @@ export const EvidencesRepository: React.FC<EvidencesRepositoryProps> = ({
             تصدير Excel (.xlsx)
           </button>
 
-          {!readOnly && (
+          {!readOnly ? (
             <button
               onClick={() => handleOpenUpload()}
               style={{
@@ -1353,6 +1354,25 @@ export const EvidencesRepository: React.FC<EvidencesRepositoryProps> = ({
               <UploadCloud size={16} />
               رفع شاهد جديد
             </button>
+          ) : (
+            <div
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '7px 14px',
+                borderRadius: '8px',
+                backgroundColor: '#FEF3C7',
+                border: '1px solid #FCD34D',
+                color: '#92400E',
+                fontSize: '12px',
+                fontWeight: 700,
+              }}
+              title="رفع وتعديل الشواهد محصور بمقيم المدرسة المعتمد"
+            >
+              <Lock size={13} />
+              <span>وضع استعراض الشواهد</span>
+            </div>
           )}
         </div>
       </div>

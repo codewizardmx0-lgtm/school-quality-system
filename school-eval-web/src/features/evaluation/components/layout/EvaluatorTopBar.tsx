@@ -33,6 +33,7 @@ interface EvaluatorTopBarProps {
   archiveEvaluations?: EvaluationCycleArchiveItem[];
   selectedArchiveEvalId?: number | null;
   onSelectArchiveEvaluation?: (evalId: number | null) => void;
+  isPrincipal?: boolean;
 }
 
 export const EvaluatorTopBar: React.FC<EvaluatorTopBarProps> = ({
@@ -52,6 +53,7 @@ export const EvaluatorTopBar: React.FC<EvaluatorTopBarProps> = ({
   archiveEvaluations = [],
   selectedArchiveEvalId = null,
   onSelectArchiveEvaluation,
+  isPrincipal = false,
 }) => {
   const [unreadNotificationsCount, setUnreadNotificationsCount] = useState<number>(0);
 
@@ -86,19 +88,19 @@ export const EvaluatorTopBar: React.FC<EvaluatorTopBarProps> = ({
   const getScreenTitle = (screen: EvaluatorScreen) => {
     switch (screen) {
       case 'dashboard':
-        return 'لوحة تحكم التقييم والتقدم';
+        return isPrincipal ? 'لوحة المتابعة الإدارية والتقدم' : 'لوحة تحكم التقييم والتقدم';
       case 'standards-tree':
-        return 'شجرة المعايير والمؤشرات الوطنية';
+        return isPrincipal ? 'دليل واستعراض المعايير والمؤشرات' : 'شجرة المعايير والمؤشرات الوطنية';
       case 'rubric-assessment':
-        return 'استمارة رصد التقديرات وأدلة التحقق';
+        return isPrincipal ? 'استعراض رصد التقديرات وأدلة التحقق' : 'استمارة رصد التقديرات وأدلة التحقق';
       case 'evidences':
         return 'مستودع الشواهد والأدلة الميدانية';
       case 'ai-assistant':
         return 'تحليل الفجوات والمساعد الذكي (AI)';
       case 'improvement-plan':
-        return 'خطة التحسين والتطوير المدرسي';
+        return isPrincipal ? 'متابعة خطة التحسين والتطوير المدرسي' : 'خطة التحسين والتطوير المدرسي';
       case 'final-review':
-        return 'المراجعة الداخلية والختم الرقمي';
+        return isPrincipal ? 'المراجعة والاعتماد الداخلي لمدير المدرسة' : 'المراجعة الداخلية والختم الرقمي';
       case 'completion-request':
         return 'معالجة طلب استكمال المشرف الوزاري';
       case 'reports':
@@ -108,23 +110,29 @@ export const EvaluatorTopBar: React.FC<EvaluatorTopBarProps> = ({
       case 'notifications':
         return 'مركز الإشعارات والتنبيهات';
       default:
-        return 'بوابة التقييم الذاتي';
+        return isPrincipal ? 'بوابة مدير المدرسة' : 'بوابة التقييم الذاتي';
     }
   };
 
-  const statusLabel = isLocked
+  const statusLabel = isPrincipal
+    ? 'وضع الملاحظة والإقرار الإداري'
+    : isLocked
     ? 'مرفوع ومقفل (للقراءة فقط)'
     : hasOpenCompletionRequest
     ? 'طلب استكمال من المشرف'
     : schoolInfo?.statusArabic || 'مسودة قيد الإدخال';
 
-  const statusBg = isLocked
+  const statusBg = isPrincipal
+    ? 'rgba(217, 119, 6, 0.12)'
+    : isLocked
     ? 'rgba(16, 185, 129, 0.15)'
     : hasOpenCompletionRequest
     ? 'rgba(245, 158, 11, 0.15)'
     : 'rgba(5, 150, 105, 0.12)';
 
-  const statusColor = isLocked
+  const statusColor = isPrincipal
+    ? '#D97706'
+    : isLocked
     ? '#059669'
     : hasOpenCompletionRequest
     ? '#D97706'
@@ -179,7 +187,7 @@ export const EvaluatorTopBar: React.FC<EvaluatorTopBarProps> = ({
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: '#94A3B8', fontWeight: 600 }}>
               <span>{SYSTEM_SHORT_NAME}</span>
               <ChevronLeft size={12} />
-              <span>بوابة التقييم</span>
+              <span>{isPrincipal ? 'بوابة مدير المدرسة' : 'بوابة التقييم'}</span>
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '2px' }}>

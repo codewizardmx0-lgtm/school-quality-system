@@ -1088,6 +1088,7 @@ export const FormulaSuggestionsSection: React.FC<FormulaSuggestionsSectionProps>
                       <td style={{ padding: '12px 14px', textAlign: 'center' }}>
                         <select
                           disabled={readOnly}
+                          title={readOnly ? 'تعديل التقدير المستهدف محصور بمقيم المدرسة المعتمد (وضع الملاحظة فقط)' : undefined}
                           value={effectiveTarget}
                           onChange={async (e) => {
                             const val = Number(e.target.value);
@@ -1125,6 +1126,7 @@ export const FormulaSuggestionsSection: React.FC<FormulaSuggestionsSectionProps>
                       <td style={{ padding: '12px 14px', textAlign: 'center' }}>
                         <select
                           disabled={readOnly}
+                          title={readOnly ? 'تعديل مستوى الأولوية محصور بمقيم المدرسة المعتمد (وضع الملاحظة فقط)' : undefined}
                           value={effectivePriority}
                           onChange={async (e) => {
                             const val = e.target.value as PriorityLevel;
@@ -1341,7 +1343,19 @@ export const FormulaSuggestionsSection: React.FC<FormulaSuggestionsSectionProps>
                               <span>{isUnadopting === sugg.resultId ? 'جارٍ الإلغاء...' : 'إلغاء التبني'}</span>
                             </button>
                           ) : (
-                            <span style={{ fontSize: '11.5px', color: '#64748b' }}>—</span>
+                            <span
+                              style={{
+                                fontSize: '11px',
+                                color: sugg.isAdopted ? '#059669' : '#64748B',
+                                backgroundColor: sugg.isAdopted ? '#ECFDF5' : '#F1F5F9',
+                                padding: '2px 8px',
+                                borderRadius: '4px',
+                                fontWeight: 600,
+                              }}
+                              title={readOnly ? 'وضع الملاحظة الإدارية فقط — تعديل المبادرات محصور بالمقيم المعتمد' : undefined}
+                            >
+                              {sugg.isAdopted ? 'متبنى بالخطة' : 'للاطلاع'}
+                            </span>
                           )}
                         </div>
                       </td>

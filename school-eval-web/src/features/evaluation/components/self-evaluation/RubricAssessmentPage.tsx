@@ -34,6 +34,7 @@ import {
   MessageSquare,
   Send,
   Compass,
+  ShieldAlert,
 } from 'lucide-react';
 import { SafeResetConfirmModal } from './SafeResetConfirmModal';
 import { QuickNavModal } from './QuickNavModal';
@@ -42,6 +43,7 @@ interface RubricAssessmentPageProps {
   selectedIndicatorId?: number | null;
   onNavigate?: (screen: EvaluatorScreen, param?: number) => void;
   isLocked?: boolean;
+  isPrincipal?: boolean;
   onResetSuccess?: () => void;
   onSelectIndicator?: (indicatorId: number) => void;
 }
@@ -50,6 +52,7 @@ export const RubricAssessmentPage: React.FC<RubricAssessmentPageProps> = ({
   selectedIndicatorId,
   onNavigate,
   isLocked = false,
+  isPrincipal = false,
   onResetSuccess,
   onSelectIndicator,
 }) => {
@@ -222,7 +225,7 @@ export const RubricAssessmentPage: React.FC<RubricAssessmentPageProps> = ({
     : [];
 
   const handleScoreSelect = (level: number) => {
-    if (isLocked) return;
+    if (isLocked || isPrincipal) return;
     setSelectedScore(level);
     // Instant save according to zero dead button guideline
     saveRubricAssessment({
@@ -240,7 +243,7 @@ export const RubricAssessmentPage: React.FC<RubricAssessmentPageProps> = ({
     (justification !== (currentResult?.justification || ''));
 
   const handleSaveDraft = async () => {
-    if (isLocked || selectedScore === null) return;
+    if (isLocked || isPrincipal || selectedScore === null) return;
     await saveRubricAssessment({
       score: selectedScore,
       justification,
@@ -252,7 +255,7 @@ export const RubricAssessmentPage: React.FC<RubricAssessmentPageProps> = ({
   };
 
   const handleSaveAndNext = async () => {
-    if (isLocked) {
+    if (isLocked || isPrincipal) {
       goToNextIndicator();
       return;
     }
@@ -400,8 +403,26 @@ export const RubricAssessmentPage: React.FC<RubricAssessmentPageProps> = ({
           }
         }
       `}</style>
-      {/* Top Banner Notice if Locked */}
-      {isLocked && (
+      {/* Top Banner Notice: Principal vs Locked */}
+      {isPrincipal ? (
+        <div
+          style={{
+            backgroundColor: '#FFFBEB',
+            border: '1px solid #FDE68A',
+            borderRadius: '10px',
+            padding: '12px 18px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px',
+            color: '#92400E',
+            fontSize: '13px',
+            fontWeight: 700,
+          }}
+        >
+          <ShieldAlert size={18} color="#D97706" />
+          <span>وضع الملاحظة والإقرار الإداري لمدير المدرسة — رصد وتعديل التقديرات محصور بمقيم المدرسة المعتمد.</span>
+        </div>
+      ) : isLocked ? (
         <div
           style={{
             backgroundColor: '#FEF2F2',
@@ -419,7 +440,7 @@ export const RubricAssessmentPage: React.FC<RubricAssessmentPageProps> = ({
           <Lock size={18} />
           <span>تم إقفال ملف التقييم بالختم الرقمي النهائي. شاشة الرصد في وضع القراءة فقط.</span>
         </div>
-      )}
+      ) : null}
 
       {/* Network / Save Error Banner with Retry */}
       {saveStatus === 'error' && (
@@ -818,6 +839,7 @@ export const RubricAssessmentPage: React.FC<RubricAssessmentPageProps> = ({
                   <div
                     key={lvl.level}
                     onClick={() => handleScoreSelect(lvl.level)}
+                    title={isPrincipal ? 'تحديد المستوى محصور بمقيم المدرسة المعتمد (وضع الملاحظة والإقرار)' : isLocked ? 'ملف التقييم مقفل' : undefined}
                     style={{
                       padding: '16px',
                       borderRadius: '12px',
@@ -1223,7 +1245,7 @@ export const RubricAssessmentPage: React.FC<RubricAssessmentPageProps> = ({
             )}
 
             {/* Add note form */}
-            {!isLocked && currentResult?.resultId && (
+            {(!isLocked || isPrincipal) && currentResult?.resultId && (
               user?.roles?.some((r) => ['admin', 'school_principal', 'ministry_supervisor'].includes(r.roleName)) ||
               user?.userType === 'ministry'
             ) ? (
@@ -1310,7 +1332,28 @@ export const RubricAssessmentPage: React.FC<RubricAssessmentPageProps> = ({
         </button>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-          {!isLocked && hasIndicatorData && (
+          {isPrincipal && (
+            <div
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '8px 16px',
+                borderRadius: '8px',
+                backgroundColor: '#FEF3C7',
+                border: '1px solid #FCD34D',
+                color: '#92400E',
+                fontSize: '12.5px',
+                fontWeight: 700,
+              }}
+              title="وضع الملاحظة والإقرار الإداري لمدير المدرسة - التعديل محصور بمقيم المدرسة المعتمد"
+            >
+              <ShieldAlert size={15} color="#D97706" />
+              <span>وضع الملاحظة الإدارية (تعديل المستويات محصور بالمقيم)</span>
+            </div>
+          )}
+
+          {!isLocked && !isPrincipal && hasIndicatorData && (
             <button
               type="button"
               onClick={() => setIsResetModalOpen(true)}
@@ -1335,7 +1378,7 @@ export const RubricAssessmentPage: React.FC<RubricAssessmentPageProps> = ({
             </button>
           )}
 
-          {!isLocked && (
+          {!isLocked && !isPrincipal && (
             <button
               onClick={handleSaveDraft}
               disabled={isSaving || selectedScore === null}
@@ -1379,9 +1422,9 @@ export const RubricAssessmentPage: React.FC<RubricAssessmentPageProps> = ({
               cursor: hasNext ? 'pointer' : 'not-allowed',
               boxShadow: '0 2px 8px rgba(5, 150, 105, 0.25)',
             }}
-            title="حفظ التقدير والانتقال المباشر للمؤشر التالي"
+            title={isPrincipal || isLocked ? 'الانتقال المباشر للمؤشر التالي' : 'حفظ التقدير والانتقال المباشر للمؤشر التالي'}
           >
-            <span>{isLocked ? 'المؤشر التالي' : 'حفظ والانتقال للمؤشر التالي'}</span>
+            <span>{isPrincipal || isLocked ? 'المؤشر التالي' : 'حفظ والانتقال للمؤشر التالي'}</span>
             <ArrowLeft size={16} />
           </button>
         </div>

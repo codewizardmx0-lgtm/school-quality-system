@@ -34,6 +34,7 @@ interface EvaluatorSidebarProps {
   isMobile?: boolean;
   isMobileOpen?: boolean;
   onCloseMobile?: () => void;
+  isPrincipal?: boolean;
 }
 
 export const EvaluatorSidebar: React.FC<EvaluatorSidebarProps> = ({
@@ -48,9 +49,12 @@ export const EvaluatorSidebar: React.FC<EvaluatorSidebarProps> = ({
   isMobile = false,
   isMobileOpen = false,
   onCloseMobile,
+  isPrincipal: isPrincipalProp,
 }) => {
   const { user, hasPermission } = useAuth();
-  const isPrincipal = user?.roles?.some((r) => r.roleName === 'school_principal') || (!hasPermission('evaluations.edit') && user?.userType === 'school');
+  const isPrincipal = isPrincipalProp !== undefined
+    ? isPrincipalProp
+    : (user?.roles?.some((r) => r.roleName === 'school_principal') || (!hasPermission('evaluations.edit') && user?.userType === 'school'));
 
   interface NavItem {
     id: EvaluatorScreen;
@@ -67,16 +71,16 @@ export const EvaluatorSidebar: React.FC<EvaluatorSidebarProps> = ({
 
   const navSections: NavSection[] = [
     {
-      title: 'التقييم الذاتي والرصد',
+      title: isPrincipal ? 'الملاحظة الإدارية والمعايير' : 'التقييم الذاتي والرصد',
       items: [
         {
           id: 'dashboard',
-          label: 'لوحة التحكم',
+          label: isPrincipal ? 'لوحة المتابعة الإدارية' : 'لوحة التحكم',
           icon: <LayoutDashboard size={19} />,
         },
         {
           id: 'standards-tree',
-          label: 'دليل وتقييم المعايير',
+          label: isPrincipal ? 'دليل واستعراض المعايير' : 'دليل وتقييم المعايير',
           icon: <ClipboardList size={19} />,
           badge: isPrincipal ? 'للاطلاع' : isLocked ? 'مقفل' : undefined,
           badgeColor: isPrincipal ? '#64748B' : '#EF4444',
@@ -85,11 +89,13 @@ export const EvaluatorSidebar: React.FC<EvaluatorSidebarProps> = ({
           id: 'evidences',
           label: 'مستودع الشواهد',
           icon: <FolderLock size={19} />,
+          badge: isPrincipal ? 'للمراجعة' : undefined,
+          badgeColor: '#059669',
         },
       ],
     },
     {
-      title: 'التحسين والمراجعة',
+      title: isPrincipal ? 'التحسين والاعتماد الداخلي' : 'التحسين والمراجعة',
       items: [
         {
           id: 'ai-assistant',
@@ -98,15 +104,17 @@ export const EvaluatorSidebar: React.FC<EvaluatorSidebarProps> = ({
         },
         {
           id: 'improvement-plan',
-          label: 'خطة التحسين',
+          label: isPrincipal ? 'متابعة خطة التحسين' : 'خطة التحسين',
           icon: <Target size={19} />,
+          badge: isPrincipal ? 'متابعة' : undefined,
+          badgeColor: '#2563EB',
         },
         {
           id: 'final-review',
-          label: isPrincipal ? 'المراجعة والاعتماد' : 'المراجعة والختم',
+          label: isPrincipal ? 'المراجعة والاعتماد الداخلي' : 'المراجعة والختم',
           icon: <FileCheck2 size={19} />,
-          badge: isLocked ? 'مختوم' : undefined,
-          badgeColor: '#10B981',
+          badge: isLocked ? 'مختوم' : isPrincipal ? 'مطلوب إقرارك' : undefined,
+          badgeColor: isLocked ? '#10B981' : '#D97706',
         },
         {
           id: 'completion-request',
@@ -118,7 +126,7 @@ export const EvaluatorSidebar: React.FC<EvaluatorSidebarProps> = ({
       ],
     },
     {
-      title: 'المخرجات والتقارير',
+      title: isPrincipal ? 'التقارير والمخرجات التنفيذية' : 'المخرجات والتقارير',
       items: [
         {
           id: 'reports',
@@ -233,8 +241,8 @@ export const EvaluatorSidebar: React.FC<EvaluatorSidebarProps> = ({
                 <div style={{ fontSize: '15px', fontWeight: 800, color: '#FFFFFF', letterSpacing: '-0.3px', whiteSpace: 'nowrap' }}>
                   {SYSTEM_SHORT_NAME}
                 </div>
-                <div style={{ fontSize: '11px', color: '#10B981', fontWeight: 600, whiteSpace: 'nowrap' }}>
-                  بوابة التقييم والتحسين
+                <div style={{ fontSize: '11px', color: isPrincipal ? '#F59E0B' : '#10B981', fontWeight: 700, whiteSpace: 'nowrap' }}>
+                  {isPrincipal ? 'بوابة مدير المدرسة' : 'بوابة التقييم والتحسين'}
                 </div>
               </div>
             )}
