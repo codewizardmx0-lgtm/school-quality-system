@@ -99,6 +99,8 @@ export const EvaluatorTopBar: React.FC<EvaluatorTopBarProps> = ({
         return 'تحليل الفجوات والمساعد الذكي (AI)';
       case 'improvement-plan':
         return isPrincipal ? 'متابعة خطة التحسين والتطوير المدرسي' : 'خطة التحسين والتطوير المدرسي';
+      case 'audit-hub':
+        return isPrincipal ? 'مركز التدقيق والمراجعة الإدارية الشاملة' : 'سجل تدقيق ومراجعات مدير المدرسة';
       case 'final-review':
         return isPrincipal ? 'المراجعة والاعتماد الداخلي لمدير المدرسة' : 'المراجعة الداخلية والختم الرقمي';
       case 'completion-request':

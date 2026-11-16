@@ -11,6 +11,7 @@ import { HandleCompletionPage } from '../completion-request/HandleCompletionPage
 import { NotificationsCenter } from '../notifications/NotificationsCenter';
 import { ReportsHubPage } from '../reports/ReportsHubPage';
 import { HistoricalPerformancePage } from '../historical/HistoricalPerformancePage';
+import { AuditReviewHubPage } from '../audit-hub/AuditReviewHubPage';
 import { ChangePasswordModal } from '../../../auth/ChangePasswordModal';
 import { ProfileModal } from '../../../auth/ProfileModal';
 import { useAuth } from '../../../auth/AuthContext';
@@ -46,6 +47,7 @@ export const EvaluatorLayout: React.FC<EvaluatorLayoutProps> = ({
   const [notifRefreshKey, setNotifRefreshKey] = useState<number>(0);
   const [isChangePasswordOpen, setIsChangePasswordOpen] = useState<boolean>(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState<boolean>(false);
+  const [navigatedFromHub, setNavigatedFromHub] = useState<boolean>(false);
   const { toasts, addToast, dismissToast } = useToast();
 
   const isPrincipal = Boolean(
@@ -115,9 +117,14 @@ export const EvaluatorLayout: React.FC<EvaluatorLayoutProps> = ({
     };
   }, [user?.userId, selectedArchiveEvalId]);
 
-  const handleNavigate = (screen: EvaluatorScreen, param?: number) => {
+  const handleNavigate = (screen: EvaluatorScreen, param?: number, fromHub?: boolean) => {
     if (param !== undefined) {
       setSelectedIndicatorId(param);
+    }
+    if (fromHub) {
+      setNavigatedFromHub(true);
+    } else {
+      setNavigatedFromHub(false);
     }
     setActiveScreen(screen);
     if (isMobile) {
@@ -186,6 +193,13 @@ export const EvaluatorLayout: React.FC<EvaluatorLayoutProps> = ({
           <ImprovementPlanPage
             onNavigate={handleNavigate}
             readOnly={effectiveReadOnly}
+            isPrincipal={isPrincipal}
+          />
+        );
+      case 'audit-hub':
+        return (
+          <AuditReviewHubPage
+            onNavigate={handleNavigate}
             isPrincipal={isPrincipal}
           />
         );
@@ -475,6 +489,70 @@ export const EvaluatorLayout: React.FC<EvaluatorLayoutProps> = ({
                   <ArrowLeft size={14} />
                 </button>
               )}
+            </div>
+          )}
+
+          {/* زر العودة المختصر إلى مركز التدقيق والمراجعة الإدارية (يظهر حصرياً عند الانتقال من المركز) */}
+          {navigatedFromHub && activeScreen !== 'audit-hub' && (
+            <div
+              style={{
+                position: 'sticky',
+                top: 0,
+                zIndex: 45,
+                backgroundColor: '#0F172A',
+                color: '#FFFFFF',
+                padding: '10px 24px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: '12px',
+                borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+                boxShadow: '0 4px 14px rgba(0, 0, 0, 0.2)',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <span
+                  style={{
+                    backgroundColor: isPrincipal ? '#0284C7' : '#059669',
+                    color: '#FFFFFF',
+                    padding: '2px 8px',
+                    borderRadius: '6px',
+                    fontSize: '11px',
+                    fontWeight: 700,
+                  }}
+                >
+                  {isPrincipal ? 'بوابة المدير' : 'سجل التدقيق'}
+                </span>
+                <span style={{ fontSize: '13px', fontWeight: 600 }}>
+                  أنت تتصفح تفاصيل منبثقة من {isPrincipal ? 'مركز التدقيق والمراجعة الإدارية' : 'سجل تدقيق ومراجعات المدير'}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setNavigatedFromHub(false);
+                  setActiveScreen('audit-hub');
+                }}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  backgroundColor: isPrincipal ? '#0284C7' : '#059669',
+                  color: '#FFFFFF',
+                  border: 'none',
+                  borderRadius: '8px',
+                  padding: '7px 18px',
+                  fontSize: '13px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  boxShadow: '0 2px 6px rgba(0, 0, 0, 0.25)',
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                <span>العودة إلى {isPrincipal ? 'مركز التدقيق والمراجعة' : 'سجل التدقيق والمراجعات'}</span>
+                <span style={{ fontSize: '16px' }}>↩</span>
+              </button>
             </div>
           )}
 

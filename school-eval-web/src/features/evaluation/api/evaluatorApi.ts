@@ -37,6 +37,7 @@ import type {
   LinkedIndicatorBrief,
   DiscrepancyAuditResponse,
   HistoricalTrendData,
+  AuditHubData,
 } from './evaluationTypes';
 
 export const evaluatorApi = {
@@ -774,7 +775,9 @@ export const evaluatorApi = {
         priorityLabel: priority === 'High' ? 'أولوية قصوى (فجوة حرجة)' : 'أولوية متوسطة',
         suggestedName: s.suggestedName || s.name || `تحسين أداء: ${s.indicatorName || s.indicatorTitle || 'المؤشر'}`,
         isAdopted: Boolean(s.isAdopted || s.isAlreadyAdopted),
+        isPreviouslyAdopted: Boolean(s.isPreviouslyAdopted),
         adoptedAreaId: s.adoptedAreaId || s.area_id || null,
+        adoptedPlan: s.adoptedPlan || null,
         isExcluded: Boolean(s.isExcluded),
         excludedAt: s.excludedAt || null,
       };
@@ -998,5 +1001,23 @@ export const evaluatorApi = {
    */
   async addEvaluationResultNote(resultId: number, text: string): Promise<void> {
     await post(`/evaluation-results/${resultId}/notes`, { text });
+  },
+
+  /**
+   * 35. GET /api/v1/evaluator/audit-hub
+   * Fetch aggregated indicators, review status, plans, and completion for the Audit Hub
+   */
+  async getAuditHub(): Promise<AuditHubData> {
+    const response = await get<AuditHubData>('/evaluator/audit-hub');
+    return response.data!;
+  },
+
+  /**
+   * 36. POST /api/v1/evaluator/audit-hub/indicators/{indicatorId}/review-note
+   * Add a quick administrative review note from the Audit Hub
+   */
+  async addAuditIndicatorReviewNote(indicatorId: number, text: string): Promise<any> {
+    const response = await post<any>(`/evaluator/audit-hub/indicators/${indicatorId}/review-note`, { text });
+    return response.data!;
   },
 };

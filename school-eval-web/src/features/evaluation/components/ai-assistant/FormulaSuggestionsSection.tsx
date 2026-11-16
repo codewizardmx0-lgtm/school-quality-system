@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   Target,
   CheckCircle2,
+  Clock,
   ArrowRight,
   RefreshCw,
   Trash2,
@@ -1189,7 +1190,7 @@ export const FormulaSuggestionsSection: React.FC<FormulaSuggestionsSectionProps>
                               }}
                             >
                               <CheckCircle2 size={14} />
-                              متبنى
+                              متبنى بالخطة
                             </span>
                             <button
                               type="button"
@@ -1209,7 +1210,7 @@ export const FormulaSuggestionsSection: React.FC<FormulaSuggestionsSectionProps>
                                 border: '1px solid #BBF7D0',
                                 color: '#15803D',
                                 fontWeight: 700,
-                                maxWidth: '180px',
+                                maxWidth: '190px',
                                 whiteSpace: 'nowrap',
                                 overflow: 'hidden',
                                 textOverflow: 'ellipsis',
@@ -1233,7 +1234,76 @@ export const FormulaSuggestionsSection: React.FC<FormulaSuggestionsSectionProps>
                                   : 'انتقال إلى خطة التحسين المعتمدة'
                               }
                             >
-                              <span>متبناة في: {sugg.adoptedPlan?.planTitle || 'خطة التحسين'}</span>
+                              <span>
+                                {sugg.adoptedPlan?.planTitle
+                                  ? `متبناة في: ${sugg.adoptedPlan.planTitle} (v${sugg.adoptedPlan.versionNumber || 1}${sugg.adoptedPlan.versionTag ? ` - ${sugg.adoptedPlan.versionTag}` : ''})`
+                                  : 'خطة التحسين'}
+                              </span>
+                              <ArrowRight size={11} style={{ flexShrink: 0 }} />
+                            </button>
+                          </div>
+                        ) : sugg.isPreviouslyAdopted ? (
+                          <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+                            <span
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                color: '#D97706',
+                                fontSize: '11.5px',
+                                fontWeight: 800,
+                              }}
+                            >
+                              <Clock size={13} />
+                              متبنى سابقاً (مؤرشف)
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (sugg.adoptedPlan?.planId) {
+                                  sessionStorage.setItem('selectedImprovementPlanId', String(sugg.adoptedPlan.planId));
+                                  onNavigateToPlans?.(sugg.adoptedPlan.planId);
+                                } else {
+                                  onNavigateToPlans?.();
+                                }
+                              }}
+                              style={{
+                                fontSize: '11px',
+                                padding: '3px 8px',
+                                borderRadius: '6px',
+                                backgroundColor: '#FFFBEB',
+                                border: '1px solid #FDE68A',
+                                color: '#B45309',
+                                fontWeight: 700,
+                                maxWidth: '190px',
+                                whiteSpace: 'nowrap',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                cursor: 'pointer',
+                                transition: 'all 0.15s ease',
+                              }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.backgroundColor = '#FEF3C7';
+                                e.currentTarget.style.borderColor = '#FCD34D';
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.backgroundColor = '#FFFBEB';
+                                e.currentTarget.style.borderColor = '#FDE68A';
+                              }}
+                              title={
+                                sugg.adoptedPlan
+                                  ? `تم تبنيه آخر مرة في: ${sugg.adoptedPlan.planTitle} (v${sugg.adoptedPlan.versionNumber || 1}) - اضغط للاستعراض`
+                                  : 'تم تبنيه في نسخة سابقة مؤرشفة'
+                              }
+                            >
+                              <span>
+                                {sugg.adoptedPlan?.planTitle
+                                  ? `آخر تبنٍّ: ${sugg.adoptedPlan.planTitle} (v${sugg.adoptedPlan.versionNumber || 1})`
+                                  : 'نسخة سابقة مؤرشفة'}
+                              </span>
                               <ArrowRight size={11} style={{ flexShrink: 0 }} />
                             </button>
                           </div>
@@ -1254,7 +1324,7 @@ export const FormulaSuggestionsSection: React.FC<FormulaSuggestionsSectionProps>
                                 style={{
                                   padding: '5px 10px',
                                   borderRadius: '6px',
-                                  backgroundColor: '#059669',
+                                  backgroundColor: sugg.isPreviouslyAdopted ? '#2563EB' : '#059669',
                                   color: '#ffffff',
                                   border: 'none',
                                   fontSize: '11.5px',
@@ -1263,12 +1333,18 @@ export const FormulaSuggestionsSection: React.FC<FormulaSuggestionsSectionProps>
                                   display: 'inline-flex',
                                   alignItems: 'center',
                                   gap: '4px',
-                                  boxShadow: '0 1px 2px rgba(5,150,105,0.2)',
+                                  boxShadow: sugg.isPreviouslyAdopted
+                                    ? '0 1px 2px rgba(37,99,235,0.2)'
+                                    : '0 1px 2px rgba(5,150,105,0.2)',
                                 }}
-                                title="تبني هذا المؤشر كإجراء تحسين في الخطة المدرسية"
+                                title={
+                                  sugg.isPreviouslyAdopted
+                                    ? 'إعادة تبني هذا المؤشر في الخطة النشطة الحالية'
+                                    : 'تبني هذا المؤشر كإجراء تحسين في الخطة المدرسية'
+                                }
                               >
                                 <Target size={13} />
-                                تبني الإجراء
+                                {sugg.isPreviouslyAdopted ? 'تبني بالخطة الحالية' : 'تبني الإجراء'}
                               </button>
 
                               {!sugg.isExcluded ? (

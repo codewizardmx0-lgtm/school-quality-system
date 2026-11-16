@@ -18,6 +18,7 @@ import {
   Lightbulb,
   Archive,
   BarChart3,
+  ClipboardCheck,
 } from 'lucide-react';
 import { SYSTEM_SHORT_NAME } from '../../../../constants/systemConstants';
 import { useAuth } from '../../../auth/AuthContext';
@@ -114,6 +115,13 @@ export const EvaluatorSidebar: React.FC<EvaluatorSidebarProps> = ({
     {
       title: isPrincipal ? 'الاعتماد الداخلي والحوكمة' : '3. المراجعة والاعتماد',
       items: [
+        {
+          id: 'audit-hub',
+          label: isPrincipal ? 'مركز التدقيق والمراجعة' : 'سجل تدقيق ومراجعات المدير',
+          icon: <ClipboardCheck size={19} />,
+          badge: isPrincipal ? 'شامل' : undefined,
+          badgeColor: '#0284C7',
+        },
         {
           id: 'final-review',
           label: isPrincipal ? 'المراجعة والاعتماد الداخلي' : 'المراجعة والختم',

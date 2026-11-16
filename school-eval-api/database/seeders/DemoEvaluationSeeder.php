@@ -338,11 +338,13 @@ class DemoEvaluationSeeder extends Seeder
         ]);
 
         // هـ. مجالات التحسين المنبثقة عن المؤشرات المتدنية وربطها بالخطط
+        // توزيع دقيق: إجراء واحد واقعي لكل مؤشر ومجال دون تكرار أي مؤشر
         $areaDefs = [
             ['name' => 'تطوير معمل الحاسوب وتجهيزات التقنية التعليمية', 'priority' => 'High', 'target' => 3, 'plan' => $planQuality],
             ['name' => 'تعزيز منظومة الأمن والسلامة وتدريب فرق الطوارئ', 'priority' => 'High', 'target' => 3, 'plan' => $planOperational],
-            ['name' => 'تنفيذ برامج علاجية للطلبة ذوي صعوبات التعلم', 'priority' => 'Medium', 'target' => 2, 'plan' => $planQuality],
+            ['name' => 'تأمين حزم البرمجيات التعليمية وتفعيل منصة التدريب الرقمي', 'priority' => 'Medium', 'target' => 3, 'plan' => $planQuality],
             ['name' => 'تفعيل لجان الشراكة المجتمعية ومجلس الآباء والمعلمين', 'priority' => 'Medium', 'target' => 2, 'plan' => $planOperational],
+            ['name' => 'تنفيذ برامج علاجية للطلبة ذوي صعوبات التعلم', 'priority' => 'Medium', 'target' => 2, 'plan' => $planQuality],
         ];
 
         $createdAreas = [];
@@ -366,8 +368,9 @@ class DemoEvaluationSeeder extends Seeder
             $createdAreas[] = $area;
         }
 
-        // و. إدراج إجراءات تجريبية واقعية محدودة بنسب إنجاز 25% و 60% (الخيار أ للعرض والتجربة)
-        // مع إبقاء مجال تحسين واحد دون إجراءات لإظهار شريط التنبيه الذكي بالواجهة (الخيار ب)
+        // و. إدراج إجراءات تجريبية واقعية: إجراء تنفيذي واحد فقط لكل مؤشر/مجال دون تكرار (نسب إنجاز 25% و 60%)
+        // مع إبقاء مجال تحسين واحد (المجال رقم 4) دون إجراءات لإظهار شريط التنبيه الذكي بالواجهة
+        // 1. خطة تحسين الجودة المدرسية: إجراء للمجال 0 بنسبة 60%
         if (isset($createdAreas[0])) {
             ImprovementAction::create([
                 'plan_id'                        => $planQuality->plan_id,
@@ -383,23 +386,9 @@ class DemoEvaluationSeeder extends Seeder
                 'baseline_target_score'          => 3,
                 'baseline_gap'                   => 2,
             ]);
-
-            ImprovementAction::create([
-                'plan_id'                        => $planQuality->plan_id,
-                'area_id'                        => $createdAreas[0]->area_id,
-                'title'                          => 'تأمين حزم البرمجيات التعليمية وتفعيل منصة التدريب الرقمي',
-                'responsible_person_description' => 'رائد النشاط ومعلم الحاسب الآلي',
-                'start_date'                     => now()->subDays(10)->toDateString(),
-                'due_date'                       => now()->addDays(50)->toDateString(),
-                'status'                         => 'InProgress',
-                'completion_percentage'          => 25,
-                'progress_description'           => \App\Enums\ProgressLevel::Limited->value,
-                'baseline_score'                 => 1,
-                'baseline_target_score'          => 3,
-                'baseline_gap'                   => 2,
-            ]);
         }
 
+        // 2. الخطة التشغيلية السنوية: إجراء للمجال 1 بنسبة 60%
         if (isset($createdAreas[1])) {
             ImprovementAction::create([
                 'plan_id'                        => $planOperational->plan_id,
@@ -415,14 +404,17 @@ class DemoEvaluationSeeder extends Seeder
                 'baseline_target_score'          => 3,
                 'baseline_gap'                   => 2,
             ]);
+        }
 
+        // 3. خطة تحسين الجودة المدرسية: إجراء للمجال 2 بنسبة 25%
+        if (isset($createdAreas[2])) {
             ImprovementAction::create([
-                'plan_id'                        => $planOperational->plan_id,
-                'area_id'                        => $createdAreas[1]->area_id,
-                'title'                          => 'تنفيذ خطة إخلاء فرضية وتدريب الطلاب ومنسوبي المدرسة',
-                'responsible_person_description' => 'لجنة الطوارئ المدرسية ورائد النشاط',
-                'start_date'                     => now()->subDays(5)->toDateString(),
-                'due_date'                       => now()->addDays(55)->toDateString(),
+                'plan_id'                        => $planQuality->plan_id,
+                'area_id'                        => $createdAreas[2]->area_id,
+                'title'                          => 'تأمين حزم البرمجيات التعليمية وتفعيل منصة التدريب الرقمي',
+                'responsible_person_description' => 'رائد النشاط ومعلم الحاسب الآلي',
+                'start_date'                     => now()->subDays(10)->toDateString(),
+                'due_date'                       => now()->addDays(50)->toDateString(),
                 'status'                         => 'InProgress',
                 'completion_percentage'          => 25,
                 'progress_description'           => \App\Enums\ProgressLevel::Limited->value,
@@ -432,6 +424,7 @@ class DemoEvaluationSeeder extends Seeder
             ]);
         }
 
+        // 4. الخطة التشغيلية السنوية: إجراء للمجال 3 بنسبة 25%
         if (isset($createdAreas[3])) {
             ImprovementAction::create([
                 'plan_id'                        => $planOperational->plan_id,
@@ -441,13 +434,16 @@ class DemoEvaluationSeeder extends Seeder
                 'start_date'                     => now()->subDays(12)->toDateString(),
                 'due_date'                       => now()->addDays(30)->toDateString(),
                 'status'                         => 'InProgress',
-                'completion_percentage'          => 60,
-                'progress_description'           => \App\Enums\ProgressLevel::Moderate->value,
+                'completion_percentage'          => 25,
+                'progress_description'           => \App\Enums\ProgressLevel::Limited->value,
                 'baseline_score'                 => 2,
                 'baseline_target_score'          => 3,
                 'baseline_gap'                   => 1,
             ]);
         }
+
+        // ملاحظة: المجال 4 (تنفيذ برامج علاجية للطلبة ذوي صعوبات التعلم) يظل دون إجراءات (pending_action)
+        // لاختبار شريط التنبيه الذكي وزر الصياغة المباشرة بالواجهة
 
         // تحديث الحالة الصريحة للمجالات (status): in_progress للمجالات المجدولة، و pending_action للمجال الشاغر
         if (isset($createdAreas[0])) {
@@ -476,6 +472,36 @@ class DemoEvaluationSeeder extends Seeder
                 $p->save();
             }
         }
+
+        // تسجيل ملاحظات مراجعة إدارية واقعية من مدير المدرسة على عينة من المؤشرات (12 مؤشراً)
+        // لتغذية "مركز التدقيق والمراجعة الإدارية"
+        $indicatorsToReview = EvaluationResult::where('evaluation_id', $evalFarouq->evaluation_id)
+            ->take(12)
+            ->get();
+
+        $sampleReviewNotes = [
+            'تمت مراجعة الوثائق والمحاضر الإدارية مع وكيل المدرسة وهي مطابقة لمعايير الجودة المعتمدة.',
+            'اطلعت الإدارة المدرسية على الشواهد المرفقة ونؤكد استيفاء متطلبات هذا المؤشر بدقة.',
+            'تم التدقيق الميداني على التجهيزات والمرافق ويوصى بتقديم الدعم اللازم لاستدامة الأداء.',
+            'ملاحظة إدارية: نؤيد هذا التقدير وتم توجيه فريق التطوير بمتابعة سجلات التوثيق الدورية.',
+        ];
+
+        foreach ($indicatorsToReview as $k => $revResult) {
+            Note::create([
+                'result_id'      => $revResult->result_id,
+                'author_user_id' => $principalFarouq->user_id,
+                'text'           => $sampleReviewNotes[$k % count($sampleReviewNotes)],
+                'created_at'     => now()->subDays(3)->addHours($k * 2),
+            ]);
+        }
+
+        PlanReviewNote::create([
+            'plan_id'        => $planQuality->plan_id,
+            'author_user_id' => $principalFarouq->user_id,
+            'reviewer_role'  => 'school_principal',
+            'text'           => 'تمت المراجعة الإدارية لخطة تحسين الجودة واعتماد مصفوفة الأهداف والإجراءات للمتابعة الفصلية.',
+            'created_at'     => now()->subDays(2),
+        ]);
 
         // ز. إنشاء التقرير المعتمد ومحاولة التسليم مع طلب استكمال مفتوح على المؤشر 6-2-1 (اختبار الدورة الكاملة)
         $reportFarouq = Report::create([
@@ -625,8 +651,11 @@ class DemoEvaluationSeeder extends Seeder
         $planIds = ImprovementPlan::where('school_id', $schoolId)->pluck('plan_id');
         if ($planIds->isNotEmpty()) {
             PlanReviewNote::whereIn('plan_id', $planIds)->delete();
-            ImprovementAction::whereIn('plan_id', $planIds)->delete();
             $areaIdsFromPlans = PlanImprovementArea::whereIn('plan_id', $planIds)->pluck('area_id');
+            ImprovementAction::whereIn('plan_id', $planIds)->delete();
+            if ($areaIdsFromPlans->isNotEmpty()) {
+                ImprovementAction::whereIn('area_id', $areaIdsFromPlans)->delete();
+            }
             PlanImprovementArea::whereIn('plan_id', $planIds)->delete();
             ImprovementPlan::whereIn('plan_id', $planIds)->delete();
 
@@ -642,9 +671,12 @@ class DemoEvaluationSeeder extends Seeder
         if ($resultIds->isNotEmpty()) {
             Note::whereIn('result_id', $resultIds)->delete();
             EvaluationResultVerificationMethod::whereIn('evaluation_result_id', $resultIds)->delete();
-            ImprovementArea::whereIn('result_id', $resultIds)
-                ->whereNotIn('area_id', PlanImprovementArea::query()->select('area_id'))
-                ->delete();
+            $areaIdsFromResult = ImprovementArea::whereIn('result_id', $resultIds)->pluck('area_id');
+            if ($areaIdsFromResult->isNotEmpty()) {
+                ImprovementAction::whereIn('area_id', $areaIdsFromResult)->delete();
+                PlanImprovementArea::whereIn('area_id', $areaIdsFromResult)->delete();
+                ImprovementArea::whereIn('area_id', $areaIdsFromResult)->delete();
+            }
         }
 
         EvaluationResult::where('evaluation_id', $evaluationId)->delete();

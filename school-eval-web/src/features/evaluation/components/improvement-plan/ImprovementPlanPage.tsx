@@ -114,6 +114,13 @@ export const ImprovementPlanPage: React.FC<ImprovementPlanPageProps> = ({
     return plansList.filter((p) => p.planType === selectedPlanType);
   }, [plansList, selectedPlanType]);
 
+  // التحقق من حالة الخطة وقفل التعديل
+  const isPlanReadOnly = readOnly || isPrincipal || planData?.status === 'Archived' || planData?.status === 'Submitted';
+  const isCurrentVersionActive = planData?.status === 'Active' || planData?.status === 'Draft';
+  const newerVersion = React.useMemo(() => {
+    return tabPlansList.find((p) => (p.versionNumber || 1) > (planData?.versionNumber || 1)) || null;
+  }, [tabPlansList, planData?.versionNumber]);
+
   // دالة مساعدة لتنسيق التاريخ بالعربية مع اسم اليوم
   const formatArabicDateWithDay = (dateStr?: string | null): string => {
     if (!dateStr) return '-';
@@ -415,68 +422,225 @@ export const ImprovementPlanPage: React.FC<ImprovementPlanPageProps> = ({
   return (
     <div style={{ padding: '24px', maxWidth: '1440px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '22px', direction: 'rtl' }}>
       
-      {/* Supervisor Completion Request Warning Banner */}
+      {/* Supervisor Completion Request / Plan Version Status Banner */}
       {completionRequest && (
+        isCurrentVersionActive ? (
+          <div
+            style={{
+              padding: '16px 20px',
+              borderRadius: '12px',
+              backgroundColor: '#F0FDF4',
+              border: '1.5px solid #86EFAC',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: '12px',
+              boxShadow: '0 2px 8px rgba(16, 185, 129, 0.12)',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div
+                style={{
+                  width: '40px',
+                  height: '40px',
+                  borderRadius: '10px',
+                  backgroundColor: '#DCFCE7',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#059669',
+                }}
+              >
+                <CheckCircle2 size={22} />
+              </div>
+              <div>
+                <h4 style={{ margin: 0, fontSize: '14.5px', fontWeight: 800, color: '#166534' }}>
+                  طلب استكمال نشط — أنت تعمل الآن على الإصدار الأحدث المستنسخ (v{planData?.versionNumber || 1})
+                </h4>
+                <p style={{ margin: '3px 0 0 0', fontSize: '12.5px', color: '#15803D' }}>
+                  الخطة الحالية مفتوحة للتعديل استجابةً لملاحظات المشرف الوزاري ({completionRequest.supervisorName}). يمكنك استكمال وإضافة الإجراءات التنفيذية لمعالجة الفجوات قبل إعادة الاعتماد.
+                </p>
+              </div>
+            </div>
+          </div>
+        ) : newerVersion ? (
+          <div
+            style={{
+              padding: '16px 20px',
+              borderRadius: '12px',
+              backgroundColor: '#EFF6FF',
+              border: '1.5px solid #93C5FD',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: '12px',
+              boxShadow: '0 2px 8px rgba(37, 99, 235, 0.12)',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div
+                style={{
+                  width: '40px',
+                  height: '40px',
+                  borderRadius: '10px',
+                  backgroundColor: '#DBEAFE',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#2563EB',
+                }}
+              >
+                <Lock size={22} />
+              </div>
+              <div>
+                <h4 style={{ margin: 0, fontSize: '14.5px', fontWeight: 800, color: '#1E40AF' }}>
+                  نسخة سابقة مؤرشفة — تم استنساخ إصدار أحدث بالفعل (v{newerVersion.versionNumber})
+                </h4>
+                <p style={{ margin: '3px 0 0 0', fontSize: '12.5px', color: '#1D4ED8' }}>
+                  هذه النسخة (v{planData?.versionNumber || 1}) مقفلة ومؤرشفة للقراءة فقط بعد استنساخ الإصدار الجديد لمعالجة ملاحظات المشرف الوزاري ({completionRequest.supervisorName}).
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                switchPlan(newerVersion.planType, newerVersion.planId);
+              }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '9px 18px',
+                borderRadius: '8px',
+                backgroundColor: '#2563EB',
+                color: '#FFFFFF',
+                border: 'none',
+                fontSize: '13px',
+                fontWeight: 800,
+                cursor: 'pointer',
+                boxShadow: '0 2px 6px rgba(37, 99, 235, 0.25)',
+              }}
+            >
+              <GitBranch size={16} />
+              <span>الانتقال إلى النسخة الأحدث (v{newerVersion.versionNumber})</span>
+            </button>
+          </div>
+        ) : (
+          <div
+            style={{
+              padding: '16px 20px',
+              borderRadius: '12px',
+              backgroundColor: '#FFFBEB',
+              border: '1.5px solid #F59E0B',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: '12px',
+              boxShadow: '0 2px 8px rgba(245, 158, 11, 0.15)',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div
+                style={{
+                  width: '40px',
+                  height: '40px',
+                  borderRadius: '10px',
+                  backgroundColor: '#FEF3C7',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#D97706',
+                }}
+              >
+                <ShieldAlert size={22} />
+              </div>
+              <div>
+                <h4 style={{ margin: 0, fontSize: '14.5px', fontWeight: 800, color: '#92400E' }}>
+                  طلب استكمال رسمي من المشرف الوزاري ({completionRequest.supervisorName})
+                </h4>
+                <p style={{ margin: '3px 0 0 0', fontSize: '12.5px', color: '#B45309' }}>
+                  الخطة الحالية مقفلة بعد التسليم السابق. يمكنك الضغط على «إنشاء نسخة جديدة (v{(planData?.versionNumber || 1) + 1})» لاستنساخ الخطة ومتابعة التعديلات المطلوبة.
+                </p>
+              </div>
+            </div>
+            {!isPrincipal && (
+              <button
+                type="button"
+                onClick={handleCloneVersion}
+                disabled={isCloningVersion}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '9px 18px',
+                  borderRadius: '8px',
+                  backgroundColor: '#D97706',
+                  color: '#FFFFFF',
+                  border: 'none',
+                  fontSize: '13px',
+                  fontWeight: 800,
+                  cursor: isCloningVersion ? 'not-allowed' : 'pointer',
+                  boxShadow: '0 2px 6px rgba(217, 119, 6, 0.3)',
+                }}
+              >
+                <GitBranch size={16} />
+                <span>{isCloningVersion ? 'جاري الاستنساخ...' : `إنشاء نسخة جديدة (v${(planData?.versionNumber || 1) + 1})`}</span>
+              </button>
+            )}
+          </div>
+        )
+      )}
+
+      {/* ReadOnly banner for archived/submitted plans without completion request */}
+      {!completionRequest && (planData?.status === 'Archived' || planData?.status === 'Submitted') && (
         <div
           style={{
-            padding: '16px 20px',
-            borderRadius: '12px',
-            backgroundColor: '#FFFBEB',
-            border: '1.5px solid #F59E0B',
+            padding: '14px 18px',
+            borderRadius: '10px',
+            backgroundColor: '#F8FAFC',
+            border: '1.5px solid #CBD5E1',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
             flexWrap: 'wrap',
             gap: '12px',
-            boxShadow: '0 2px 8px rgba(245, 158, 11, 0.15)',
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <div
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <Lock size={18} color="#64748B" />
+            <span style={{ fontSize: '13px', color: '#475569', fontWeight: 600 }}>
+              {planData?.status === 'Archived'
+                ? '🔒 هذه النسخة من خطة التحسين مؤرشفة كمرجع تاريخي للقراءة فقط.'
+                : '📤 هذه الخطة مرفوعة للاعتماد الوزاري ومقفلة عن التعديل.'}
+            </span>
+          </div>
+          {newerVersion && (
+            <button
+              type="button"
+              onClick={() => {
+                switchPlan(newerVersion.planType, newerVersion.planId);
+              }}
               style={{
-                width: '40px',
-                height: '40px',
-                borderRadius: '10px',
-                backgroundColor: '#FEF3C7',
-                display: 'flex',
+                display: 'inline-flex',
                 alignItems: 'center',
-                justifyContent: 'center',
-                color: '#D97706',
+                gap: '5px',
+                padding: '6px 14px',
+                borderRadius: '6px',
+                backgroundColor: '#2563EB',
+                color: '#FFFFFF',
+                border: 'none',
+                fontSize: '12px',
+                fontWeight: 700,
+                cursor: 'pointer',
               }}
             >
-              <ShieldAlert size={22} />
-            </div>
-            <div>
-              <h4 style={{ margin: 0, fontSize: '14.5px', fontWeight: 800, color: '#92400E' }}>
-                طلب استكمال رسمي من المشرف الوزاري ({completionRequest.supervisorName})
-              </h4>
-              <p style={{ margin: '3px 0 0 0', fontSize: '12.5px', color: '#B45309' }}>
-                الخطة الحالية مقفلة بعد التسليم السابق. يمكنك الضغط على «إنشاء نسخة جديدة (v2)» لاستنساخ الخطة ومتابعة التعديلات المطلوبة.
-              </p>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={handleCloneVersion}
-            disabled={isCloningVersion}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '9px 18px',
-              borderRadius: '8px',
-              backgroundColor: '#D97706',
-              color: '#FFFFFF',
-              border: 'none',
-              fontSize: '13px',
-              fontWeight: 800,
-              cursor: isCloningVersion ? 'not-allowed' : 'pointer',
-              boxShadow: '0 2px 6px rgba(217, 119, 6, 0.3)',
-            }}
-          >
-            <GitBranch size={16} />
-            <span>{isCloningVersion ? 'جاري الاستنساخ...' : `إنشاء نسخة جديدة (v${(planData?.versionNumber || 1) + 1})`}</span>
-          </button>
+              <GitBranch size={14} />
+              الانتقال للنسخة الأحدث (v{newerVersion.versionNumber})
+            </button>
+          )}
         </div>
       )}
 
@@ -1090,7 +1254,7 @@ export const ImprovementPlanPage: React.FC<ImprovementPlanPageProps> = ({
             <span>{isExportingWorkbook ? 'جاري التصدير...' : '📗 تصدير إكسل شامل (المصنف الموحد)'}</span>
           </button>
 
-          {!readOnly && planData?.status !== 'Archived' && planData?.status !== 'Submitted' && (
+          {!isPlanReadOnly && (
             <>
               <button
                 type="button"
@@ -1386,7 +1550,7 @@ export const ImprovementPlanPage: React.FC<ImprovementPlanPageProps> = ({
                     أولوية {area.priority === 'High' ? 'عالية' : area.priority === 'Medium' ? 'متوسطة' : 'منخفضة'}
                   </span>
 
-                  {!readOnly && !isPrincipal ? (
+                  {!isPlanReadOnly ? (
                     <button
                       type="button"
                       onClick={() => {
@@ -2006,7 +2170,7 @@ export const ImprovementPlanPage: React.FC<ImprovementPlanPageProps> = ({
                         <div style={{ fontSize: '13px', color: '#64748B', maxWidth: '520px', margin: '0 auto 16px', lineHeight: 1.6 }}>
                           يوجد ({areasWithoutActions.length}) مجالات تحسين متبناة في هذه الخطة بانتظار صياغة مهامها ومسؤوليها في الشريط التنبيهي أعلاه.
                         </div>
-                        {!readOnly && !isPrincipal && (
+                        {!isPlanReadOnly && (
                           <button
                             type="button"
                             onClick={() => {
@@ -2401,10 +2565,10 @@ export const ImprovementPlanPage: React.FC<ImprovementPlanPageProps> = ({
                             cursor: 'pointer',
                             transition: 'all 0.15s ease',
                           }}
-                          title={readOnly ? 'استعراض تفاصيل الإجراء' : 'تعديل كافة بيانات الإجراء والمتابعة الميدانية'}
+                          title={isPlanReadOnly ? 'استعراض تفاصيل الإجراء (للقراءة فقط)' : 'تعديل كافة بيانات الإجراء والمتابعة الميدانية'}
                         >
                           <Edit2 size={12} />
-                          {readOnly ? 'تفاصيل' : 'تعديل'}
+                          {isPlanReadOnly ? 'استعراض' : 'تعديل'}
                         </button>
                       </td>
                     </tr>
@@ -2622,7 +2786,7 @@ export const ImprovementPlanPage: React.FC<ImprovementPlanPageProps> = ({
           addToast('success', 'تم حفظ وتحديث بيانات الإجراء التنفيذي بنجاح.');
         }}
         isSubmitting={isSubmitting}
-        readOnly={readOnly || planData?.status === 'Archived' || planData?.status === 'Submitted'}
+        readOnly={isPlanReadOnly}
       />
 
       {/* Toasts */}

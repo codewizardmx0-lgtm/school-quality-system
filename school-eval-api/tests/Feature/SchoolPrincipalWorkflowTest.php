@@ -4,12 +4,15 @@ namespace Tests\Feature;
 
 use App\Models\Evaluation;
 use App\Models\ImprovementPlan;
+use App\Models\Indicator;
 use App\Models\School;
 use App\Models\User;
+use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Tests\TestCase;
 
 class SchoolPrincipalWorkflowTest extends TestCase
 {
+    use DatabaseTransactions;
     protected User $principalFarouq;
     protected User $principalBelqees;
     protected School $schoolFarouq;
@@ -307,5 +310,173 @@ class SchoolPrincipalWorkflowTest extends TestCase
         $updateRes->assertStatus(200);
         $areaModel->refresh();
         $this->assertEquals('completed', $areaModel->status, 'اكتمال كافة إجراءات المجال يجب أن ينقل حالته إلى completed');
+    }
+
+    /**
+     * 11. قفل الخطط المؤرشفة والمرفوعة: منع التعديل وإضافة أو تعديل الإجراءات التنفيذية (422 Unprocessable Entity)
+     */
+    public function test_archived_or_submitted_plan_is_locked_against_modifications(): void
+    {
+        $evaluator = User::where('username', 'quality_farouq')->firstOrFail();
+        $planQuality = ImprovementPlan::where('school_id', $this->schoolFarouq->school_id)
+            ->where('plan_type', ImprovementPlan::TYPE_QUALITY_IMPROVEMENT)
+            ->firstOrFail();
+
+        // تحويل الخطة إلى مؤرخة لاختبار القفل الصارم
+        $planQuality->update(['status' => 'Archived']);
+        $area = $planQuality->areas()->firstOrFail();
+
+        // 1. محاولة تعديل بيانات الخطة المؤرشفة -> 422
+        $updatePlanRes = $this->actingAs($evaluator, 'sanctum')
+            ->patchJson("/api/v1/improvement-plans/{$planQuality->plan_id}", [
+                'title' => 'عنوان معدل لخطة مؤرشفة',
+            ]);
+        $updatePlanRes->assertStatus(422)
+            ->assertJsonValidationErrors(['status']);
+
+        // 2. محاولة إضافة إجراء تنفيذي لخطة مؤرشفة -> 422
+        $storeActionRes = $this->actingAs($evaluator, 'sanctum')
+            ->postJson("/api/v1/improvement-plans/{$planQuality->plan_id}/actions", [
+                'areaId'                       => $area->area_id,
+                'title'                        => 'إجراء محظور على خطة مؤرشفة',
+                'responsiblePersonDescription' => 'فريق الجودة',
+                'startDate'                    => now()->toDateString(),
+                'dueDate'                      => now()->addMonths(1)->toDateString(),
+            ]);
+        $storeActionRes->assertStatus(422)
+            ->assertJsonValidationErrors(['status']);
+
+        // 3. محاولة تعديل إجراء في خطة مؤرشفة -> 422
+        $action = $planQuality->actions()->first();
+        if ($action) {
+            $updateActionRes = $this->actingAs($evaluator, 'sanctum')
+                ->patchJson("/api/v1/improvement-plans/{$planQuality->plan_id}/actions/{$action->action_id}", [
+                    'title' => 'تعديل محظور لإجراء',
+                ]);
+            $updateActionRes->assertStatus(422)
+                ->assertJsonValidationErrors(['status']);
+        }
+    }
+
+    /**
+     * 12. مقترحات AI: تمييز التبني بالخطة النشطة (isAlreadyAdopted) عن التبني السابق بالخطة المؤرشفة (isPreviouslyAdopted)
+     */
+    public function test_suggestions_api_distinguishes_active_vs_archived_plan_adoption(): void
+    {
+        $evaluator = User::where('username', 'quality_farouq')->firstOrFail();
+        $evaluation = Evaluation::where('school_id', $this->schoolFarouq->school_id)->firstOrFail();
+
+        $res = $this->actingAs($evaluator, 'sanctum')
+            ->getJson("/api/v1/evaluations/{$evaluation->evaluation_id}/improvement-suggestions");
+
+        $res->assertStatus(200);
+        $suggestions = $res->json('data.suggestions') ?? [];
+        $this->assertNotEmpty($suggestions);
+
+        // التحقق من بنية حقول التبني والإصدار
+        foreach ($suggestions as $sugg) {
+            $this->assertArrayHasKey('isAlreadyAdopted', $sugg);
+            $this->assertArrayHasKey('isPreviouslyAdopted', $sugg);
+            if ($sugg['isAlreadyAdopted'] && $sugg['adoptedPlan']) {
+                $this->assertArrayHasKey('versionNumber', $sugg['adoptedPlan']);
+                $this->assertTrue($sugg['adoptedPlan']['isCurrentPlan']);
+            }
+        }
+    }
+
+    /**
+     * 13. مركز التدقيق والمراجعة الشاملة (Audit Hub): استرجاع المؤشرات الـ 109 والخطط والإقرار الإداري
+     */
+    public function test_audit_hub_endpoint_returns_comprehensive_data_for_principal_and_evaluator(): void
+    {
+        $principal = User::where('username', 'principal_farouq')->firstOrFail();
+        $evaluator = User::where('username', 'quality_farouq')->firstOrFail();
+
+        // فحص وصول مدير المدرسة للمركز
+        $resPrincipal = $this->actingAs($principal, 'sanctum')
+            ->getJson('/api/v1/evaluator/audit-hub');
+
+        $resPrincipal->assertStatus(200)
+            ->assertJsonStructure([
+                'data' => [
+                    'schoolId',
+                    'schoolName',
+                    'summary' => [
+                        'totalIndicators',
+                        'reviewedIndicatorsCount',
+                        'pendingIndicatorsCount',
+                        'reviewCoveragePercentage',
+                        'plansCount',
+                        'reviewedPlansCount',
+                        'hasOpenCompletionRequest',
+                        'finalReviewAcknowledged',
+                    ],
+                    'indicators',
+                    'plans',
+                    'completionRequest',
+                    'finalReview' => [
+                        'reportId',
+                        'isGenerated',
+                        'isLocked',
+                        'hasPrincipalAcknowledgment',
+                    ],
+                ],
+            ]);
+
+        $summary = $resPrincipal->json('data.summary');
+        $this->assertEquals(109, $summary['totalIndicators']);
+        $this->assertGreaterThan(0, $summary['reviewedIndicatorsCount']);
+        $this->assertNotEmpty($resPrincipal->json('data.plans'));
+
+        // فحص وصول مقيم المدرسة لسجل التدقيق
+        $resEvaluator = $this->actingAs($evaluator, 'sanctum')
+            ->getJson('/api/v1/evaluator/audit-hub');
+
+        $resEvaluator->assertStatus(200);
+        $this->assertEquals($summary['totalIndicators'], $resEvaluator->json('data.summary.totalIndicators'));
+    }
+
+    /**
+     * 14. مركز التدقيق والمراجعة: المدير يدون مراجعة إدارية سريعة بنجاح والمستخدم غير المصرح يُمنع
+     */
+    public function test_principal_can_submit_quick_review_note_from_audit_hub_and_unauthorized_user_is_forbidden(): void
+    {
+        $principal = User::where('username', 'principal_farouq')->firstOrFail();
+        $indicator = Indicator::firstOrFail();
+
+        // 1. تدوين ملاحظة مراجعة سريعة ناجحة من قبل المدير
+        $res = $this->actingAs($principal, 'sanctum')
+            ->postJson("/api/v1/evaluator/audit-hub/indicators/{$indicator->indicator_id}/review-note", [
+                'text' => 'تم تدقيق هذا المؤشر إدارياً والتأكد من مطابقة شواهد البيئة المدرسية.',
+            ]);
+
+        $res->assertStatus(200)
+            ->assertJsonPath('data.text', 'تم تدقيق هذا المؤشر إدارياً والتأكد من مطابقة شواهد البيئة المدرسية.')
+            ->assertJsonPath('data.authorRole', 'مدير المدرسة');
+
+        // 2. التحقق من فشل التحقق في حال كان النص فارغاً أو قصيراً جداً
+        $resValidation = $this->actingAs($principal, 'sanctum')
+            ->postJson("/api/v1/evaluator/audit-hub/indicators/{$indicator->indicator_id}/review-note", [
+                'text' => 'لا',
+            ]);
+        $resValidation->assertStatus(422)
+            ->assertJsonValidationErrors(['text']);
+
+        // 3. مستخدم بدون صلاحية reviews.write أو evaluations.edit
+        $guestUser = User::create([
+            'school_id'     => $this->schoolFarouq->school_id,
+            'username'      => 'guest_audit_' . uniqid(),
+            'full_name'     => 'مستخدم ضيف',
+            'email'         => 'guest_audit_' . uniqid() . '@example.com',
+            'user_type'     => 'school',
+            'password_hash' => bcrypt('password'),
+            'status'        => 'active',
+        ]);
+
+        $resForbidden = $this->actingAs($guestUser, 'sanctum')
+            ->postJson("/api/v1/evaluator/audit-hub/indicators/{$indicator->indicator_id}/review-note", [
+                'text' => 'محاولة تدوين مراجعة غير مصرحة',
+            ]);
+        $resForbidden->assertStatus(403);
     }
 }

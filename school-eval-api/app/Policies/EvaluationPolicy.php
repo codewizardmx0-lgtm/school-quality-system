@@ -99,6 +99,22 @@ class EvaluationPolicy
     }
 
     /**
+     * هل يحق للمستخدم تدوين ملاحظات ومراجعة التقييم؟ (مدير المدرسة أو المقيم)
+     */
+    public function review(User $user, Evaluation $evaluation): bool
+    {
+        if ($user->user_type !== 'school') {
+            return false;
+        }
+
+        if ((int) $user->school_id !== (int) $evaluation->school_id) {
+            return false;
+        }
+
+        return $user->hasPermission('reviews.write') || $user->hasPermission('evaluations.edit');
+    }
+
+    /**
      * هل يحق للمستخدم إجراء الإرسال النهائي لملف التقييم؟
      */
     public function submit(User $user, Evaluation $evaluation): bool

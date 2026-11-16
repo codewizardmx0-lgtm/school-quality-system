@@ -122,38 +122,81 @@
     4. **4. المخرجات وسجل الإشعارات** (مركز التقارير، مقارنة الأداء التاريخي، مركز التنبيهات).
   - تكييف العناوين المقابلة لمدير المدرسة: `الملاحظة الإدارية والمعايير`، `متابعة خطط التحسين`، `الاعتماد الداخلي والحوكمة`، `التقارير والمخرجات التنفيذية`.
 
+### المرحلة السابعة: استقرار دورة حياة الخطط، قفل الأرشيف الصارم، ومعالجة التكرار وتبني المقترحات
+- **تنظيم بيانات الـ Seeder التجريبية (إجراء واحد واقعي لكل مؤشر دون تكرار)**:
+  - ضبط `DemoEvaluationSeeder.php` بحيث ينفرد كل مؤشر ومجال تحسين بإجراء تنفيذي واحد فقط بنسب إنجاز 25% و 60%، مع إبقاء مجال واحد دون إجراءات (`pending_action`) لاختبار شريط التنبيه الذكي.
+  - إزالة أي تكرار لإجراءات على نفس المؤشر.
+- **حوكمة زر الاستنساخ ودورة حياة النسخ (`ImprovementPlanPage.tsx`)**:
+  - إخفاء زر الاستنساخ تلقائياً عند التواجد على النسخة النشطة (`Active` أو `Draft`) واستبداله بشريط إرشادي يؤكد للمستخدم أنه يعمل بالفعل على النسخة الأحدث المستنسخة.
+  - عند استعراض نسخة قديمة تمت أرشفتها وسبق استنساخ إصدار أحدث منها، يظهر شريط أرشيف للقراءة فقط مع زر مباشر `[الانتقال إلى النسخة الأحدث (vX)]` دون إظهار زر الاستنساخ المكرر.
+  - يظهر زر الاستنساخ فقط عند فتح الخطة المقفلة/المرفوعة التي تنتظر الاستنساخ الأولي لبدء المعالجة.
+- **قفل الخطط المؤرشفة والمرفوعة في الـ Backend والواجهة**:
+  - حظر تعديل بيانات الخطة (`update`) أو إضافة إجراءات (`storeAction`) أو تعديل الإجراءات القائمة (`updateAction`) على الخطط المؤرشفة (`Archived`) أو المرفوعة (`Submitted`) مع إرجاع كود الاستجابة المعتمد `422 Unprocessable Entity`.
+  - في الواجهة الأمامية، تحويل أزرار جدول الإجراءات في النسخ المؤرشفة من `تعديل` إلى `استعراض` للقراءة فقط، وتمرير `readOnly={isPlanReadOnly}` إلى نافذة متابعة الإجراءات `ActionProgressModal`.
+- **معالجة تكرار المجالات والوسوم في نافذة إضافة الإجراء (`AddActionModal.tsx` و `EvaluatorApiController.php`)**:
+  - إزالة التكرار من مصفوفة `$existingLinks` في الباك إند عبر `unique('planId')`.
+  - فلترة المجالات غير المكررة في الواجهة `uniqueAreas` عبر `useMemo` بناءً على `areaId`.
+  - منع تكرار وسم الخطة الواحدة أسفل اسم المجال في القائمة المنسدلة.
+- **ترقية شارات مقترحات AI وتحديد إصدار الخطة وحالة التبني السابقة**:
+  - تحديث `ImprovementSuggestionController.php` ليميز بين:
+    - **متبنى بالخطة الحالية** (`isAlreadyAdopted = true`): إذا كان متبنى في خطة نشطة بالدورة الحالية، مع عرض رقم الإصدار والوسم مثل `متبناة في: خطة تحسين الجودة (v2 - خطة استكمال)`.
+    - **متبنى سابقاً (مؤرشف)** (`isPreviouslyAdopted = true`): إذا كان تبنيه في خطة مؤرشفة أو دورة سابقة؛ حيث تظهر شارة كهرمانية `آخر تبنٍّ: خطة الجودة (v1)`، مع إبقاء زر `[تبني بالخطة الحالية]` متاحاً للمقيم لإعادة التبني دون قيود.
+
+### المرحلة الثامنة: مركز التدقيق والمراجعة الإدارية الشاملة وزر العودة المختصر
+- **مركز التدقيق والمراجعة (`AuditReviewHubPage.tsx`)**:
+  - إنشاء صفحة موحدة متخصصة في القسم الثالث من القائمة الجانبية ("الاعتماد الداخلي والحوكمة"):
+    - لمدير المدرسة: تحت مسمى **«مركز التدقيق والمراجعة الإدارية الشاملة»**.
+    - لمقيم المدرسة: تحت مسمى **«سجل تدقيق ومراجعات مدير المدرسة»**.
+  - **بطاقات المؤشرات القياسية (KPI Cards)**: عرض إجمالي المؤشرات الـ 109، عدد ونسبة المؤشرات المراجعة إدارياً، عدد المؤشرات المعلقة، حالة خطط التحسين الثلاث، حالة طلبات الاستكمال، وحالة الإقرار الإداري.
+  - **تبويب 1: جدول مؤشرات التقييم الذاتي الـ 109**:
+    - شريط تصفية متعدد: بحث نصي بالرمز/الاسم، فلتر المعايير الأربعة، فلتر حالة مراجعة المدير (تمت/معلقة)، وفلتر التقديرات (متقدم/كافٍ/محدود/غير متوفر/غير مرصود).
+    - فرز رؤوس الأعمدة: فرز تصاعدي وتنازلي لرمز المؤشر، المعيار، التقدير، عدد الشواهد، وحالة مراجعة المدير.
+    - حالة المراجعة الذكية: عرض شارة خضراء `✓ تمت المراجعة` مع عدد الملاحظات واقتباس من آخر ملاحظة مع التاريخ والكاتب، أو شارة صفراء `⏳ بانتظار مراجعة المدير`.
+    - الإجراءات:
+      - زر `[استعراض ↗]`: انتقال مباشر للمؤشر في استمارة التقييم (`rubric-assessment`) مع فتح المؤشر المحدد وتفعيل مسار العودة الذكي.
+      - زر `[+ مراجعة / ملاحظة]`: نافذة منبثقة سريعة (`QuickReviewModal`) مخصصة حصراً لمدير المدرسة لكتابة وحفظ الملاحظة الإدارية فورياً ومزامنتها دون مغادرة المركز. للمقيم يختفي هذا الزر تماماً لتقتصر واجهته على الاستعراض والمطالعة فقط.
+  - **تبويب 2: متابعة خطط التحسين المدرسية الثلاث**:
+    - بطاقات تفصيلية لخطة الجودة، الخطة التشغيلية، وخطة التطوير المهني مع الإصدار والوسم وعدد الإجراءات وملاحظات المدير وزر انتقال مباشر.
+  - **تبويب 3: طلبات وملاحظات الاستكمال الوزارية**:
+    - عرض حالة طلب المشرف، توجيهاته، عدد البنود المتبقية والمكتملة، وزر انتقال مباشر لشاشة المعالجة.
+  - **تبويب 4: المراجعة والإقرار الإداري والختم**:
+    - عرض حالة التقرير النهائي، نص وتاريخ الإقرار الإداري للمدير، وزر انتقال لشاشة المراجعة الداخلية.
+- **زر العودة المختصر الذكي (`Sticky Quick Return Banner`)**:
+  - تم في `EvaluatorLayout.tsx` تطبيق نظام تتبع مسار التنقل الذكي عبر راية `navigatedFromHub`.
+  - عند انتقال المستخدم (سواء كان مديراً أو مقيماً) من مركز التدقيق إلى أي شاشة أخرى (استمارة الرصد، خطة التحسين، طلب الاستكمال، المراجعة والختم)، يظهر في أعلى الشاشة شريط مثبت بارز أنيق:
+    `[العودة إلى مركز التدقيق والمراجعة الإدارية ↩]`
+  - عند النقر عليه، يعود المستخدم فوراً إلى مركز التدقيق ويختفي الشريط.
+  - **حوكمة دقيقة:** يختفي الشريط تلقائياً إذا تنقل المستخدم عبر بنود القائمة الجانبية مباشرة، ولا يظهر إلا عند الانبثاق من مركز التدقيق.
+- **الواجهة الخلفية (`Backend APIs & Policies`)**:
+  - إضافة نقطة `GET /api/v1/evaluator/audit-hub` لتجميع كافة مؤشرات الـ 109 والخطط والاستكمال والإقرار الإداري.
+  - إضافة نقطة `POST /api/v1/evaluator/audit-hub/indicators/{indicatorId}/review-note` لتدوين الملاحظات السريعة.
+  - تحديث `EvaluationPolicy::review` ليسمح لمن يملك صلاحية `reviews.write` بالمراجعة دون الحاجة لصلاحية تعديل التقييم `evaluations.edit`.
+- **الاختبارات الآلية**:
+  - إضافة اختباري تكامل رقم 13 و 14 في `SchoolPrincipalWorkflowTest.php` للتحقق من استرجاع بيانات المركز ومنع غير المصرحين وتدوين مراجعات المدير.
+
 ---
 
 ## 3. قائمة الملفات المنفذة والمعدلة في هذا الفرع
 
 | المسار | نوع التعديل | الغرض |
 | :--- | :--- | :--- |
-| `school-eval-web/src/features/evaluation/components/layout/EvaluatorLayout.tsx` | تحديث جوهري | شريط الحوكمة الإدارية، تمرير `isPrincipal` لكافة الشاشات الفرعية |
-| `school-eval-web/src/features/evaluation/components/layout/EvaluatorTopBar.tsx` | تحديث | مسار `بوابة مدير المدرسة`، عناوين إدارية، وشارة الملاحظة والإقرار |
-| `school-eval-web/src/features/evaluation/components/layout/EvaluatorSidebar.tsx` | تحديث جوهري | إعادة هيكلة القائمة إلى 4 أقسام دورة حياة، وتكييف الشارات والعناوين |
-| `school-eval-web/src/features/evaluation/components/self-evaluation/RubricAssessmentPage.tsx` | تحديث جوهري | شريط تنبيه المدير، تلميحات البطاقات، إخفاء الحفظ والتصفير، كبسولة الملاحظة |
-| `school-eval-web/src/features/evaluation/components/self-evaluation/UnifiedStandardsAssessmentPage.tsx` | تحديث | تمرير `isPrincipal` لشجرة المعايير واستمارة الرصد |
-| `school-eval-web/src/features/evaluation/components/self-evaluation/StandardsTreePage.tsx` | تحديث | حظر تصفير المعيار للمدير، تعديل زر المؤشر إلى "استعراض" |
-| `school-eval-web/src/features/evaluation/components/evidences/EvidencesRepository.tsx` | تحديث | كبسولة `وضع استعراض الشواهد` بدلاً من زر الرفع، استيراد أيقونة `Lock` |
-| `school-eval-web/src/features/evaluation/components/ai-assistant/FormulaSuggestionsSection.tsx` | تحديث | تلميحات أزرار المقترحات، شارة "للاطلاع" بدلاً من الحذف |
-| `school-eval-web/src/features/evaluation/components/improvement-plan/ImprovementPlanPage.tsx` | تحديث جوهري | شريط المجالات غير المجدولة، شارات الحالة الصريحة، الزر المباشر للصياغة |
-| `school-eval-web/src/features/evaluation/components/improvement-plan/AddActionModal.tsx` | تحديث | دعم `initialAreaId` وعرض شارة حالة المجال في القائمة المنسدلة |
-| `school-eval-web/src/features/evaluation/api/evaluationTypes.ts` | تحديث | إضافة نموذج `ImprovementAreaStatus` وخصائص `status` و `description` |
-| `school-eval-web/src/features/evaluation/components/dashboard/EvaluatorDashboard.tsx` | تحديث | إزالة البيانات الوهمية، شارة لوحة الإشراف والمتابعة الإدارية |
-| `school-eval-web/src/features/evaluation/components/dashboard/PendingIndicatorsTable.tsx` | تحديث | تكييف زر الفتح لمدير المدرسة ليكون "استعراض" |
-| `school-eval-api/database/migrations/2026_11_16_200001_add_status_to_improvement_areas_table.php` | **جديد** | إضافة حقل `status` لجدول مجالات التحسين مع القيمة الافتراضية `pending_action` |
-| `school-eval-api/app/Models/ImprovementArea.php` | تحديث | ثوابت الحالة الصريحة ودالة المزامنة التلقائية `syncStatus()` |
-| `school-eval-api/app/Models/ImprovementAction.php` | تحديث | ربط أحداث النموذج (`saved`, `deleted`) بمزامنة حالة المجال |
-| `school-eval-api/app/Http/Controllers/Api/V1/ImprovementAreaController.php` | تحديث | إرجاع `status` في مصفوفة تنسيق المجال |
-| `school-eval-api/app/Http/Controllers/Api/V1/ImprovementPlanController.php` | تحديث | إرجاع `status` في تفاصيل خطة التحسين |
-| `school-eval-api/app/Http/Controllers/Api/V1/EvaluatorApiController.php` | تحديث | إرجاع `status` في قوائم مجالات الخطة والمجالات المتاحة |
-| `school-eval-api/database/seeders/DemoEvaluationSeeder.php` | تحديث | بذر الحالة الصريحة للمجالات وتوليد الإجراءات التجريبية بنسب 25% و 60% |
-| `school-eval-api/tests/Feature/SchoolPrincipalWorkflowTest.php` | **جديد** | 10 اختبارات تكاملية تشمل حوكمة الصلاحيات والحالة الصريحة وانتقالاتها |
+| `school-eval-web/src/features/evaluation/components/audit-hub/AuditReviewHubPage.tsx` | **جديد** | مركز التدقيق والمراجعة الشاملة، المؤشرات الـ 109، الفلاتر والفرز، نافذة المراجعة السريعة |
+| `school-eval-web/src/features/evaluation/components/layout/EvaluatorLayout.tsx` | تحديث جوهري | شريط الحوكمة، زر العودة المختصر الذكي، ربط `audit-hub` وتمرير `fromHub` |
+| `school-eval-web/src/features/evaluation/components/layout/EvaluatorTopBar.tsx` | تحديث | عنوان `مركز التدقيق والمراجعة الإدارية الشاملة` و`سجل تدقيق ومراجعات مدير المدرسة` |
+| `school-eval-web/src/features/evaluation/components/layout/EvaluatorSidebar.tsx` | تحديث | إضافة بند `مركز التدقيق والمراجعة` في القسم الثالث من القائمة الجانبية |
+| `school-eval-web/src/features/evaluation/api/evaluationTypes.ts` | تحديث | إضافة شاشة `audit-hub` ونماذج `AuditHubData` و `AuditHubIndicator` |
+| `school-eval-web/src/features/evaluation/api/evaluatorApi.ts` | تحديث | دالتا `getAuditHub` و `addAuditIndicatorReviewNote` |
+| `school-eval-api/app/Http/Controllers/Api/V1/EvaluatorApiController.php` | تحديث جوهري | نقطتا `getAuditHub` و `storeIndicatorReviewNote` |
+| `school-eval-api/app/Policies/EvaluationPolicy.php` | تحديث | دالة `review` لاعتماد صلاحية `reviews.write` للمدير |
+| `school-eval-api/app/Http/Controllers/Api/V1/EvaluationController.php` | تحديث | تحديث `addNote` للتحقق من سياسة `review` |
+| `school-eval-api/routes/api.php` | تحديث | مسارات مركز التدقيق والمراجعة السريعة |
+| `school-eval-api/database/seeders/DemoEvaluationSeeder.php` | تحديث جوهري | غرس 12 ملاحظة مراجعة واقعية من مدير المدرسة على المؤشرات والخطة |
+| `school-eval-api/tests/Feature/SchoolPrincipalWorkflowTest.php` | تحديث | 14 اختباراً شاملاً بنسبة نجاح 100% |
 
 ---
 
 ## 4. نتائج الفحص والاختبارات الكاملة
 - **بناء الواجهة الأمامية (`npm run build`)**:
-  - النتيجة: **ناجح بنسبة 100% (0 أخطاء، 0 تحذيرات، زمن البناء 765ms)**.
+  - النتيجة: **ناجح بنسبة 100% (0 أخطاء، 0 تحذيرات، زمن البناء 723ms)**.
 - **حزمة اختبارات الواجهة الخلفية (`php vendor/bin/phpunit`)**:
-  - النتيجة: **429 اختباراً ناجحاً بالكامل (11,858 تأكيداً، 0 فشل، 0 أخطاء)**.
+  - النتيجة: **433 اختباراً ناجحاً بالكامل (12,008 تأكيداً، 0 فشل، 0 أخطاء)**.
