@@ -26,6 +26,7 @@ import type { StandardNode, SubStandardNode, IndicatorNode } from '../../api/sta
 interface StandardsTreeViewProps {
   standards: StandardNode[];
   selectedIndicatorId?: number;
+  isDraft?: boolean;
   onSelectIndicator: (indicator: IndicatorNode, sub: SubStandardNode, std: StandardNode) => void;
   onAddSubStandard: (std: StandardNode) => void;
   onAddIndicator: (sub: SubStandardNode, std: StandardNode) => void;
@@ -34,6 +35,7 @@ interface StandardsTreeViewProps {
 export const StandardsTreeView: React.FC<StandardsTreeViewProps> = ({
   standards,
   selectedIndicatorId,
+  isDraft = true,
   onSelectIndicator,
   onAddSubStandard,
   onAddIndicator,
@@ -412,31 +414,33 @@ export const StandardsTreeView: React.FC<StandardsTreeViewProps> = ({
                     {subStandards.length} مجالات • {totalIndicators} مؤشراً
                   </span>
 
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onAddSubStandard(std);
-                    }}
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '5px',
-                      padding: '6px 12px',
-                      borderRadius: '8px',
-                      backgroundColor: '#FFFFFF',
-                      border: '1px solid #CBD5E1',
-                      color: '#B45309',
-                      fontSize: '12px',
-                      fontWeight: 700,
-                      cursor: 'pointer',
-                      transition: 'background-color 0.15s ease',
-                    }}
-                    title="+ إضافة معيار فرعي لهذا المعيار"
-                  >
-                    <Plus size={14} />
-                    <span>+ إضافة مجال</span>
-                  </button>
+                  {isDraft && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onAddSubStandard(std);
+                      }}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '5px',
+                        padding: '6px 12px',
+                        borderRadius: '8px',
+                        backgroundColor: '#FFFFFF',
+                        border: '1px solid #CBD5E1',
+                        color: '#B45309',
+                        fontSize: '12px',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        transition: 'background-color 0.15s ease',
+                      }}
+                      title="+ إضافة معيار فرعي لهذا المعيار"
+                    >
+                      <Plus size={14} />
+                      <span>+ إضافة مجال</span>
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -498,30 +502,32 @@ export const StandardsTreeView: React.FC<StandardsTreeViewProps> = ({
                                 {indicators.length} مؤشرات معتمدة
                               </span>
 
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  onAddIndicator(sub, std);
-                                }}
-                                style={{
-                                  padding: '5px 12px',
-                                  borderRadius: '6px',
-                                  backgroundColor: '#ECFDF5',
-                                  border: '1px solid #A7F3D0',
-                                  color: '#047857',
-                                  fontSize: '11px',
-                                  fontWeight: 700,
-                                  cursor: 'pointer',
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  gap: '4px',
-                                }}
-                                title="+ إضافة مؤشر لهذا المجال"
-                              >
-                                <Plus size={13} />
-                                <span>+ مؤشر جديد</span>
-                              </button>
+                              {isDraft && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    onAddIndicator(sub, std);
+                                  }}
+                                  style={{
+                                    padding: '5px 12px',
+                                    borderRadius: '6px',
+                                    backgroundColor: '#ECFDF5',
+                                    border: '1px solid #A7F3D0',
+                                    color: '#047857',
+                                    fontSize: '11px',
+                                    fontWeight: 700,
+                                    cursor: 'pointer',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '4px',
+                                  }}
+                                  title="+ إضافة مؤشر لهذا المجال"
+                                >
+                                  <Plus size={13} />
+                                  <span>+ مؤشر جديد</span>
+                                </button>
+                              )}
                             </div>
                           </div>
 

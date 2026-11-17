@@ -45,11 +45,11 @@ export const OfficialLockSealModal: React.FC<OfficialLockSealModalProps> = ({
           </div>
 
           <span className="text-[11px] font-bold tracking-wider uppercase bg-emerald-900/60 text-emerald-200 px-3 py-1 rounded-full border border-emerald-500/30">
-            أمانة المعايير والاعتماد الأكاديمي
+            أمانة المعايير والمؤشرات الوطنية
           </span>
 
           <h3 className="text-xl font-black mt-2">
-            تم قفل واعتماد وثيقة المعايير رسمياً
+            تم قفل وإقرار وثيقة المعايير رسمياً
           </h3>
           <p className="text-xs text-emerald-100/90 mt-1 max-w-sm mx-auto">
             منصة ارتقاء للتقييم الذاتي والتحسين المدرسي
@@ -60,12 +60,12 @@ export const OfficialLockSealModal: React.FC<OfficialLockSealModalProps> = ({
         <div className="p-6 space-y-4">
           <div className="space-y-2.5 text-xs text-slate-700 bg-slate-50 p-4 rounded-2xl border border-slate-200">
             <div className="flex items-center justify-between">
-              <span className="text-slate-500">كود الإصدار المعتمد:</span>
+              <span className="text-slate-500">كود الإصدار المُقرّ:</span>
               <span className="font-mono font-bold text-slate-900">{versionNo}</span>
             </div>
 
             <div className="flex items-center justify-between">
-              <span className="text-slate-500">رقم قرار الاعتماد الوزاري:</span>
+              <span className="text-slate-500">رقم قرار الإقرار المعياري:</span>
               <span className="font-mono font-bold text-emerald-700">{approvalCode}</span>
             </div>
 
@@ -73,7 +73,7 @@ export const OfficialLockSealModal: React.FC<OfficialLockSealModalProps> = ({
               <span className="text-slate-500">حالة المناعة المنهجية:</span>
               <span className="font-bold text-emerald-700 flex items-center gap-1">
                 <ShieldCheck className="w-4 h-4 text-emerald-600" />
-                <span>مقفل ومجمد للتعديل (Immutable)</span>
+                <span>مُقرّ ومجمد للتعديل (Immutable)</span>
               </span>
             </div>
 
@@ -93,7 +93,7 @@ export const OfficialLockSealModal: React.FC<OfficialLockSealModalProps> = ({
               className="inline-flex items-center gap-2 px-4 py-2.5 text-xs font-bold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 rounded-xl transition-colors cursor-pointer"
             >
               <FileDown className="w-4 h-4 text-emerald-600" />
-              <span>تحميل التقرير الوزاري المعتمد (PDF)</span>
+              <span>تحميل تقرير الإقرار المعياري (PDF)</span>
             </button>
 
             <button

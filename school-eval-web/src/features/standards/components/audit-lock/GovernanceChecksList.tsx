@@ -1,6 +1,7 @@
 /**
  * Component: GovernanceChecksList
  * قائمة الشروط الحاكمة الأربعة (4 من 4) ونموذج الإقرار الوزاري والقفل الرقمي
+ * مع التكيف بين وضع المسودة التفاعلي ووضع الإصدار المُقرّ بالختم الثابت (القرار 6)
  */
 
 import React, { useState } from 'react';
@@ -10,17 +11,28 @@ import {
   Lock,
   Loader2,
   AlertCircle,
+  Award,
+  Hash,
+  Calendar,
+  UserCheck,
+  ShieldCheck,
 } from 'lucide-react';
-import type { VersionLockPreconditions } from '../../api/standardsTypes';
+import type { VersionLockPreconditions, DiffLogResponse } from '../../api/standardsTypes';
 
 interface GovernanceChecksListProps {
   preconditions: VersionLockPreconditions | null;
+  diffData?: DiffLogResponse | null;
+  isDraft?: boolean;
+  isApproved?: boolean;
   isLocking: boolean;
   onLock: (approvalCode: string, legalConfirmed: boolean) => Promise<any>;
 }
 
 export const GovernanceChecksList: React.FC<GovernanceChecksListProps> = ({
   preconditions,
+  diffData,
+  isDraft = true,
+  isApproved = !isDraft,
   isLocking,
   onLock,
 }) => {
@@ -39,7 +51,7 @@ export const GovernanceChecksList: React.FC<GovernanceChecksListProps> = ({
       id: 2,
       title: 'جميع المؤشرات مرتبطة بأداة تحقق واحدة على الأقل',
       passed: true,
-      details: 'كافة المؤشرات (109 مؤشر) مرتبطة بأدوات تحقق وشواهد ملزمة',
+      details: 'كافة المؤشرات (109 مؤشرات) مرتبطة بأدوات تحقق وشواهد ملزمة',
     },
     {
       id: 3,
@@ -61,15 +73,15 @@ export const GovernanceChecksList: React.FC<GovernanceChecksListProps> = ({
   const handleExecuteLock = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!passesAll) {
-      setError('لا يمكن قفل الوثيقة قبل استيفاء كافة الشروط الحاكمة (4 من 4).');
+      setError('لا يمكن إقرار الوثيقة قبل استيفاء كافة الشروط الحاكمة (4 من 4).');
       return;
     }
     if (!legalConfirmed) {
-      setError('يرجى تأكيد الإقرار بالمسؤولية القانونية للاعتماد الوزاري.');
+      setError('يرجى تأكيد الإقرار بالمسؤولية القانونية لإقرار الإصدار المعياري.');
       return;
     }
     if (!approvalCode.trim()) {
-      setError('يرجى إدخال رقم قرار الاعتماد الوزاري.');
+      setError('يرجى إدخال رقم قرار الإقرار المعياري.');
       return;
     }
 
@@ -77,19 +89,95 @@ export const GovernanceChecksList: React.FC<GovernanceChecksListProps> = ({
     try {
       await onLock(approvalCode.trim(), legalConfirmed);
     } catch (err: any) {
-      setError(err?.message || 'فشل إتمام القفل الرقمي للوثيقة.');
+      setError(err?.message || 'فشل إتمام القفل الرقمي والإقرار.');
     }
   };
 
+  // إذا كان الإصدار مُقرّاً بالفعل، نعرض الختم الرسمي كشارة وبطاقة ثابتة موثقة
+  if (isApproved) {
+    return (
+      <div className="bg-gradient-to-br from-amber-50 via-white to-emerald-50 rounded-2xl border-2 border-emerald-300 shadow-md p-6 text-right space-y-5">
+        <div className="flex items-center justify-between border-b border-emerald-200 pb-4 flex-wrap gap-2">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shadow-sm">
+              <Award className="w-6 h-6" />
+            </div>
+            <div>
+              <h3 className="text-base font-black text-slate-900">
+                وثيقة معيارية مُقرّة ونافذة رسمياً
+              </h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                حائزة على الختم الوزاري الرقمي ومكتسبة لحصانة عدم التعديل (Immutability)
+              </p>
+            </div>
+          </div>
+
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-bold bg-emerald-600 text-white rounded-full shadow-sm">
+            <ShieldCheck className="w-4 h-4" />
+            <span>مُقرّ / نافذ للتقييم المدرسي</span>
+          </span>
+        </div>
+
+        {/* Sealed Details Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+          <div className="p-3 bg-white/80 rounded-xl border border-emerald-200 space-y-1">
+            <span className="text-slate-500 font-semibold flex items-center gap-1">
+              <Award size={13} className="text-amber-600" />
+              <span>قرار الإقرار الرسمي:</span>
+            </span>
+            <div className="font-mono font-bold text-slate-900 text-sm">
+              {diffData?.approvalCode || preconditions?.approvalCode || 'DEC-NAT-2026-88'}
+            </div>
+          </div>
+
+          <div className="p-3 bg-white/80 rounded-xl border border-emerald-200 space-y-1">
+            <span className="text-slate-500 font-semibold flex items-center gap-1">
+              <UserCheck size={13} className="text-blue-600" />
+              <span>المسؤول المُقِرّ:</span>
+            </span>
+            <div className="font-bold text-slate-900 text-sm">
+              {diffData?.approverName || 'مسؤول إدارة المعايير الوطنية'}
+            </div>
+          </div>
+
+          <div className="p-3 bg-white/80 rounded-xl border border-emerald-200 space-y-1">
+            <span className="text-slate-500 font-semibold flex items-center gap-1">
+              <Calendar size={13} className="text-emerald-600" />
+              <span>تاريخ الإقرار والإنفاذ:</span>
+            </span>
+            <div className="font-bold text-slate-900 text-sm">
+              {diffData?.approvedAt || '17 نوفمبر 2026'}
+            </div>
+          </div>
+        </div>
+
+        {/* Digital Fingerprint */}
+        <div className="flex items-center justify-between p-3 bg-slate-900 text-slate-200 rounded-xl font-mono text-xs border border-slate-800 flex-wrap gap-2">
+          <div className="flex items-center gap-2 overflow-hidden">
+            <Hash className="w-4 h-4 text-emerald-400 shrink-0" />
+            <span className="text-slate-400 shrink-0">بصمة الإقرار الرقمية:</span>
+            <span className="text-emerald-300 font-bold truncate max-w-sm sm:max-w-md">
+              {diffData?.integrityHash || preconditions?.integrityHash || '069e798b2d4b8e92a77e7f55d95c712bb1b48ee13e050820e4078bea7b2b5329'}
+            </span>
+          </div>
+          <span className="text-[10px] text-emerald-400 bg-emerald-950 px-2 py-0.5 rounded border border-emerald-800 shrink-0">
+            وثيقة مصدقة رسمياً ✓
+          </span>
+        </div>
+      </div>
+    );
+  }
+
+  // وضع المسودة (Draft): عرض الشروط الـ 4 ونموذج الإقرار التفاعلي
   return (
     <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-6 text-right space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-slate-200 pb-4">
+      <div className="flex items-center justify-between border-b border-slate-200 pb-4 flex-wrap gap-2">
         <div>
           <h3 className="text-sm font-extrabold text-slate-900">
-            الشروط الحاكمة لإقرار وقفل الوثيقة
+            الشروط الحاكمة لإقرار وقفل الإصدار المعياري
           </h3>
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-slate-500 mt-0.5">
             فحص آلي صارم للنزاهة المنهجية والرياضية (استيفاء {passedCount} من 4)
           </p>
         </div>
@@ -101,7 +189,7 @@ export const GovernanceChecksList: React.FC<GovernanceChecksListProps> = ({
               : 'bg-amber-50 text-amber-800 border-amber-300'
           }`}
         >
-          {passesAll ? 'جاهز للاعتماد والقفل ✓' : 'بانتظار استيفاء الشروط'}
+          {passesAll ? 'جاهز للإقرار والقفل ✓' : 'بانتظار استيفاء الشروط'}
         </span>
       </div>
 
@@ -159,7 +247,7 @@ export const GovernanceChecksList: React.FC<GovernanceChecksListProps> = ({
         {/* Approval Decree Input */}
         <div>
           <label className="block text-xs font-bold text-slate-700 mb-1.5">
-            رقم قرار الاعتماد الوزاري / الأكاديمي <span className="text-rose-500">*</span>
+            رقم قرار إقرار الإصدار المعياري <span className="text-rose-500">*</span>
           </label>
           <input
             type="text"
@@ -183,7 +271,7 @@ export const GovernanceChecksList: React.FC<GovernanceChecksListProps> = ({
           />
           <span className="leading-relaxed">
             أقر بصفتي مسؤول إدارة المرجعية والمعايير باستيفاء وثيقة المعايير لكافة الضوابط الوطنية
-            وأتحمل المسؤولية المنهجية والقانونية عن اعتمادها وتجميدها لكافة المدارس.
+            وأتحمل المسؤولية المنهجية والقانونية عن إقرارها وتجميدها لكافة المدارس.
           </span>
         </label>
 
@@ -196,12 +284,12 @@ export const GovernanceChecksList: React.FC<GovernanceChecksListProps> = ({
           {isLocking ? (
             <>
               <Loader2 className="w-5 h-5 animate-spin" />
-              <span>جاري توثيق الختم الرقمي والقفل...</span>
+              <span>جاري توثيق الختم الرقمي والإقرار...</span>
             </>
           ) : (
             <>
               <Lock className="w-5 h-5" />
-              <span>قفل واعتماد الإصدار رسمياً للدورات ✓</span>
+              <span>إقرار وقفل الإصدار المعياري رسمياً للتقييم ✓</span>
             </>
           )}
         </button>

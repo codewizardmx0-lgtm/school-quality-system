@@ -20,10 +20,10 @@ interface StandardsTopBarProps {
 }
 
 const screenTitles: Record<StandardsScreenKey, string> = {
-  versions: 'إدارة إصدارات وثيقة المعايير والاعتماد',
+  versions: 'إدارة إصدارات وثيقة المعايير الوطنية',
   tree: 'بناء وهيكلة الشجرة المعيارية والمؤشرات',
   weights: 'معايرة الأوزان وسلالم التقدير اللفظي (0-3)',
-  'audit-lock': 'تدقيق الفروقات والقفل والاعتماد الرسمي',
+  'audit-lock': 'تدقيق الفروقات وقفل الإقرار المعياري',
 };
 
 export const StandardsTopBar: React.FC<StandardsTopBarProps> = ({
@@ -100,7 +100,7 @@ export const StandardsTopBar: React.FC<StandardsTopBarProps> = ({
             }}
           />
           <ShieldCheck size={15} color="#059669" />
-          <span>إصدار رسمي نشط ومقفل ({activeVersionNo})</span>
+          <span>إصدار رسمي مُقرّ ونافذ ({activeVersionNo})</span>
         </div>
 
         {/* User Capsule */}

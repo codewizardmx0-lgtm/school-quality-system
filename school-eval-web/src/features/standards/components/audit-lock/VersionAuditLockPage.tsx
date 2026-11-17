@@ -33,6 +33,8 @@ export const VersionAuditLockPage: React.FC<VersionAuditLockPageProps> = ({
   const {
     diffData,
     preconditions,
+    isDraft,
+    isApproved,
     isLocking,
     isLockedSuccessfully,
     error,
@@ -49,7 +51,7 @@ export const VersionAuditLockPage: React.FC<VersionAuditLockPageProps> = ({
     setPdfSuccessMessage(null);
     try {
       const res = await triggerPdfExport();
-      setPdfSuccessMessage(res?.message || 'تم توليد تقرير الاعتماد المعياري الرسمي PDF بنجاح.');
+      setPdfSuccessMessage(res?.message || 'تم توليد تقرير الإقرار المعياري الرسمي PDF بنجاح.');
       setTimeout(() => setPdfSuccessMessage(null), 4000);
     } catch {
       // Error handled by hook
@@ -95,43 +97,64 @@ export const VersionAuditLockPage: React.FC<VersionAuditLockPageProps> = ({
             </span>
           </div>
           <h1 style={{ fontSize: '24px', fontWeight: 900, color: '#0F172A', letterSpacing: '-0.02em', margin: 0 }}>
-            سجل الفروقات والتدقيق الوزاري وقفل الاعتماد الرسمي
+            سجل الفروقات والتدقيق الوزاري وقفل الإقرار المعياري
           </h1>
           <p style={{ fontSize: '13px', color: '#64748B', marginTop: '4px', margin: 0 }}>
             مراجعة فوارق المسودة عن الإصدار السابق، التحقق من الشروط الأربعة، وتثبيت الختم الرقمي (SHA-256)
           </p>
         </div>
 
-        {/* Primary Action: Official Lock Trigger */}
+        {/* Primary Action: Official Lock Trigger or Approved Badge */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <button
-            type="button"
-            onClick={() => setIsLockModalOpen(true)}
-            disabled={!passesAllChecks || isLocking || isLockedSuccessfully}
-            className="std-btn-primary"
-            style={{
-              background: passesAllChecks ? 'linear-gradient(135deg, #059669, #047857)' : undefined,
-              opacity: !passesAllChecks || isLockedSuccessfully ? 0.6 : 1,
-              cursor: !passesAllChecks || isLockedSuccessfully ? 'not-allowed' : 'pointer',
-            }}
-          >
-            {isLocking ? (
-              <>
-                <Loader2 size={15} className="animate-spin" />
-                <span>جاري تثبيت القفل والاعتماد...</span>
-              </>
-            ) : isLockedSuccessfully ? (
-              <>
-                <CheckCircle2 size={15} />
-                <span>تم الاعتماد والقفل الرسمي</span>
-              </>
-            ) : (
-              <>
-                <Lock size={15} />
-                <span>+ اعتماد وقفل الوثيقة رسمياً</span>
-              </>
-            )}
-          </button>
+          {isApproved ? (
+            <div
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '10px 20px',
+                backgroundColor: '#ECFDF5',
+                border: '1.5px solid #10B981',
+                borderRadius: '12px',
+                color: '#065F46',
+                fontWeight: 800,
+                fontSize: '13px',
+                boxShadow: '0 2px 8px rgba(16, 185, 129, 0.15)',
+              }}
+            >
+              <ShieldCheck size={18} color="#059669" />
+              <span>إصدار معياري مُقرّ ونافذ رسمياً ✓</span>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setIsLockModalOpen(true)}
+              disabled={!passesAllChecks || isLocking || isLockedSuccessfully}
+              className="std-btn-primary"
+              style={{
+                background: passesAllChecks ? 'linear-gradient(135deg, #059669, #047857)' : undefined,
+                opacity: !passesAllChecks || isLockedSuccessfully ? 0.6 : 1,
+                cursor: !passesAllChecks || isLockedSuccessfully ? 'not-allowed' : 'pointer',
+              }}
+            >
+              {isLocking ? (
+                <>
+                  <Loader2 size={15} className="animate-spin" />
+                  <span>جاري تثبيت القفل والإقرار...</span>
+                </>
+              ) : isLockedSuccessfully ? (
+                <>
+                  <CheckCircle2 size={15} />
+                  <span>تم الإقرار والقفل الرسمي</span>
+                </>
+              ) : (
+                <>
+                  <Lock size={15} />
+                  <span>+ إقرار وقفل الإصدار المعياري رسمياً</span>
+                </>
+              )}
+            </button>
+          )}
         </div>
       </div>
 
@@ -152,7 +175,7 @@ export const VersionAuditLockPage: React.FC<VersionAuditLockPageProps> = ({
           }}
         >
           <CheckCircle2 size={18} color="#059669" />
-          <span>تم اعتماد وقفل الإصدار المعياري رسمياً بنجاح واكتساب حصانة عدم التعديل (Immutability).</span>
+          <span>تم إقرار وقفل الإصدار المعياري رسمياً بنجاح واكتساب حصانة عدم التعديل (Immutability).</span>
         </div>
       )}
 
@@ -199,6 +222,9 @@ export const VersionAuditLockPage: React.FC<VersionAuditLockPageProps> = ({
       {/* 1. Governance Integrity Checks (4/4 Mandatory Rules) */}
       <GovernanceChecksList
         preconditions={preconditions}
+        diffData={diffData}
+        isDraft={isDraft}
+        isApproved={isApproved}
         isLocking={isLocking}
         onLock={async (approvalCode, legalConfirmed) => {
           await executeOfficialLock({ approval_code: approvalCode, legal_confirmation: legalConfirmed });

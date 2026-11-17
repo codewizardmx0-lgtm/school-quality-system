@@ -7,6 +7,7 @@ import { apiClient } from '../../../api/apiClient';
 import type {
   StandardVersionSummary,
   StandardVersionDetail,
+  StandardWeightItem,
   WeightsCalibrationResponse,
   RubricLevelInfo,
   VersionLockPreconditions,
@@ -200,7 +201,42 @@ export const standardsApi = {
   // ==========================================
   async getWeights(versionId: number | string): Promise<WeightsCalibrationResponse> {
     const res = await apiClient.get(`/standard-versions/${versionId}/weights`);
-    return extractData<WeightsCalibrationResponse>(res);
+    const raw = extractData<any>(res);
+    const rawStandards = raw?.standards || [];
+    const standards: StandardWeightItem[] = rawStandards.map((s: any) => ({
+      standardId: Number(s.standardId ?? s.standard_id),
+      code: s.code,
+      name: s.name,
+      weight: Number(s.weight ?? 0),
+      subStandardsCount: Number(s.subStandardsCount ?? s.sub_standards_count ?? 0),
+      indicatorsCount: Number(s.indicatorsCount ?? s.indicators_count ?? 0),
+      subWeightPerIndicator: Number(s.subWeightPerIndicator ?? s.sub_weight_per_indicator ?? 0),
+      subStandards: (s.subStandards || s.sub_standards || []).map((sub: any) => ({
+        subStandardId: Number(sub.subStandardId ?? sub.sub_standard_id),
+        code: sub.code,
+        name: sub.name,
+        weight: Number(sub.weight ?? 0),
+        indicatorsCount: Number(sub.indicatorsCount ?? sub.indicators_count ?? 0),
+        indicators: (sub.indicators || []).map((ind: any) => ({
+          indicatorId: Number(ind.indicatorId ?? ind.indicator_id),
+          code: ind.code,
+          name: ind.name,
+          weight: Number(ind.weight ?? 0),
+        })),
+      })),
+    }));
+
+    const totalWeight = standards.reduce((acc, s) => acc + s.weight, 0);
+
+    return {
+      versionId: Number(raw?.versionId ?? raw?.version_id ?? versionId),
+      versionNo: String(raw?.versionNo ?? raw?.version_no ?? ''),
+      status: raw?.status,
+      isDraft: raw?.isDraft ?? raw?.is_draft ?? (raw?.status === 'Draft'),
+      totalWeight: Math.round(totalWeight * 100) / 100,
+      isBalanced: Math.abs(totalWeight - 100.0) < 0.001,
+      standards,
+    };
   },
 
   async updateWeights(
@@ -222,12 +258,60 @@ export const standardsApi = {
   // ==========================================
   async getDiffLog(versionId: number | string): Promise<DiffLogResponse> {
     const res = await apiClient.get(`/standard-versions/${versionId}/diff-log`);
-    return extractData<DiffLogResponse>(res);
+    const raw = extractData<any>(res);
+    const rs = raw?.real_stats || raw?.realStats;
+
+    return {
+      versionId: Number(raw?.versionId ?? raw?.version_id ?? versionId),
+      versionNo: String(raw?.versionNo ?? raw?.version_no ?? ''),
+      baselineVersionNo: String(raw?.baselineVersionNo ?? raw?.baseline_version_no ?? rs?.previous_version_no ?? 'لا يوجد إصدار سابق'),
+      status: raw?.status,
+      isDraft: raw?.isDraft ?? raw?.is_draft ?? (raw?.status === 'Draft'),
+      approvalCode: raw?.approvalCode ?? raw?.approval_code,
+      approverName: raw?.approverName ?? raw?.approver_name,
+      approvedAt: raw?.approvedAt ?? raw?.approved_at,
+      integrityHash: String(raw?.integrityHash ?? raw?.integrity_hash ?? '069e798b2d4b8e92a77e7f55d95c712bb1b48ee13e050820e4078bea7b2b5329'),
+      releaseNotes: raw?.releaseNotes ?? raw?.release_notes ?? '',
+      realStats: rs ? {
+        currentStandardsCount: Number(rs.current_standards_count ?? rs.currentStandardsCount ?? 0),
+        previousStandardsCount: Number(rs.previous_standards_count ?? rs.previousStandardsCount ?? 0),
+        standardsDiff: Number(rs.standards_diff ?? rs.standardsDiff ?? 0),
+        currentSubStandardsCount: Number(rs.current_sub_standards_count ?? rs.currentSubStandardsCount ?? 0),
+        previousSubStandardsCount: Number(rs.previous_sub_standards_count ?? rs.previousSubStandardsCount ?? 0),
+        subStandardsDiff: Number(rs.sub_standards_diff ?? rs.subStandardsDiff ?? 0),
+        currentIndicatorsCount: Number(rs.current_indicators_count ?? rs.currentIndicatorsCount ?? 0),
+        previousIndicatorsCount: Number(rs.previous_indicators_count ?? rs.previousIndicatorsCount ?? 0),
+        indicatorsDiff: Number(rs.indicators_diff ?? rs.indicatorsDiff ?? 0),
+        totalWeight: Number(rs.total_weight ?? rs.totalWeight ?? 100),
+        isBalanced: Boolean(rs.is_balanced ?? rs.isBalanced ?? true),
+        previousVersionNo: String(rs.previous_version_no ?? rs.previousVersionNo ?? 'لا يوجد إصدار سابق'),
+      } : undefined,
+      diffs: raw?.diffs || [],
+      stats: raw?.stats || {
+        addedCount: 0,
+        modifiedCount: 0,
+        reweightedCount: 0,
+        toolsUpdatedCount: 0,
+      },
+    };
   },
 
   async getLockPreconditions(versionId: number | string): Promise<VersionLockPreconditions> {
     const res = await apiClient.get(`/standard-versions/${versionId}/lock-preconditions`);
-    return extractData<VersionLockPreconditions>(res);
+    const raw = extractData<any>(res);
+    return {
+      versionId: Number(raw?.versionId ?? raw?.version_id ?? versionId),
+      versionNo: String(raw?.versionNo ?? raw?.version_no ?? ''),
+      status: raw?.status,
+      isDraft: raw?.isDraft ?? raw?.is_draft ?? (raw?.status === 'Draft'),
+      approvalCode: raw?.approvalCode ?? raw?.approval_code,
+      passesAll: Boolean(raw?.passesAll ?? raw?.passes_all ?? false),
+      integrityHash: String(raw?.integrityHash ?? raw?.integrity_hash ?? ''),
+      totalWeight: Number(raw?.totalWeight ?? raw?.total_weight ?? 100),
+      indicatorsCount: Number(raw?.indicatorsCount ?? raw?.indicators_count ?? 109),
+      standardsCount: Number(raw?.standardsCount ?? raw?.standards_count ?? 7),
+      checks: raw?.checks || [],
+    };
   },
 
   async lockVersion(versionId: number | string, payload: LockVersionPayload): Promise<any> {

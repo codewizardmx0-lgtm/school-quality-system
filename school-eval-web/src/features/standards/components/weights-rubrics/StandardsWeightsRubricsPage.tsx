@@ -12,6 +12,7 @@ import {
   CheckCircle2,
   AlertTriangle,
   Loader2,
+  Lock,
 } from 'lucide-react';
 import { WeightsBalanceBanner } from './WeightsBalanceBanner';
 import { WeightsDistributionTable } from './WeightsDistributionTable';
@@ -34,12 +35,16 @@ export const StandardsWeightsRubricsPage: React.FC<StandardsWeightsRubricsPagePr
     weights,
     rubricLevels,
     versionNo,
+    isDraft,
     totalWeight,
     isBalanced,
+    subStandardsBalanceMap,
     isSaving,
     saveSuccess,
     error,
     handleWeightChange,
+    handleSubStandardWeightChange,
+    handleIndicatorWeightChange,
     resetToEqualWeights,
     saveWeights,
   } = useWeightsRubrics(versionId);
@@ -92,30 +97,74 @@ export const StandardsWeightsRubricsPage: React.FC<StandardsWeightsRubricsPagePr
 
         {/* Quick Save Button in Header */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <button
-            type="button"
-            onClick={saveWeights}
-            disabled={!isBalanced || isSaving}
-            className="std-btn-primary"
-            style={{
-              opacity: !isBalanced || isSaving ? 0.6 : 1,
-              cursor: !isBalanced || isSaving ? 'not-allowed' : 'pointer',
-            }}
-          >
-            {isSaving ? (
-              <>
-                <Loader2 size={15} className="animate-spin" />
-                <span>جاري الحفظ...</span>
-              </>
-            ) : (
-              <>
-                <Save size={15} />
-                <span>حفظ الأوزان في الوثيقة</span>
-              </>
-            )}
-          </button>
+          {isDraft ? (
+            <button
+              type="button"
+              onClick={saveWeights}
+              disabled={!isBalanced || isSaving}
+              className="std-btn-primary"
+              style={{
+                opacity: !isBalanced || isSaving ? 0.6 : 1,
+                cursor: !isBalanced || isSaving ? 'not-allowed' : 'pointer',
+              }}
+            >
+              {isSaving ? (
+                <>
+                  <Loader2 size={15} className="animate-spin" />
+                  <span>جاري الحفظ...</span>
+                </>
+              ) : (
+                <>
+                  <Save size={15} />
+                  <span>حفظ الأوزان في الوثيقة</span>
+                </>
+              )}
+            </button>
+          ) : (
+            <div
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '8px 16px',
+                backgroundColor: '#FEF3C7',
+                borderRadius: '8px',
+                border: '1px solid #FCD34D',
+                fontSize: '12px',
+                fontWeight: 700,
+                color: '#92400E',
+              }}
+            >
+              <Lock size={14} />
+              <span>إصدار مُقرّ ونافذ (عرض فقط)</span>
+            </div>
+          )}
         </div>
       </div>
+
+      {/* Immutability Banner if not Draft */}
+      {!isDraft && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px',
+            padding: '14px 20px',
+            backgroundColor: '#FEF3C7',
+            border: '1px solid #F59E0B',
+            borderRadius: '12px',
+            color: '#78350F',
+          }}
+        >
+          <Lock size={20} color="#B45309" />
+          <div>
+            <div style={{ fontWeight: 800, fontSize: '14px' }}>هذا الإصدار مُقرّ ونافذ — وضع القراءة والاطلاع فقط</div>
+            <div style={{ fontSize: '12px', marginTop: '2px' }}>
+              تم إقرار هذه الوثيقة وتجميد أوزانها النسبية رسمياً، ولا يمكن إعادة معايرة الأوزان إلا في مسودة جديدة.
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Success / Error Alerts */}
       {saveSuccess && (
@@ -170,7 +219,11 @@ export const StandardsWeightsRubricsPage: React.FC<StandardsWeightsRubricsPagePr
           weights={weights}
           totalWeight={totalWeight}
           isBalanced={isBalanced}
+          isDraft={isDraft}
+          subStandardsBalanceMap={subStandardsBalanceMap}
           onWeightChange={handleWeightChange}
+          onSubStandardWeightChange={handleSubStandardWeightChange}
+          onIndicatorWeightChange={handleIndicatorWeightChange}
           onResetEqual={resetToEqualWeights}
         />
       </div>

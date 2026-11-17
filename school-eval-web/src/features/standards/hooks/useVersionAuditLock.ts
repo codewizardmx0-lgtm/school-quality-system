@@ -1,7 +1,7 @@
 /**
  * Hook: useVersionAuditLock
  * سجل الفروقات والتغييرات، التحقق الآلي من الشروط الحاكمة (4 من 4)،
- * والقفل والاعتماد الوزاري الرقمي بختم SHA-256
+ * والقفل والإقرار المعياري الرقمي بختم SHA-256
  */
 
 import { useState, useEffect, useCallback } from 'react';
@@ -42,7 +42,12 @@ export function useVersionAuditLock(versionId?: number | string) {
     fetchAuditData();
   }, [fetchAuditData]);
 
-  // تنفيذ الاعتماد والقفل الرسمي النهائي
+  // حالة الإصدار والإقرار
+  const status = diffData?.status || preconditions?.status || 'Draft';
+  const isDraft = diffData?.isDraft ?? (status === 'Draft');
+  const isApproved = status === 'Approved' || isLockedSuccessfully;
+
+  // تنفيذ الإقرار والقفل الرسمي النهائي
   const executeOfficialLock = async (payload: LockVersionPayload) => {
     if (!versionId) return;
     setIsLocking(true);
@@ -52,7 +57,7 @@ export function useVersionAuditLock(versionId?: number | string) {
       setIsLockedSuccessfully(true);
       await fetchAuditData();
     } catch (err: any) {
-      setError(err?.message || 'تعذر اعتماد وقفل وثيقة المعايير.');
+      setError(err?.message || 'تعذر إقرار وقفل وثيقة المعايير.');
       throw err;
     } finally {
       setIsLocking(false);
@@ -66,7 +71,7 @@ export function useVersionAuditLock(versionId?: number | string) {
       const result = await standardsApi.exportPdfReport(versionId);
       return result;
     } catch (err: any) {
-      setError(err?.message || 'تعذر تصدير تقرير الاعتماد PDF.');
+      setError(err?.message || 'تعذر تصدير تقرير الإقرار المعياري PDF.');
       throw err;
     }
   };
@@ -74,6 +79,9 @@ export function useVersionAuditLock(versionId?: number | string) {
   return {
     diffData,
     preconditions,
+    status,
+    isDraft,
+    isApproved,
     isLoading,
     isLocking,
     isLockedSuccessfully,

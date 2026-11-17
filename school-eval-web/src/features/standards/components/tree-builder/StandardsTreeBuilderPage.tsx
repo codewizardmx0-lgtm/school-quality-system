@@ -13,10 +13,13 @@ import {
   PlusCircle,
   Layers,
   Edit3,
+  BookmarkPlus,
+  Lock,
 } from 'lucide-react';
 import type { StandardNode, SubStandardNode } from '../../api/standardsTypes';
 import { StandardsTreeView } from './StandardsTreeView';
 import { IndicatorEditorPanel } from './IndicatorEditorPanel';
+import { AddStandardModal } from './AddStandardModal';
 import { AddSubStandardModal } from './AddSubStandardModal';
 import { AddIndicatorModal } from './AddIndicatorModal';
 import { useStandardsTree } from '../../hooks/useStandardsTree';
@@ -36,19 +39,26 @@ export const StandardsTreeBuilderPage: React.FC<StandardsTreeBuilderPageProps> =
 }) => {
   const {
     treeData,
+    isDraft,
     selectedStandard,
     selectedSubStandard,
     selectedIndicator,
     isSaving,
     saveStatus,
     selectIndicator,
+    addStandard,
     updateIndicator,
     addSubStandard,
     addIndicator,
     deleteIndicator,
+    addEvidenceRequirement,
+    updateEvidenceRequirement,
+    deleteEvidenceRequirement,
+    updateScoreDescriptors,
   } = useStandardsTree(versionId);
 
   // Modals state
+  const [isAddStdModalOpen, setIsAddStdModalOpen] = useState(false);
   const [isAddSubModalOpen, setIsAddSubModalOpen] = useState(false);
   const [isAddIndModalOpen, setIsAddIndModalOpen] = useState(false);
   const [modalTargetStd, setModalTargetStd] = useState<StandardNode | null>(null);
@@ -141,51 +151,120 @@ export const StandardsTreeBuilderPage: React.FC<StandardsTreeBuilderPageProps> =
 
         {/* Toolbar Actions */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <button
-            type="button"
-            onClick={() => handleOpenAddSub()}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '9px 16px',
-              fontSize: '12px',
-              fontWeight: 700,
-              color: '#451A03',
-              backgroundColor: '#FEF3C7',
-              borderRadius: '10px',
-              border: 'none',
-              cursor: 'pointer',
-              transition: 'all 0.15s ease',
-            }}
-          >
-            <FolderPlus size={15} color="#92400E" />
-            <span>+ إضافة معيار فرعي</span>
-          </button>
+          {isDraft && (
+            <>
+              <button
+                type="button"
+                onClick={() => setIsAddStdModalOpen(true)}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '9px 16px',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  color: '#92400E',
+                  backgroundColor: '#FFFFFF',
+                  borderRadius: '10px',
+                  border: '1px solid rgba(255, 255, 255, 0.4)',
+                  cursor: 'pointer',
+                  boxShadow: '0 2px 4px rgba(0,0,0,0.06)',
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                <BookmarkPlus size={15} color="#92400E" />
+                <span>+ إضافة معيار رئيسي</span>
+              </button>
 
-          <button
-            type="button"
-            onClick={() => handleOpenAddIndicator()}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '9px 16px',
-              fontSize: '12px',
-              fontWeight: 700,
-              color: '#451A03',
-              backgroundColor: '#FEF3C7',
-              borderRadius: '10px',
-              border: 'none',
-              cursor: 'pointer',
-              transition: 'all 0.15s ease',
-            }}
-          >
-            <PlusCircle size={15} color="#92400E" />
-            <span>+ إضافة مؤشر رسمي</span>
-          </button>
+              <button
+                type="button"
+                onClick={() => handleOpenAddSub()}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '9px 16px',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  color: '#451A03',
+                  backgroundColor: '#FEF3C7',
+                  borderRadius: '10px',
+                  border: 'none',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                <FolderPlus size={15} color="#92400E" />
+                <span>+ إضافة معيار فرعي</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleOpenAddIndicator()}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '9px 16px',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  color: '#451A03',
+                  backgroundColor: '#FEF3C7',
+                  borderRadius: '10px',
+                  border: 'none',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                <PlusCircle size={15} color="#92400E" />
+                <span>+ إضافة مؤشر رسمي</span>
+              </button>
+            </>
+          )}
+          {!isDraft && (
+            <div
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '8px 16px',
+                backgroundColor: 'rgba(0,0,0,0.15)',
+                borderRadius: '8px',
+                fontSize: '12px',
+                fontWeight: 700,
+                color: '#FEF3C7',
+              }}
+            >
+              <Lock size={14} />
+              <span>إصدار مُقرّ ونافذ (عرض فقط)</span>
+            </div>
+          )}
         </div>
       </div>
+
+      {/* Immutability Banner if not Draft */}
+      {!isDraft && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px',
+            padding: '14px 20px',
+            backgroundColor: '#FEF3C7',
+            border: '1px solid #F59E0B',
+            borderRadius: '12px',
+            color: '#78350F',
+          }}
+        >
+          <Lock size={20} color="#B45309" />
+          <div>
+            <div style={{ fontWeight: 800, fontSize: '14px' }}>هذا الإصدار مُقرّ ونافذ — وضع القراءة والاطلاع فقط</div>
+            <div style={{ fontSize: '12px', marginTop: '2px' }}>
+              لا يمكن تعديل بنية المعايير، المجالات الفرعية، المؤشرات، الشواهد، أو واصفات الأداء لهذا الإصدار نظراً لكونه معتمداً رسمياً.
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 2. القسم الأول (في الأعلى): شجرة المعايير بكامل العرض */}
       <div style={{ width: '100%' }}>
@@ -236,6 +315,7 @@ export const StandardsTreeBuilderPage: React.FC<StandardsTreeBuilderPageProps> =
         <StandardsTreeView
           standards={standards}
           selectedIndicatorId={selectedIndicator?.indicatorId}
+          isDraft={isDraft}
           onSelectIndicator={handleSelectIndicatorAndScroll}
           onAddSubStandard={(std) => handleOpenAddSub(std)}
           onAddIndicator={(sub, std) => handleOpenAddIndicator(sub, std)}
@@ -270,10 +350,15 @@ export const StandardsTreeBuilderPage: React.FC<StandardsTreeBuilderPageProps> =
           indicator={selectedIndicator}
           standardName={selectedStandard?.name}
           subStandardName={selectedSubStandard?.name}
+          isDraft={isDraft}
           isSaving={isSaving}
           saveStatus={saveStatus}
           onSave={updateIndicator}
           onDelete={deleteIndicator}
+          onAddEvidenceRequirement={addEvidenceRequirement}
+          onUpdateEvidenceRequirement={updateEvidenceRequirement}
+          onDeleteEvidenceRequirement={deleteEvidenceRequirement}
+          onUpdateScoreDescriptors={updateScoreDescriptors}
         />
       </div>
 
@@ -350,6 +435,17 @@ export const StandardsTreeBuilderPage: React.FC<StandardsTreeBuilderPageProps> =
       </div>
 
       {/* Modals */}
+      {isAddStdModalOpen && (
+        <AddStandardModal
+          isOpen={isAddStdModalOpen}
+          onClose={() => setIsAddStdModalOpen(false)}
+          onSubmit={async (payload) => {
+            await addStandard(payload);
+            setIsAddStdModalOpen(false);
+          }}
+        />
+      )}
+
       {isAddSubModalOpen && modalTargetStd && (
         <AddSubStandardModal
           isOpen={isAddSubModalOpen}

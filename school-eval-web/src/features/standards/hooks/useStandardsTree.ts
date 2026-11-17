@@ -1,6 +1,6 @@
 /**
  * Hook: useStandardsTree
- * إدارة الهيكل الشجري التفاعلي للمسودة، التنقل بين العقد، وتحديث المؤشرات لحظياً
+ * إدارة الهيكل الشجري التفاعلي للمسودة، التنقل بين العقد، وتحديث المؤشرات ومتطلبات الشواهد لحظياً
  */
 
 import { useState, useEffect, useCallback } from 'react';
@@ -10,9 +10,14 @@ import type {
   SubStandardNode,
   IndicatorNode,
   StandardVersionDetail,
-  UpdateIndicatorPayload,
+  CreateStandardPayload,
+  UpdateStandardPayload,
   CreateSubStandardPayload,
+  UpdateSubStandardPayload,
   CreateIndicatorPayload,
+  UpdateIndicatorPayload,
+  SaveEvidenceRequirementPayload,
+  UpdateScoreDescriptorItem,
 } from '../api/standardsTypes';
 
 export function useStandardsTree(versionId?: number | string) {
@@ -26,6 +31,8 @@ export function useStandardsTree(versionId?: number | string) {
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [error, setError] = useState<string | null>(null);
 
+  const isDraft = treeData?.status === 'Draft' || treeData?.status === 'draft';
+
   const fetchTree = useCallback(async () => {
     if (!versionId) return;
     setIsLoading(true);
@@ -34,17 +41,26 @@ export function useStandardsTree(versionId?: number | string) {
       const data = await standardsApi.getStandardsTree(versionId);
       setTreeData(data);
 
-      // اختيار افتراضي لأول معيار وأول مؤشر إذا لم يتم تحديد عقدة مسبقاً
+      // الحفاظ على العقدة المحددة حالياً إن أمكن، أو اختيار أول عقدة
       if (data?.standards && data.standards.length > 0) {
-        const firstStd = data.standards[0];
-        setSelectedStandard(firstStd);
-        if (firstStd.subStandards && firstStd.subStandards.length > 0) {
-          const firstSub = firstStd.subStandards[0];
-          setSelectedSubStandard(firstSub);
-          if (firstSub.indicators && firstSub.indicators.length > 0) {
-            setSelectedIndicator(firstSub.indicators[0]);
-          }
-        }
+        setSelectedStandard((prevStd) => {
+          const match = prevStd ? data.standards.find((s) => s.standardId === prevStd.standardId) : null;
+          const targetStd = match || data.standards[0];
+
+          setSelectedSubStandard((prevSub) => {
+            const subMatch = prevSub ? targetStd.subStandards?.find((sb) => sb.subStandardId === prevSub.subStandardId) : null;
+            const targetSub = subMatch || targetStd.subStandards?.[0] || null;
+
+            setSelectedIndicator((prevInd) => {
+              const indMatch = prevInd ? targetSub?.indicators?.find((i) => i.indicatorId === prevInd.indicatorId) : null;
+              return indMatch || targetSub?.indicators?.[0] || null;
+            });
+
+            return targetSub;
+          });
+
+          return targetStd;
+        });
       }
     } catch (err: any) {
       setError(err?.message || 'فشل تحميل الشجرة الهرمية للمعايير.');
@@ -64,7 +80,111 @@ export function useStandardsTree(versionId?: number | string) {
     if (parentStd) setSelectedStandard(parentStd);
   };
 
-  // حفظ تعديلات المؤشر في اللوحة الجانبية
+  // 1. إدارة المعيار الرئيسي (القرار 4)
+  const addStandard = async (payload: CreateStandardPayload) => {
+    if (!versionId) return;
+    setIsSaving(true);
+    try {
+      await standardsApi.createStandard(versionId, payload);
+      await fetchTree();
+    } catch (err: any) {
+      setError(err?.message || 'فشل إضافة المعيار الرئيسي.');
+      throw err;
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const updateStandard = async (standardId: number, payload: UpdateStandardPayload) => {
+    setIsSaving(true);
+    try {
+      await standardsApi.updateStandard(standardId, payload);
+      await fetchTree();
+    } catch (err: any) {
+      setError(err?.message || 'فشل تحديث المعيار الرئيسي.');
+      throw err;
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const deleteStandard = async (standardId: number) => {
+    setIsSaving(true);
+    try {
+      await standardsApi.deleteStandard(standardId);
+      if (selectedStandard?.standardId === standardId) {
+        setSelectedStandard(null);
+        setSelectedSubStandard(null);
+        setSelectedIndicator(null);
+      }
+      await fetchTree();
+    } catch (err: any) {
+      setError(err?.message || 'تعذر حذف المعيار الرئيسي.');
+      throw err;
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // 2. إدارة المعيار الفرعي
+  const addSubStandard = async (stdId: number, payload: CreateSubStandardPayload) => {
+    if (!versionId) return;
+    setIsSaving(true);
+    try {
+      await standardsApi.createSubStandard(versionId, stdId, payload);
+      await fetchTree();
+    } catch (err: any) {
+      setError(err?.message || 'فشل إضافة المعيار الفرعي.');
+      throw err;
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const updateSubStandard = async (subStandardId: number, payload: UpdateSubStandardPayload) => {
+    setIsSaving(true);
+    try {
+      await standardsApi.updateSubStandard(subStandardId, payload);
+      await fetchTree();
+    } catch (err: any) {
+      setError(err?.message || 'فشل تحديث المعيار الفرعي.');
+      throw err;
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const deleteSubStandard = async (subStandardId: number) => {
+    setIsSaving(true);
+    try {
+      await standardsApi.deleteSubStandard(subStandardId);
+      if (selectedSubStandard?.subStandardId === subStandardId) {
+        setSelectedSubStandard(null);
+        setSelectedIndicator(null);
+      }
+      await fetchTree();
+    } catch (err: any) {
+      setError(err?.message || 'تعذر حذف المعيار الفرعي.');
+      throw err;
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // 3. إدارة المؤشر
+  const addIndicator = async (subStandardId: number, payload: CreateIndicatorPayload) => {
+    setIsSaving(true);
+    try {
+      await standardsApi.createIndicator(subStandardId, payload);
+      await fetchTree();
+    } catch (err: any) {
+      setError(err?.message || 'فشل إضافة المؤشر.');
+      throw err;
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const updateIndicator = async (id: number, payload: UpdateIndicatorPayload) => {
     setIsSaving(true);
     setSaveStatus('saving');
@@ -72,7 +192,6 @@ export function useStandardsTree(versionId?: number | string) {
     try {
       await standardsApi.updateIndicator(id, payload);
 
-      // تحديث الحالة المحلية فوراً
       setSelectedIndicator((prev) => (prev ? { ...prev, ...payload } : null));
 
       setTreeData((prev) => {
@@ -100,36 +219,6 @@ export function useStandardsTree(versionId?: number | string) {
     }
   };
 
-  // إضافة معيار فرعي جديد
-  const addSubStandard = async (stdId: number, payload: CreateSubStandardPayload) => {
-    if (!versionId) return;
-    setIsSaving(true);
-    try {
-      await standardsApi.createSubStandard(versionId, stdId, payload);
-      await fetchTree();
-    } catch (err: any) {
-      setError(err?.message || 'فشل إضافة المعيار الفرعي.');
-      throw err;
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  // إضافة مؤشر جديد
-  const addIndicator = async (subStandardId: number, payload: CreateIndicatorPayload) => {
-    setIsSaving(true);
-    try {
-      await standardsApi.createIndicator(subStandardId, payload);
-      await fetchTree();
-    } catch (err: any) {
-      setError(err?.message || 'فشل إضافة المؤشر.');
-      throw err;
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  // حذف مؤشر
   const deleteIndicator = async (id: number) => {
     setIsSaving(true);
     try {
@@ -146,8 +235,101 @@ export function useStandardsTree(versionId?: number | string) {
     }
   };
 
+  // 4. إدارة متطلبات الشواهد الـ 278 (القرار 2)
+  const addEvidenceRequirement = async (indicatorId: number, payload: SaveEvidenceRequirementPayload) => {
+    setIsSaving(true);
+    try {
+      const created = await standardsApi.createEvidenceRequirement(indicatorId, payload);
+      setSelectedIndicator((prev) => {
+        if (!prev || prev.indicatorId !== indicatorId) return prev;
+        const currentReqs = prev.evidenceRequirements || [];
+        return {
+          ...prev,
+          evidenceRequirements: [...currentReqs, created],
+        };
+      });
+      await fetchTree();
+      return created;
+    } catch (err: any) {
+      setError(err?.message || 'فشل إضافة متطلب الشاهد.');
+      throw err;
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const updateEvidenceRequirement = async (
+    indicatorId: number,
+    requirementId: number,
+    payload: SaveEvidenceRequirementPayload
+  ) => {
+    setIsSaving(true);
+    try {
+      const updated = await standardsApi.updateEvidenceRequirement(indicatorId, requirementId, payload);
+      setSelectedIndicator((prev) => {
+        if (!prev || prev.indicatorId !== indicatorId) return prev;
+        const currentReqs = prev.evidenceRequirements || [];
+        return {
+          ...prev,
+          evidenceRequirements: currentReqs.map((r) => (r.requirementId === requirementId ? updated : r)),
+        };
+      });
+      await fetchTree();
+      return updated;
+    } catch (err: any) {
+      setError(err?.message || 'فشل تحديث متطلب الشاهد.');
+      throw err;
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const deleteEvidenceRequirement = async (indicatorId: number, requirementId: number) => {
+    setIsSaving(true);
+    try {
+      await standardsApi.deleteEvidenceRequirement(indicatorId, requirementId);
+      setSelectedIndicator((prev) => {
+        if (!prev || prev.indicatorId !== indicatorId) return prev;
+        const currentReqs = prev.evidenceRequirements || [];
+        return {
+          ...prev,
+          evidenceRequirements: currentReqs.filter((r) => r.requirementId !== requirementId),
+        };
+      });
+      await fetchTree();
+    } catch (err: any) {
+      setError(err?.message || 'تعذر حذف متطلب الشاهد.');
+      throw err;
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // 5. تحديث واصفات سلم التقدير اللفظي (القرار 3)
+  const updateScoreDescriptors = async (indicatorId: number, descriptors: UpdateScoreDescriptorItem[]) => {
+    setIsSaving(true);
+    try {
+      const updated = await standardsApi.updateIndicatorDescriptors(indicatorId, descriptors);
+      setSelectedIndicator((prev) => {
+        if (!prev || prev.indicatorId !== indicatorId) return prev;
+        return {
+          ...prev,
+          scoreDescriptors: updated,
+        };
+      });
+      await fetchTree();
+      return updated;
+    } catch (err: any) {
+      setError(err?.message || 'تعذر تحديث واصفات سلم التقدير.');
+      throw err;
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   return {
     treeData,
+    isDraft,
     selectedStandard,
     selectedSubStandard,
     selectedIndicator,
@@ -159,9 +341,18 @@ export function useStandardsTree(versionId?: number | string) {
     selectIndicator,
     setSelectedStandard,
     setSelectedSubStandard,
-    updateIndicator,
+    addStandard,
+    updateStandard,
+    deleteStandard,
     addSubStandard,
+    updateSubStandard,
+    deleteSubStandard,
     addIndicator,
+    updateIndicator,
     deleteIndicator,
+    addEvidenceRequirement,
+    updateEvidenceRequirement,
+    deleteEvidenceRequirement,
+    updateScoreDescriptors,
   };
 }

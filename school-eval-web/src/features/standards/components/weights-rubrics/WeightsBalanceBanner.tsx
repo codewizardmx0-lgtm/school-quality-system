@@ -30,7 +30,7 @@ export const WeightsBalanceBanner: React.FC<WeightsBalanceBannerProps> = ({
               </span>
             </h4>
             <p className="text-xs text-emerald-800/90 mt-0.5">
-              تم استيفاء الشرط الحاكم الأول للاعتماد الوزاري، وتوزيع الأوزان مطابق للنموذج القياسي المعتمد.
+              تم استيفاء الشرط الحاكم الأول لإقرار الإصدار المعياري، وتوزيع الأوزان مطابق للنموذج القياسي المعتمد.
             </p>
           </div>
         </div>

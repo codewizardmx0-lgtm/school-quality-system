@@ -117,12 +117,20 @@ export interface StandardVersionDetail extends StandardVersionSummary {
   standards: StandardNode[];
 }
 
+export interface IndicatorWeightItem {
+  indicatorId: number;
+  code: string;
+  name: string;
+  weight: number;
+}
+
 export interface SubStandardWeightItem {
   subStandardId: number;
   code: string;
   name: string;
   weight: number;
   indicatorsCount?: number;
+  indicators?: IndicatorWeightItem[];
 }
 
 export interface StandardWeightItem {
@@ -145,6 +153,8 @@ export interface UpdateWeightsPayload {
 export interface WeightsCalibrationResponse {
   versionId: number;
   versionNo: string;
+  status?: string;
+  isDraft?: boolean;
   totalWeight: number;
   isBalanced: boolean;
   standards: StandardWeightItem[];
@@ -168,6 +178,9 @@ export interface GovernanceCheckRule {
 export interface VersionLockPreconditions {
   versionId: number;
   versionNo: string;
+  status?: string;
+  isDraft?: boolean;
+  approvalCode?: string;
   passesAll: boolean;
   integrityHash: string;
   totalWeight: number;
@@ -188,29 +201,34 @@ export interface DiffTimelineItem {
 }
 
 export interface DiffRealStats {
-  standardsCount: number;
-  baselineStandardsCount: number;
-  subStandardsCount: number;
-  baselineSubsCount: number;
-  indicatorsCount: number;
-  baselineIndicatorsCount: number;
-  totalWeight: number;
-  baselineTotalWeight: number;
+  currentStandardsCount: number;
+  previousStandardsCount: number;
   standardsDiff: number;
+  currentSubStandardsCount: number;
+  previousSubStandardsCount: number;
   subStandardsDiff: number;
+  currentIndicatorsCount: number;
+  previousIndicatorsCount: number;
   indicatorsDiff: number;
-  isWeightBalanced: boolean;
+  totalWeight: number;
+  isBalanced: boolean;
+  previousVersionNo: string;
 }
 
 export interface DiffLogResponse {
   versionId: number;
   versionNo: string;
-  baselineVersionNo: string;
+  baselineVersionNo?: string;
+  status?: string;
+  isDraft?: boolean;
+  approvalCode?: string;
+  approverName?: string;
+  approvedAt?: string;
   integrityHash: string;
   releaseNotes?: string;
   realStats?: DiffRealStats;
   diffs: DiffTimelineItem[];
-  stats: {
+  stats?: {
     addedCount: number;
     modifiedCount: number;
     reweightedCount: number;

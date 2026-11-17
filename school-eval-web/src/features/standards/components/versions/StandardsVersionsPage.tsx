@@ -211,7 +211,7 @@ export const StandardsVersionsPage: React.FC<StandardsVersionsPageProps> = ({
               backgroundColor: '#10B981',
             }}
           />
-          نشط وحاكم للدورات
+          مُقرّ ونافذ للدورات
         </span>
       );
     }
@@ -285,7 +285,7 @@ export const StandardsVersionsPage: React.FC<StandardsVersionsPageProps> = ({
                 border: '1px solid #FDE68A',
               }}
             >
-              أمانة المعايير ومجلس الاعتماد الأكاديمي
+              أمانة المعايير والمؤشرات الوطنية
             </span>
             <div
               style={{
@@ -302,7 +302,7 @@ export const StandardsVersionsPage: React.FC<StandardsVersionsPageProps> = ({
               }}
             >
               <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#10B981' }} />
-              إصدار رسمي نشط ومقفل
+              إصدار رسمي مُقرّ ونافذ
             </div>
           </div>
           <h1 style={{ fontSize: '24px', fontWeight: 900, color: '#0F172A', letterSpacing: '-0.02em', margin: 0 }}>
@@ -348,14 +348,14 @@ export const StandardsVersionsPage: React.FC<StandardsVersionsPageProps> = ({
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
             <div>
               <span style={{ fontSize: '11px', fontWeight: 700, color: '#64748B', display: 'block', marginBottom: '4px' }}>
-                الإصدار المعتمد الحاكم للدورات الحالية
+                الإصدار المُقرّ الحاكم للدورات الحالية
               </span>
               <h3 style={{ fontSize: '20px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
                 {activeVersion?.versionNo ? `الإصدار الوطني (${activeVersion.versionNo})` : 'الإصدار الوطني (2026.1)'}
               </h3>
               <p style={{ fontSize: '12px', color: '#047857', fontWeight: 600, marginTop: '6px', display: 'flex', alignItems: 'center', gap: '6px', margin: 0 }}>
                 <ShieldCheck size={14} color="#059669" />
-                <span>مقفل برقم اعتماد رسمي • مرتبط بـ {activeVersion?.activeSchoolsCount || 48} مدرسة</span>
+                <span>مقفل برقم إقرار رسمي • مرتبط بـ {activeVersion?.activeSchoolsCount || 48} مدرسة</span>
               </p>
             </div>
             <div
@@ -423,7 +423,7 @@ export const StandardsVersionsPage: React.FC<StandardsVersionsPageProps> = ({
               </h3>
               <p style={{ fontSize: '12px', color: '#2563EB', fontWeight: 600, marginTop: '6px', display: 'flex', alignItems: 'center', gap: '6px', margin: 0 }}>
                 <Clock size={14} color="#3B82F6" />
-                <span>غير مفعلة للمدارس حتى اعتماد القفل النهائي</span>
+                <span>غير مفعلة للمدارس حتى إقرار القفل النهائي</span>
               </p>
             </div>
             <div
@@ -523,7 +523,7 @@ export const StandardsVersionsPage: React.FC<StandardsVersionsPageProps> = ({
             </span>
             {[
               { key: 'all', label: 'كافة الإصدارات', count: statusCounts.all },
-              { key: 'active', label: 'الإصدار المعتمد', count: statusCounts.active },
+              { key: 'active', label: 'الإصدار المُقرّ', count: statusCounts.active },
               { key: 'draft', label: 'المسودات', count: statusCounts.draft },
               { key: 'archived', label: 'الأرشيف', count: statusCounts.archived },
             ].map((tab) => {
@@ -626,7 +626,7 @@ export const StandardsVersionsPage: React.FC<StandardsVersionsPageProps> = ({
                       color: '#92400E',
                     }}
                   >
-                    الحالة: {filterStatus === 'active' ? 'المعتمد' : filterStatus === 'draft' ? 'المسودات' : 'الأرشيف'}
+                    الحالة: {filterStatus === 'active' ? 'المُقرّ' : filterStatus === 'draft' ? 'المسودات' : 'الأرشيف'}
                     <button
                       type="button"
                       onClick={() => setFilterStatus('all')}
@@ -690,10 +690,10 @@ export const StandardsVersionsPage: React.FC<StandardsVersionsPageProps> = ({
                     backgroundColor: sortKey === 'issueDate' ? '#FEF3C7' : undefined,
                     color: sortKey === 'issueDate' ? '#92400E' : undefined,
                   }}
-                  title="انقر للفرز بحسب تاريخ القفل والاعتماد"
+                  title="انقر للفرز بحسب تاريخ القفل والإقرار"
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <span>تاريخ القفل والاعتماد</span>
+                    <span>تاريخ القفل والإقرار</span>
                     {renderSortIndicator('issueDate')}
                   </div>
                 </th>

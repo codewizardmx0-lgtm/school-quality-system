@@ -38,7 +38,7 @@ const navItems: NavItemConfig[] = [
   { key: 'versions', label: 'سجل الإصدارات', icon: BookOpen },
   { key: 'tree', label: 'بناء الشجرة', icon: GitFork },
   { key: 'weights', label: 'معايرة الأوزان', icon: Scale },
-  { key: 'audit-lock', label: 'تدقيق القفل', icon: ShieldCheck, badge: '4/4' },
+  { key: 'audit-lock', label: 'تدقيق الإقرار', icon: ShieldCheck, badge: '4/4' },
 ];
 
 export const StandardsSidebar: React.FC<StandardsSidebarProps> = ({
@@ -125,7 +125,7 @@ export const StandardsSidebar: React.FC<StandardsSidebarProps> = ({
                   textOverflow: 'ellipsis',
                 }}
               >
-                أمانة المعايير والاعتماد
+                أمانة المعايير والمؤشرات
               </span>
             </div>
           )}
