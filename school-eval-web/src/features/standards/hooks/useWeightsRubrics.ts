@@ -33,7 +33,7 @@ export function useWeightsRubrics(versionId?: number | string) {
     try {
       const [weightsRes, rubricsRes] = await Promise.all([
         standardsApi.getWeights(versionId),
-        standardsApi.getScoreLevels(),
+        standardsApi.getScoreLevels(versionId),
       ]);
 
       if (weightsRes) {

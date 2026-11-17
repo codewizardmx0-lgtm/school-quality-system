@@ -12,6 +12,7 @@ use App\Models\IndicatorScoreDescriptor;
 use App\Models\IndicatorVerificationMethod;
 use App\Models\Role;
 use App\Models\School;
+use App\Models\ScoreLevel;
 use App\Models\Standard;
 use App\Models\StandardVersion;
 use App\Models\SubStandard;
@@ -1022,5 +1023,93 @@ class StandardsManagementFeatureTest extends TestCase
                 'diffs',
             ],
         ]);
+    }
+
+    /**
+     * اختبار خلو سجل الفروقات من البيانات الوهمية المسبقة الصنع (DIFF-01..04).
+     */
+    public function test_diff_log_does_not_contain_mock_diff_items(): void
+    {
+        $res = $this->actingAs($this->standardsManager, 'sanctum')
+            ->getJson("/api/v1/standard-versions/{$this->seededVersion->version_id}/diff-log");
+
+        $res->assertOk();
+        $diffs = $res->json('data.diffs');
+
+        // التأكد من عدم وجود أي من المعرفات الوهمية السابقة
+        $diffIds = collect($diffs)->pluck('id')->all();
+        $this->assertNotContains('DIFF-01', $diffIds);
+        $this->assertNotContains('DIFF-02', $diffIds);
+        $this->assertNotContains('DIFF-03', $diffIds);
+        $this->assertNotContains('DIFF-04', $diffIds);
+    }
+
+    /**
+     * اختبار جلب وتحديث مستويات سلم التقدير اللفظي ديناميكياً على مستوى الإصدار.
+     */
+    public function test_score_levels_can_be_retrieved_and_updated_per_version(): void
+    {
+        // 1. جلب مستويات الإصدار الأول (الافتراضي 0-3)
+        $res = $this->actingAs($this->standardsManager, 'sanctum')
+            ->getJson("/api/v1/score-levels?version_id={$this->seededVersion->version_id}");
+
+        $res->assertOk();
+        $this->assertNotEmpty($res->json('data'));
+
+        // 2. إنشاء مسودة وتحديث سلم التقدير لها
+        $draftRes = $this->actingAs($this->standardsManager, 'sanctum')
+            ->postJson('/api/v1/standard-versions', [
+                'version_no' => '2030.CUSTOM-SCALE',
+            ]);
+        $draftId = $draftRes->json('data.version_id');
+
+        $updateScaleRes = $this->actingAs($this->standardsManager, 'sanctum')
+            ->putJson("/api/v1/standard-versions/{$draftId}/score-levels", [
+                'levels' => [
+                    ['score_value' => 1, 'label' => 'مبتدئ', 'general_description' => 'مستوى أولي', 'display_order' => 1],
+                    ['score_value' => 2, 'label' => 'متمكن', 'general_description' => 'مستوى متوسط', 'display_order' => 2],
+                    ['score_value' => 3, 'label' => 'خبير', 'general_description' => 'مستوى متقدم', 'display_order' => 3],
+                ],
+            ]);
+
+        $updateScaleRes->assertOk();
+        $this->assertCount(3, $updateScaleRes->json('data'));
+    }
+
+    /**
+     * اختبار فصل فحص أدوات التحقق عن متطلبات الشواهد ومانع تفعيل السلم غير المدعوم.
+     */
+    public function test_lock_preconditions_separates_tools_from_evidence_and_blocks_unsupported_scale(): void
+    {
+        // 1. استدعاء الشروط الحاكمة للإصدار التأسيسي
+        $res = $this->actingAs($this->standardsManager, 'sanctum')
+            ->getJson("/api/v1/standard-versions/{$this->seededVersion->version_id}/lock-preconditions");
+
+        $res->assertOk();
+        $checks = collect($res->json('data.checks'))->keyBy('key');
+
+        // التحقق من وجود فحص مستقل لأدوات التحقق
+        $this->assertTrue($checks->has('verification_tools'));
+        // التحقق من وجود فحص مستقل لمتطلبات الشواهد
+        $this->assertTrue($checks->has('evidence_requirements'));
+        // التحقق من وجود فحص التوافق التشغيلي للسلم
+        $this->assertTrue($checks->has('portal_compatibility'));
+
+        // 2. اختبار مانع التفعيل التشغيلي: محاولة تنشيط مسودة بسلم تقديري مخصص (3 مستويات: 1, 2, 3 بدلاً من 0-3)
+        $draft = StandardVersion::create([
+            'version_no'          => 'BLOCKED-SCALE-VER',
+            'issue_date'          => now()->toDateString(),
+            'source_organization' => 'وزارة التربية والتعليم',
+            'status'              => StandardVersion::STATUS_APPROVED,
+        ]);
+
+        ScoreLevel::create(['standard_version_id' => $draft->version_id, 'score_value' => 1, 'label' => 'L1', 'display_order' => 1]);
+        ScoreLevel::create(['standard_version_id' => $draft->version_id, 'score_value' => 2, 'label' => 'L2', 'display_order' => 2]);
+
+        $activateRes = $this->actingAs($this->standardsManager, 'sanctum')
+            ->postJson("/api/v1/standard-versions/{$draft->version_id}/activate");
+
+        $activateRes->assertStatus(422)
+            ->assertJsonValidationErrors(['scale_compatibility']);
     }
 }

@@ -109,7 +109,9 @@ export interface StandardVersionSummary {
   indicatorsCount?: number;
   totalWeight?: number;
   evaluationCyclesCount?: number;
+  activeCyclesCount?: number;
   activeSchoolsCount?: number;
+  uniqueSchoolsCount?: number;
 }
 
 export interface StandardVersionDetail extends StandardVersionSummary {
@@ -161,18 +163,23 @@ export interface WeightsCalibrationResponse {
 }
 
 export interface RubricLevelInfo {
+  scoreLevelId?: number;
+  standardVersionId?: number;
   scoreValue: number;
   label: string;
-  badgeColor: 'emerald' | 'blue' | 'amber' | 'rose';
-  range: string;
-  description: string;
+  badgeColor?: string;
+  range?: string;
+  description?: string;
+  displayOrder?: number;
 }
 
 export interface GovernanceCheckRule {
   id: number;
+  key?: string;
   title: string;
   passed: boolean;
   details: string;
+  blocker?: boolean;
 }
 
 export interface VersionLockPreconditions {
@@ -182,6 +189,7 @@ export interface VersionLockPreconditions {
   isDraft?: boolean;
   approvalCode?: string;
   passesAll: boolean;
+  isScaleSupported?: boolean;
   integrityHash: string;
   totalWeight: number;
   indicatorsCount: number;
@@ -196,29 +204,40 @@ export interface DiffTimelineItem {
   target: string;
   code: string;
   description: string;
-  timestamp: string;
-  author: string;
+  timestamp?: string;
+  author?: string;
 }
 
 export interface DiffRealStats {
-  currentStandardsCount: number;
-  previousStandardsCount: number;
+  standardsCount?: number;
+  currentStandardsCount?: number;
+  baselineStandardsCount?: number;
+  previousStandardsCount?: number;
+  subStandardsCount?: number;
+  currentSubStandardsCount?: number;
+  baselineSubsCount?: number;
+  previousSubStandardsCount?: number;
+  indicatorsCount?: number;
+  currentIndicatorsCount?: number;
+  baselineIndicatorsCount?: number;
+  previousIndicatorsCount?: number;
+  totalWeight?: number;
+  baselineTotalWeight?: number;
   standardsDiff: number;
-  currentSubStandardsCount: number;
-  previousSubStandardsCount: number;
   subStandardsDiff: number;
-  currentIndicatorsCount: number;
-  previousIndicatorsCount: number;
   indicatorsDiff: number;
-  totalWeight: number;
-  isBalanced: boolean;
-  previousVersionNo: string;
+  isWeightBalanced?: boolean;
+  isBalanced?: boolean;
+  hasBaseline?: boolean;
+  baselineVersionNo?: string | null;
+  previousVersionNo?: string | null;
 }
 
 export interface DiffLogResponse {
   versionId: number;
   versionNo: string;
-  baselineVersionNo?: string;
+  baselineVersionNo?: string | null;
+  hasBaseline?: boolean;
   status?: string;
   isDraft?: boolean;
   approvalCode?: string;
@@ -234,6 +253,15 @@ export interface DiffLogResponse {
     reweightedCount: number;
     toolsUpdatedCount: number;
   };
+}
+
+export interface UpdateScoreLevelsPayload {
+  levels: {
+    score_value: number;
+    label: string;
+    general_description?: string;
+    display_order?: number;
+  }[];
 }
 
 export interface CreateDraftPayload {

@@ -88,7 +88,7 @@ export const StandardsWeightsRubricsPage: React.FC<StandardsWeightsRubricsPagePr
             </span>
           </div>
           <h1 style={{ fontSize: '24px', fontWeight: 900, color: '#0F172A', letterSpacing: '-0.02em', margin: 0 }}>
-            معايرة الأوزان النسبية وسلالم التقدير اللفظي (0-3)
+            معايرة الأوزان النسبية وسلالم التقدير
           </h1>
           <p style={{ fontSize: '13px', color: '#64748B', marginTop: '4px', margin: 0 }}>
             ضبط التوزيع الرياضي لأوزان المعايير السبعة وضمان استيفاء شرط المجموع 100.0% قبل القفل

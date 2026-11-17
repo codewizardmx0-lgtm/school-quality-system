@@ -14,6 +14,7 @@ interface CreateDraftModalProps {
   isOpen: boolean;
   onClose: () => void;
   activeVersions: StandardVersionSummary[];
+  initialCloneId?: number;
   onSubmit: (payload: CreateDraftPayload) => Promise<any>;
 }
 
@@ -21,13 +22,14 @@ export const CreateDraftModal: React.FC<CreateDraftModalProps> = ({
   isOpen,
   onClose,
   activeVersions,
+  initialCloneId,
   onSubmit,
 }) => {
   const [versionNo, setVersionNo] = useState('');
   const [sourceNumber, setSourceNumber] = useState('');
   const [sourceDescription, setSourceDescription] = useState('');
   const [cloneFromId, setCloneFromId] = useState<number | undefined>(
-    activeVersions[0]?.versionId
+    initialCloneId || activeVersions[0]?.versionId
   );
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);

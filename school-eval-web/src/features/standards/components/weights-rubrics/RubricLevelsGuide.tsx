@@ -43,40 +43,74 @@ export const RubricLevelsGuide: React.FC<RubricLevelsGuideProps> = ({ levels }) 
     },
   ];
 
-  const items = levels.length >= 4 ? levels : defaultLevels;
+  const items = levels && levels.length > 0 ? levels : defaultLevels;
 
-  const getColorStyles = (color: string) => {
-    switch (color) {
-      case 'emerald':
-        return {
-          bg: 'bg-emerald-50/70',
-          border: 'border-emerald-200',
-          badge: 'bg-emerald-100 text-emerald-800 border-emerald-300',
-          icon: <CheckCircle className="w-5 h-5 text-emerald-600" />,
-        };
-      case 'blue':
-        return {
-          bg: 'bg-blue-50/70',
-          border: 'border-blue-200',
-          badge: 'bg-blue-100 text-blue-800 border-blue-300',
-          icon: <Award className="w-5 h-5 text-blue-600" />,
-        };
-      case 'amber':
-        return {
-          bg: 'bg-amber-50/70',
-          border: 'border-amber-200',
-          badge: 'bg-amber-100 text-amber-800 border-amber-300',
-          icon: <Clock className="w-5 h-5 text-amber-600" />,
-        };
-      case 'rose':
-      default:
-        return {
-          bg: 'bg-rose-50/70',
-          border: 'border-rose-200',
-          badge: 'bg-rose-100 text-rose-800 border-rose-300',
-          icon: <XCircle className="w-5 h-5 text-rose-600" />,
-        };
+  const getColorStyles = (color?: string, index: number = 0, total: number = 4) => {
+    // If color is specified
+    if (color === 'emerald') {
+      return {
+        bg: 'bg-emerald-50/70',
+        border: 'border-emerald-200',
+        badge: 'bg-emerald-100 text-emerald-800 border-emerald-300',
+        icon: <CheckCircle className="w-5 h-5 text-emerald-600" />,
+      };
     }
+    if (color === 'blue') {
+      return {
+        bg: 'bg-blue-50/70',
+        border: 'border-blue-200',
+        badge: 'bg-blue-100 text-blue-800 border-blue-300',
+        icon: <Award className="w-5 h-5 text-blue-600" />,
+      };
+    }
+    if (color === 'amber') {
+      return {
+        bg: 'bg-amber-50/70',
+        border: 'border-amber-200',
+        badge: 'bg-amber-100 text-amber-800 border-amber-300',
+        icon: <Clock className="w-5 h-5 text-amber-600" />,
+      };
+    }
+    if (color === 'rose') {
+      return {
+        bg: 'bg-rose-50/70',
+        border: 'border-rose-200',
+        badge: 'bg-rose-100 text-rose-800 border-rose-300',
+        icon: <XCircle className="w-5 h-5 text-rose-600" />,
+      };
+    }
+
+    // Dynamic gradient distribution based on index
+    if (index === 0) {
+      return {
+        bg: 'bg-emerald-50/70',
+        border: 'border-emerald-200',
+        badge: 'bg-emerald-100 text-emerald-800 border-emerald-300',
+        icon: <CheckCircle className="w-5 h-5 text-emerald-600" />,
+      };
+    }
+    if (index === total - 1) {
+      return {
+        bg: 'bg-rose-50/70',
+        border: 'border-rose-200',
+        badge: 'bg-rose-100 text-rose-800 border-rose-300',
+        icon: <XCircle className="w-5 h-5 text-rose-600" />,
+      };
+    }
+    if (index === 1) {
+      return {
+        bg: 'bg-blue-50/70',
+        border: 'border-blue-200',
+        badge: 'bg-blue-100 text-blue-800 border-blue-300',
+        icon: <Award className="w-5 h-5 text-blue-600" />,
+      };
+    }
+    return {
+      bg: 'bg-amber-50/70',
+      border: 'border-amber-200',
+      badge: 'bg-amber-100 text-amber-800 border-amber-300',
+      icon: <Clock className="w-5 h-5 text-amber-600" />,
+    };
   };
 
   return (
@@ -84,20 +118,20 @@ export const RubricLevelsGuide: React.FC<RubricLevelsGuideProps> = ({ levels }) 
       <div className="flex items-center justify-between border-b border-slate-200 pb-3">
         <div>
           <h3 className="text-sm font-extrabold text-slate-900">
-            سلم التقدير اللفظي المعتمد (المستويات 0 – 3)
+            سلم التقدير اللفظي المعتمد ({items.length} مستويات أداء)
           </h3>
           <p className="text-xs text-slate-500">
             المستويات القياسية الحاكمة لكافة استمارات التقييم الذاتي والاعتماد
           </p>
         </div>
         <span className="text-xs font-bold text-amber-800 bg-amber-50 px-2.5 py-1 rounded-full border border-amber-200">
-          4 مستويات إلزامية
+          {items.length} مستويات قياسية
         </span>
       </div>
 
       <div className="space-y-3">
-        {items.map((level) => {
-          const style = getColorStyles(level.badgeColor);
+        {items.map((level, idx) => {
+          const style = getColorStyles(level.badgeColor, idx, items.length);
 
           return (
             <div

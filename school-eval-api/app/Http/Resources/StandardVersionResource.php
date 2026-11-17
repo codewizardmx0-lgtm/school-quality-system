@@ -22,6 +22,17 @@ class StandardVersionResource extends JsonResource
         $standardsCount = $this->standards_count ?? $this->standards()->count();
         $cyclesCount = $this->evaluation_cycles_count ?? $this->evaluationCycles()->count();
 
+        // حساب المدارس الفريدة المرتبطة بالإصدار عبر دورات التقييم الفعلية دون أي أرقام وهمية أو افتراضية
+        $uniqueSchoolsCount = \Illuminate\Support\Facades\DB::table('cycle_participations')
+            ->join('evaluation_cycles', 'cycle_participations.cycle_id', '=', 'evaluation_cycles.cycle_id')
+            ->where('evaluation_cycles.version_id', $this->version_id)
+            ->distinct()
+            ->count('cycle_participations.school_id');
+
+        $activeCyclesCount = $this->relationLoaded('evaluationCycles')
+            ? $this->evaluationCycles->filter(fn($c) => in_array(strtolower($c->status), ['active', 'in_progress']))->count()
+            : $this->evaluationCycles()->whereIn('status', ['Active', 'active', 'In_Progress', 'in_progress'])->count();
+
         // حساب عدد المؤشرات الإجمالي
         $indicatorsCount = 0;
         if ($this->relationLoaded('standards')) {
@@ -65,7 +76,12 @@ class StandardVersionResource extends JsonResource
             'total_weight'          => (float) ($totalWeight ?: 100),
             'evaluationCyclesCount' => (int) $cyclesCount,
             'evaluation_cycles_count'=> (int) $cyclesCount,
-            'activeSchoolsCount'    => (int) ($cyclesCount > 0 ? 48 : 0),
+            'activeCyclesCount'     => (int) $activeCyclesCount,
+            'active_cycles_count'   => (int) $activeCyclesCount,
+            'activeSchoolsCount'    => (int) $uniqueSchoolsCount,
+            'active_schools_count'  => (int) $uniqueSchoolsCount,
+            'uniqueSchoolsCount'    => (int) $uniqueSchoolsCount,
+            'unique_schools_count'  => (int) $uniqueSchoolsCount,
         ];
     }
 }

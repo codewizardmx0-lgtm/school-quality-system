@@ -248,8 +248,14 @@ export const standardsApi = {
     return extractData<any>(res);
   },
 
-  async getScoreLevels(): Promise<RubricLevelInfo[]> {
-    const res = await apiClient.get('/score-levels');
+  async getScoreLevels(versionId?: number | string): Promise<RubricLevelInfo[]> {
+    const url = versionId ? `/score-levels?version_id=${versionId}` : '/score-levels';
+    const res = await apiClient.get(url);
+    return extractData<RubricLevelInfo[]>(res);
+  },
+
+  async updateScoreLevels(versionId: number | string, levels: any[]): Promise<RubricLevelInfo[]> {
+    const res = await apiClient.put(`/standard-versions/${versionId}/score-levels`, { levels });
     return extractData<RubricLevelInfo[]>(res);
   },
 
@@ -264,27 +270,30 @@ export const standardsApi = {
     return {
       versionId: Number(raw?.versionId ?? raw?.version_id ?? versionId),
       versionNo: String(raw?.versionNo ?? raw?.version_no ?? ''),
-      baselineVersionNo: String(raw?.baselineVersionNo ?? raw?.baseline_version_no ?? rs?.previous_version_no ?? 'لا يوجد إصدار سابق'),
+      baselineVersionNo: raw?.baselineVersionNo ?? raw?.baseline_version_no ?? rs?.previous_version_no ?? null,
+      hasBaseline: Boolean(raw?.hasBaseline ?? raw?.has_baseline ?? (raw?.baselineVersionNo && raw?.baselineVersionNo !== raw?.versionNo)),
       status: raw?.status,
       isDraft: raw?.isDraft ?? raw?.is_draft ?? (raw?.status === 'Draft'),
       approvalCode: raw?.approvalCode ?? raw?.approval_code,
       approverName: raw?.approverName ?? raw?.approver_name,
       approvedAt: raw?.approvedAt ?? raw?.approved_at,
-      integrityHash: String(raw?.integrityHash ?? raw?.integrity_hash ?? '069e798b2d4b8e92a77e7f55d95c712bb1b48ee13e050820e4078bea7b2b5329'),
+      integrityHash: String(raw?.integrityHash ?? raw?.integrity_hash ?? ''),
       releaseNotes: raw?.releaseNotes ?? raw?.release_notes ?? '',
       realStats: rs ? {
-        currentStandardsCount: Number(rs.current_standards_count ?? rs.currentStandardsCount ?? 0),
-        previousStandardsCount: Number(rs.previous_standards_count ?? rs.previousStandardsCount ?? 0),
-        standardsDiff: Number(rs.standards_diff ?? rs.standardsDiff ?? 0),
-        currentSubStandardsCount: Number(rs.current_sub_standards_count ?? rs.currentSubStandardsCount ?? 0),
-        previousSubStandardsCount: Number(rs.previous_sub_standards_count ?? rs.previousSubStandardsCount ?? 0),
-        subStandardsDiff: Number(rs.sub_standards_diff ?? rs.subStandardsDiff ?? 0),
-        currentIndicatorsCount: Number(rs.current_indicators_count ?? rs.currentIndicatorsCount ?? 0),
-        previousIndicatorsCount: Number(rs.previous_indicators_count ?? rs.previousIndicatorsCount ?? 0),
-        indicatorsDiff: Number(rs.indicators_diff ?? rs.indicatorsDiff ?? 0),
-        totalWeight: Number(rs.total_weight ?? rs.totalWeight ?? 100),
-        isBalanced: Boolean(rs.is_balanced ?? rs.isBalanced ?? true),
-        previousVersionNo: String(rs.previous_version_no ?? rs.previousVersionNo ?? 'لا يوجد إصدار سابق'),
+        standardsCount: Number(rs.standardsCount ?? rs.standards_count ?? 0),
+        baselineStandardsCount: Number(rs.baselineStandardsCount ?? rs.baseline_standards_count ?? 0),
+        standardsDiff: Number(rs.standardsDiff ?? rs.standards_diff ?? 0),
+        subStandardsCount: Number(rs.subStandardsCount ?? rs.sub_standards_count ?? 0),
+        baselineSubsCount: Number(rs.baselineSubsCount ?? rs.baseline_subs_count ?? 0),
+        subStandardsDiff: Number(rs.subStandardsDiff ?? rs.sub_standards_diff ?? 0),
+        indicatorsCount: Number(rs.indicatorsCount ?? rs.indicators_count ?? 0),
+        baselineIndicatorsCount: Number(rs.baselineIndicatorsCount ?? rs.baseline_indicators_count ?? 0),
+        indicatorsDiff: Number(rs.indicatorsDiff ?? rs.indicators_diff ?? 0),
+        totalWeight: Number(rs.totalWeight ?? rs.total_weight ?? 100),
+        baselineTotalWeight: Number(rs.baselineTotalWeight ?? rs.baseline_total_weight ?? 100),
+        isWeightBalanced: Boolean(rs.isWeightBalanced ?? rs.is_weight_balanced ?? rs.isBalanced),
+        hasBaseline: Boolean(rs.hasBaseline ?? rs.has_baseline),
+        baselineVersionNo: rs.baselineVersionNo ?? rs.baseline_version_no ?? null,
       } : undefined,
       diffs: raw?.diffs || [],
       stats: raw?.stats || {
@@ -306,11 +315,19 @@ export const standardsApi = {
       isDraft: raw?.isDraft ?? raw?.is_draft ?? (raw?.status === 'Draft'),
       approvalCode: raw?.approvalCode ?? raw?.approval_code,
       passesAll: Boolean(raw?.passesAll ?? raw?.passes_all ?? false),
+      isScaleSupported: Boolean(raw?.isScaleSupported ?? raw?.is_scale_supported ?? true),
       integrityHash: String(raw?.integrityHash ?? raw?.integrity_hash ?? ''),
       totalWeight: Number(raw?.totalWeight ?? raw?.total_weight ?? 100),
-      indicatorsCount: Number(raw?.indicatorsCount ?? raw?.indicators_count ?? 109),
-      standardsCount: Number(raw?.standardsCount ?? raw?.standards_count ?? 7),
-      checks: raw?.checks || [],
+      indicatorsCount: Number(raw?.indicatorsCount ?? raw?.indicators_count ?? 0),
+      standardsCount: Number(raw?.standardsCount ?? raw?.standards_count ?? 0),
+      checks: (raw?.checks || []).map((c: any) => ({
+        id: Number(c.id),
+        key: c.key,
+        title: String(c.title),
+        passed: Boolean(c.passed),
+        details: String(c.details),
+        blocker: Boolean(c.blocker ?? (c.key === 'portal_compatibility' && !c.passed)),
+      })),
     };
   },
 

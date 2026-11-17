@@ -20,6 +20,7 @@ import {
   Search,
   X,
   Filter,
+  Copy,
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
@@ -62,6 +63,7 @@ export const StandardsVersionsPage: React.FC<StandardsVersionsPageProps> = ({
   onNavigateToLock,
 }) => {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [cloneSourceId, setCloneSourceId] = useState<number | undefined>(undefined);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [sortKey, setSortKey] = useState<VersionSortKey>('versionNo');
@@ -355,7 +357,9 @@ export const StandardsVersionsPage: React.FC<StandardsVersionsPageProps> = ({
               </h3>
               <p style={{ fontSize: '12px', color: '#047857', fontWeight: 600, marginTop: '6px', display: 'flex', alignItems: 'center', gap: '6px', margin: 0 }}>
                 <ShieldCheck size={14} color="#059669" />
-                <span>مقفل برقم إقرار رسمي • مرتبط بـ {activeVersion?.activeSchoolsCount || 48} مدرسة</span>
+                <span>
+                  مقفل برقم إقرار رسمي • مرتبط بـ {activeVersion?.uniqueSchoolsCount ?? activeVersion?.activeSchoolsCount ?? 0} مدرسة ({activeVersion?.evaluationCyclesCount ?? 0} دورة تقويم)
+                </span>
               </p>
             </div>
             <div
@@ -833,19 +837,49 @@ export const StandardsVersionsPage: React.FC<StandardsVersionsPageProps> = ({
 
                       {/* الدورات المرتبطة */}
                       <td>
-                        {isCurrentActive ? (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#047857', fontWeight: 600, fontSize: '12px' }}>
-                            <Building2 size={14} />
-                            <span>{v.activeSchoolsCount || 48} مدرسة نشطة</span>
+                        {(v.evaluationCyclesCount && v.evaluationCyclesCount > 0) || (v.uniqueSchoolsCount && v.uniqueSchoolsCount > 0) || isCurrentActive ? (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', color: '#047857', fontWeight: 600, fontSize: '12px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <Building2 size={14} />
+                              <span>{v.uniqueSchoolsCount ?? v.activeSchoolsCount ?? 0} مدرسة نشطة</span>
+                            </div>
+                            <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 500 }}>
+                              {v.evaluationCyclesCount ?? 0} دورة تقويم
+                            </span>
                           </div>
                         ) : (
-                          <span style={{ color: '#94A3B8', fontSize: '12px' }}>غير مرتبطة</span>
+                          <span style={{ color: '#94A3B8', fontSize: '12px' }}>غير مرتبط بدورات</span>
                         )}
                       </td>
 
                       {/* الإجراءات المتاحة */}
                       <td style={{ textAlign: 'center' }}>
                         <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', justifyContent: 'center' }}>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setCloneSourceId(v.versionId);
+                              setIsCreateModalOpen(true);
+                            }}
+                            style={{
+                              padding: '6px 12px',
+                              borderRadius: '8px',
+                              fontSize: '11px',
+                              fontWeight: 700,
+                              backgroundColor: '#F0FDF4',
+                              color: '#15803D',
+                              border: '1px solid #BBF7D0',
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                            }}
+                            title={`استنساخ مسودة جديدة مبنية على الإصدار (${v.versionNo})`}
+                          >
+                            <Copy size={13} />
+                            <span>استنساخ</span>
+                          </button>
+
                           <button
                             type="button"
                             onClick={() => onNavigateToTree(v.versionId)}
@@ -962,10 +996,15 @@ export const StandardsVersionsPage: React.FC<StandardsVersionsPageProps> = ({
         <CreateDraftModal
           isOpen={isCreateModalOpen}
           activeVersions={versions}
-          onClose={() => setIsCreateModalOpen(false)}
+          initialCloneId={cloneSourceId}
+          onClose={() => {
+            setIsCreateModalOpen(false);
+            setCloneSourceId(undefined);
+          }}
           onSubmit={async (payload) => {
             await onCreateDraft(payload);
             setIsCreateModalOpen(false);
+            setCloneSourceId(undefined);
           }}
         />
       )}

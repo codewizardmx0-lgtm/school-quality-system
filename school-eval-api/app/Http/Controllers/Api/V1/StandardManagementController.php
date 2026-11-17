@@ -522,46 +522,78 @@ class StandardManagementController extends Controller
     }
 
     /**
-     * استرجاع مستويات سلم التقدير اللفظي (0-3).
+     * استرجاع مستويات سلم التقدير اللفظي للإصدار المعتمد أو المحدد.
      */
-    public function scoreLevels(): JsonResponse
+    public function scoreLevels(Request $request): JsonResponse
     {
-        $levels = [
-            [
-                'scoreValue' => 3,
-                'label' => 'مستوفٍ بالكامل (Exemplary)',
-                'badgeColor' => 'emerald',
-                'range' => '85% – 100%',
-                'description' => 'المستوى الدال على وصول المؤسسة إلى المستوى المطلوب تحقيقه وبشكل مستمر وتوثيقي كامل.',
-            ],
-            [
-                'scoreValue' => 2,
-                'label' => 'مستوفٍ جزئياً (Proficient)',
-                'badgeColor' => 'blue',
-                'range' => '65% – 84%',
-                'description' => 'يعبر عن قيام المدرسة بأداءات متحققة بصورة متوسطة الفاعلية مع وجود مجال واضح للتحسين.',
-            ],
-            [
-                'scoreValue' => 1,
-                'label' => 'غير مستوفٍ / أدنى (Developing)',
-                'badgeColor' => 'amber',
-                'range' => '40% – 64%',
-                'description' => 'يعبر عن قيام المدرسة بأداءات كتابية أو متحققة أحياناً وتتطلب تدخلاً عاجلاً للتطوير.',
-            ],
-            [
-                'scoreValue' => 0,
-                'label' => 'غير متوفر / غائب (Unsatisfactory)',
-                'badgeColor' => 'rose',
-                'range' => '0% – 39%',
-                'description' => 'يشير إلى عدم قيام المدرسة بالأداءات المطلوبة منها وغياب الشواهد والأدلة الداعمة.',
-            ],
-        ];
+        $versionId = $request->query('version_id');
+        $query = ScoreLevel::query();
 
-        return ApiResponse::success($levels, 'تم استرجاع مستويات سلم التقدير المعتمدة بنجاح.');
+        if ($versionId) {
+            $query->where('standard_version_id', $versionId);
+        } else {
+            $activeVersion = StandardVersion::where('status', StandardVersion::STATUS_ACTIVE)->first()
+                ?? StandardVersion::where('status', StandardVersion::STATUS_APPROVED)->first();
+            if ($activeVersion) {
+                $query->where('standard_version_id', $activeVersion->version_id);
+            }
+        }
+
+        $levels = $query->orderBy('display_order')->orderBy('score_value')->get();
+
+        if ($levels->isEmpty()) {
+            $levels = ScoreLevel::where('standard_version_id', 1)->orderBy('display_order')->get();
+        }
+
+        $mapped = $levels->map(function ($lvl) {
+            $colorMap = [
+                3 => 'emerald',
+                2 => 'blue',
+                1 => 'amber',
+                0 => 'rose',
+            ];
+            return [
+                'scoreLevelId'       => $lvl->score_level_id,
+                'standardVersionId'  => $lvl->standard_version_id,
+                'scoreValue'         => $lvl->score_value,
+                'label'              => $lvl->label,
+                'badgeColor'         => $colorMap[$lvl->score_value] ?? 'slate',
+                'description'        => $lvl->general_description,
+                'displayOrder'       => $lvl->display_order,
+            ];
+        });
+
+        return ApiResponse::success($mapped, 'تم استرجاع مستويات سلم التقدير المعتمدة بنجاح.');
     }
 
     /**
-     * استرجاع سجل الفروقات والتغييرات مقارنة بالإصدار المعتمد.
+     * تحديث أو إعادة تهيئة مستويات سلم التقدير اللفظي للإصدار (مسودة فقط).
+     */
+    public function updateScoreLevels(Request $request, int $id): JsonResponse
+    {
+        $version = StandardVersion::find($id);
+        if (!$version) {
+            return ApiResponse::notFound('الإصدار المعياري غير موجود.');
+        }
+
+        $request->validate([
+            'levels'                       => 'required|array|min:2',
+            'levels.*.score_value'         => 'required|integer',
+            'levels.*.label'               => 'required|string|max:100',
+            'levels.*.general_description' => 'nullable|string',
+            'levels.*.display_order'       => 'nullable|integer',
+        ]);
+
+        try {
+            $updated = $this->service->updateVersionScoreLevels($version, $request->input('levels'));
+            return ApiResponse::success($updated, 'تم تحديث مستويات سلم التقدير للإصدار بنجاح.');
+        } catch (ValidationException $e) {
+            return ApiResponse::validationError($e->errors(), $e->getMessage());
+        }
+    }
+
+    /**
+     * استرجاع سجل الفروقات والتغييرات الحقيقية مقارنة بالإصدار المعتمد.
      */
     public function diffLog(int $id): JsonResponse
     {
@@ -570,99 +602,170 @@ class StandardManagementController extends Controller
             return ApiResponse::notFound('الإصدار المعياري غير موجود.');
         }
 
+        // تحديد خط الأساس الفعلي: الإصدار السابق المعتمد أو النشط
         $baseline = StandardVersion::whereIn('status', [StandardVersion::STATUS_ACTIVE, StandardVersion::STATUS_APPROVED])
             ->where('version_id', '!=', $id)
-            ->first() ?? $version;
+            ->where('version_id', '<', $id)
+            ->orderByDesc('version_id')
+            ->first();
+
+        if (!$baseline) {
+            $baseline = StandardVersion::whereIn('status', [StandardVersion::STATUS_ACTIVE, StandardVersion::STATUS_APPROVED])
+                ->where('version_id', '!=', $id)
+                ->first();
+        }
+
+        $hasBaseline = ($baseline !== null && $baseline->version_id !== $version->version_id);
 
         $versionStandards = $version->standards;
         $versionSubs = $versionStandards->flatMap->subStandards;
         $versionIndicators = $versionSubs->flatMap->indicators;
         $versionWeight = round($versionStandards->sum('weight'), 2);
 
-        $baselineStandards = $baseline->standards;
+        $baselineStandards = $hasBaseline ? $baseline->standards()->with('subStandards.indicators')->get() : collect();
         $baselineSubs = $baselineStandards->flatMap->subStandards;
         $baselineIndicators = $baselineSubs->flatMap->indicators;
-        $baselineWeight = round($baselineStandards->sum('weight'), 2);
+        $baselineWeight = $hasBaseline ? round($baselineStandards->sum('weight'), 2) : 0;
 
         $realStats = [
-            'standardsCount'         => $versionStandards->count(),
-            'baselineStandardsCount' => $baselineStandards->count(),
-            'subStandardsCount'      => $versionSubs->count(),
-            'baselineSubsCount'      => $baselineSubs->count(),
-            'indicatorsCount'        => $versionIndicators->count(),
-            'baselineIndicatorsCount'=> $baselineIndicators->count(),
-            'totalWeight'            => $versionWeight,
-            'baselineTotalWeight'    => $baselineWeight,
-            'standardsDiff'          => $versionStandards->count() - $baselineStandards->count(),
-            'subStandardsDiff'       => $versionSubs->count() - $baselineSubs->count(),
-            'indicatorsDiff'         => $versionIndicators->count() - $baselineIndicators->count(),
-            'isWeightBalanced'       => abs($versionWeight - 100.0) < 0.05,
+            'standardsCount'          => $versionStandards->count(),
+            'currentStandardsCount'   => $versionStandards->count(),
+            'baselineStandardsCount'  => $hasBaseline ? $baselineStandards->count() : 0,
+            'previousStandardsCount'  => $hasBaseline ? $baselineStandards->count() : 0,
+            'subStandardsCount'       => $versionSubs->count(),
+            'currentSubStandardsCount'=> $versionSubs->count(),
+            'baselineSubsCount'       => $hasBaseline ? $baselineSubs->count() : 0,
+            'previousSubStandardsCount'=> $hasBaseline ? $baselineSubs->count() : 0,
+            'indicatorsCount'         => $versionIndicators->count(),
+            'currentIndicatorsCount'  => $versionIndicators->count(),
+            'baselineIndicatorsCount' => $hasBaseline ? $baselineIndicators->count() : 0,
+            'previousIndicatorsCount' => $hasBaseline ? $baselineIndicators->count() : 0,
+            'totalWeight'             => $versionWeight,
+            'baselineTotalWeight'     => $baselineWeight,
+            'standardsDiff'           => $hasBaseline ? ($versionStandards->count() - $baselineStandards->count()) : 0,
+            'subStandardsDiff'        => $hasBaseline ? ($versionSubs->count() - $baselineSubs->count()) : 0,
+            'indicatorsDiff'          => $hasBaseline ? ($versionIndicators->count() - $baselineIndicators->count()) : 0,
+            'isWeightBalanced'        => abs($versionWeight - 100.0) < 0.05,
+            'isBalanced'              => abs($versionWeight - 100.0) < 0.05,
+            'hasBaseline'             => $hasBaseline,
+            'baselineVersionNo'       => $hasBaseline ? $baseline->version_no : null,
+            'previousVersionNo'       => $hasBaseline ? $baseline->version_no : null,
         ];
 
-        $diffs = [
-            [
-                'id' => 'DIFF-01',
-                'category' => 'مؤشر جديد',
-                'type' => 'added',
-                'target' => 'المعيار الأول: الإدارة المدرسية',
-                'code' => 'STD-1-SUB-2-IND-4',
-                'description' => 'إضافة مؤشر الاستجابة للحوكمة الرقمية والتحول الإلكتروني مع بطاقة ملاحظة مقننة.',
-                'timestamp' => 'منذ 3 ساعات',
-                'author' => 'د. خالد الرازحي',
-            ],
-            [
-                'id' => 'DIFF-02',
-                'category' => 'إعادة معايرة وزن',
-                'type' => 'modified',
-                'target' => 'المعيار الرابع: التعليم والتعلم',
-                'code' => 'STD-04',
-                'description' => 'تعديل الوزن النسبي من 18% إلى 20% لتحقيق توازن التقييم الأكاديمي.',
-                'timestamp' => 'منذ 5 ساعات',
-                'author' => 'د. خالد الرازحي',
-            ],
-            [
-                'id' => 'DIFF-03',
-                'category' => 'تحديث واصفات السلم',
-                'type' => 'modified',
-                'target' => 'المعيار الخامس: البيئة المدرسية',
-                'code' => 'STD-05-RUBRIC',
-                'description' => 'تحسين صياغة المستوى (3) في سلم التقدير اللفظي للمطابقة مع دليل الأمن والسلامة المحدث.',
-                'timestamp' => 'أمس',
-                'author' => 'أمانة المعايير',
-            ],
-            [
-                'id' => 'DIFF-04',
-                'category' => 'أداة تحقق ملزمة',
-                'type' => 'tool',
-                'target' => 'المعيار الثاني: الكوادر التعليمية',
-                'code' => 'STD-2-TOOLS',
-                'description' => 'إلزامية إرفاق ملف الإنجاز المهني الإلكتروني كأداة تحقق إضافية.',
-                'timestamp' => 'منذ يومين',
-                'author' => 'مجلس الاعتماد',
-            ],
-        ];
+        // احتساب الفروقات الحقيقية بدون أي بيانات وهمية أو أوقات مختلقة
+        $diffs = [];
+
+        if ($hasBaseline) {
+            $baselineStdCodes = $baselineStandards->pluck('code')->all();
+            $versionStdCodes = $versionStandards->pluck('code')->all();
+
+            foreach ($versionStandards as $vStd) {
+                if (!in_array($vStd->code, $baselineStdCodes)) {
+                    $diffs[] = [
+                        'id'          => 'DIFF-STD-ADD-' . $vStd->code,
+                        'category'    => 'معيار رئيسي مضاف',
+                        'type'        => 'added',
+                        'target'      => $vStd->name,
+                        'code'        => $vStd->code,
+                        'description' => "إضافة معيار رئيسي جديد ({$vStd->name}) بوزن نسبي {$vStd->weight}%.",
+                    ];
+                } else {
+                    $bStd = $baselineStandards->firstWhere('code', $vStd->code);
+                    if ($bStd && abs((float)$bStd->weight - (float)$vStd->weight) > 0.01) {
+                        $diffs[] = [
+                            'id'          => 'DIFF-STD-WEIGHT-' . $vStd->code,
+                            'category'    => 'إعادة معايرة وزن المعيار',
+                            'type'        => 'reweighted',
+                            'target'      => $vStd->name,
+                            'code'        => $vStd->code,
+                            'description' => "تعديل الوزن النسبي للمعيار من {$bStd->weight}% إلى {$vStd->weight}%.",
+                        ];
+                    }
+                }
+            }
+
+            foreach ($baselineStandards as $bStd) {
+                if (!in_array($bStd->code, $versionStdCodes)) {
+                    $diffs[] = [
+                        'id'          => 'DIFF-STD-DEL-' . $bStd->code,
+                        'category'    => 'معيار رئيسي محذوف',
+                        'type'        => 'modified',
+                        'target'      => $bStd->name,
+                        'code'        => $bStd->code,
+                        'description' => "حذف المعيار الرئيسي ({$bStd->name}) الذي كان معتمداً في الإصدار الأساس.",
+                    ];
+                }
+            }
+
+            $baselineIndMap = $baselineIndicators->keyBy('code');
+            $versionIndMap = $versionIndicators->keyBy('code');
+
+            foreach ($versionIndicators as $vInd) {
+                if (!$baselineIndMap->has($vInd->code)) {
+                    $diffs[] = [
+                        'id'          => 'DIFF-IND-ADD-' . $vInd->code,
+                        'category'    => 'مؤشر أداء جديد',
+                        'type'        => 'added',
+                        'target'      => $vInd->name,
+                        'code'        => $vInd->code,
+                        'description' => "إضافة مؤشر تفصيلي جديد إلى الهيكل المعياري.",
+                    ];
+                } else {
+                    $bInd = $baselineIndMap->get($vInd->code);
+                    if (abs((float)$bInd->weight - (float)$vInd->weight) > 0.01) {
+                        $diffs[] = [
+                            'id'          => 'DIFF-IND-WEIGHT-' . $vInd->code,
+                            'category'    => 'إعادة معايرة وزن المؤشر',
+                            'type'        => 'reweighted',
+                            'target'      => $vInd->name,
+                            'code'        => $vInd->code,
+                            'description' => "تعديل الوزن النسبي للمؤشر من {$bInd->weight}% إلى {$vInd->weight}%.",
+                        ];
+                    }
+                }
+            }
+
+            foreach ($baselineIndicators as $bInd) {
+                if (!$versionIndMap->has($bInd->code)) {
+                    $diffs[] = [
+                        'id'          => 'DIFF-IND-DEL-' . $bInd->code,
+                        'category'    => 'مؤشر محذوف',
+                        'type'        => 'modified',
+                        'target'      => $bInd->name,
+                        'code'        => $bInd->code,
+                        'description' => "حذف المؤشر ({$bInd->code} - {$bInd->name}) من الهيكل المعياري.",
+                    ];
+                }
+            }
+        }
 
         $hash = hash('sha256', "VERSION_{$version->version_id}_{$version->version_no}_DIFF_LOG");
 
         return ApiResponse::success([
-            'versionId' => $version->version_id,
-            'versionNo' => $version->version_no,
-            'baselineVersionNo' => $baseline->version_no,
-            'integrityHash' => $hash,
-            'releaseNotes' => $version->source_description ?? 'مذكرات الإصدار والتغييرات المنهجية الرسمية.',
-            'realStats' => $realStats,
-            'diffs' => $diffs,
-            'stats' => [
-                'addedCount' => max(0, $realStats['indicatorsDiff']),
-                'modifiedCount' => 5,
-                'reweightedCount' => 2,
-                'toolsUpdatedCount' => 4,
-            ]
-        ], 'تم استرجاع سجل التغييرات والفروقات بنجاح.');
+            'versionId'         => $version->version_id,
+            'versionNo'         => $version->version_no,
+            'baselineVersionNo' => $hasBaseline ? $baseline->version_no : null,
+            'hasBaseline'       => $hasBaseline,
+            'status'            => $version->status,
+            'isDraft'           => $version->isDraft(),
+            'approvalCode'      => $version->approval_code,
+            'approverName'      => $version->approver_name,
+            'approvedAt'        => $version->approved_at?->toIso8601ZuluString(),
+            'integrityHash'     => $hash,
+            'releaseNotes'      => $version->source_description ?? 'مذكرات الإصدار والتغييرات المنهجية الرسمية.',
+            'realStats'         => $realStats,
+            'diffs'             => $diffs,
+            'stats'             => [
+                'addedCount'        => count(array_filter($diffs, fn($d) => $d['type'] === 'added')),
+                'modifiedCount'     => count(array_filter($diffs, fn($d) => $d['type'] === 'modified')),
+                'reweightedCount'   => count(array_filter($diffs, fn($d) => $d['type'] === 'reweighted')),
+                'toolsUpdatedCount' => 0,
+            ],
+        ], 'تم استرجاع سجل الفروقات والمقارنة الحقيقية بنجاح.');
     }
 
     /**
-     * فحص وتدقيق الشروط الحاكمة الأربعة قبل القفل الرسمي.
+     * فحص وتدقيق الشروط الحاكمة وموانع التفعيل قبل القفل والإقرار الرسمي.
      */
     public function lockPreconditions(int $id): JsonResponse
     {
@@ -673,69 +776,109 @@ class StandardManagementController extends Controller
 
         $standards = $version->standards;
         $totalWeight = round($standards->sum('weight'), 2);
+        
+        // 1. اتزان الأوزان (100.0%)
         $check1 = abs($totalWeight - 100.0) < 0.05;
 
+        // 2. فصل أدوات التحقق: فحص ربط كل مؤشر بأداة تحقق معتمدة في الإصدار
         $indicators = $standards->flatMap->subStandards->flatMap->indicators;
         $missingTools = $indicators->filter(function ($ind) {
-            $hasReqs = DB::table('indicator_evidence_requirements')
-                ->where('indicator_id', $ind->indicator_id)
-                ->exists();
             $hasMethods = DB::table('indicator_verification_methods')
                 ->where('indicator_id', $ind->indicator_id)
                 ->exists();
-            return !$hasReqs && !$hasMethods;
+            $toolsArray = is_array($ind->verification_tools) ? $ind->verification_tools : json_decode($ind->verification_tools ?? '[]', true);
+            return empty($toolsArray) && !$hasMethods && empty($ind->verification_method);
         });
         $check2 = $missingTools->isEmpty();
 
-        $scoreLevelsCount = ScoreLevel::whereIn('score_value', [0, 1, 2, 3])->count();
-        $check3 = $scoreLevelsCount >= 4;
+        // 3. فصل متطلبات الشواهد: فحص تعريف متطلبات الشواهد المرجعية في وثيقة المعايير
+        $missingRequirements = $indicators->filter(function ($ind) {
+            return !DB::table('indicator_evidence_requirements')
+                ->where('indicator_id', $ind->indicator_id)
+                ->exists();
+        });
+        $check3 = $missingRequirements->isEmpty();
 
+        // 4. اكتمال تعريف سلم التقدير اللفظي المعتمد للإصدار
+        $versionScoreLevels = ScoreLevel::where('standard_version_id', $version->version_id)->get();
+        if ($versionScoreLevels->isEmpty()) {
+            $versionScoreLevels = ScoreLevel::where('standard_version_id', 1)->get();
+        }
+        $check4 = $versionScoreLevels->count() >= 2;
+
+        // 5. تفرد الرموز المعيارية بدون تكرار
         $allCodes = collect();
         $standards->each(fn($s) => $allCodes->push($s->code));
         $standards->flatMap->subStandards->each(fn($sub) => $allCodes->push($sub->code));
         $indicators->each(fn($ind) => $allCodes->push($ind->code));
-        $check4 = $allCodes->count() === $allCodes->unique()->count();
+        $check5 = $allCodes->count() === $allCodes->unique()->count();
 
-        $passesAll = $check1 && $check2 && $check3 && $check4;
+        // 6. فحص مانع التفعيل التشغيلي: هل السلم التقديري مدعوم في بوابات الرصد والتقييم الحالية (سلم 0-3)؟
+        $levelValues = $versionScoreLevels->pluck('score_value')->sort()->values()->all();
+        $isStandardScale = ($levelValues === [0, 1, 2, 3]);
+        $check6 = $isStandardScale;
+
+        $passesAll = $check1 && $check2 && $check3 && $check4 && $check5 && $check6;
 
         $hashContent = "VERSION_{$version->version_id}_{$version->version_no}_{$totalWeight}_{$indicators->count()}_" . $allCodes->sort()->implode('_');
         $integrityHash = hash('sha256', $hashContent);
 
         return ApiResponse::success([
-            'versionId' => $version->version_id,
-            'versionNo' => $version->version_no,
-            'passesAll' => $passesAll,
-            'integrityHash' => $integrityHash,
-            'totalWeight' => $totalWeight,
-            'indicatorsCount' => $indicators->count(),
-            'standardsCount' => $standards->count(),
-            'checks' => [
+            'versionId'        => $version->version_id,
+            'versionNo'        => $version->version_no,
+            'passesAll'        => $passesAll,
+            'isScaleSupported' => $isStandardScale,
+            'integrityHash'    => $integrityHash,
+            'totalWeight'      => $totalWeight,
+            'indicatorsCount'  => $indicators->count(),
+            'standardsCount'   => $standards->count(),
+            'checks'           => [
                 [
-                    'id' => 1,
-                    'title' => 'مجموع أوزان المعايير متزن بنسبة 100.0% تماماً',
-                    'passed' => $check1,
+                    'id'      => 1,
+                    'key'     => 'weights_balance',
+                    'title'   => 'مجموع أوزان المعايير الرئيسية متزن بنسبة 100.0% تماماً',
+                    'passed'  => $check1,
                     'details' => $check1 ? "مجموع الأوزان الموزعة {$totalWeight}% متطابق 100%" : "المجموع الحالي {$totalWeight}% غير متزن (يجب أن يكون 100.0%)",
                 ],
                 [
-                    'id' => 2,
-                    'title' => 'جميع المؤشرات مرتبطة بأداة تحقق واحدة على الأقل',
-                    'passed' => $check2,
-                    'details' => $check2 ? "كافة المؤشرات ({$indicators->count()} مؤشر) مرتبطة بأدوات تحقق وشواهد ملزمة" : "يوجد مؤشرات بحاجة لربط أدوات التحقق",
+                    'id'      => 2,
+                    'key'     => 'verification_tools',
+                    'title'   => 'أدوات التحقق المعتمدة: كل مؤشر مرتبط بأداة تحقق واحدة على الأقل',
+                    'passed'  => $check2,
+                    'details' => $check2 ? "كافة المؤشرات ({$indicators->count()} مؤشراً) معرف لها أدوات تحقق معتمدة" : "يوجد مؤشرات بحاجة لربط أدوات التحقق",
                 ],
                 [
-                    'id' => 3,
-                    'title' => 'سلم التقدير اللفظي (0-3) مكتمل ومحدد الشروط',
-                    'passed' => $check3,
-                    'details' => $check3 ? 'المستويات الأربعة المعتمدة (0, 1, 2, 3) مكتملة ومحددة الواصفات' : 'نقص في مستويات سلم التقدير',
+                    'id'      => 3,
+                    'key'     => 'evidence_requirements',
+                    'title'   => 'متطلبات الشواهد المرجعية: اكتمال تعريف الشواهد الإلزامية والاختيارية في الوثيقة',
+                    'passed'  => $check3,
+                    'details' => $check3 ? "تم تعريف متطلبات الشواهد لجميع المؤشرات في هذا الإصدار" : "يوجد مؤشرات لم يتم تحديد متطلبات شواهدها المرجعية بعد",
                 ],
                 [
-                    'id' => 4,
-                    'title' => 'الأكواد البرمجية لجميع العناصر فريدة وغير مكررة',
-                    'passed' => $check4,
-                    'details' => $check4 ? "تم فحص {$allCodes->count()} كود معياري، وجميعها فريدة تماماً" : 'يوجد تكرار في بعض الأكواد المعيارية',
+                    'id'      => 4,
+                    'key'     => 'rubric_scale_definition',
+                    'title'   => 'سلم التقدير اللفظي: اكتمال تعريف مستويات السلم المعتمدة للإصدار',
+                    'passed'  => $check4,
+                    'details' => $check4 ? "السلم التقديري معرف بعدد {$versionScoreLevels->count()} مستويات" : "السلم التقديري غير مكتمل لهذا الإصدار",
+                ],
+                [
+                    'id'      => 5,
+                    'key'     => 'unique_codes',
+                    'title'   => 'سلامة الهيكل المعياري وتفرد الرموز المعيارية بدون تكرار',
+                    'passed'  => $check5,
+                    'details' => $check5 ? "تم فحص {$allCodes->count()} كوداً معيارياً، وجميعها فريدة تماماً" : "توجد أكواد معيارية مكررة في الهيكل",
+                ],
+                [
+                    'id'      => 6,
+                    'key'     => 'portal_compatibility',
+                    'title'   => 'توافق السلم مع بوابات الرصد والتقييم (مانع تفعيل تشغيلي)',
+                    'passed'  => $check6,
+                    'details' => $check6
+                        ? 'السلم التقديري (0-3) متوافق تماماً ومدعوم 100% في استمارة رصد المقيم ومحرك احتساب الدرجات'
+                        : 'مانع تفعيل: السلم التقديري المخصص لهذا الإصدار يتضمن مستويات غير مدعومة حالياً في استمارة رصد المقيم ومحرك احتساب الدرجات (المدعوم حالياً: سلم 0-3). يتطلب تحديث بوابات التقييم والرصد قبل التفعيل.',
                 ],
             ],
-        ], 'تم إجراء تدقيق الشروط الحاكمة بنجاح.');
+        ], 'تم إجراء تدقيق الشروط الحاكمة وموانع التفعيل بنجاح.');
     }
 
     /**

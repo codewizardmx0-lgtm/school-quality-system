@@ -82,16 +82,31 @@ export const DiffTimelineView: React.FC<DiffTimelineViewProps> = ({ diffData }) 
             سجل الفروقات والملخص الإحصائي الحقيقي (Diff Log & Real Stats)
           </h3>
           <p className="text-xs text-slate-500 mt-0.5">
-            مقارنة إحصائية ومنهجية مفصلة بين هذا الإصدار وخط الأساس السابق ({realStats?.previousVersionNo || diffData?.baselineVersionNo || 'لا يوجد إصدار سابق'})
+            {diffData?.hasBaseline === false
+              ? 'وثيقة خط الأساس التأسيسية المعتمدة (الإصدار المرجعي الأول)'
+              : `مقارنة إحصائية ومنهجية مفصلة بين هذا الإصدار وخط الأساس السابق (${realStats?.previousVersionNo || diffData?.baselineVersionNo || 'الإصدار المعتمد'})`}
           </p>
         </div>
 
         <div className="flex items-center gap-2">
           <span className="text-xs font-bold text-slate-700 bg-slate-100 px-2.5 py-1 rounded-full border border-slate-200">
-            {diffs.length} تعديلات مرصودة في الشجرة
+            {diffData?.hasBaseline === false ? 'إصدار تأسيسي' : `${diffs.length} تعديلات مرصودة في الشجرة`}
           </span>
         </div>
       </div>
+
+      {/* Foundational Version Notice if No Baseline */}
+      {diffData?.hasBaseline === false && (
+        <div className="p-4 rounded-xl bg-blue-50/80 border border-blue-200 text-blue-900 text-xs flex items-center gap-3">
+          <FileText className="w-5 h-5 text-blue-600 shrink-0" />
+          <div>
+            <div className="font-extrabold text-sm">وثيقة خط الأساس التأسيسية المعتمدة</div>
+            <div className="text-blue-700 mt-0.5 leading-relaxed">
+              هذا هو الإصدار المعياري الوطني المرجعي الأول. لا توجد وثيقة سابقة للمقارنة معها، وتُعد شجرة هذا الإصدار خط الأساس الحاكم الذي ستُقاس عليه كافة التعديلات في الإصدارات المستقبلية.
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 1. Real Comparative Statistics Cards (§ القرار 5) */}
       {realStats && (
@@ -202,8 +217,10 @@ export const DiffTimelineView: React.FC<DiffTimelineViewProps> = ({ diffData }) 
       {/* 4. Timeline List */}
       <div className="relative pr-4 border-r-2 border-slate-200 space-y-4">
         {diffs.length === 0 ? (
-          <div className="text-center py-6 text-xs text-slate-400">
-            لا توجد فروقات تفصيلية مسجلة بين هذا الإصدار وخط الأساس السابق.
+          <div className="text-center py-8 text-xs text-slate-500 bg-slate-50/70 rounded-xl border border-dashed border-slate-200">
+            {diffData?.hasBaseline === false
+              ? 'وثيقة خط أساس أولية — لا توجد فروقات تفصيلية مقارنة بإصدارات سابقة.'
+              : 'لا توجد تعديلات أو فروقات مرصودة بين هذه المسودة وخط الأساس المعتمد.'}
           </div>
         ) : (
           diffs.map((diff) => (
@@ -230,17 +247,23 @@ export const DiffTimelineView: React.FC<DiffTimelineViewProps> = ({ diffData }) 
                   {diff.description}
                 </p>
 
-                <div className="flex items-center justify-between text-[11px] text-slate-500 border-t border-slate-200/60 pt-2 mt-2">
-                  <div className="flex items-center gap-1 text-slate-600">
-                    <UserCheck className="w-3.5 h-3.5 text-slate-400" />
-                    <span>المسؤول: {diff.author}</span>
-                  </div>
+                {(diff.author || diff.timestamp) && (
+                  <div className="flex items-center justify-between text-[11px] text-slate-500 border-t border-slate-200/60 pt-2 mt-2">
+                    {diff.author ? (
+                      <div className="flex items-center gap-1 text-slate-600">
+                        <UserCheck className="w-3.5 h-3.5 text-slate-400" />
+                        <span>المسؤول: {diff.author}</span>
+                      </div>
+                    ) : <div />}
 
-                  <div className="flex items-center gap-1 text-slate-400">
-                    <Clock className="w-3.5 h-3.5" />
-                    <span>{diff.timestamp}</span>
+                    {diff.timestamp && (
+                      <div className="flex items-center gap-1 text-slate-400">
+                        <Clock className="w-3.5 h-3.5" />
+                        <span>{diff.timestamp}</span>
+                      </div>
+                    )}
                   </div>
-                </div>
+                )}
               </div>
             </div>
           ))

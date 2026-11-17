@@ -51,19 +51,31 @@ export const GovernanceChecksList: React.FC<GovernanceChecksListProps> = ({
       id: 2,
       title: 'جميع المؤشرات مرتبطة بأداة تحقق واحدة على الأقل',
       passed: true,
-      details: 'كافة المؤشرات (109 مؤشرات) مرتبطة بأدوات تحقق وشواهد ملزمة',
+      details: 'كافة المؤشرات مرتبطة بأدوات تحقق ملزمة ومحددة',
     },
     {
       id: 3,
-      title: 'سلم التقدير اللفظي (0-3) مكتمل ومحدد الشروط',
+      title: 'جميع المؤشرات محددة بمتطلبات شواهد وأدلة مرجعية',
       passed: true,
-      details: 'المستويات الأربعة المعتمدة (0, 1, 2, 3) مكتملة ومحددة الواصفات',
+      details: 'حصر وتحديد متطلبات الشواهد المرجعية لكافة المؤشرات في الشجرة',
     },
     {
       id: 4,
+      title: 'سلم التقدير اللفظي مكتمل ومحدد الشروط',
+      passed: true,
+      details: 'مستويات سلم التقدير اللفظي المعتمدة مكتملة ومحددة الواصفات',
+    },
+    {
+      id: 5,
       title: 'الأكواد البرمجية لجميع العناصر فريدة وغير مكررة',
       passed: true,
       details: 'تم فحص كافة الأكواد المعيارية، وجميعها فريدة تماماً',
+    },
+    {
+      id: 6,
+      title: 'توافق السلم التقديري مع محركات التقييم والمطابقة',
+      passed: true,
+      details: 'السلم التقديري متوافق تشغيلياً مع بوابات التقييم الميداني وإصدار التقارير',
     },
   ];
 
@@ -73,7 +85,7 @@ export const GovernanceChecksList: React.FC<GovernanceChecksListProps> = ({
   const handleExecuteLock = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!passesAll) {
-      setError('لا يمكن إقرار الوثيقة قبل استيفاء كافة الشروط الحاكمة (4 من 4).');
+      setError(`لا يمكن إقرار الوثيقة قبل استيفاء كافة الشروط الحاكمة (${checks.length} من ${checks.length}).`);
       return;
     }
     if (!legalConfirmed) {
@@ -136,7 +148,7 @@ export const GovernanceChecksList: React.FC<GovernanceChecksListProps> = ({
               <span>المسؤول المُقِرّ:</span>
             </span>
             <div className="font-bold text-slate-900 text-sm">
-              {diffData?.approverName || 'مسؤول إدارة المعايير الوطنية'}
+              {diffData?.approverName || 'مسؤول إدارة المعايير والمؤشرات'}
             </div>
           </div>
 
@@ -178,7 +190,7 @@ export const GovernanceChecksList: React.FC<GovernanceChecksListProps> = ({
             الشروط الحاكمة لإقرار وقفل الإصدار المعياري
           </h3>
           <p className="text-xs text-slate-500 mt-0.5">
-            فحص آلي صارم للنزاهة المنهجية والرياضية (استيفاء {passedCount} من 4)
+            فحص آلي صارم للنزاهة المنهجية والرياضية (استيفاء {passedCount} من {checks.length})
           </p>
         </div>
 
@@ -270,7 +282,7 @@ export const GovernanceChecksList: React.FC<GovernanceChecksListProps> = ({
             className="mt-0.5 w-4 h-4 text-amber-600 rounded border-slate-300 focus:ring-amber-500 cursor-pointer"
           />
           <span className="leading-relaxed">
-            أقر بصفتي مسؤول إدارة المرجعية والمعايير باستيفاء وثيقة المعايير لكافة الضوابط الوطنية
+            أقر بصفتي مسؤول إدارة المعايير والمؤشرات باستيفاء وثيقة المعايير لكافة الضوابط الوطنية
             وأتحمل المسؤولية المنهجية والقانونية عن إقرارها وتجميدها لكافة المدارس.
           </span>
         </label>

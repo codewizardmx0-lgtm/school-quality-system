@@ -235,6 +235,7 @@ Route::prefix('v1')->group(function () {
             Route::post('/{id}/approve', [\App\Http\Controllers\Api\V1\StandardManagementController::class, 'approve'])->name('api.v1.standard-versions.approve');
             Route::post('/{id}/activate', [\App\Http\Controllers\Api\V1\StandardManagementController::class, 'activate'])->name('api.v1.standard-versions.activate');
             Route::post('/{id}/archive', [\App\Http\Controllers\Api\V1\StandardManagementController::class, 'archive'])->name('api.v1.standard-versions.archive');
+            Route::put('/{id}/score-levels', [\App\Http\Controllers\Api\V1\StandardManagementController::class, 'updateScoreLevels'])->name('api.v1.standard-versions.score-levels.update');
             Route::post('/{id}/standards', [\App\Http\Controllers\Api\V1\StandardManagementController::class, 'storeStandard'])->name('api.v1.standard-versions.standards.store');
             Route::post('/{id}/standards/{stdId}/sub-standards', [\App\Http\Controllers\Api\V1\StandardManagementController::class, 'storeSubStandardNested'])->name('api.v1.standard-versions.standards.sub-standards.store');
         });

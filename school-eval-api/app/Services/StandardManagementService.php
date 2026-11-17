@@ -81,14 +81,29 @@ class StandardManagementService
      */
     public function createDraft(array $data): StandardVersion
     {
-        return StandardVersion::create([
-            'version_no'          => $data['version_no'],
-            'issue_date'          => $data['issue_date'] ?? now()->toDateString(),
-            'source_organization' => $data['source_organization'] ?? 'وزارة التربية والتعليم والبحث العلمي',
-            'source_number'       => $data['source_number'] ?? null,
-            'source_description'  => $data['source_description'] ?? null,
-            'status'              => StandardVersion::STATUS_DRAFT,
-        ]);
+        return DB::transaction(function () use ($data) {
+            $version = StandardVersion::create([
+                'version_no'          => $data['version_no'],
+                'issue_date'          => $data['issue_date'] ?? now()->toDateString(),
+                'source_organization' => $data['source_organization'] ?? 'وزارة التربية والتعليم والبحث العلمي',
+                'source_number'       => $data['source_number'] ?? null,
+                'source_description'  => $data['source_description'] ?? null,
+                'status'              => StandardVersion::STATUS_DRAFT,
+            ]);
+
+            // تهيئة مستويات سلم التقدير اللفظي الافتراضية للإصدار الجديد
+            $defaultLevels = [
+                ['score_value' => 0, 'label' => 'غير متوفر / غائب', 'general_description' => 'يشير إلى عدم قيام المدرسة بالأداءات المطلوبة وغياب الشواهد.', 'display_order' => 1],
+                ['score_value' => 1, 'label' => 'متحقق جزئياً / أدنى', 'general_description' => 'يعبر عن أداءات متحققة بصورة جزئية أو غير مستقرة.', 'display_order' => 2],
+                ['score_value' => 2, 'label' => 'متحقق / ملائم', 'general_description' => 'يعبر عن أداءات متحققة بفاعلية ومستوفية للشواهد المعتمدة.', 'display_order' => 3],
+                ['score_value' => 3, 'label' => 'مستوفٍ بالكامل / متميز', 'general_description' => 'المستوى الدال على وصول المؤسسة إلى التميز والنمذجة والتطوير المستمر.', 'display_order' => 4],
+            ];
+            foreach ($defaultLevels as $lvl) {
+                ScoreLevel::create(array_merge($lvl, ['standard_version_id' => $version->version_id]));
+            }
+
+            return $version;
+        });
     }
 
     /**
@@ -394,6 +409,17 @@ class StandardManagementService
      */
     public function activateVersion(StandardVersion $version): StandardVersion
     {
+        // فحص التوافق التشغيلي: التحقق من أن السلم التقديري مدعوم في بوابات الرصد والتقييم الحالية (سلم 0-3)
+        $versionScoreLevels = ScoreLevel::where('standard_version_id', $version->version_id)->get();
+        if ($versionScoreLevels->isNotEmpty()) {
+            $levelValues = $versionScoreLevels->pluck('score_value')->sort()->values()->all();
+            if ($levelValues !== [0, 1, 2, 3]) {
+                throw ValidationException::withMessages([
+                    'scale_compatibility' => ['مانع تفعيل تشغيلي: السلم التقديري المخصص لهذا الإصدار يتضمن مستويات غير مدعومة حالياً في استمارة رصد المقيم ومحرك احتساب الدرجات (المدعوم حالياً: سلم 0-3). يتطلب تحديث بوابات التقييم والرصد قبل إمكانية تفعيل هذا الإصدار.'],
+                ]);
+            }
+        }
+
         return DB::transaction(function () use ($version) {
             $auditLogger = app(AuditLoggerService::class);
 
@@ -775,5 +801,62 @@ class StandardManagementService
         $this->ensureIsDraft($version);
 
         return (bool) $requirement->delete();
+    }
+
+    /**
+     * تحديث أو إعادة تهيئة مستويات سلم التقدير اللفظي للإصدار (مسودة فقط).
+     *
+     * @param StandardVersion $version
+     * @param array<int, array{score_value: int, label: string, general_description?: string, display_order?: int}> $levels
+     * @return Collection
+     * @throws ValidationException
+     */
+    public function updateVersionScoreLevels(StandardVersion $version, array $levels): Collection
+    {
+        $this->ensureIsDraft($version);
+
+        if (empty($levels) || count($levels) < 2) {
+            throw ValidationException::withMessages([
+                'levels' => ['يجب ألا يقل سلم التقدير عن مستويين على الأقل.'],
+            ]);
+        }
+
+        return DB::transaction(function () use ($version, $levels) {
+            ScoreLevel::where('standard_version_id', $version->version_id)->delete();
+
+            $created = new Collection();
+            $order = 1;
+            foreach ($levels as $item) {
+                $created->push(ScoreLevel::create([
+                    'standard_version_id' => $version->version_id,
+                    'score_value'         => (int) $item['score_value'],
+                    'label'               => $item['label'],
+                    'general_description' => $item['general_description'] ?? null,
+                    'display_order'       => $item['display_order'] ?? $order++,
+                ]));
+            }
+
+            // تحديث واصفات المؤشرات التابعة لهذا الإصدار لضمان وجود سجل لكل مستوى
+            $indicators = Indicator::whereHas('subStandard.standard', function ($q) use ($version) {
+                $q->where('version_id', $version->version_id);
+            })->get();
+
+            foreach ($indicators as $ind) {
+                foreach ($created as $lvl) {
+                    IndicatorScoreDescriptor::firstOrCreate([
+                        'indicator_id'        => $ind->indicator_id,
+                        'score_level_id'      => $lvl->score_level_id,
+                        'standard_version_id' => $version->version_id,
+                    ], [
+                        'label'         => $lvl->label,
+                        'description'   => 'واصف مستوى ' . $lvl->label . ' للمؤشر ' . $ind->name,
+                        'display_order' => $lvl->display_order,
+                        'is_active'     => true,
+                    ]);
+                }
+            }
+
+            return $created;
+        });
     }
 }
