@@ -122,7 +122,7 @@ export const standardsApi = {
 
   // المعايير الرئيسية (القرار 4: مرونة إضافة وتعديل وحذف المعيار الرئيسي)
   async createStandard(versionId: number | string, payload: CreateStandardPayload): Promise<any> {
-    const res = await apiClient.post(`/standards/${versionId}`, payload);
+    const res = await apiClient.post(`/standard-versions/${versionId}/standards`, payload);
     return extractData<any>(res);
   },
 

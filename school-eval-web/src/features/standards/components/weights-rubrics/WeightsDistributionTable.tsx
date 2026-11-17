@@ -86,27 +86,30 @@ export const WeightsDistributionTable: React.FC<WeightsDistributionTableProps> =
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <button
             type="button"
             onClick={expandAll}
-            className="px-2.5 py-1 text-xs font-semibold text-slate-600 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg transition-colors cursor-pointer"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-amber-900 bg-amber-50 hover:bg-amber-100 border border-amber-300 rounded-lg transition-colors cursor-pointer"
+            title="توسيع كافة المستويات الثلاثة وإظهار جميع المؤشرات (109)"
           >
-            توسيع التفاصيل
+            <FileCheck2 className="w-3.5 h-3.5 text-amber-700" />
+            <span>إظهار كافة المؤشرات (المستويات الثلاثة)</span>
           </button>
           <button
             type="button"
             onClick={collapseAll}
-            className="px-2.5 py-1 text-xs font-semibold text-slate-600 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg transition-colors cursor-pointer"
+            className="px-2.5 py-1.5 text-xs font-semibold text-slate-600 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg transition-colors cursor-pointer"
+            title="طي كافة الفروع وعرض المعايير الرئيسية السبعة فقط"
           >
-            طي التفاصيل
+            طي المؤشرات
           </button>
 
           {isDraft && (
             <button
               type="button"
               onClick={onResetEqual}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-300 rounded-lg transition-colors cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-300 rounded-lg transition-colors cursor-pointer"
               title="إعادة توزيع الأوزان رياضياً بالتساوي على المعايير السبعة وفروعها ومؤشراتها"
             >
               <RotateCcw className="w-3.5 h-3.5" />

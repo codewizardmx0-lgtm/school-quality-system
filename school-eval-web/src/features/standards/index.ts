@@ -26,8 +26,14 @@ export { VersionRuleCallout } from './components/versions/VersionRuleCallout';
 export { StandardsTreeBuilderPage } from './components/tree-builder/StandardsTreeBuilderPage';
 export { StandardsTreeView } from './components/tree-builder/StandardsTreeView';
 export { IndicatorEditorPanel } from './components/tree-builder/IndicatorEditorPanel';
+export { IndicatorEditorModal } from './components/tree-builder/IndicatorEditorModal';
+export { AddStandardModal } from './components/tree-builder/AddStandardModal';
+export { EditStandardModal } from './components/tree-builder/EditStandardModal';
 export { AddSubStandardModal } from './components/tree-builder/AddSubStandardModal';
+export { EditSubStandardModal } from './components/tree-builder/EditSubStandardModal';
+export { EditScoreDescriptorsModal } from './components/tree-builder/EditScoreDescriptorsModal';
 export { AddIndicatorModal } from './components/tree-builder/AddIndicatorModal';
+export { StandardVersionWorkspacePage } from './components/workspace/StandardVersionWorkspacePage';
 
 export { StandardsWeightsRubricsPage } from './components/weights-rubrics/StandardsWeightsRubricsPage';
 export { WeightsBalanceBanner } from './components/weights-rubrics/WeightsBalanceBanner';

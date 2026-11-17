@@ -12,9 +12,7 @@ import '../../styles/standards.css';
 import { StandardsSidebar, type StandardsScreenKey } from './StandardsSidebar';
 import { StandardsTopBar } from './StandardsTopBar';
 import { StandardsVersionsPage } from '../versions/StandardsVersionsPage';
-import { StandardsTreeBuilderPage } from '../tree-builder/StandardsTreeBuilderPage';
-import { StandardsWeightsRubricsPage } from '../weights-rubrics/StandardsWeightsRubricsPage';
-import { VersionAuditLockPage } from '../audit-lock/VersionAuditLockPage';
+import { StandardVersionWorkspacePage, type WorkspaceTabKey } from '../workspace/StandardVersionWorkspacePage';
 import { useStandardsVersions } from '../../hooks/useStandardsVersions';
 
 interface StandardsLayoutProps {
@@ -72,28 +70,13 @@ export const StandardsLayout: React.FC<StandardsLayoutProps> = ({
         );
 
       case 'tree':
-        return (
-          <StandardsTreeBuilderPage
-            versionId={currentVersionId}
-            onNavigateToVersions={() => navigateToScreen('versions')}
-            onNavigateToWeights={(id) => navigateToScreen('weights', id)}
-          />
-        );
-
       case 'weights':
-        return (
-          <StandardsWeightsRubricsPage
-            versionId={currentVersionId}
-            onNavigateToTree={(id) => navigateToScreen('tree', id)}
-            onNavigateToLock={(id) => navigateToScreen('audit-lock', id)}
-          />
-        );
-
       case 'audit-lock':
         return (
-          <VersionAuditLockPage
-            versionId={currentVersionId}
-            onNavigateToWeights={(id) => navigateToScreen('weights', id)}
+          <StandardVersionWorkspacePage
+            key={`workspace-${currentVersionId}`}
+            initialVersionId={currentVersionId}
+            initialTab={activeScreen as WorkspaceTabKey}
             onNavigateToVersions={() => navigateToScreen('versions')}
           />
         );

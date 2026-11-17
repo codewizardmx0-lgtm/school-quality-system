@@ -1,7 +1,7 @@
 /**
- * Screen 2: Standards Tree Builder (Stacked Vertical Layout - تحت بعض)
+ * Screen 2: Standards Tree Builder
  * بناء وهيكلة الشجرة المعيارية والمؤشرات وعناصر التقييم
- * تم التنسيق عمودياً (تحت بعض) ليتسع العرض الكامل لكل من الشجرة والمحرر
+ * يدعم إضافة وتعديل وحذف المعايير الرئيسية والفرعية، وفتح نافذة تحرير المؤشر التفاعلية
  */
 
 import React, { useState } from 'react';
@@ -11,16 +11,16 @@ import {
   ArrowLeft,
   FolderPlus,
   PlusCircle,
-  Layers,
-  Edit3,
   BookmarkPlus,
   Lock,
 } from 'lucide-react';
-import type { StandardNode, SubStandardNode } from '../../api/standardsTypes';
+import type { StandardNode, SubStandardNode, IndicatorNode } from '../../api/standardsTypes';
 import { StandardsTreeView } from './StandardsTreeView';
-import { IndicatorEditorPanel } from './IndicatorEditorPanel';
+import { IndicatorEditorModal } from './IndicatorEditorModal';
 import { AddStandardModal } from './AddStandardModal';
+import { EditStandardModal } from './EditStandardModal';
 import { AddSubStandardModal } from './AddSubStandardModal';
+import { EditSubStandardModal } from './EditSubStandardModal';
 import { AddIndicatorModal } from './AddIndicatorModal';
 import { useStandardsTree } from '../../hooks/useStandardsTree';
 import { exportStandardsTreeToExcel } from '../../utils/standardsExportUtils';
@@ -44,12 +44,15 @@ export const StandardsTreeBuilderPage: React.FC<StandardsTreeBuilderPageProps> =
     selectedSubStandard,
     selectedIndicator,
     isSaving,
-    saveStatus,
     selectIndicator,
     addStandard,
-    updateIndicator,
+    updateStandard,
+    deleteStandard,
     addSubStandard,
+    updateSubStandard,
+    deleteSubStandard,
     addIndicator,
+    updateIndicator,
     deleteIndicator,
     addEvidenceRequirement,
     updateEvidenceRequirement,
@@ -59,10 +62,19 @@ export const StandardsTreeBuilderPage: React.FC<StandardsTreeBuilderPageProps> =
 
   // Modals state
   const [isAddStdModalOpen, setIsAddStdModalOpen] = useState(false);
+  const [isEditStdModalOpen, setIsEditStdModalOpen] = useState(false);
+  const [editingStandard, setEditingStandard] = useState<StandardNode | null>(null);
+
   const [isAddSubModalOpen, setIsAddSubModalOpen] = useState(false);
+  const [isEditSubModalOpen, setIsEditSubModalOpen] = useState(false);
+  const [editingSubStandard, setEditingSubStandard] = useState<SubStandardNode | null>(null);
+  const [editingSubParentName, setEditingSubParentName] = useState<string>('');
+
   const [isAddIndModalOpen, setIsAddIndModalOpen] = useState(false);
   const [modalTargetStd, setModalTargetStd] = useState<StandardNode | null>(null);
   const [modalTargetSub, setModalTargetSub] = useState<SubStandardNode | null>(null);
+
+  const [isIndicatorModalOpen, setIsIndicatorModalOpen] = useState(false);
 
   const standards = treeData?.standards || [];
   const totalSubStandards = countAllSubStandards(standards);
@@ -86,22 +98,29 @@ export const StandardsTreeBuilderPage: React.FC<StandardsTreeBuilderPageProps> =
     }
   };
 
-  const handleExportExcel = () => {
-    if (treeData) {
-      exportStandardsTreeToExcel(treeData);
-    }
+  const handleOpenEditStandard = (std: StandardNode) => {
+    setEditingStandard(std);
+    setIsEditStdModalOpen(true);
   };
 
-  const handleSelectIndicatorAndScroll = (
-    ind: any,
+  const handleOpenEditSubStandard = (sub: SubStandardNode, std: StandardNode) => {
+    setEditingSubStandard(sub);
+    setEditingSubParentName(std.name);
+    setIsEditSubModalOpen(true);
+  };
+
+  const handleSelectIndicator = (
+    ind: IndicatorNode,
     sub: SubStandardNode,
     std: StandardNode
   ) => {
     selectIndicator(ind, sub, std);
-    // Smooth scroll down to the editor panel
-    const editorEl = document.getElementById('indicator-editor-section');
-    if (editorEl) {
-      editorEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    setIsIndicatorModalOpen(true);
+  };
+
+  const handleExportExcel = () => {
+    if (treeData) {
+      exportStandardsTreeToExcel(treeData);
     }
   };
 
@@ -145,12 +164,12 @@ export const StandardsTreeBuilderPage: React.FC<StandardsTreeBuilderPageProps> =
             المسودة المستهدفة: وثيقة معايير التقييم والاعتماد المدرسي المطورة
           </h2>
           <p style={{ fontSize: '12px', color: '#FEF3C7', margin: '4px 0 0' }}>
-            (7 معايير رئيسية • {totalSubStandards || 24} مجالاً فرعياً • {totalIndicators || 109} مؤشرات معتمدة بأدوات تحقق ملزمة)
+            ({standards.length} معايير رئيسية • {totalSubStandards || 24} مجالاً فرعياً • {totalIndicators || 109} مؤشراً معتمداً بأدوات تحقق ملزمة)
           </p>
         </div>
 
         {/* Toolbar Actions */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
           {isDraft && (
             <>
               <button
@@ -242,127 +261,21 @@ export const StandardsTreeBuilderPage: React.FC<StandardsTreeBuilderPageProps> =
         </div>
       </div>
 
-      {/* Immutability Banner if not Draft */}
-      {!isDraft && (
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '12px',
-            padding: '14px 20px',
-            backgroundColor: '#FEF3C7',
-            border: '1px solid #F59E0B',
-            borderRadius: '12px',
-            color: '#78350F',
-          }}
-        >
-          <Lock size={20} color="#B45309" />
-          <div>
-            <div style={{ fontWeight: 800, fontSize: '14px' }}>هذا الإصدار مُقرّ ونافذ — وضع القراءة والاطلاع فقط</div>
-            <div style={{ fontSize: '12px', marginTop: '2px' }}>
-              لا يمكن تعديل بنية المعايير، المجالات الفرعية، المؤشرات، الشواهد، أو واصفات الأداء لهذا الإصدار نظراً لكونه معتمداً رسمياً.
-            </div>
-          </div>
-        </div>
-      )}
+      {/* 2. Interactive Standards Tree View */}
+      <StandardsTreeView
+        standards={standards}
+        selectedIndicatorId={selectedIndicator?.indicatorId}
+        isDraft={isDraft}
+        onSelectIndicator={handleSelectIndicator}
+        onAddSubStandard={handleOpenAddSub}
+        onAddIndicator={handleOpenAddIndicator}
+        onEditStandard={handleOpenEditStandard}
+        onDeleteStandard={(std) => deleteStandard(std.standardId)}
+        onEditSubStandard={handleOpenEditSubStandard}
+        onDeleteSubStandard={(sub) => deleteSubStandard(sub.subStandardId)}
+      />
 
-      {/* 2. القسم الأول (في الأعلى): شجرة المعايير بكامل العرض */}
-      <div style={{ width: '100%' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <div
-              style={{
-                width: '28px',
-                height: '28px',
-                borderRadius: '8px',
-                backgroundColor: '#FFFBEB',
-                color: '#D97706',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              <Layers size={16} />
-            </div>
-            <div>
-              <h3 style={{ fontSize: '15px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
-                1. الشجرة الهرمية للمعايير والمؤشرات (اختر مؤشراً لتعديله في الأسفل)
-              </h3>
-            </div>
-          </div>
-
-          {selectedIndicator && (
-            <div
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-                fontSize: '12px',
-                fontWeight: 700,
-                color: '#B45309',
-                backgroundColor: '#FFFBEB',
-                border: '1px solid #FDE68A',
-                padding: '4px 12px',
-                borderRadius: '8px',
-              }}
-            >
-              <Edit3 size={13} />
-              <span>المؤشر المحدد حالياً: {selectedIndicator.code}</span>
-            </div>
-          )}
-        </div>
-
-        <StandardsTreeView
-          standards={standards}
-          selectedIndicatorId={selectedIndicator?.indicatorId}
-          isDraft={isDraft}
-          onSelectIndicator={handleSelectIndicatorAndScroll}
-          onAddSubStandard={(std) => handleOpenAddSub(std)}
-          onAddIndicator={(sub, std) => handleOpenAddIndicator(sub, std)}
-        />
-      </div>
-
-      {/* 3. القسم الثاني (في الأسفل): لوحة محرر بيانات المؤشر المختار بكامل العرض */}
-      <div id="indicator-editor-section" style={{ width: '100%', scrollMarginTop: '80px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-          <div
-            style={{
-              width: '28px',
-              height: '28px',
-              borderRadius: '8px',
-              backgroundColor: '#ECFDF5',
-              color: '#059669',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <Edit3 size={16} />
-          </div>
-          <div>
-            <h3 style={{ fontSize: '15px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
-              2. لوحة تحرير وتفصيل المؤشر المختار
-            </h3>
-          </div>
-        </div>
-
-        <IndicatorEditorPanel
-          indicator={selectedIndicator}
-          standardName={selectedStandard?.name}
-          subStandardName={selectedSubStandard?.name}
-          isDraft={isDraft}
-          isSaving={isSaving}
-          saveStatus={saveStatus}
-          onSave={updateIndicator}
-          onDelete={deleteIndicator}
-          onAddEvidenceRequirement={addEvidenceRequirement}
-          onUpdateEvidenceRequirement={updateEvidenceRequirement}
-          onDeleteEvidenceRequirement={deleteEvidenceRequirement}
-          onUpdateScoreDescriptors={updateScoreDescriptors}
-        />
-      </div>
-
-      {/* 4. Bottom Actions Bar */}
+      {/* 3. Bottom Actions Bar */}
       <div
         style={{
           display: 'flex',
@@ -434,7 +347,31 @@ export const StandardsTreeBuilderPage: React.FC<StandardsTreeBuilderPageProps> =
         </div>
       </div>
 
-      {/* Modals */}
+      {/* Indicator Modal */}
+      {isIndicatorModalOpen && selectedIndicator && (
+        <IndicatorEditorModal
+          isOpen={isIndicatorModalOpen}
+          indicator={selectedIndicator}
+          standardName={selectedStandard?.name}
+          subStandardName={selectedSubStandard?.name}
+          isDraft={isDraft}
+          isSaving={isSaving}
+          onClose={() => setIsIndicatorModalOpen(false)}
+          onSave={async (id, payload) => {
+            await updateIndicator(id, payload);
+          }}
+          onDelete={async (id) => {
+            await deleteIndicator(id);
+            setIsIndicatorModalOpen(false);
+          }}
+          onAddEvidenceRequirement={addEvidenceRequirement}
+          onUpdateEvidenceRequirement={updateEvidenceRequirement}
+          onDeleteEvidenceRequirement={deleteEvidenceRequirement}
+          onUpdateScoreDescriptors={updateScoreDescriptors}
+        />
+      )}
+
+      {/* Main Standard Modals */}
       {isAddStdModalOpen && (
         <AddStandardModal
           isOpen={isAddStdModalOpen}
@@ -446,6 +383,23 @@ export const StandardsTreeBuilderPage: React.FC<StandardsTreeBuilderPageProps> =
         />
       )}
 
+      {isEditStdModalOpen && editingStandard && (
+        <EditStandardModal
+          isOpen={isEditStdModalOpen}
+          standard={editingStandard}
+          onClose={() => {
+            setIsEditStdModalOpen(false);
+            setEditingStandard(null);
+          }}
+          onSubmit={async (stdId, payload) => {
+            await updateStandard(stdId, payload);
+            setIsEditStdModalOpen(false);
+            setEditingStandard(null);
+          }}
+        />
+      )}
+
+      {/* SubStandard Modals */}
       {isAddSubModalOpen && modalTargetStd && (
         <AddSubStandardModal
           isOpen={isAddSubModalOpen}
@@ -459,6 +413,24 @@ export const StandardsTreeBuilderPage: React.FC<StandardsTreeBuilderPageProps> =
         />
       )}
 
+      {isEditSubModalOpen && editingSubStandard && (
+        <EditSubStandardModal
+          isOpen={isEditSubModalOpen}
+          subStandard={editingSubStandard}
+          standardName={editingSubParentName}
+          onClose={() => {
+            setIsEditSubModalOpen(false);
+            setEditingSubStandard(null);
+          }}
+          onSubmit={async (subId, payload) => {
+            await updateSubStandard(subId, payload);
+            setIsEditSubModalOpen(false);
+            setEditingSubStandard(null);
+          }}
+        />
+      )}
+
+      {/* Indicator Add Modal */}
       {isAddIndModalOpen && modalTargetSub && (
         <AddIndicatorModal
           isOpen={isAddIndModalOpen}
