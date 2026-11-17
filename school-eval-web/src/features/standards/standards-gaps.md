@@ -104,18 +104,23 @@
 5. **إضافة واجتياز 5 اختبارات آلية جديدة في الباك إند:** ✅
    - اجتياز 23/23 اختباراً في `StandardsManagementFeatureTest` واجتياز 438/438 اختباراً في الحزمة الكاملة بنسبة 100% (12,042 تأكيداً برمجياً دون أي فشل أو انحدار).
 
-### المرحلة 2: طبقة الـ API والأنواع في الواجهة الأمامية (Frontend Types & API Client)
-1. **تحديث أنواع البيانات (`standardsTypes.ts`):**
-   - إضافة `weight` إلى واجهة `SubStandardNode`.
-   - إضافة واجهات متطلبات الشواهد `EvidenceRequirementItem` و `SaveRequirementPayload`.
-   - إضافة واجهات واصفات سلم التقدير `ScoreDescriptorItem` و `UpdateDescriptorsPayload`.
-   - إضافة أنواع مذكرات الإصدار والملخص الإحصائي الحقيقي لـ `DiffLogResponse`.
-   - توحيد حالات الإصدار على `Approved` و `Draft` و `Archived`.
-2. **تحديث دوال استدعاء الـ API (`standardsApi.ts`):**
-   - دوال إدارة متطلبات الشواهد (`createRequirement`, `updateRequirement`, `deleteRequirement`).
-   - دالة تحديث واصفات المؤشر (`updateIndicatorDescriptors`).
-   - دوال إضافة وتعديل وحذف المعيار الرئيسي (`createStandard`, `updateStandard`, `deleteStandard`).
-   - دالة حفظ الأوزان بالمستويات الثلاثة (`saveThreeLevelWeights`).
+### المرحلة 2: طبقة الـ API والأنواع في الواجهة الأمامية (Frontend Types & API Client) — [مكتملة 100% ✅]
+1. **تحديث أنواع البيانات (`standardsTypes.ts`):** ✅
+   - إضافة `weight` إلى واجهة `SubStandardNode` وحساب المؤشرات.
+   - إضافة واجهات متطلبات الشواهد `EvidenceRequirement`, `SaveEvidenceRequirementPayload`.
+   - إضافة واجهات واصفات سلم التقدير `ScoreDescriptor`, `UpdateScoreDescriptorItem`, `UpdateScoreDescriptorsPayload`.
+   - إضافة أنواع المعايير الرئيسية `CreateStandardPayload`, `UpdateStandardPayload` (القرار 4).
+   - إضافة أنواع مصفوفة الأوزان الثلاثية `UpdateWeightsPayload`, `SubStandardWeightItem`.
+   - إضافة أنواع الملخص الإحصائي الحقيقي `DiffRealStats` ومذكرات الإصدار `releaseNotes` في `DiffLogResponse`.
+   - توحيد حالات الإصدار على `Approved`, `Draft`, `Archived`.
+2. **تحديث وتوسيع دوال استدعاء الـ API (`standardsApi.ts`):** ✅
+   - دوال إدارة المعيار الرئيسي: `createStandard`, `updateStandard`, `deleteStandard` (القرار 4).
+   - دوال إدارة المعايير الفرعية: `createSubStandard`, `updateSubStandard`, `deleteSubStandard`.
+   - دوال إدارة متطلبات الشواهد الـ 278: `createEvidenceRequirement`, `updateEvidenceRequirement`, `deleteEvidenceRequirement` (القرار 2).
+   - دالة تحديث واصفات سلم التقدير للمؤشر: `updateIndicatorDescriptors` (القرار 3).
+   - دالة حفظ الأوزان بالمستويات الثلاثة والتوزيع التلقائي: `updateWeights` (القرار 1).
+   - دوال دورة حياة الإصدار: `approveVersion`, `lockVersion`, `archiveVersion` (القرار 6).
+   - تم التحقق من نجاح بناء الواجهة بالكامل `npm run build` في 765ms (0 أخطاء TypeScript).
 
 ### المرحلة 3: تطوير مكونات شجرة المعايير وتحرير المؤشرات (Tree Builder & Indicator Editor)
 1. **إنشاء نافذة إضافة معيار رئيسي (`AddStandardModal.tsx`):**
