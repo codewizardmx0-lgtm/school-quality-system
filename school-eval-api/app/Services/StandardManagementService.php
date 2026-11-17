@@ -155,6 +155,7 @@ class StandardManagementService
                         'code'        => $sub->code,
                         'name'        => $sub->name,
                         'description' => $sub->description,
+                        'weight'      => $sub->weight,
                     ]);
 
                     foreach ($sub->indicators as $ind) {
@@ -243,19 +244,24 @@ class StandardManagementService
     }
 
     /**
-     * تحديث أوزان المعايير في المسودة مع التحقق الحتمي من أن المجموع = 100.00%.
+     * تحديث أوزان المعايير والمجالات والمؤشرات في المسودة مع التحقق الحتمي من التوازن الثلاثي (القرار 1).
      *
      * @param StandardVersion $version
      * @param array<int, array{standard_id: int, weight: float}> $standardsWeights
      * @param array<int, array{indicator_id: int, weight: float}>|null $indicatorsWeights
+     * @param array<int, array{sub_standard_id: int, weight: float}>|null $subStandardsWeights
      * @return StandardVersion
      * @throws ValidationException
      */
-    public function updateWeights(StandardVersion $version, array $standardsWeights, ?array $indicatorsWeights = null): StandardVersion
-    {
+    public function updateWeights(
+        StandardVersion $version,
+        array $standardsWeights,
+        ?array $indicatorsWeights = null,
+        ?array $subStandardsWeights = null
+    ): StandardVersion {
         $this->ensureIsDraft($version);
 
-        // جلب المعايير الحالية للإصدار للتأكد من حساب المجموع بدقة
+        // 1. فحص المستوى 1: مجموع أوزان المعايير الرئيسية = 100.00%
         $currentStandards = $version->standards()->pluck('weight', 'standard_id')->all();
 
         foreach ($standardsWeights as $item) {
@@ -272,7 +278,36 @@ class StandardManagementService
             ]);
         }
 
-        DB::transaction(function () use ($version, $standardsWeights, $indicatorsWeights) {
+        // 2. فحص المستوى 2: إن تم تمرير أوزان المعايير الفرعية، يجب أن يتطابق مجموعها لكل معيار مع وزن المعيار الرئيسي الحاوي لها
+        if (!empty($subStandardsWeights)) {
+            $subStandardsList = SubStandard::whereHas('standard', fn($q) => $q->where('version_id', $version->version_id))
+                ->get()
+                ->keyBy('sub_standard_id');
+
+            $groupedSubWeights = [];
+            foreach ($subStandardsWeights as $subItem) {
+                $subId = (int) ($subItem['sub_standard_id'] ?? $subItem['id']);
+                if (isset($subStandardsList[$subId])) {
+                    $stdId = $subStandardsList[$subId]->standard_id;
+                    $groupedSubWeights[$stdId][$subId] = (float) $subItem['weight'];
+                }
+            }
+
+            foreach ($groupedSubWeights as $stdId => $subsMap) {
+                $expectedWeight = $currentStandards[$stdId] ?? 0.0;
+                $actualSubSum = round(array_sum($subsMap), 2);
+                if (abs($actualSubSum - $expectedWeight) > 0.01) {
+                    $stdModel = Standard::find($stdId);
+                    $stdName = $stdModel ? $stdModel->name : "المعيار رقم {$stdId}";
+                    throw ValidationException::withMessages([
+                        'sub_standards_weights' => ["مجموع أوزان المعايير الفرعية لـ ({$stdName}) هو ({$actualSubSum}%) ويجب أن يساوي تماماً وزن المعيار الرئيسي ({$expectedWeight}%)."],
+                    ]);
+                }
+            }
+        }
+
+        DB::transaction(function () use ($version, $standardsWeights, $indicatorsWeights, $subStandardsWeights) {
+            // تحديث أوزان المعايير الرئيسية
             foreach ($standardsWeights as $item) {
                 $sid = (int) ($item['standard_id'] ?? $item['id']);
                 Standard::where('standard_id', $sid)
@@ -280,19 +315,41 @@ class StandardManagementService
                     ->update(['weight' => $item['weight']]);
             }
 
+            // تحديث أوزان المعايير الفرعية
+            if (!empty($subStandardsWeights)) {
+                foreach ($subStandardsWeights as $subItem) {
+                    $subId = (int) ($subItem['sub_standard_id'] ?? $subItem['id']);
+                    SubStandard::where('sub_standard_id', $subId)
+                        ->whereHas('standard', fn($q) => $q->where('version_id', $version->version_id))
+                        ->update(['weight' => $subItem['weight']]);
+                }
+            }
+
+            // تحديث أوزان المؤشرات
             if (!empty($indicatorsWeights)) {
                 foreach ($indicatorsWeights as $indItem) {
                     $iid = (int) ($indItem['indicator_id'] ?? $indItem['id']);
-                    // التحقق من أن المؤشر يتبع هذا الإصدار
                     $indicator = Indicator::find($iid);
                     if ($indicator && $indicator->subStandard?->standard?->version_id === $version->version_id) {
                         $indicator->update(['weight' => $indItem['weight']]);
                     }
                 }
+            } elseif (!empty($subStandardsWeights)) {
+                // التوزيع التلقائي بالتساوي: إذا لم تُرسل أوزان مخصصة للمؤشرات، توزع أوزان المعيار الفرعي بالتساوي على مؤشراته
+                foreach ($subStandardsWeights as $subItem) {
+                    $subId = (int) ($subItem['sub_standard_id'] ?? $subItem['id']);
+                    $subWeight = (float) $subItem['weight'];
+                    $indicators = Indicator::where('sub_standard_id', $subId)->get();
+                    $indCount = $indicators->count();
+                    if ($indCount > 0) {
+                        $equalWeight = round($subWeight / $indCount, 2);
+                        Indicator::where('sub_standard_id', $subId)->update(['weight' => $equalWeight]);
+                    }
+                }
             }
         });
 
-        return $version->fresh('standards');
+        return $version->fresh(['standards.subStandards.indicators']);
     }
 
     /**
@@ -468,6 +525,7 @@ class StandardManagementService
             'code'        => $data['code'],
             'name'        => $data['name'],
             'description' => $data['description'] ?? null,
+            'weight'      => $data['weight'] ?? null,
         ]);
     }
 
@@ -488,6 +546,7 @@ class StandardManagementService
             'name'        => $data['name'] ?? $subStandard->name,
             'description' => array_key_exists('description', $data) ? $data['description'] : $subStandard->description,
             'code'        => $data['code'] ?? $subStandard->code,
+            'weight'      => array_key_exists('weight', $data) ? $data['weight'] : $subStandard->weight,
         ]);
 
         return $subStandard;

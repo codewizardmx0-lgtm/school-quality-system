@@ -775,4 +775,252 @@ class StandardsManagementFeatureTest extends TestCase
         $activeCount = StandardVersion::where('status', StandardVersion::STATUS_ACTIVE)->count();
         $this->assertEquals(1, $activeCount);
     }
+
+    /**
+     * اختبار إضافة وتحديث وزن المعيار الفرعي (SubStandard Weight Persistence) - القرار 1.
+     */
+    public function test_sub_standard_weight_can_be_stored_and_updated_in_draft(): void
+    {
+        $draft = StandardVersion::create([
+            'version_no'          => '2099.WEIGHT-TEST',
+            'issue_date'          => now()->toDateString(),
+            'source_organization' => 'وزارة التربية والتعليم',
+            'status'              => StandardVersion::STATUS_DRAFT,
+        ]);
+
+        $std = Standard::create([
+            'version_id'  => $draft->version_id,
+            'code'        => 'STD-W1',
+            'name'        => 'معيار تجربة الوزن',
+            'weight'      => 20.0,
+        ]);
+
+        // إضافة معيار فرعي مع وزنه
+        $resStore = $this->actingAs($this->standardsManager, 'sanctum')
+            ->postJson("/api/v1/standards/{$std->standard_id}/sub-standards", [
+                'code'        => 'SUB-W1-1',
+                'name'        => 'مجال فرعي أول',
+                'description' => 'وصف تجريبي',
+                'weight'      => 10.0,
+            ]);
+
+        $resStore->assertCreated();
+        $subId = $resStore->json('data.sub_standard_id');
+        $this->assertDatabaseHas('sub_standards', [
+            'sub_standard_id' => $subId,
+            'weight'          => 10.0,
+        ]);
+
+        // تحديث وزن المعيار الفرعي
+        $resUpdate = $this->actingAs($this->standardsManager, 'sanctum')
+            ->putJson("/api/v1/sub-standards/{$subId}", [
+                'name'   => 'مجال فرعي أول معدل',
+                'weight' => 12.5,
+            ]);
+
+        $resUpdate->assertOk();
+        $this->assertDatabaseHas('sub_standards', [
+            'sub_standard_id' => $subId,
+            'weight'          => 12.5,
+        ]);
+    }
+
+    /**
+     * اختبار التحقق الحتمي من توازن أوزان المعايير الفرعية (المجموع = وزن المعيار الرئيسي) - القرار 1.
+     */
+    public function test_three_level_weights_validation_enforces_sub_standards_sum_matches_parent_standard(): void
+    {
+        $draft = StandardVersion::create([
+            'version_no'          => '2099.THREE-LEVEL',
+            'issue_date'          => now()->toDateString(),
+            'source_organization' => 'وزارة التربية والتعليم',
+            'status'              => StandardVersion::STATUS_DRAFT,
+        ]);
+
+        $std1 = Standard::create([
+            'version_id' => $draft->version_id,
+            'code'       => 'STD-A',
+            'name'       => 'المعيار الأول',
+            'weight'     => 60.0,
+        ]);
+
+        $std2 = Standard::create([
+            'version_id' => $draft->version_id,
+            'code'       => 'STD-B',
+            'name'       => 'المعيار الثاني',
+            'weight'     => 40.0,
+        ]);
+
+        $subA1 = SubStandard::create([
+            'standard_id' => $std1->standard_id,
+            'code'        => 'SUB-A1',
+            'name'        => 'مجال أ-1',
+            'weight'      => 30.0,
+        ]);
+
+        $subA2 = SubStandard::create([
+            'standard_id' => $std1->standard_id,
+            'code'        => 'SUB-A2',
+            'name'        => 'مجال أ-2',
+            'weight'      => 30.0,
+        ]);
+
+        // 1. محاولة إرسال أوزان غير متزنة للمعيار الفرعي (30 + 20 = 50 != 60)
+        $resInvalid = $this->actingAs($this->standardsManager, 'sanctum')
+            ->putJson("/api/v1/standard-versions/{$draft->version_id}/weights", [
+                'standards_weights' => [
+                    ['standard_id' => $std1->standard_id, 'weight' => 60.0],
+                    ['standard_id' => $std2->standard_id, 'weight' => 40.0],
+                ],
+                'sub_standards_weights' => [
+                    ['sub_standard_id' => $subA1->sub_standard_id, 'weight' => 30.0],
+                    ['sub_standard_id' => $subA2->sub_standard_id, 'weight' => 20.0], // نقص 10%
+                ],
+            ]);
+
+        $resInvalid->assertStatus(422);
+        $resInvalid->assertJsonValidationErrors(['sub_standards_weights']);
+
+        // 2. إرسال أوزان متزنة تماماً (30 + 30 = 60)
+        $resValid = $this->actingAs($this->standardsManager, 'sanctum')
+            ->putJson("/api/v1/standard-versions/{$draft->version_id}/weights", [
+                'standards_weights' => [
+                    ['standard_id' => $std1->standard_id, 'weight' => 60.0],
+                    ['standard_id' => $std2->standard_id, 'weight' => 40.0],
+                ],
+                'sub_standards_weights' => [
+                    ['sub_standard_id' => $subA1->sub_standard_id, 'weight' => 35.0],
+                    ['sub_standard_id' => $subA2->sub_standard_id, 'weight' => 25.0], // مجموعها 60
+                ],
+            ]);
+
+        $resValid->assertOk();
+        $this->assertEquals(35.0, (float) $subA1->fresh()->weight);
+        $this->assertEquals(25.0, (float) $subA2->fresh()->weight);
+    }
+
+    /**
+     * اختبار التوزيع التلقائي المتساوي لوزن المعيار الفرعي على مؤشراته عند عدم تحديد أوزان المؤشرات - القرار 1.
+     */
+    public function test_sub_standards_weight_auto_distributes_equally_to_indicators_when_omitted(): void
+    {
+        $draft = StandardVersion::create([
+            'version_no'          => '2099.AUTO-DISTRIB',
+            'issue_date'          => now()->toDateString(),
+            'source_organization' => 'وزارة التربية والتعليم',
+            'status'              => StandardVersion::STATUS_DRAFT,
+        ]);
+
+        $std = Standard::create([
+            'version_id' => $draft->version_id,
+            'code'       => 'STD-AUTO',
+            'name'       => 'معيار التوزيع',
+            'weight'     => 100.0,
+        ]);
+
+        $sub = SubStandard::create([
+            'standard_id' => $std->standard_id,
+            'code'        => 'SUB-AUTO',
+            'name'        => 'مجال التوزيع',
+            'weight'      => 100.0,
+        ]);
+
+        $ind1 = Indicator::create([
+            'sub_standard_id' => $sub->sub_standard_id,
+            'code'            => 'IND-AUTO-1',
+            'name'            => 'مؤشر 1',
+            'status'          => 'Active',
+        ]);
+
+        $ind2 = Indicator::create([
+            'sub_standard_id' => $sub->sub_standard_id,
+            'code'            => 'IND-AUTO-2',
+            'name'            => 'مؤشر 2',
+            'status'          => 'Active',
+        ]);
+
+        // تحديث أوزان المعيار والمجال (100%) دون إرسال indicators_weights
+        $res = $this->actingAs($this->standardsManager, 'sanctum')
+            ->putJson("/api/v1/standard-versions/{$draft->version_id}/weights", [
+                'standards_weights' => [
+                    ['standard_id' => $std->standard_id, 'weight' => 100.0],
+                ],
+                'sub_standards_weights' => [
+                    ['sub_standard_id' => $sub->sub_standard_id, 'weight' => 100.0],
+                ],
+            ]);
+
+        $res->assertOk();
+
+        // يجب أن يوزع الـ 100% بالتساوي (50% لكل مؤشر من الاثنين)
+        $this->assertEquals(50.0, (float) $ind1->fresh()->weight);
+        $this->assertEquals(50.0, (float) $ind2->fresh()->weight);
+    }
+
+    /**
+     * اختبار نسخ وزن المعيار الفرعي في الاستنساخ العميق (Deep Cloning) - القرار 1.
+     */
+    public function test_deep_clone_preserves_sub_standards_weights(): void
+    {
+        $approvedVersion = StandardVersion::create([
+            'version_no'          => '2099.CLONE-SOURCE',
+            'issue_date'          => now()->toDateString(),
+            'source_organization' => 'وزارة التربية والتعليم',
+            'status'              => StandardVersion::STATUS_APPROVED,
+        ]);
+
+        $std = Standard::create([
+            'version_id' => $approvedVersion->version_id,
+            'code'       => 'STD-CLONE',
+            'name'       => 'معيار الاستنساخ',
+            'weight'     => 100.0,
+        ]);
+
+        $sub = SubStandard::create([
+            'standard_id' => $std->standard_id,
+            'code'        => 'SUB-CLONE',
+            'name'        => 'مجال فرعي',
+            'weight'      => 100.0,
+        ]);
+
+        $res = $this->actingAs($this->standardsManager, 'sanctum')
+            ->postJson("/api/v1/standard-versions/{$approvedVersion->version_id}/clone", [
+                'version_no' => '2099.CLONE-DEST',
+            ]);
+
+        $res->assertCreated();
+        $newVersionId = $res->json('data.version_id');
+
+        $clonedSub = SubStandard::whereHas('standard', fn($q) => $q->where('version_id', $newVersionId))->first();
+        $this->assertNotNull($clonedSub);
+        $this->assertEquals(100.0, (float) $clonedSub->weight);
+    }
+
+    /**
+     * اختبار أن diff-log يعيد إحصاءات مقارنة حقيقية ومذكرات الإصدار - القرار 5.
+     */
+    public function test_diff_log_returns_real_stats_and_release_notes(): void
+    {
+        $res = $this->actingAs($this->standardsManager, 'sanctum')
+            ->getJson("/api/v1/standard-versions/{$this->seededVersion->version_id}/diff-log");
+
+        $res->assertOk();
+        $res->assertJsonStructure([
+            'data' => [
+                'versionId',
+                'versionNo',
+                'baselineVersionNo',
+                'integrityHash',
+                'releaseNotes',
+                'realStats' => [
+                    'standardsCount',
+                    'subStandardsCount',
+                    'indicatorsCount',
+                    'totalWeight',
+                    'isWeightBalanced',
+                ],
+                'diffs',
+            ],
+        ]);
+    }
 }

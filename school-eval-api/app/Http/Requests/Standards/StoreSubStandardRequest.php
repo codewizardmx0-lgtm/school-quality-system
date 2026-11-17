@@ -17,6 +17,7 @@ class StoreSubStandardRequest extends FormRequest
             'code'        => ['required', 'string', 'max:20'],
             'name'        => ['required', 'string', 'max:200'],
             'description' => ['nullable', 'string'],
+            'weight'      => ['nullable', 'numeric', 'min:0', 'max:100'],
         ];
     }
 }

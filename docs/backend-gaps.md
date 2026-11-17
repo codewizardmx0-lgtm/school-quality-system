@@ -7,6 +7,7 @@
 > **الفرع الحالي:** `feature/school-evaluator-ui`.  
 > **خطة المعالجة المعتمدة:** يُحال للتفاصيل التنفيذية وجدول الأولويات إلى [docs/gap-remediation-plan.md](gap-remediation-plan.md).  
 > **سجل فجوات واجهات التقييم المحدث (المصادر الأربعة):** [school-eval-web/src/features/evaluation/evaluation-gaps.md](../school-eval-web/src/features/evaluation/evaluation-gaps.md).  
+> **سجل فجوات واجهات إدارة المعايير الوطنية المحدث (المصادر الثمانية):** [school-eval-web/src/features/standards/standards-gaps.md](../school-eval-web/src/features/standards/standards-gaps.md).  
 
 ---
 
@@ -32,6 +33,7 @@
 | **BE-GAP-05** | الجدولة الدورية لحذف توكنات الجلسات المنتهية (Prune Expired Tokens) | تم إغلاقها بنجاح بتسجيل أمر `sanctum:prune-expired --hours=24` يومياً وجدولة تنظيف الجلسات الخاملة (>30 يوماً) في `routes/console.php` مع 3 اختبارات في `PruneExpiredTokensTest`. | **عالية** | `routes/console.php`<br>`tests/Feature/PruneExpiredTokensTest.php` | **تم الإغلاق والاعتماد ✅** |
 | **BE-GAP-06** (`U-43`) | استبدال ملف النسخ الاحتياطي الوصفي بـ Dump حقيقي لقاعدة البيانات | استبدال الملف الوصفي المشفر الحالي بـ Dump حقيقي لقاعدة البيانات (`mysqldump` أو `pg_dump`) قابل للاستعادة والتعافي الفعلي في حال الكوارث (Disaster Recovery). | **عالية** (مؤجلة للنشر) | `AdminController.php`<br>`routes/console.php` | برمجة استدعاء مؤمن لأداة dump مع ضغط وتشفير الملف الناتج في خادم الإنتاج. |
 | **BE-GAP-07** (`U-44`) | محرك تصدير استمارة التقرير المفصلة الشاملة (PDF/Excel Engine) | تم إغلاقها بنجاح بتزويد `EvaluationReportService` بدالة `generateDetailedDossierPdf` وقالب mPDF مفصل بـ 109 مؤشرات، وربط مساري التصدير الثنائيين في `EvaluatorApiController` (`/export-detailed-pdf` و `/export-detailed-excel`) واجتياز اختبارات `Batch5DetailedReportExportTest`. | **محلولة ✅** | `EvaluationReportService.php`<br>`EvaluatorApiController.php`<br>`detailed_dossier_report.blade.php`<br>`Batch5DetailedReportExportTest.php` | **تم الإغلاق والاعتماد بالكامل ✅** |
+| **BE-GAP-08** | تطبيق أوزان المعايير الفرعية الثلاثية (`weight`) في `sub_standards` | تم تطبيق تهجير `2026_11_17_180000_add_weight_to_sub_standards_table.php` وتحديث `SubStandard.php` و `UpdateWeightsRequest.php` و `StandardManagementService.php` لحوكمة الأوزان الثلاثية المعتمدة بالقرار 1، واجتياز 438/438 اختباراً آلياً بنسبة 100%. | **محلولة ✅** | `database/migrations/`<br>`SubStandard.php`<br>`StandardManagementService.php` | **تم الإغلاق والاعتماد بالكامل ✅** |
 
 ---
 

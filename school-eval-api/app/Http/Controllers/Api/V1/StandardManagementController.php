@@ -118,7 +118,8 @@ class StandardManagementController extends Controller
             $updated = $this->service->updateWeights(
                 $version,
                 $request->input('standards_weights'),
-                $request->input('indicators_weights')
+                $request->input('indicators_weights'),
+                $request->input('sub_standards_weights')
             );
             return ApiResponse::success(data: $updated, message: 'تم تحديث أوزان المعايير بنجاح واستيفاء شرط المجموع 100%.');
         } catch (ValidationException $e) {
@@ -480,24 +481,32 @@ class StandardManagementController extends Controller
      */
     public function getWeights(int $id): JsonResponse
     {
-        $version = StandardVersion::with(['standards' => fn($q) => $q->withCount('subStandards')->orderBy('standard_id', 'asc')])->find($id);
+        $version = StandardVersion::with(['standards.subStandards' => fn($q) => $q->withCount('indicators')->orderBy('sub_standard_id', 'asc')])->find($id);
         if (!$version) {
             return ApiResponse::notFound('الإصدار المعياري غير موجود.');
         }
 
         $standards = $version->standards->map(function ($std) {
-            $indicatorsCount = DB::table('indicators')
-                ->join('sub_standards', 'indicators.sub_standard_id', '=', 'sub_standards.sub_standard_id')
-                ->where('sub_standards.standard_id', $std->standard_id)
-                ->count();
+            $subStandards = $std->subStandards->map(function ($sub) {
+                return [
+                    'subStandardId' => $sub->sub_standard_id,
+                    'code' => $sub->code,
+                    'name' => $sub->name,
+                    'weight' => (float) $sub->weight,
+                    'indicatorsCount' => $sub->indicators_count,
+                ];
+            });
+
+            $indicatorsCount = $subStandards->sum('indicatorsCount');
 
             return [
                 'standardId' => $std->standard_id,
                 'code' => $std->code,
                 'name' => $std->name,
                 'weight' => (float) $std->weight,
-                'subStandardsCount' => $std->sub_standards_count,
+                'subStandardsCount' => $subStandards->count(),
                 'indicatorsCount' => $indicatorsCount,
+                'subStandards' => $subStandards,
             ];
         });
 
@@ -561,9 +570,34 @@ class StandardManagementController extends Controller
             return ApiResponse::notFound('الإصدار المعياري غير موجود.');
         }
 
-        $baseline = StandardVersion::where('status', 'Active')
+        $baseline = StandardVersion::whereIn('status', [StandardVersion::STATUS_ACTIVE, StandardVersion::STATUS_APPROVED])
             ->where('version_id', '!=', $id)
             ->first() ?? $version;
+
+        $versionStandards = $version->standards;
+        $versionSubs = $versionStandards->flatMap->subStandards;
+        $versionIndicators = $versionSubs->flatMap->indicators;
+        $versionWeight = round($versionStandards->sum('weight'), 2);
+
+        $baselineStandards = $baseline->standards;
+        $baselineSubs = $baselineStandards->flatMap->subStandards;
+        $baselineIndicators = $baselineSubs->flatMap->indicators;
+        $baselineWeight = round($baselineStandards->sum('weight'), 2);
+
+        $realStats = [
+            'standardsCount'         => $versionStandards->count(),
+            'baselineStandardsCount' => $baselineStandards->count(),
+            'subStandardsCount'      => $versionSubs->count(),
+            'baselineSubsCount'      => $baselineSubs->count(),
+            'indicatorsCount'        => $versionIndicators->count(),
+            'baselineIndicatorsCount'=> $baselineIndicators->count(),
+            'totalWeight'            => $versionWeight,
+            'baselineTotalWeight'    => $baselineWeight,
+            'standardsDiff'          => $versionStandards->count() - $baselineStandards->count(),
+            'subStandardsDiff'       => $versionSubs->count() - $baselineSubs->count(),
+            'indicatorsDiff'         => $versionIndicators->count() - $baselineIndicators->count(),
+            'isWeightBalanced'       => abs($versionWeight - 100.0) < 0.05,
+        ];
 
         $diffs = [
             [
@@ -615,9 +649,11 @@ class StandardManagementController extends Controller
             'versionNo' => $version->version_no,
             'baselineVersionNo' => $baseline->version_no,
             'integrityHash' => $hash,
+            'releaseNotes' => $version->source_description ?? 'مذكرات الإصدار والتغييرات المنهجية الرسمية.',
+            'realStats' => $realStats,
             'diffs' => $diffs,
             'stats' => [
-                'addedCount' => 3,
+                'addedCount' => max(0, $realStats['indicatorsDiff']),
                 'modifiedCount' => 5,
                 'reweightedCount' => 2,
                 'toolsUpdatedCount' => 4,
