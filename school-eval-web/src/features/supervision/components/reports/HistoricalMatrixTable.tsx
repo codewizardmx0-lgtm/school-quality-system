@@ -4,8 +4,8 @@
  * محمي بحاوية تمرير أفقي ومطابق لمعايير UI_STANDARDS (§4)
  */
 
-import React from 'react';
-import { ArrowUp, ArrowDown, Minus } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { ArrowUp, ArrowDown, Minus, ArrowUpDown } from 'lucide-react';
 import type { HistoricalStandardDelta } from '../../api/supervisionTypes';
 
 interface HistoricalMatrixTableProps {
@@ -17,6 +17,9 @@ interface HistoricalMatrixTableProps {
   netDelta: number;
 }
 
+type DeltaSortKey = 'name' | 'previousScore' | 'currentScore' | 'delta';
+type SortDirection = 'asc' | 'desc';
+
 export const HistoricalMatrixTable: React.FC<HistoricalMatrixTableProps> = ({
   standardsDeltas,
   baseCycleYear,
@@ -25,6 +28,45 @@ export const HistoricalMatrixTable: React.FC<HistoricalMatrixTableProps> = ({
   currentTotal,
   netDelta,
 }) => {
+  const [sortKey, setSortKey] = useState<DeltaSortKey>('name');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+
+  const handleSort = (key: DeltaSortKey) => {
+    if (sortKey === key) {
+      setSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortKey(key);
+      setSortDirection(key === 'name' ? 'asc' : 'desc');
+    }
+  };
+
+  const renderSortIndicator = (key: DeltaSortKey) => {
+    if (sortKey !== key) {
+      return <ArrowUpDown size={13} style={{ opacity: 0.35, flexShrink: 0 }} />;
+    }
+    return sortDirection === 'asc' ? (
+      <ArrowUp size={13} style={{ color: '#2563EB', flexShrink: 0 }} />
+    ) : (
+      <ArrowDown size={13} style={{ color: '#2563EB', flexShrink: 0 }} />
+    );
+  };
+
+  const sortedDeltas = useMemo(() => {
+    const list = [...standardsDeltas];
+    return list.sort((a, b) => {
+      let valA: any = a[sortKey];
+      let valB: any = b[sortKey];
+
+      if (typeof valA === 'number' && typeof valB === 'number') {
+        return sortDirection === 'asc' ? valA - valB : valB - valA;
+      }
+      const strA = String(valA || '');
+      const strB = String(valB || '');
+      return sortDirection === 'asc'
+        ? strA.localeCompare(strB, 'ar')
+        : strB.localeCompare(strA, 'ar');
+    });
+  }, [standardsDeltas, sortKey, sortDirection]);
   const getTrendBadge = (trend: string, delta: number) => {
     if (trend === 'up') {
       return (
@@ -125,20 +167,86 @@ export const HistoricalMatrixTable: React.FC<HistoricalMatrixTableProps> = ({
                 color: '#475569',
               }}
             >
-              <th style={{ padding: '14px 18px', fontWeight: 800, width: '40%' }}>المعيار الوطني الرئيسي</th>
-              <th style={{ padding: '14px 16px', fontWeight: 700, width: '20%' }}>
-                دورة {comparedCycleYear} (السابقة)
+              <th
+                onClick={() => handleSort('name')}
+                style={{
+                  padding: '14px 18px',
+                  fontWeight: 800,
+                  width: '40%',
+                  cursor: 'pointer',
+                  userSelect: 'none',
+                  backgroundColor: sortKey === 'name' ? '#EFF6FF' : undefined,
+                  color: sortKey === 'name' ? '#1D4ED8' : undefined,
+                }}
+                title="انقر لفرز المعايير أبجدياً"
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span>المعيار الوطني الرئيسي</span>
+                  {renderSortIndicator('name')}
+                </div>
               </th>
-              <th style={{ padding: '14px 16px', fontWeight: 700, width: '20%' }}>
-                دورة {baseCycleYear} (الحالية)
+
+              <th
+                onClick={() => handleSort('previousScore')}
+                style={{
+                  padding: '14px 16px',
+                  fontWeight: 700,
+                  width: '20%',
+                  cursor: 'pointer',
+                  userSelect: 'none',
+                  backgroundColor: sortKey === 'previousScore' ? '#EFF6FF' : undefined,
+                  color: sortKey === 'previousScore' ? '#1D4ED8' : undefined,
+                }}
+                title="انقر للفرز بحسب نتيجة الدورة السابقة"
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span>دورة {comparedCycleYear} (السابقة)</span>
+                  {renderSortIndicator('previousScore')}
+                </div>
               </th>
-              <th style={{ padding: '14px 18px', fontWeight: 800, width: '20%', textAlign: 'center' }}>
-                الفارق والاتجاه (Delta)
+
+              <th
+                onClick={() => handleSort('currentScore')}
+                style={{
+                  padding: '14px 16px',
+                  fontWeight: 700,
+                  width: '20%',
+                  cursor: 'pointer',
+                  userSelect: 'none',
+                  backgroundColor: sortKey === 'currentScore' ? '#EFF6FF' : undefined,
+                  color: sortKey === 'currentScore' ? '#1D4ED8' : undefined,
+                }}
+                title="انقر للفرز بحسب نتيجة الدورة الحالية"
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span>دورة {baseCycleYear} (الحالية)</span>
+                  {renderSortIndicator('currentScore')}
+                </div>
+              </th>
+
+              <th
+                onClick={() => handleSort('delta')}
+                style={{
+                  padding: '14px 18px',
+                  fontWeight: 800,
+                  width: '20%',
+                  textAlign: 'center',
+                  cursor: 'pointer',
+                  userSelect: 'none',
+                  backgroundColor: sortKey === 'delta' ? '#EFF6FF' : undefined,
+                  color: sortKey === 'delta' ? '#1D4ED8' : undefined,
+                }}
+                title="انقر للفرز بحسب قيمة الفارق (Delta)"
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                  <span>الفارق والاتجاه (Delta)</span>
+                  {renderSortIndicator('delta')}
+                </div>
               </th>
             </tr>
           </thead>
           <tbody>
-            {standardsDeltas.map((item, idx) => {
+            {sortedDeltas.map((item, idx) => {
               const isEven = idx % 2 === 1;
               return (
                 <tr

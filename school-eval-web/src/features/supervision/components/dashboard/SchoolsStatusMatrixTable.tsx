@@ -7,13 +7,16 @@
  * - إجراءات إشرافية مباشرة وغير معطلة (Zero Dead Buttons)
  */
 
-import React from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   FileCheck2,
   ClipboardList,
   AlertCircle,
   History,
   CheckCircle2,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
 } from 'lucide-react';
 import type { SchoolStatusMatrixRow } from '../../api/supervisionTypes';
 
@@ -25,12 +28,88 @@ interface SchoolsStatusMatrixTableProps {
   onCompareHistorical: (schoolId: number) => void;
 }
 
+type MatrixSortKey =
+  | 'schoolName'
+  | 'selfEvaluationProgress'
+  | 'outputStatus'
+  | 'completionRequestsCount'
+  | 'improvementPlanStatus';
+type SortDirection = 'asc' | 'desc';
+
 export const SchoolsStatusMatrixTable: React.FC<SchoolsStatusMatrixTableProps> = ({
   schools,
   onReviewSubmission,
   onOpenTrackingLog,
   onCompareHistorical,
 }) => {
+  const [sortKey, setSortKey] = useState<MatrixSortKey>('schoolName');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+
+  const handleSort = (key: MatrixSortKey) => {
+    if (sortKey === key) {
+      setSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortKey(key);
+      setSortDirection(
+        key === 'selfEvaluationProgress' || key === 'completionRequestsCount'
+          ? 'desc'
+          : 'asc'
+      );
+    }
+  };
+
+  const renderSortIndicator = (key: MatrixSortKey) => {
+    if (sortKey !== key) {
+      return <ArrowUpDown size={13} style={{ opacity: 0.35, flexShrink: 0 }} />;
+    }
+    return sortDirection === 'asc' ? (
+      <ArrowUp size={13} style={{ color: '#2563EB', flexShrink: 0 }} />
+    ) : (
+      <ArrowDown size={13} style={{ color: '#2563EB', flexShrink: 0 }} />
+    );
+  };
+
+  const sortedSchools = useMemo(() => {
+    const list = [...schools];
+    return list.sort((a, b) => {
+      let valA: any;
+      let valB: any;
+
+      switch (sortKey) {
+        case 'schoolName':
+          valA = a.schoolName;
+          valB = b.schoolName;
+          break;
+        case 'selfEvaluationProgress':
+          valA = a.selfEvaluationProgress ?? 0;
+          valB = b.selfEvaluationProgress ?? 0;
+          break;
+        case 'outputStatus':
+          valA = a.outputStatusArabic || a.outputStatus;
+          valB = b.outputStatusArabic || b.outputStatus;
+          break;
+        case 'completionRequestsCount':
+          valA = a.completionRequestsCount ?? 0;
+          valB = b.completionRequestsCount ?? 0;
+          break;
+        case 'improvementPlanStatus':
+          valA = a.improvementPlanStatus || '';
+          valB = b.improvementPlanStatus || '';
+          break;
+        default:
+          return 0;
+      }
+
+      if (typeof valA === 'number' && typeof valB === 'number') {
+        return sortDirection === 'asc' ? valA - valB : valB - valA;
+      }
+      const strA = String(valA || '');
+      const strB = String(valB || '');
+      return sortDirection === 'asc'
+        ? strA.localeCompare(strB, 'ar')
+        : strB.localeCompare(strA, 'ar');
+    });
+  }, [schools, sortKey, sortDirection]);
   const getStatusBadge = (status: string, statusArabic: string) => {
     switch (status) {
       case 'NeedsCompletion':
@@ -181,18 +260,113 @@ export const SchoolsStatusMatrixTable: React.FC<SchoolsStatusMatrixTableProps> =
                 color: '#475569',
               }}
             >
-              <th style={{ padding: '14px 16px', fontWeight: 700, width: '22%' }}>المدرسة والرمز</th>
-              <th style={{ padding: '14px 14px', fontWeight: 700, width: '18%' }}>إنجاز التقييم الذاتي</th>
-              <th style={{ padding: '14px 14px', fontWeight: 700, width: '16%' }}>حالة المخرج الوزاري</th>
-              <th style={{ padding: '14px 14px', fontWeight: 700, width: '14%' }}>طلبات الاستكمال</th>
-              <th style={{ padding: '14px 14px', fontWeight: 700, width: '12%' }}>خطة التحسين</th>
+              <th
+                onClick={() => handleSort('schoolName')}
+                style={{
+                  padding: '14px 16px',
+                  fontWeight: 700,
+                  width: '22%',
+                  cursor: 'pointer',
+                  userSelect: 'none',
+                  transition: 'background-color 0.15s ease',
+                  backgroundColor: sortKey === 'schoolName' ? '#EFF6FF' : undefined,
+                  color: sortKey === 'schoolName' ? '#1D4ED8' : undefined,
+                }}
+                title="انقر لفرز المدارس أبجدياً"
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span>المدرسة والرمز</span>
+                  {renderSortIndicator('schoolName')}
+                </div>
+              </th>
+
+              <th
+                onClick={() => handleSort('selfEvaluationProgress')}
+                style={{
+                  padding: '14px 14px',
+                  fontWeight: 700,
+                  width: '18%',
+                  cursor: 'pointer',
+                  userSelect: 'none',
+                  transition: 'background-color 0.15s ease',
+                  backgroundColor: sortKey === 'selfEvaluationProgress' ? '#EFF6FF' : undefined,
+                  color: sortKey === 'selfEvaluationProgress' ? '#1D4ED8' : undefined,
+                }}
+                title="انقر للفرز بحسب نسبة إنجاز التقييم الذاتي"
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span>إنجاز التقييم الذاتي</span>
+                  {renderSortIndicator('selfEvaluationProgress')}
+                </div>
+              </th>
+
+              <th
+                onClick={() => handleSort('outputStatus')}
+                style={{
+                  padding: '14px 14px',
+                  fontWeight: 700,
+                  width: '16%',
+                  cursor: 'pointer',
+                  userSelect: 'none',
+                  transition: 'background-color 0.15s ease',
+                  backgroundColor: sortKey === 'outputStatus' ? '#EFF6FF' : undefined,
+                  color: sortKey === 'outputStatus' ? '#1D4ED8' : undefined,
+                }}
+                title="انقر للفرز بحسب حالة المخرج الوزاري"
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span>حالة المخرج الوزاري</span>
+                  {renderSortIndicator('outputStatus')}
+                </div>
+              </th>
+
+              <th
+                onClick={() => handleSort('completionRequestsCount')}
+                style={{
+                  padding: '14px 14px',
+                  fontWeight: 700,
+                  width: '14%',
+                  cursor: 'pointer',
+                  userSelect: 'none',
+                  transition: 'background-color 0.15s ease',
+                  backgroundColor: sortKey === 'completionRequestsCount' ? '#EFF6FF' : undefined,
+                  color: sortKey === 'completionRequestsCount' ? '#1D4ED8' : undefined,
+                }}
+                title="انقر للفرز بحسب طلبات الاستكمال"
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span>طلبات الاستكمال</span>
+                  {renderSortIndicator('completionRequestsCount')}
+                </div>
+              </th>
+
+              <th
+                onClick={() => handleSort('improvementPlanStatus')}
+                style={{
+                  padding: '14px 14px',
+                  fontWeight: 700,
+                  width: '12%',
+                  cursor: 'pointer',
+                  userSelect: 'none',
+                  transition: 'background-color 0.15s ease',
+                  backgroundColor: sortKey === 'improvementPlanStatus' ? '#EFF6FF' : undefined,
+                  color: sortKey === 'improvementPlanStatus' ? '#1D4ED8' : undefined,
+                }}
+                title="انقر للفرز بحسب حالة خطة التحسين"
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span>خطة التحسين</span>
+                  {renderSortIndicator('improvementPlanStatus')}
+                </div>
+              </th>
+
               <th style={{ padding: '14px 16px', fontWeight: 700, width: '18%', textAlign: 'center' }}>
                 الإجراءات الإشرافية
               </th>
             </tr>
           </thead>
           <tbody>
-            {schools.map((school, idx) => {
+            {sortedSchools.map((school, idx) => {
               const isEven = idx % 2 === 1;
               return (
                 <tr

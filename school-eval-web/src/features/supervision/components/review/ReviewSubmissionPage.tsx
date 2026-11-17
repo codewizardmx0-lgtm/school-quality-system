@@ -81,6 +81,13 @@ export const ReviewSubmissionPage: React.FC<ReviewSubmissionPageProps> = ({
 
   return (
     <div style={{ padding: '24px 32px', maxWidth: '1440px', margin: '0 auto' }}>
+      <style>{`
+        @media (max-width: 1024px) {
+          .supervision-review-grid {
+            grid-template-columns: 1fr !important;
+          }
+        }
+      `}</style>
       {/* 1. الترويسة الرئيسية وسياق المدرسة */}
       <div style={{ marginBottom: '20px' }}>
         <button
@@ -191,6 +198,7 @@ export const ReviewSubmissionPage: React.FC<ReviewSubmissionPageProps> = ({
       ) : (
         /* 2. تخطيط المراجعة بعمودين */
         <div
+          className="supervision-review-grid"
           style={{
             display: 'grid',
             gridTemplateColumns: 'minmax(0, 1.8fr) minmax(0, 1fr)',

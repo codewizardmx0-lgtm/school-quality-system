@@ -4,7 +4,7 @@
  * متوافقة مع كافة بنود UI_STANDARDS.md وتصميم Figma المعتمد
  */
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   FilePlus,
   ShieldCheck,
@@ -17,6 +17,12 @@ import {
   Clock,
   ArrowRight,
   History,
+  Search,
+  X,
+  Filter,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
 } from 'lucide-react';
 import type { StandardVersionSummary } from '../../api/standardsTypes';
 import { CreateDraftModal } from './CreateDraftModal';
@@ -36,6 +42,14 @@ interface StandardsVersionsPageProps {
   onNavigateToLock: (versionId?: number) => void;
 }
 
+type VersionSortKey =
+  | 'versionNo'
+  | 'issueDate'
+  | 'status'
+  | 'standardsCount'
+  | 'activeSchoolsCount';
+type SortDirection = 'asc' | 'desc';
+
 export const StandardsVersionsPage: React.FC<StandardsVersionsPageProps> = ({
   versions,
   activeVersion,
@@ -48,14 +62,103 @@ export const StandardsVersionsPage: React.FC<StandardsVersionsPageProps> = ({
   onNavigateToLock,
 }) => {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('all');
+  const [sortKey, setSortKey] = useState<VersionSortKey>('versionNo');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
 
   const draftVersionsCount = versions.filter((v) => v.status === 'Draft' || v.status === 'draft').length;
 
-  const filteredVersions = versions.filter((v) => {
-    if (filterStatus === 'all') return true;
-    return v.status.toLowerCase() === filterStatus.toLowerCase();
-  });
+  const statusCounts = useMemo(() => {
+    return {
+      all: versions.length,
+      active: versions.filter((v) => v.status?.toLowerCase() === 'active').length,
+      draft: versions.filter((v) => v.status?.toLowerCase() === 'draft').length,
+      archived: versions.filter((v) => v.status?.toLowerCase() === 'archived').length,
+    };
+  }, [versions]);
+
+  const hasActiveFilters = searchTerm.trim() !== '' || filterStatus !== 'all';
+
+  const handleSort = (key: VersionSortKey) => {
+    if (sortKey === key) {
+      setSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortKey(key);
+      setSortDirection(key === 'versionNo' || key === 'issueDate' ? 'desc' : 'asc');
+    }
+  };
+
+  const renderSortIndicator = (key: VersionSortKey) => {
+    if (sortKey !== key) {
+      return <ArrowUpDown size={13} style={{ opacity: 0.35, flexShrink: 0 }} />;
+    }
+    return sortDirection === 'asc' ? (
+      <ArrowUp size={13} style={{ color: '#D97706', flexShrink: 0 }} />
+    ) : (
+      <ArrowDown size={13} style={{ color: '#D97706', flexShrink: 0 }} />
+    );
+  };
+
+  const filteredAndSortedVersions = useMemo(() => {
+    let list = versions.filter((v) => {
+      // Status filter
+      if (filterStatus !== 'all' && v.status?.toLowerCase() !== filterStatus.toLowerCase()) {
+        return false;
+      }
+      // Search filter
+      if (searchTerm.trim()) {
+        const q = searchTerm.trim().toLowerCase();
+        const matchNo = String(v.versionNo || '').toLowerCase().includes(q);
+        const matchOrg = String(v.sourceOrganization || '').toLowerCase().includes(q);
+        const matchNum = String(v.sourceNumber || '').toLowerCase().includes(q);
+        const matchDesc = String(v.sourceDescription || '').toLowerCase().includes(q);
+        if (!matchNo && !matchOrg && !matchNum && !matchDesc) {
+          return false;
+        }
+      }
+      return true;
+    });
+
+    return list.sort((a, b) => {
+      let valA: any;
+      let valB: any;
+
+      switch (sortKey) {
+        case 'versionNo':
+          valA = a.versionNo;
+          valB = b.versionNo;
+          break;
+        case 'issueDate':
+          valA = a.issueDate || '';
+          valB = b.issueDate || '';
+          break;
+        case 'status':
+          valA = a.status;
+          valB = b.status;
+          break;
+        case 'standardsCount':
+          valA = a.standardsCount ?? 7;
+          valB = b.standardsCount ?? 7;
+          break;
+        case 'activeSchoolsCount':
+          valA = a.activeSchoolsCount ?? 0;
+          valB = b.activeSchoolsCount ?? 0;
+          break;
+        default:
+          return 0;
+      }
+
+      if (typeof valA === 'number' && typeof valB === 'number') {
+        return sortDirection === 'asc' ? valA - valB : valB - valA;
+      }
+      const strA = String(valA || '');
+      const strB = String(valB || '');
+      return sortDirection === 'asc'
+        ? strA.localeCompare(strB, 'ar')
+        : strB.localeCompare(strA, 'ar');
+    });
+  }, [versions, filterStatus, searchTerm, sortKey, sortDirection]);
 
   if (isLoading && versions.length === 0) {
     return (
@@ -344,42 +447,216 @@ export const StandardsVersionsPage: React.FC<StandardsVersionsPageProps> = ({
 
       {/* 3. Versions Data Table Card */}
       <div className="std-table-card">
-        {/* Table Filter Tabs Bar */}
-        <div className="std-table-filter-bar">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ fontSize: '12px', fontWeight: 700, color: '#334155', marginLeft: '6px' }}>
+        {/* Table Filter & Search Controls */}
+        <div style={{ backgroundColor: '#FDFBF7', borderBottom: '1px solid #E2E8F0', padding: '16px 24px' }}>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '12px',
+              flexWrap: 'wrap',
+              marginBottom: '12px',
+            }}
+          >
+            {/* Search Input with Clear X */}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                backgroundColor: '#FFFFFF',
+                border: '1px solid #CBD5E1',
+                borderRadius: '8px',
+                padding: '7px 12px',
+                minWidth: '260px',
+                flex: 1,
+                maxWidth: '400px',
+              }}
+            >
+              <Search size={15} color="#92400E" style={{ flexShrink: 0 }} />
+              <input
+                type="text"
+                placeholder="بحث برقم الإصدار، الجهة المصدرة، أو الوصف..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                style={{
+                  border: 'none',
+                  background: 'none',
+                  outline: 'none',
+                  fontSize: '12px',
+                  color: '#0F172A',
+                  width: '100%',
+                }}
+              />
+              {searchTerm && (
+                <button
+                  type="button"
+                  onClick={() => setSearchTerm('')}
+                  title="مسح البحث"
+                  style={{
+                    border: 'none',
+                    background: 'none',
+                    cursor: 'pointer',
+                    color: '#94A3B8',
+                    padding: '2px',
+                    display: 'flex',
+                    alignItems: 'center',
+                  }}
+                >
+                  <X size={13} />
+                </button>
+              )}
+            </div>
+
+            {/* Total Records Counter */}
+            <div style={{ fontSize: '12px', color: '#64748B', fontWeight: 500 }}>
+              الإصدارات المعروضة: <span style={{ fontWeight: 800, color: '#92400E' }}>{filteredAndSortedVersions.length}</span> من أصل{' '}
+              <span style={{ fontWeight: 800, color: '#0F172A' }}>{versions.length}</span>
+            </div>
+          </div>
+
+          {/* Filter Status Tabs Bar */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: '12px', fontWeight: 700, color: '#78350F', marginLeft: '6px' }}>
               تصفية السجل:
             </span>
             {[
-              { key: 'all', label: 'كافة الإصدارات' },
-              { key: 'active', label: 'الإصدار المعتمد' },
-              { key: 'draft', label: 'المسودات' },
-              { key: 'archived', label: 'الأرشيف' },
-            ].map((tab) => (
-              <button
-                key={tab.key}
-                type="button"
-                onClick={() => setFilterStatus(tab.key)}
-                style={{
-                  padding: '6px 14px',
-                  fontSize: '12px',
-                  fontWeight: 700,
-                  borderRadius: '8px',
-                  cursor: 'pointer',
-                  border: filterStatus === tab.key ? 'none' : '1px solid #CBD5E1',
-                  backgroundColor: filterStatus === tab.key ? '#D97706' : '#FFFFFF',
-                  color: filterStatus === tab.key ? '#FFFFFF' : '#475569',
-                  transition: 'all 0.15s ease',
-                }}
-              >
-                {tab.label}
-              </button>
-            ))}
+              { key: 'all', label: 'كافة الإصدارات', count: statusCounts.all },
+              { key: 'active', label: 'الإصدار المعتمد', count: statusCounts.active },
+              { key: 'draft', label: 'المسودات', count: statusCounts.draft },
+              { key: 'archived', label: 'الأرشيف', count: statusCounts.archived },
+            ].map((tab) => {
+              const isSelected = filterStatus === tab.key;
+              return (
+                <button
+                  key={tab.key}
+                  type="button"
+                  onClick={() => setFilterStatus(tab.key)}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '6px 14px',
+                    fontSize: '12px',
+                    fontWeight: isSelected ? 800 : 600,
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                    border: isSelected ? '1px solid #B45309' : '1px solid #CBD5E1',
+                    backgroundColor: isSelected ? '#D97706' : '#FFFFFF',
+                    color: isSelected ? '#FFFFFF' : '#475569',
+                    boxShadow: isSelected ? '0 2px 6px rgba(217, 119, 6, 0.25)' : 'none',
+                    transition: 'all 0.15s ease',
+                  }}
+                >
+                  <span>{tab.label}</span>
+                  <span
+                    style={{
+                      fontSize: '10px',
+                      fontWeight: 700,
+                      padding: '1px 5px',
+                      borderRadius: '999px',
+                      backgroundColor: isSelected ? 'rgba(255, 255, 255, 0.3)' : '#F1F5F9',
+                      color: isSelected ? '#FFFFFF' : '#475569',
+                    }}
+                  >
+                    {tab.count}
+                  </span>
+                </button>
+              );
+            })}
           </div>
 
-          <div style={{ fontSize: '12px', color: '#64748B', fontWeight: 500 }}>
-            إجمالي السجلات: <span style={{ fontWeight: 800, color: '#0F172A' }}>{filteredVersions.length}</span>
-          </div>
+          {/* Active Filters Chips Bar */}
+          {hasActiveFilters && (
+            <div
+              style={{
+                marginTop: '12px',
+                paddingTop: '10px',
+                borderTop: '1px solid #E2E8F0',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: '8px',
+                flexWrap: 'wrap',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: '11px', color: '#78350F', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <Filter size={12} />
+                  فلاتر نشطة:
+                </span>
+                {searchTerm.trim() && (
+                  <span
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      padding: '2px 8px',
+                      backgroundColor: '#FEF3C7',
+                      border: '1px solid #FDE68A',
+                      borderRadius: '6px',
+                      fontSize: '11px',
+                      fontWeight: 600,
+                      color: '#92400E',
+                    }}
+                  >
+                    بحث: "{searchTerm.trim()}"
+                    <button
+                      type="button"
+                      onClick={() => setSearchTerm('')}
+                      style={{ border: 'none', background: 'none', cursor: 'pointer', padding: 0, color: '#92400E' }}
+                    >
+                      <X size={11} />
+                    </button>
+                  </span>
+                )}
+                {filterStatus !== 'all' && (
+                  <span
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      padding: '2px 8px',
+                      backgroundColor: '#FEF3C7',
+                      border: '1px solid #FDE68A',
+                      borderRadius: '6px',
+                      fontSize: '11px',
+                      fontWeight: 600,
+                      color: '#92400E',
+                    }}
+                  >
+                    الحالة: {filterStatus === 'active' ? 'المعتمد' : filterStatus === 'draft' ? 'المسودات' : 'الأرشيف'}
+                    <button
+                      type="button"
+                      onClick={() => setFilterStatus('all')}
+                      style={{ border: 'none', background: 'none', cursor: 'pointer', padding: 0, color: '#92400E' }}
+                    >
+                      <X size={11} />
+                    </button>
+                  </span>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchTerm('');
+                  setFilterStatus('all');
+                }}
+                style={{
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  color: '#DC2626',
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  textDecoration: 'underline',
+                }}
+              >
+                مسح الفلاتر
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Table Scroll Containment Wrapper (§4 UI_STANDARDS) */}
@@ -387,29 +664,112 @@ export const StandardsVersionsPage: React.FC<StandardsVersionsPageProps> = ({
           <table className="std-data-table">
             <thead>
               <tr>
-                <th style={{ width: '28%' }}>عنوان وكود الإصدار</th>
-                <th style={{ width: '16%' }}>تاريخ القفل والاعتماد</th>
-                <th style={{ width: '16%' }}>حالة الإصدار</th>
-                <th style={{ width: '18%' }}>الهيكل التنظيمي</th>
-                <th style={{ width: '12%' }}>الدورات المرتبطة</th>
+                <th
+                  onClick={() => handleSort('versionNo')}
+                  style={{
+                    width: '28%',
+                    cursor: 'pointer',
+                    userSelect: 'none',
+                    backgroundColor: sortKey === 'versionNo' ? '#FEF3C7' : undefined,
+                    color: sortKey === 'versionNo' ? '#92400E' : undefined,
+                  }}
+                  title="انقر للفرز بحسب كود وعنوان الإصدار"
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span>عنوان وكود الإصدار</span>
+                    {renderSortIndicator('versionNo')}
+                  </div>
+                </th>
+
+                <th
+                  onClick={() => handleSort('issueDate')}
+                  style={{
+                    width: '16%',
+                    cursor: 'pointer',
+                    userSelect: 'none',
+                    backgroundColor: sortKey === 'issueDate' ? '#FEF3C7' : undefined,
+                    color: sortKey === 'issueDate' ? '#92400E' : undefined,
+                  }}
+                  title="انقر للفرز بحسب تاريخ القفل والاعتماد"
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span>تاريخ القفل والاعتماد</span>
+                    {renderSortIndicator('issueDate')}
+                  </div>
+                </th>
+
+                <th
+                  onClick={() => handleSort('status')}
+                  style={{
+                    width: '16%',
+                    cursor: 'pointer',
+                    userSelect: 'none',
+                    backgroundColor: sortKey === 'status' ? '#FEF3C7' : undefined,
+                    color: sortKey === 'status' ? '#92400E' : undefined,
+                  }}
+                  title="انقر للفرز بحسب حالة الإصدار"
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span>حالة الإصدار</span>
+                    {renderSortIndicator('status')}
+                  </div>
+                </th>
+
+                <th
+                  onClick={() => handleSort('standardsCount')}
+                  style={{
+                    width: '18%',
+                    cursor: 'pointer',
+                    userSelect: 'none',
+                    backgroundColor: sortKey === 'standardsCount' ? '#FEF3C7' : undefined,
+                    color: sortKey === 'standardsCount' ? '#92400E' : undefined,
+                  }}
+                  title="انقر للفرز بحسب عدد المعايير والمؤشرات"
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span>الهيكل التنظيمي</span>
+                    {renderSortIndicator('standardsCount')}
+                  </div>
+                </th>
+
+                <th
+                  onClick={() => handleSort('activeSchoolsCount')}
+                  style={{
+                    width: '12%',
+                    cursor: 'pointer',
+                    userSelect: 'none',
+                    backgroundColor: sortKey === 'activeSchoolsCount' ? '#FEF3C7' : undefined,
+                    color: sortKey === 'activeSchoolsCount' ? '#92400E' : undefined,
+                  }}
+                  title="انقر للفرز بحسب عدد المدارس والدورات المرتبطة"
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span>الدورات المرتبطة</span>
+                    {renderSortIndicator('activeSchoolsCount')}
+                  </div>
+                </th>
+
                 <th style={{ width: '10%', textAlign: 'center' }}>الإجراءات</th>
               </tr>
             </thead>
 
             <tbody>
-              {filteredVersions.length === 0 ? (
+              {filteredAndSortedVersions.length === 0 ? (
                 <tr>
                   <td colSpan={6} style={{ padding: '48px', textAlign: 'center' }}>
                     <EmptyStandardsState
                       title="لا توجد إصدارات مطابقة للتصفية"
                       description="لم يتم العثور على وثائق معايير تطابق معيار التصفية المحدد."
-                      onAction={onRefresh}
-                      actionText="إعادة تحميل القائمة"
+                      onAction={() => {
+                        setSearchTerm('');
+                        setFilterStatus('all');
+                      }}
+                      actionText="إلغاء الفلاتر"
                     />
                   </td>
                 </tr>
               ) : (
-                filteredVersions.map((v) => {
+                filteredAndSortedVersions.map((v) => {
                   const isCurrentActive = v.status === 'Active' || v.status === 'active';
                   const isDraft = v.status === 'Draft' || v.status === 'draft';
 

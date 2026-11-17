@@ -4,7 +4,7 @@
  * منصة ارتقاء للتقييم الذاتي والتحسين المدرسي
  */
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
   Plus,
   FileSpreadsheet,
@@ -12,6 +12,8 @@ import {
   ShieldAlert,
   RefreshCw,
   TrendingUp,
+  X,
+  Filter,
 } from 'lucide-react';
 import { useSupervisionDashboard } from '../../hooks/useSupervisionDashboard';
 import { SupervisorKpiGrid } from './SupervisorKpiGrid';
@@ -26,6 +28,7 @@ interface SupervisionDashboardPageProps {
 
 export const SupervisionDashboardPage: React.FC<SupervisionDashboardPageProps> = ({ onNavigate }) => {
   const {
+    dashboardData,
     schools,
     totalCount,
     kpis,
@@ -41,6 +44,29 @@ export const SupervisionDashboardPage: React.FC<SupervisionDashboardPageProps> =
     stageFilter,
     setStageFilter,
   } = useSupervisionDashboard();
+
+  const statusCounts = useMemo(() => {
+    const raw = dashboardData?.schools || [];
+    return {
+      all: raw.length,
+      Submitted: raw.filter((s) => s.outputStatus === 'Submitted').length,
+      NeedsCompletion: raw.filter((s) => s.outputStatus === 'NeedsCompletion').length,
+      UnderReview: raw.filter((s) => s.outputStatus === 'UnderReview').length,
+      Completed: raw.filter((s) => s.outputStatus === 'Completed').length,
+      Draft: raw.filter((s) => s.outputStatus === 'Draft').length,
+    };
+  }, [dashboardData?.schools]);
+
+  const hasActiveFilters = searchTerm.trim() !== '' || statusFilter !== 'all' || stageFilter !== 'all';
+
+  const statusTabs = [
+    { key: 'all', label: 'كافة المدارس', count: statusCounts.all },
+    { key: 'Submitted', label: 'مرفوع جديد', count: statusCounts.Submitted, color: '#2563EB' },
+    { key: 'NeedsCompletion', label: 'يحتاج استكمال', count: statusCounts.NeedsCompletion, color: '#D97706' },
+    { key: 'UnderReview', label: 'قيد التدقيق', count: statusCounts.UnderReview, color: '#7C3AED' },
+    { key: 'Completed', label: 'مكتمل المراجعة', count: statusCounts.Completed, color: '#059669' },
+    { key: 'Draft', label: 'مسودة', count: statusCounts.Draft, color: '#64748B' },
+  ];
 
   return (
     <div style={{ padding: '24px 32px', maxWidth: '1440px', margin: '0 auto' }}>
@@ -190,127 +216,320 @@ export const SupervisionDashboardPage: React.FC<SupervisionDashboardPageProps> =
         </div>
       </div>
 
-      {/* 4. شريط البحث والتصفية */}
+      {/* 4. كرت البحث والتصفية المتقدم بالهوية الإشرافية الزرقاء */}
       <div
         style={{
-          display: 'flex',
-          flexWrap: 'wrap',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: '12px',
-          padding: '14px 16px',
           backgroundColor: '#FFFFFF',
           border: '1px solid #E2E8F0',
-          borderRadius: '10px',
-          marginBottom: '16px',
+          borderRadius: '12px',
+          boxShadow: '0 1px 3px rgba(0, 0, 0, 0.04)',
+          marginBottom: '20px',
+          overflow: 'hidden',
         }}
       >
-        {/* حقل البحث */}
+        {/* صف البحث والمرحلة والتحديث */}
         <div
           style={{
             display: 'flex',
+            flexWrap: 'wrap',
             alignItems: 'center',
-            gap: '8px',
-            backgroundColor: '#F8FAFC',
-            border: '1px solid #CBD5E1',
-            borderRadius: '8px',
-            padding: '7px 12px',
-            minWidth: '280px',
-            flex: 1,
-            maxWidth: '380px',
+            justifyContent: 'space-between',
+            gap: '12px',
+            padding: '16px 20px',
+            borderBottom: '1px solid #F1F5F9',
           }}
         >
-          <Search size={16} color="#64748B" />
-          <input
-            type="text"
-            placeholder="بحث باسم المدرسة أو الرمز (مثال: بلقيس أو SCH-104)..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+          {/* حقل البحث مع زر المسح X */}
+          <div
             style={{
-              border: 'none',
-              background: 'none',
-              outline: 'none',
-              fontSize: '13px',
-              color: '#0F172A',
-              width: '100%',
-            }}
-          />
-        </div>
-
-        {/* فلاتر الحالة والمرحلة */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-          {/* فلتر حالة المخرج */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <span style={{ fontSize: '12px', color: '#64748B', fontWeight: 600 }}>الحالة:</span>
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              style={{
-                padding: '6px 12px',
-                fontSize: '12px',
-                fontWeight: 600,
-                color: '#0F172A',
-                backgroundColor: '#F8FAFC',
-                border: '1px solid #CBD5E1',
-                borderRadius: '6px',
-                cursor: 'pointer',
-                outline: 'none',
-              }}
-            >
-              <option value="all">كافة الحالات</option>
-              <option value="NeedsCompletion">يحتاج استكمال</option>
-              <option value="Submitted">مرفوع جديد</option>
-              <option value="UnderReview">قيد التدقيق الإشرافي</option>
-              <option value="Completed">مكتمل المراجعة</option>
-              <option value="Draft">مسودة</option>
-            </select>
-          </div>
-
-          {/* فلتر المرحلة الدراسية */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <span style={{ fontSize: '12px', color: '#64748B', fontWeight: 600 }}>المرحلة:</span>
-            <select
-              value={stageFilter}
-              onChange={(e) => setStageFilter(e.target.value)}
-              style={{
-                padding: '6px 12px',
-                fontSize: '12px',
-                fontWeight: 600,
-                color: '#0F172A',
-                backgroundColor: '#F8FAFC',
-                border: '1px solid #CBD5E1',
-                borderRadius: '6px',
-                cursor: 'pointer',
-                outline: 'none',
-              }}
-            >
-              <option value="all">جميع المراحل</option>
-              <option value="أساسي">المرحلة الأساسية (1-9)</option>
-              <option value="ثانوي">المرحلة الثانوية (10-12)</option>
-            </select>
-          </div>
-
-          {/* زر التحديث */}
-          <button
-            type="button"
-            onClick={refetch}
-            title="تحديث البيانات"
-            style={{
-              width: '34px',
-              height: '34px',
               display: 'flex',
               alignItems: 'center',
-              justifyContent: 'center',
+              gap: '8px',
               backgroundColor: '#F8FAFC',
-              color: '#64748B',
               border: '1px solid #CBD5E1',
-              borderRadius: '6px',
-              cursor: 'pointer',
+              borderRadius: '8px',
+              padding: '8px 14px',
+              minWidth: '280px',
+              flex: 1,
+              maxWidth: '420px',
             }}
           >
-            <RefreshCw size={15} />
-          </button>
+            <Search size={16} color="#64748B" style={{ flexShrink: 0 }} />
+            <input
+              type="text"
+              placeholder="بحث باسم المدرسة أو الرمز (مثال: بلقيس أو SCH-104)..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              style={{
+                border: 'none',
+                background: 'none',
+                outline: 'none',
+                fontSize: '13px',
+                color: '#0F172A',
+                width: '100%',
+              }}
+            />
+            {searchTerm && (
+              <button
+                type="button"
+                onClick={() => setSearchTerm('')}
+                title="مسح البحث"
+                style={{
+                  border: 'none',
+                  background: 'none',
+                  cursor: 'pointer',
+                  color: '#94A3B8',
+                  padding: '2px',
+                  display: 'flex',
+                  alignItems: 'center',
+                }}
+              >
+                <X size={14} />
+              </button>
+            )}
+          </div>
+
+          {/* فلاتر المرحلة والتحديث */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+            {/* فلتر المرحلة الدراسية */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '12px', color: '#64748B', fontWeight: 600 }}>المرحلة:</span>
+              <select
+                value={stageFilter}
+                onChange={(e) => setStageFilter(e.target.value)}
+                style={{
+                  padding: '7px 14px',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  color: '#0F172A',
+                  backgroundColor: '#F8FAFC',
+                  border: '1px solid #CBD5E1',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  outline: 'none',
+                }}
+              >
+                <option value="all">جميع المراحل</option>
+                <option value="أساسي">المرحلة الأساسية (1-9)</option>
+                <option value="ثانوي">المرحلة الثانوية (10-12)</option>
+              </select>
+            </div>
+
+            {/* زر التحديث */}
+            <button
+              type="button"
+              onClick={refetch}
+              title="تحديث البيانات"
+              style={{
+                width: '36px',
+                height: '36px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                backgroundColor: '#F8FAFC',
+                color: '#64748B',
+                border: '1px solid #CBD5E1',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = '#EFF6FF';
+                e.currentTarget.style.color = '#2563EB';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = '#F8FAFC';
+                e.currentTarget.style.color = '#64748B';
+              }}
+            >
+              <RefreshCw size={15} />
+            </button>
+          </div>
         </div>
+
+        {/* صف ألسنة / شرائح تصفية الحالة التفاعلية */}
+        <div
+          style={{
+            padding: '12px 20px',
+            backgroundColor: '#FAFCFF',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '10px',
+            flexWrap: 'wrap',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: '12px', fontWeight: 700, color: '#475569', marginLeft: '4px' }}>
+              تصفية الحالة:
+            </span>
+            {statusTabs.map((tab) => {
+              const isSelected = statusFilter === tab.key;
+              return (
+                <button
+                  key={tab.key}
+                  type="button"
+                  onClick={() => setStatusFilter(tab.key)}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '6px 12px',
+                    borderRadius: '8px',
+                    fontSize: '12px',
+                    fontWeight: isSelected ? 800 : 600,
+                    cursor: 'pointer',
+                    border: isSelected ? '1px solid #1D4ED8' : '1px solid #E2E8F0',
+                    backgroundColor: isSelected ? '#2563EB' : '#FFFFFF',
+                    color: isSelected ? '#FFFFFF' : '#334155',
+                    boxShadow: isSelected ? '0 2px 6px rgba(37, 99, 235, 0.25)' : 'none',
+                    transition: 'all 0.15s ease',
+                  }}
+                >
+                  <span>{tab.label}</span>
+                  <span
+                    style={{
+                      fontSize: '11px',
+                      fontWeight: 700,
+                      padding: '1px 6px',
+                      borderRadius: '999px',
+                      backgroundColor: isSelected ? 'rgba(255, 255, 255, 0.25)' : '#F1F5F9',
+                      color: isSelected ? '#FFFFFF' : '#475569',
+                    }}
+                  >
+                    {tab.count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          <div style={{ fontSize: '12px', color: '#64748B', fontWeight: 600 }}>
+            المدارس المعروضة: <span style={{ color: '#2563EB', fontWeight: 800 }}>{schools.length}</span> من أصل{' '}
+            <span style={{ color: '#0F172A', fontWeight: 800 }}>{totalCount}</span>
+          </div>
+        </div>
+
+        {/* شريط الفلاتر النشطة مع إمكانية الإلغاء الفردي أو الكلي */}
+        {hasActiveFilters && (
+          <div
+            style={{
+              padding: '10px 20px',
+              backgroundColor: '#EFF6FF',
+              borderTop: '1px solid #DBEAFE',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '10px',
+              flexWrap: 'wrap',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: '12px', color: '#1E40AF', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <Filter size={13} />
+                الفلاتر المطبقة:
+              </span>
+
+              {searchTerm.trim() && (
+                <span
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    padding: '3px 8px',
+                    backgroundColor: '#FFFFFF',
+                    border: '1px solid #BFDBFE',
+                    borderRadius: '6px',
+                    fontSize: '11px',
+                    fontWeight: 600,
+                    color: '#1D4ED8',
+                  }}
+                >
+                  بحث: "{searchTerm.trim()}"
+                  <button
+                    type="button"
+                    onClick={() => setSearchTerm('')}
+                    style={{ border: 'none', background: 'none', cursor: 'pointer', padding: 0, color: '#1D4ED8' }}
+                  >
+                    <X size={12} />
+                  </button>
+                </span>
+              )}
+
+              {statusFilter !== 'all' && (
+                <span
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    padding: '3px 8px',
+                    backgroundColor: '#FFFFFF',
+                    border: '1px solid #BFDBFE',
+                    borderRadius: '6px',
+                    fontSize: '11px',
+                    fontWeight: 600,
+                    color: '#1D4ED8',
+                  }}
+                >
+                  الحالة: {statusTabs.find((t) => t.key === statusFilter)?.label || statusFilter}
+                  <button
+                    type="button"
+                    onClick={() => setStatusFilter('all')}
+                    style={{ border: 'none', background: 'none', cursor: 'pointer', padding: 0, color: '#1D4ED8' }}
+                  >
+                    <X size={12} />
+                  </button>
+                </span>
+              )}
+
+              {stageFilter !== 'all' && (
+                <span
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    padding: '3px 8px',
+                    backgroundColor: '#FFFFFF',
+                    border: '1px solid #BFDBFE',
+                    borderRadius: '6px',
+                    fontSize: '11px',
+                    fontWeight: 600,
+                    color: '#1D4ED8',
+                  }}
+                >
+                  المرحلة: {stageFilter}
+                  <button
+                    type="button"
+                    onClick={() => setStageFilter('all')}
+                    style={{ border: 'none', background: 'none', cursor: 'pointer', padding: 0, color: '#1D4ED8' }}
+                  >
+                    <X size={12} />
+                  </button>
+                </span>
+              )}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                setSearchTerm('');
+                setStatusFilter('all');
+                setStageFilter('all');
+              }}
+              style={{
+                fontSize: '11px',
+                fontWeight: 700,
+                color: '#DC2626',
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                textDecoration: 'underline',
+              }}
+            >
+              مسح كافة الفلاتر
+            </button>
+          </div>
+        )}
       </div>
 
       {/* 5. جدول مصفوفة حالة المدارس أو الحالة الفارغة */}
