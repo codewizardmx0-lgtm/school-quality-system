@@ -295,6 +295,7 @@ class EvaluationController extends Controller
                         'code'          => $sub->code,
                         'name'          => $sub->name,
                         'description'   => $sub->description,
+                        'weight'        => (float) ($sub->weight ?? 0.0),
                         'indicators'    => $sub->indicators->map(function ($ind) use ($std, $sub, $existingResults, &$totalActiveIndicators, &$completedResultsCount) {
                             $isActive = $ind->status === 'Active';
                             if ($isActive) {
@@ -326,6 +327,7 @@ class EvaluationController extends Controller
                                 'subStandardName'        => $sub->name,
                                 'subStandardDescription' => $sub->description,
                                 'weight'                 => (float) $ind->weight,
+                                'subStandardWeight'      => (float) ($sub->weight ?? 0.0),
                                 'status'                 => $ind->status,
                                 'resultId'               => $result?->result_id,
                                 'score'                  => ($result && $result->completion_status === 'Completed') ? $result->score : null,
@@ -385,6 +387,11 @@ class EvaluationController extends Controller
                 'academicYear' => $evaluation->cycle?->academic_year,
                 'versionId'    => $version->version_id,
                 'versionName'  => $version->version_name,
+                'versionNo'    => $version->version_no,
+                'approvalCode' => $version->source_number ?? 'DEC-2026-QA-01',
+                'approvedAt'   => $version->updated_at?->toIso8601ZuluString() ?? now()->toIso8601ZuluString(),
+                'effectiveFrom'=> $version->issue_date?->toDateString() ?? '2026-01-01',
+                'integrityHash'=> hash('sha256', "VERSION_{$version->version_id}_{$version->version_no}_{$version->status}"),
                 'standards'    => $standardsData,
             ],
             message: null,

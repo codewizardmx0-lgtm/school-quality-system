@@ -6,7 +6,7 @@ import { FinalSubmissionLockModal } from './FinalSubmissionLockModal';
 import { StandardsProgressBar } from '../dashboard/StandardsProgressBar';
 import { InteractiveDonutChart } from '../../../../components/ui/InteractiveDonutChart';
 import { InteractiveBarChart } from '../../../../components/ui/InteractiveBarChart';
-import type { EvaluatorScreen, EvaluatorDashboardData } from '../../api/evaluationTypes';
+import type { EvaluatorScreen, EvaluatorDashboardData, StandardNode } from '../../api/evaluationTypes';
 import {
   CheckCircle2,
   XCircle,
@@ -49,6 +49,7 @@ export const InternalReviewPage: React.FC<InternalReviewPageProps> = ({
   const [isLockModalOpen, setIsLockModalOpen] = useState(false);
   const [successBanner, setSuccessBanner] = useState<string | null>(null);
   const [dashboardData, setDashboardData] = useState<EvaluatorDashboardData | null>(null);
+  const [standardsTree, setStandardsTree] = useState<StandardNode[]>([]);
   const [expandedCriteria, setExpandedCriteria] = useState<Record<string, boolean>>({
     scores_completed: true,
   });
@@ -61,6 +62,13 @@ export const InternalReviewPage: React.FC<InternalReviewPageProps> = ({
         if (isMounted) setDashboardData(data);
       })
       .catch((err) => console.error('Failed to load dashboard data for review:', err));
+
+    evaluatorApi
+      .getActiveStandardsTree()
+      .then((data) => {
+        if (isMounted && data?.standards) setStandardsTree(data.standards);
+      })
+      .catch((err) => console.error('Failed to load standards tree for review:', err));
 
     return () => {
       isMounted = false;
@@ -948,7 +956,7 @@ export const InternalReviewPage: React.FC<InternalReviewPageProps> = ({
                 <span style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: '#10B981' }} />
                 <div>
                   <div style={{ fontSize: '12.5px', fontWeight: 800, color: '#065F46' }}>المستوى 3: متحقق</div>
-                  <div style={{ fontSize: '11px', color: '#047857' }}>وصول المؤسسة للمستوى المطلوب تحقيقه وبشكل مستمر</div>
+                  <div style={{ fontSize: '11px', color: '#047857' }}>وصول المؤسسة للمستوى المطلوب تحقيقه وبشكل مستمر مع متابعة دورية وخطط تحسين.</div>
                 </div>
               </div>
               <span style={{ fontSize: '14px', fontWeight: 900, color: '#065F46' }}>{l3}</span>
@@ -960,7 +968,7 @@ export const InternalReviewPage: React.FC<InternalReviewPageProps> = ({
                 <span style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: '#3B82F6' }} />
                 <div>
                   <div style={{ fontSize: '12.5px', fontWeight: 800, color: '#1E40AF' }}>المستوى 2: متحقق بدرجة متوسطة</div>
-                  <div style={{ fontSize: '11px', color: '#1D4ED8' }}>أداءات متحققة بصورة متوسطة الفاعلية وبحاجة لتحسين</div>
+                  <div style={{ fontSize: '11px', color: '#1D4ED8' }}>أداءات متحققة بصورة متوسطة الفاعلية مع وجود مجال للتحسين وخطط للتطوير.</div>
                 </div>
               </div>
               <span style={{ fontSize: '14px', fontWeight: 900, color: '#1E40AF' }}>{l2}</span>
@@ -972,7 +980,7 @@ export const InternalReviewPage: React.FC<InternalReviewPageProps> = ({
                 <span style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: '#F59E0B' }} />
                 <div>
                   <div style={{ fontSize: '12.5px', fontWeight: 800, color: '#92400E' }}>المستوى 1: متحقق بدرجة ضعيفة</div>
-                  <div style={{ fontSize: '11px', color: '#B45309' }}>أداءات كتابية تفتقر للمنهجية وبحاجة لاستكمال الشواهد</div>
+                  <div style={{ fontSize: '11px', color: '#B45309' }}>أداءات كتابية أو متحققة أحياناً وتفتقر للمنهجية وبحاجة لمجهود واستكمال الشواهد.</div>
                 </div>
               </div>
               <span style={{ fontSize: '14px', fontWeight: 900, color: '#92400E' }}>{l1}</span>
@@ -984,7 +992,7 @@ export const InternalReviewPage: React.FC<InternalReviewPageProps> = ({
                 <span style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: '#EF4444' }} />
                 <div>
                   <div style={{ fontSize: '12.5px', fontWeight: 800, color: '#991B1B' }}>المستوى 0: غير متوفر</div>
-                  <div style={{ fontSize: '11px', color: '#B91C1C' }}>عدم قيام المدرسة بالأداءات المطلوبة منها وبحاجة لتصحيح</div>
+                  <div style={{ fontSize: '11px', color: '#B91C1C' }}>عدم قيام المدرسة بالأداءات المطلوبة منها وبحاجة لمراجعة أدائها وتصحيح أخطائها.</div>
                 </div>
               </div>
               <span style={{ fontSize: '14px', fontWeight: 900, color: '#991B1B' }}>{l0}</span>
@@ -1024,6 +1032,106 @@ export const InternalReviewPage: React.FC<InternalReviewPageProps> = ({
             onSelectStandard={(id) => onNavigate?.('standards-tree', id)}
           />
         </div>
+
+        {/* مصفوفة المعايير الفرعية الـ 14 وأوزانها المعتمدة رسمياً (The 14 National Sub-Standards Matrix) */}
+        {standardsTree.length > 0 && (
+          <div
+            data-testid="substandards-matrix-card"
+            style={{
+              marginTop: '10px',
+              backgroundColor: '#F8FAFC',
+              borderRadius: '12px',
+              padding: '20px',
+              border: '1px solid #E2E8F0',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px', flexWrap: 'wrap', gap: '8px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <FileCheck2 size={18} color="#059669" />
+                <h4 style={{ fontSize: '14.5px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
+                  تقسيم المعايير الفرعية الـ 14 والأوزان النسبية المعتمدة (النموذج الوطني)
+                </h4>
+              </div>
+              <span
+                style={{
+                  fontSize: '11.5px',
+                  fontWeight: 700,
+                  padding: '3px 10px',
+                  borderRadius: '8px',
+                  backgroundColor: '#ECFDF5',
+                  color: '#065F46',
+                  border: '1px solid #A7F3D0',
+                }}
+              >
+                14 معياراً فرعياً — إجمالي الأوزان: 100%
+              </span>
+            </div>
+
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+                gap: '12px',
+              }}
+            >
+              {standardsTree.flatMap((std) =>
+                std.subStandards.map((sub) => (
+                  <div
+                    key={sub.subStandardId}
+                    style={{
+                      backgroundColor: '#FFFFFF',
+                      borderRadius: '8px',
+                      padding: '12px 14px',
+                      border: '1px solid #E2E8F0',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: '10px',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span
+                        style={{
+                          fontSize: '11px',
+                          fontWeight: 800,
+                          padding: '2px 7px',
+                          borderRadius: '4px',
+                          backgroundColor: '#EFF6FF',
+                          color: '#1D4ED8',
+                        }}
+                      >
+                        {sub.code}
+                      </span>
+                      <div>
+                        <div style={{ fontSize: '12.5px', fontWeight: 700, color: '#1E293B' }}>
+                          {sub.title}
+                        </div>
+                        <div style={{ fontSize: '11px', color: '#64748B', marginTop: '1px' }}>
+                          المجال: {std.title} ({sub.indicators.length} مؤشرات)
+                        </div>
+                      </div>
+                    </div>
+
+                    <span
+                      style={{
+                        fontSize: '12px',
+                        fontWeight: 800,
+                        padding: '3px 8px',
+                        borderRadius: '6px',
+                        backgroundColor: '#ECFDF5',
+                        color: '#065F46',
+                        border: '1px solid #A7F3D0',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {sub.weight ?? 0}%
+                    </span>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* 5. Draft Report Preview */}

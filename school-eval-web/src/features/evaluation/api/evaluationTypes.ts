@@ -159,6 +159,11 @@ export interface IndicatorNode {
   title: string;
   description: string;
   weight: number;
+  standardName?: string;
+  standardDescription?: string;
+  subStandardName?: string;
+  subStandardDescription?: string;
+  subStandardWeight?: number;
   score?: number | null;
   evidenceCount?: number;
   mandatoryRequirementsCount?: number;
@@ -172,6 +177,8 @@ export interface SubStandardNode {
   subStandardId: number;
   code: string;
   title: string;
+  description?: string;
+  weight?: number;
   indicators: IndicatorNode[];
 }
 
@@ -204,6 +211,10 @@ export interface StandardsTreeData {
   versionCode: string;
   versionNumber?: string;
   versionStatus?: string;
+  approvalCode?: string;
+  approvedAt?: string;
+  effectiveFrom?: string;
+  integrityHash?: string;
   title: string;
   academicYear?: string;
   cycleName?: string;

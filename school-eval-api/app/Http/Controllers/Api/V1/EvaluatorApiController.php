@@ -476,12 +476,14 @@ class EvaluatorApiController extends Controller
                     'totalMandatoryRequirements' => $stdTotalMandatory,
                     'coveredRequirements' => $stdTotalCovered,
                 ],
-                'subStandards' => $std->subStandards->map(function ($sub) use ($results, $computeIndicatorCoverage) {
+                'subStandards' => $std->subStandards->map(function ($sub) use ($results, $computeIndicatorCoverage, $std) {
                     return [
                         'subStandardId' => $sub->sub_standard_id,
                         'code' => $sub->code,
                         'title' => $sub->name,
-                        'indicators' => $sub->indicators->map(function ($ind) use ($results, $computeIndicatorCoverage) {
+                        'description' => $sub->description ?? '',
+                        'weight' => (float)($sub->weight ?? 0.0),
+                        'indicators' => $sub->indicators->map(function ($ind) use ($results, $computeIndicatorCoverage, $std, $sub) {
                             $res = $results->firstWhere('indicator_id', $ind->indicator_id);
                             [$evCount, $mandatoryCnt, $coveredCnt, $explicitIds] = $computeIndicatorCoverage($ind);
 
@@ -490,7 +492,12 @@ class EvaluatorApiController extends Controller
                                 'code' => $ind->code,
                                 'title' => $ind->name,
                                 'description' => $ind->description ?? '',
-                                'weight' => $ind->weight ?? 1,
+                                'weight' => (float)($ind->weight ?? 1),
+                                'standardName' => $std->name,
+                                'standardDescription' => $std->description ?? '',
+                                'subStandardName' => $sub->name,
+                                'subStandardDescription' => $sub->description ?? '',
+                                'subStandardWeight' => (float)($sub->weight ?? 0.0),
                                 'score' => $res?->score,
                                 'evidenceCount' => $evCount,
                                 'mandatoryRequirementsCount' => $mandatoryCnt,
@@ -530,6 +537,10 @@ class EvaluatorApiController extends Controller
             'versionNumber' => $version->version_no ?? '1.0',
             'title' => $version->source_description ?? 'المعايير الوطنية لتقويم الأداء المدرسي 2026',
             'versionStatus' => $version->status,
+            'approvalCode' => $version->source_number ?? 'DEC-2026-QA-01',
+            'approvedAt' => $version->updated_at?->toIso8601ZuluString() ?? now()->toIso8601ZuluString(),
+            'effectiveFrom' => $version->issue_date?->toDateString() ?? '2026-01-01',
+            'integrityHash' => hash('sha256', "VERSION_{$version->version_id}_{$version->version_no}_{$version->status}"),
             'cycleId' => $evaluation?->cycle?->cycle_id,
             'academicYear' => $evaluation?->cycle?->academic_year ?? '2025/2026',
             'cycleName' => $evaluation?->cycle?->name ?: ('الدورة التقييمية ' . ($evaluation?->cycle?->academic_year ?? '2025/2026')),
@@ -569,12 +580,23 @@ class EvaluatorApiController extends Controller
                 ];
             });
 
+        $explicitRequirementIds = [];
+        foreach ($evidenceLinks as $evLink) {
+            $cov = $evLink['coveredRequirements'] ?? [];
+            if (is_array($cov)) {
+                foreach ($cov as $covId) {
+                    $explicitRequirementIds[(int)$covId] = true;
+                }
+            }
+        }
+
         $indicator = Indicator::with('evidenceRequirements')->find($indicatorId);
         $reqs = $indicator?->evidenceRequirements->map(fn($er) => [
             'id' => $er->requirement_id,
             'title' => $er->title,
             'description' => $er->description ?? '',
             'required' => (bool)$er->required,
+            'isCovered' => isset($explicitRequirementIds[(int)$er->requirement_id]),
         ]) ?? collect();
 
         if (!$result) {
@@ -726,12 +748,23 @@ class EvaluatorApiController extends Controller
                 ];
             });
 
+        $explicitRequirementIds = [];
+        foreach ($evidenceLinks as $evLink) {
+            $cov = $evLink['coveredRequirements'] ?? [];
+            if (is_array($cov)) {
+                foreach ($cov as $covId) {
+                    $explicitRequirementIds[(int)$covId] = true;
+                }
+            }
+        }
+
         $indicator = Indicator::with('evidenceRequirements')->find($indicatorId);
         $reqs = $indicator?->evidenceRequirements->map(fn($er) => [
             'id' => $er->requirement_id,
             'title' => $er->title,
             'description' => $er->description ?? '',
             'required' => (bool)$er->required,
+            'isCovered' => isset($explicitRequirementIds[(int)$er->requirement_id]),
         ]) ?? collect();
 
         $justificationNote = $result->notes()->orderBy('note_id', 'desc')->first();

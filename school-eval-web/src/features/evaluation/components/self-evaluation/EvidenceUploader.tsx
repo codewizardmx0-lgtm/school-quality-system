@@ -187,38 +187,70 @@ export const EvidenceUploader: React.FC<EvidenceUploaderProps> = ({
                 style={{
                   display: 'flex',
                   alignItems: 'flex-start',
+                  justifyContent: 'space-between',
                   gap: '10px',
                   padding: '8px 12px',
                   borderRadius: '6px',
-                  backgroundColor: '#FFFFFF',
-                  border: '1px solid #CBD5E1',
+                  backgroundColor: req.isCovered ? '#F0FDF4' : '#FFFFFF',
+                  border: `1px solid ${req.isCovered ? '#BBF7D0' : req.required ? '#FECACA' : '#CBD5E1'}`,
                 }}
               >
-                <span
-                  style={{
-                    fontSize: '10.5px',
-                    fontWeight: 800,
-                    padding: '2px 8px',
-                    borderRadius: '4px',
-                    backgroundColor: req.required ? '#FEF2F2' : '#EFF6FF',
-                    color: req.required ? '#DC2626' : '#2563EB',
-                    border: `1px solid ${req.required ? '#FECACA' : '#BFDBFE'}`,
-                    whiteSpace: 'nowrap',
-                    marginTop: '2px',
-                  }}
-                >
-                  {req.required ? 'إلزامي' : 'استرشادي'}
-                </span>
-                <div>
-                  <div style={{ fontSize: '12.5px', fontWeight: 700, color: '#1E293B' }}>
-                    {req.title}
-                  </div>
-                  {req.description && (
-                    <div style={{ fontSize: '11.5px', color: '#64748B', marginTop: '2px' }}>
-                      {req.description}
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
+                  <span
+                    style={{
+                      fontSize: '10.5px',
+                      fontWeight: 800,
+                      padding: '2px 8px',
+                      borderRadius: '4px',
+                      backgroundColor: req.isCovered ? '#ECFDF5' : req.required ? '#FEF2F2' : '#EFF6FF',
+                      color: req.isCovered ? '#059669' : req.required ? '#DC2626' : '#2563EB',
+                      border: `1px solid ${req.isCovered ? '#A7F3D0' : req.required ? '#FECACA' : '#BFDBFE'}`,
+                      whiteSpace: 'nowrap',
+                      marginTop: '2px',
+                    }}
+                  >
+                    {req.isCovered ? '✓ مغطى بشاهد' : req.required ? '⚠ مطلوب' : '○ استرشادي'}
+                  </span>
+                  <div>
+                    <div style={{ fontSize: '12.5px', fontWeight: 700, color: req.isCovered ? '#166534' : '#1E293B' }}>
+                      {req.title}
                     </div>
-                  )}
+                    {req.description && (
+                      <div style={{ fontSize: '11.5px', color: '#64748B', marginTop: '2px' }}>
+                        {req.description}
+                      </div>
+                    )}
+                  </div>
                 </div>
+
+                {!readOnly && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedUploadReqIds([req.id]);
+                      fileInputRef.current?.click();
+                    }}
+                    style={{
+                      padding: '3px 8px',
+                      borderRadius: '5px',
+                      backgroundColor: '#FFFFFF',
+                      border: '1px solid #CBD5E1',
+                      color: '#0F766E',
+                      fontSize: '11px',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      whiteSpace: 'nowrap',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      flexShrink: 0,
+                    }}
+                    title="رفع وتخصيص شاهد فوري لهذا المتطلب"
+                  >
+                    <span>ربط شاهد</span>
+                    <Link2 size={12} />
+                  </button>
+                )}
               </div>
             ))}
           </div>
