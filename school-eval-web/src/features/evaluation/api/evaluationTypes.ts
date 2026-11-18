@@ -15,6 +15,23 @@ export type AiRecommendationStatus = 'PendingReview' | 'Accepted' | 'Modified' |
 export type AiRecommendationType = 'strength' | 'improvement' | 'recommendation' | 'draft';
 export type VerificationTagStatus = 'Compliant' | 'NeedsReplacement' | 'UnderReview';
 
+export interface StandardVersionSummary {
+  versionId: number;
+  versionNumber: string;
+  title?: string;
+  status: string;
+  issueDate?: string;
+}
+
+export interface EvaluationCycleSummary {
+  cycleId: number;
+  name: string;
+  academicYear: string;
+  status: string;
+  startDate?: string;
+  endDate?: string;
+}
+
 export interface EvaluatorSchoolInfo {
   schoolId: number;
   schoolName: string;
@@ -24,6 +41,8 @@ export interface EvaluatorSchoolInfo {
   currentEvaluator: string;
   academicYear: string;
   cycleName: string;
+  standardVersion?: StandardVersionSummary;
+  evaluationCycle?: EvaluationCycleSummary;
   trackingCode?: string;
   digitalHash?: string;
   submittedAt?: string;
@@ -183,7 +202,11 @@ export interface StandardsTreeData {
   evaluationId?: number;
   versionId: number;
   versionCode: string;
+  versionNumber?: string;
+  versionStatus?: string;
   title: string;
+  academicYear?: string;
+  cycleName?: string;
   standards: StandardNode[];
 }
 

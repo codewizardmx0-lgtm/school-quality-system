@@ -328,4 +328,5 @@ export interface LockVersionPayload {
   legalConfirmation?: boolean;
   council_notes?: string;
   release_notes?: string;
+  action?: 'approve' | 'activate';
 }

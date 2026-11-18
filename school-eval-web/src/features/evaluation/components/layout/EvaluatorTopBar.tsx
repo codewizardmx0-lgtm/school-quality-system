@@ -8,7 +8,8 @@ import {
   KeyRound,
   LogOut,
   ChevronLeft,
-  History,
+  BookOpen,
+  Calendar,
 } from 'lucide-react';
 import { SYSTEM_SHORT_NAME } from '../../../../constants/systemConstants';
 import { evaluatorApi } from '../../api/evaluatorApi';
@@ -227,27 +228,49 @@ export const EvaluatorTopBar: React.FC<EvaluatorTopBarProps> = ({
                 {isLocked ? <Lock size={11} /> : <CheckCircle2 size={11} />}
                 <span>{statusLabel}</span>
               </div>
+
+              {/* Standard Version Badge (Separate & Isolated) */}
+              <div
+                className="hidden lg:inline-flex"
+                style={{
+                  padding: '3px 9px',
+                  borderRadius: '14px',
+                  backgroundColor: '#FEF3C7',
+                  color: '#92400E',
+                  border: '1px solid #FCD34D',
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  whiteSpace: 'nowrap',
+                }}
+                title={`المرجعية المعيارية المعتمدة: ${schoolInfo?.standardVersion?.title || 'المعايير الوطنية'} (${schoolInfo?.standardVersion?.status || 'Active'})`}
+              >
+                <BookOpen size={11} color="#D97706" />
+                <span>المعايير: {schoolInfo?.standardVersion?.versionNumber || 'v2026.1'}</span>
+              </div>
             </div>
           </div>
         </div>
 
         {/* Left (RTL End): Actions & User Capsule */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
-          {/* Archive / Evaluation Cycles Switcher (IMP-06: Read-Only for Past Cycles) */}
-          {archiveEvaluations.length > 0 && onSelectArchiveEvaluation && (
+          {/* Separate Evaluation Cycle Display / Switcher */}
+          {archiveEvaluations.length > 0 && onSelectArchiveEvaluation ? (
             <div
               className="hidden md:flex"
               style={{
                 alignItems: 'center',
                 gap: '6px',
-                backgroundColor: selectedArchiveEvalId ? '#EFF6FF' : '#F8FAFC',
-                border: `1px solid ${selectedArchiveEvalId ? '#93C5FD' : '#E2E8F0'}`,
+                backgroundColor: selectedArchiveEvalId ? '#EFF6FF' : '#F0FDF4',
+                border: `1px solid ${selectedArchiveEvalId ? '#93C5FD' : '#BBF7D0'}`,
                 borderRadius: '8px',
                 padding: '4px 8px',
               }}
               title="استعراض أرشيف دورات التقييم السابقة للمدرسة (للقراءة فقط)"
             >
-              <History size={14} color={selectedArchiveEvalId ? '#2563EB' : '#64748B'} />
+              <Calendar size={14} color={selectedArchiveEvalId ? '#2563EB' : '#16A34A'} />
               <select
                 value={selectedArchiveEvalId ? String(selectedArchiveEvalId) : ''}
                 onChange={(e) => {
@@ -259,14 +282,14 @@ export const EvaluatorTopBar: React.FC<EvaluatorTopBarProps> = ({
                   background: 'transparent',
                   fontSize: '12px',
                   fontWeight: 700,
-                  color: selectedArchiveEvalId ? '#1E40AF' : '#334155',
+                  color: selectedArchiveEvalId ? '#1E40AF' : '#166534',
                   outline: 'none',
                   cursor: 'pointer',
                   paddingLeft: '4px',
                 }}
               >
                 <option value="">
-                  الدورة الحالية ({archiveEvaluations[0]?.academicYear || '2026/2027'})
+                  الدورة الحالية ({archiveEvaluations[0]?.academicYear || schoolInfo?.academicYear || '2025/2026'})
                 </option>
                 {archiveEvaluations.slice(1).map((ev) => (
                   <option key={ev.evaluationId} value={String(ev.evaluationId)}>
@@ -274,6 +297,25 @@ export const EvaluatorTopBar: React.FC<EvaluatorTopBarProps> = ({
                   </option>
                 ))}
               </select>
+            </div>
+          ) : (
+            <div
+              className="hidden md:flex"
+              style={{
+                alignItems: 'center',
+                gap: '5px',
+                backgroundColor: '#F0FDF4',
+                border: '1px solid #BBF7D0',
+                borderRadius: '8px',
+                padding: '4px 8px',
+                fontSize: '11.5px',
+                fontWeight: 700,
+                color: '#166534',
+              }}
+              title="الدورة التقييمية الحالية للمدرسة"
+            >
+              <Calendar size={13} color="#16A34A" />
+              <span>الدورة التقييمية: {schoolInfo?.evaluationCycle?.academicYear || schoolInfo?.academicYear || '2025/2026'}</span>
             </div>
           )}
 

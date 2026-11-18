@@ -69,14 +69,25 @@ export const StandardsLayout: React.FC<StandardsLayoutProps> = ({
           />
         );
 
+      case 'workspace':
       case 'tree':
       case 'weights':
+        return (
+          <StandardVersionWorkspacePage
+            key={`workspace-${currentVersionId}`}
+            initialVersionId={currentVersionId}
+            initialTab={(activeScreen === 'weights' ? 'weights' : 'tree') as WorkspaceTabKey}
+            onNavigateToVersions={() => navigateToScreen('versions')}
+          />
+        );
+
+      case 'diff-log':
       case 'audit-lock':
         return (
           <StandardVersionWorkspacePage
             key={`workspace-${currentVersionId}`}
             initialVersionId={currentVersionId}
-            initialTab={activeScreen as WorkspaceTabKey}
+            initialTab="audit-lock"
             onNavigateToVersions={() => navigateToScreen('versions')}
           />
         );

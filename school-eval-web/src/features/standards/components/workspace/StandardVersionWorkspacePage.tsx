@@ -65,8 +65,11 @@ export const StandardVersionWorkspacePage: React.FC<StandardVersionWorkspacePage
 
   // Find currently selected version details
   const currentVersion = versions.find((v) => v.versionId === selectedVersionId) || activeVersion || versions[0];
-  const isDraft = currentVersion?.status === 'Draft' || currentVersion?.status === 'draft';
-  const isApproved = currentVersion?.status === 'Approved' || currentVersion?.status === 'approved';
+  const currentStatus = currentVersion?.status?.toLowerCase() || '';
+  const isActive = currentStatus === 'active';
+  const isApproved = currentStatus === 'approved';
+  const isDraft = currentStatus === 'draft';
+  const isArchived = currentStatus === 'archived' || (!isActive && !isApproved && !isDraft);
 
   const handleSelectVersion = (versionId: number) => {
     setSelectedVersionId(versionId);
@@ -108,7 +111,7 @@ export const StandardVersionWorkspacePage: React.FC<StandardVersionWorkspacePage
 
             <div className="flex items-center gap-3 flex-wrap">
               <span className="text-sm font-extrabold text-slate-900">
-                الإصدار النشط للتحرير:
+                الإصدار المختار في بيئة العمل:
               </span>
 
               {/* Version Selector Dropdown */}
@@ -119,20 +122,38 @@ export const StandardVersionWorkspacePage: React.FC<StandardVersionWorkspacePage
                   disabled={isVersionsLoading || versions.length === 0}
                   className="appearance-none bg-amber-50/70 hover:bg-amber-100/70 text-amber-950 font-black text-sm px-4 py-2 pl-9 rounded-xl border border-amber-300 focus:outline-none focus:ring-2 focus:ring-amber-500 cursor-pointer transition-all shadow-sm"
                 >
-                  {versions.map((ver) => (
-                    <option key={ver.versionId} value={ver.versionId}>
-                      الإصدار {ver.versionNo} — {ver.status === 'Approved' ? 'مُقرّ ونافذ' : ver.status === 'Draft' ? 'مسودة قيد التطوير' : 'مؤرشف'}
-                    </option>
-                  ))}
+                  {versions.map((ver) => {
+                    const st = ver.status?.toLowerCase();
+                    const label =
+                      st === 'active'
+                        ? 'مُقرّ ونافذ حاكم للدورة الجارية'
+                        : st === 'approved'
+                        ? 'مُقرّ ومجدول للدورة القادمة'
+                        : st === 'draft'
+                        ? 'مسودة قيد التطوير'
+                        : 'إصدار سابق مؤرشف';
+                    return (
+                      <option key={ver.versionId} value={ver.versionId}>
+                        الإصدار {ver.versionNo} — {label}
+                      </option>
+                    );
+                  })}
                 </select>
                 <ChevronDown className="w-4 h-4 text-amber-700 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
               </div>
 
               {/* Status Pill Badge */}
-              {isApproved && (
-                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+              {isActive && (
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-800 border border-emerald-300">
                   <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>مُقرّ ونافذ رسمياً (للقراءة فقط)</span>
+                  <span>مُقرّ ونافذ حاكم للدورة الجارية (للقراءة فقط)</span>
+                </span>
+              )}
+
+              {isApproved && (
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-blue-50 text-blue-800 border border-blue-200">
+                  <ShieldCheck className="w-3.5 h-3.5 text-blue-600" />
+                  <span>مُقرّ ومجدول للدورة القادمة (للقراءة فقط)</span>
                 </span>
               )}
 
@@ -143,7 +164,7 @@ export const StandardVersionWorkspacePage: React.FC<StandardVersionWorkspacePage
                 </span>
               )}
 
-              {!isApproved && !isDraft && (
+              {isArchived && (
                 <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-600 border border-slate-200">
                   <Archive className="w-3.5 h-3.5" />
                   <span>نسخة سابقة مؤرشفة</span>

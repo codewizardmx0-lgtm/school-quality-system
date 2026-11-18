@@ -16,7 +16,6 @@ import {
 } from 'lucide-react';
 import { WeightsBalanceBanner } from './WeightsBalanceBanner';
 import { WeightsDistributionTable } from './WeightsDistributionTable';
-import { RubricLevelsGuide } from './RubricLevelsGuide';
 import { useWeightsRubrics } from '../../hooks/useWeightsRubrics';
 import { exportWeightsTableToExcel } from '../../utils/standardsExportUtils';
 
@@ -33,11 +32,12 @@ export const StandardsWeightsRubricsPage: React.FC<StandardsWeightsRubricsPagePr
 }) => {
   const {
     weights,
-    rubricLevels,
     versionNo,
     isDraft,
     totalWeight,
     isBalanced,
+    isMainBalanced,
+    isAllSubStandardsBalanced,
     subStandardsBalanceMap,
     isSaving,
     saveSuccess,
@@ -211,6 +211,8 @@ export const StandardsWeightsRubricsPage: React.FC<StandardsWeightsRubricsPagePr
       <WeightsBalanceBanner
         totalWeight={totalWeight}
         isBalanced={isBalanced}
+        isMainBalanced={isMainBalanced}
+        isAllSubStandardsBalanced={isAllSubStandardsBalanced}
       />
 
       {/* 2. Standards Weights Distribution Table */}
@@ -227,9 +229,6 @@ export const StandardsWeightsRubricsPage: React.FC<StandardsWeightsRubricsPagePr
           onResetEqual={resetToEqualWeights}
         />
       </div>
-
-      {/* 3. Rubric Scale Levels Guide (0-3) */}
-      <RubricLevelsGuide levels={rubricLevels} />
 
       {/* 4. Bottom Actions Bar */}
       <div

@@ -515,6 +515,8 @@ class StandardManagementController extends Controller
         return ApiResponse::success([
             'versionId' => $version->version_id,
             'versionNo' => $version->version_no,
+            'status' => $version->status,
+            'isDraft' => $version->isDraft(),
             'totalWeight' => $totalWeight,
             'isBalanced' => abs($totalWeight - 100.0) < 0.05,
             'standards' => $standards,
@@ -884,8 +886,17 @@ class StandardManagementController extends Controller
     /**
      * قفل واعتماد الإصدار رسمياً للدورات التقييمية.
      */
+    /**
+     * قفل وإقرار أو تنشيط الإصدار المعياري رسمياً وفق نموذج الحالات الرباعي (القرار 6).
+     * الصلاحية المطلوبة: standards.manage
+     */
     public function lock(Request $request, int $id): JsonResponse
     {
+        $user = $request->user();
+        if ($user && !$user->hasPermission('standards.manage')) {
+            return ApiResponse::forbidden('غير مصرح لك بإقرار الإصدارات المعيارية.');
+        }
+
         $version = StandardVersion::find($id);
         if (!$version) {
             return ApiResponse::notFound('الإصدار المعياري غير موجود.');
@@ -893,6 +904,7 @@ class StandardManagementController extends Controller
 
         $approvalCode = $request->input('approval_code') ?? $request->input('approvalCode');
         $legalConfirmation = $request->input('legal_confirmation') ?? $request->input('legalConfirmation');
+        $action = $request->input('action', 'approve'); // 'approve' (إقرار وجدولة) أو 'activate' (إقرار وتفعيل فوري)
 
         if (!$legalConfirmation) {
             return ApiResponse::validationError(['legalConfirmation' => ['يجب الإقرار بالمسؤولية القانونية للاعتماد.']], 'يجب تأكيد الإقرار القانوني');
@@ -900,15 +912,20 @@ class StandardManagementController extends Controller
 
         if ($approvalCode) {
             $version->source_number = $approvalCode;
+            $version->save();
         }
-        $version->status = StandardVersion::STATUS_ACTIVE;
-        $version->save();
 
-        StandardVersion::where('version_id', '!=', $version->version_id)
-            ->where('status', StandardVersion::STATUS_ACTIVE)
-            ->update(['status' => StandardVersion::STATUS_ARCHIVED]);
-
-        return ApiResponse::success($version, 'تم قفل واعتماد وثيقة المعايير رسمياً للدورات التقييمية بنجاح.');
+        try {
+            if ($action === 'activate') {
+                $activated = $this->service->activateVersion($version);
+                return ApiResponse::success($activated, 'تم قفل وتنشيط وثيقة المعايير رسمياً للدورة التقييمية الحالية بنجاح وأرشفة الإصدار السابق.');
+            } else {
+                $approved = $this->service->approveVersion($version);
+                return ApiResponse::success($approved, 'تم إقرار وثيقة المعايير رسمياً وجدولتها للدورة التقييمية القادمة بنجاح مع الحفاظ على الدورة الحالية.');
+            }
+        } catch (ValidationException $e) {
+            return ApiResponse::validationError($e->errors(), $e->getMessage());
+        }
     }
 
     /**

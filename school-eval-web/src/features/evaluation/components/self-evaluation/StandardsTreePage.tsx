@@ -96,11 +96,43 @@ export const StandardsTreePage: React.FC<StandardsTreePageProps> = ({
         }}
       >
         <div>
-          <h2 style={{ fontSize: '18px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
-            مستكشف المعايير الوطنية والمؤشرات المعتمدة
-          </h2>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+            <h2 style={{ fontSize: '18px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
+              مستكشف المعايير الوطنية والمؤشرات المعتمدة
+            </h2>
+            {treeData?.versionNumber && (
+              <span
+                style={{
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  padding: '2px 8px',
+                  borderRadius: '6px',
+                  backgroundColor: '#FEF3C7',
+                  color: '#92400E',
+                  border: '1px solid #FCD34D',
+                }}
+              >
+                وثيقة المعايير: v{treeData.versionNumber}
+              </span>
+            )}
+            {treeData?.academicYear && (
+              <span
+                style={{
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  padding: '2px 8px',
+                  borderRadius: '6px',
+                  backgroundColor: '#EFF6FF',
+                  color: '#1E40AF',
+                  border: '1px solid #BFDBFE',
+                }}
+              >
+                الدورة التقييمية: {treeData.academicYear}
+              </span>
+            )}
+          </div>
           <p style={{ fontSize: '13px', color: '#64748B', margin: '4px 0 0 0' }}>
-            {treeData?.title || 'المعايير الوطنية لتقويم جودة الأداء المدرسي 2026'} — {standards.length} معايير وطنية رئيسية
+            {treeData?.title || 'المعايير الوطنية لتقويم جودة الأداء المدرسي 2026'} — {standards.length} معايير رئيسية
           </p>
         </div>
 

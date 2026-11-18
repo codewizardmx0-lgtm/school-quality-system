@@ -20,6 +20,7 @@ import {
   Download,
   RefreshCw,
   FileSpreadsheet,
+  BookOpen,
 } from 'lucide-react';
 import { evaluatorApi } from '../../api/evaluatorApi';
 import { useAuth } from '../../../auth/AuthContext';
@@ -276,9 +277,27 @@ export const EvaluatorDashboard: React.FC<EvaluatorDashboardProps> = ({
                 المقيّم المسؤول: {school?.currentEvaluator || 'قيد التعيين'}
               </span>
               <span>•</span>
-              <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }} title="الدورة التقييمية الحالية المنفصلة">
                 <Calendar size={15} />
-                العام الدراسي {school?.academicYear || 'الدورة الحالية'}
+                الدورة التقييمية: {school?.evaluationCycle?.academicYear || school?.academicYear || '2025/2026'}
+              </span>
+              <span>•</span>
+              <span
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  backgroundColor: 'rgba(255, 255, 255, 0.18)',
+                  padding: '2px 8px',
+                  borderRadius: '6px',
+                  border: '1px solid rgba(255, 255, 255, 0.3)',
+                  fontWeight: 700,
+                  fontSize: '12px',
+                }}
+                title={`المرجعية المعيارية المعتمدة: ${school?.standardVersion?.title || 'المعايير الوطنية لتقويم الأداء المدرسي'} (${school?.standardVersion?.status || 'Active'})`}
+              >
+                <BookOpen size={14} />
+                وثيقة المعايير: {school?.standardVersion?.versionNumber || 'v2026.1'}
               </span>
             </div>
           </div>

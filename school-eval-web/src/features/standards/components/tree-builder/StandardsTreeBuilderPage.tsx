@@ -4,17 +4,16 @@
  * يدعم إضافة وتعديل وحذف المعايير الرئيسية والفرعية، وفتح نافذة تحرير المؤشر التفاعلية
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   FileSpreadsheet,
   ArrowRight,
   ArrowLeft,
-  FolderPlus,
-  PlusCircle,
   BookmarkPlus,
   Lock,
 } from 'lucide-react';
-import type { StandardNode, SubStandardNode, IndicatorNode } from '../../api/standardsTypes';
+import type { StandardNode, SubStandardNode, IndicatorNode, RubricLevelInfo } from '../../api/standardsTypes';
+import { standardsApi } from '../../api/standardsApi';
 import { StandardsTreeView } from './StandardsTreeView';
 import { IndicatorEditorModal } from './IndicatorEditorModal';
 import { AddStandardModal } from './AddStandardModal';
@@ -22,6 +21,8 @@ import { EditStandardModal } from './EditStandardModal';
 import { AddSubStandardModal } from './AddSubStandardModal';
 import { EditSubStandardModal } from './EditSubStandardModal';
 import { AddIndicatorModal } from './AddIndicatorModal';
+import { VerificationToolsGuide } from './VerificationToolsGuide';
+import { RubricLevelsGuide } from '../weights-rubrics/RubricLevelsGuide';
 import { useStandardsTree } from '../../hooks/useStandardsTree';
 import { exportStandardsTreeToExcel } from '../../utils/standardsExportUtils';
 import { countAllIndicators, countAllSubStandards } from '../../utils/treeCalculators';
@@ -75,6 +76,17 @@ export const StandardsTreeBuilderPage: React.FC<StandardsTreeBuilderPageProps> =
   const [modalTargetSub, setModalTargetSub] = useState<SubStandardNode | null>(null);
 
   const [isIndicatorModalOpen, setIsIndicatorModalOpen] = useState(false);
+  const [rubricLevels, setRubricLevels] = useState<RubricLevelInfo[]>([]);
+
+  useEffect(() => {
+    if (versionId) {
+      standardsApi.getScoreLevels(versionId).then((levels) => {
+        if (levels && levels.length > 0) {
+          setRubricLevels(levels);
+        }
+      }).catch(() => {});
+    }
+  }, [versionId]);
 
   const standards = treeData?.standards || [];
   const totalSubStandards = countAllSubStandards(standards);
@@ -164,81 +176,35 @@ export const StandardsTreeBuilderPage: React.FC<StandardsTreeBuilderPageProps> =
             المسودة المستهدفة: وثيقة معايير التقييم والاعتماد المدرسي المطورة
           </h2>
           <p style={{ fontSize: '12px', color: '#FEF3C7', margin: '4px 0 0' }}>
-            ({standards.length} معايير رئيسية • {totalSubStandards || 24} مجالاً فرعياً • {totalIndicators || 109} مؤشراً معتمداً بأدوات تحقق ملزمة)
+            ({standards.length} معايير رئيسية • {totalSubStandards || 14} معياراً فرعياً • {totalIndicators || 109} مؤشراً معتمداً بأدوات تحقق ملزمة)
           </p>
         </div>
 
         {/* Toolbar Actions */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
           {isDraft && (
-            <>
-              <button
-                type="button"
-                onClick={() => setIsAddStdModalOpen(true)}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  padding: '9px 16px',
-                  fontSize: '12px',
-                  fontWeight: 700,
-                  color: '#92400E',
-                  backgroundColor: '#FFFFFF',
-                  borderRadius: '10px',
-                  border: '1px solid rgba(255, 255, 255, 0.4)',
-                  cursor: 'pointer',
-                  boxShadow: '0 2px 4px rgba(0,0,0,0.06)',
-                  transition: 'all 0.15s ease',
-                }}
-              >
-                <BookmarkPlus size={15} color="#92400E" />
-                <span>+ إضافة معيار رئيسي</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleOpenAddSub()}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  padding: '9px 16px',
-                  fontSize: '12px',
-                  fontWeight: 700,
-                  color: '#451A03',
-                  backgroundColor: '#FEF3C7',
-                  borderRadius: '10px',
-                  border: 'none',
-                  cursor: 'pointer',
-                  transition: 'all 0.15s ease',
-                }}
-              >
-                <FolderPlus size={15} color="#92400E" />
-                <span>+ إضافة معيار فرعي</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleOpenAddIndicator()}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  padding: '9px 16px',
-                  fontSize: '12px',
-                  fontWeight: 700,
-                  color: '#451A03',
-                  backgroundColor: '#FEF3C7',
-                  borderRadius: '10px',
-                  border: 'none',
-                  cursor: 'pointer',
-                  transition: 'all 0.15s ease',
-                }}
-              >
-                <PlusCircle size={15} color="#92400E" />
-                <span>+ إضافة مؤشر رسمي</span>
-              </button>
-            </>
+            <button
+              type="button"
+              onClick={() => setIsAddStdModalOpen(true)}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '9px 16px',
+                fontSize: '12px',
+                fontWeight: 700,
+                color: '#92400E',
+                backgroundColor: '#FFFFFF',
+                borderRadius: '10px',
+                border: '1px solid rgba(255, 255, 255, 0.4)',
+                cursor: 'pointer',
+                boxShadow: '0 2px 4px rgba(0,0,0,0.06)',
+                transition: 'all 0.15s ease',
+              }}
+            >
+              <BookmarkPlus size={15} color="#92400E" />
+              <span>+ إضافة معيار رئيسي</span>
+            </button>
           )}
           {!isDraft && (
             <div
@@ -274,6 +240,12 @@ export const StandardsTreeBuilderPage: React.FC<StandardsTreeBuilderPageProps> =
         onEditSubStandard={handleOpenEditSubStandard}
         onDeleteSubStandard={(sub) => deleteSubStandard(sub.subStandardId)}
       />
+
+      {/* Verification Tools Guide (Observation 12) */}
+      <VerificationToolsGuide />
+
+      {/* Rubric Levels Guide (0-3) */}
+      <RubricLevelsGuide levels={rubricLevels} />
 
       {/* 3. Bottom Actions Bar */}
       <div

@@ -1112,4 +1112,69 @@ class StandardsManagementFeatureTest extends TestCase
         $activateRes->assertStatus(422)
             ->assertJsonValidationErrors(['scale_compatibility']);
     }
+
+    /**
+     * اختبار نموذج الحالات الرباعي وخيار الإقرار والجدولة مقابل التفعيل الفوري (القرار 6).
+     */
+    public function test_lock_action_supports_approve_and_schedule_versus_activate_immediately(): void
+    {
+        // 1. إنشاء مسودة متزنة بنسبة 100%
+        $draft = StandardVersion::create([
+            'version_no'          => 'LOCK-CYCLE-2027',
+            'issue_date'          => now()->toDateString(),
+            'source_organization' => 'وزارة التربية والتعليم',
+            'status'              => StandardVersion::STATUS_DRAFT,
+        ]);
+
+        // إضافة معيار واحد بوزن 100%
+        Standard::create([
+            'version_id'  => $draft->version_id,
+            'code'        => 'STD-FULL',
+            'name'        => 'المعيار الشامل',
+            'description' => 'وصف المعيار',
+            'weight'      => 100.00,
+        ]);
+
+        // إضافة مستويات السلم القياسي (0-3)
+        foreach ([0, 1, 2, 3] as $val) {
+            ScoreLevel::create([
+                'standard_version_id' => $draft->version_id,
+                'score_value'         => $val,
+                'label'               => "Level {$val}",
+                'display_order'       => $val,
+            ]);
+        }
+
+        // حفظ الإصدار النشط الأصلي
+        $originalActiveId = $this->seededVersion->version_id;
+
+        // 2. إقرار وجدولة للدورة القادمة (action = approve)
+        $approveRes = $this->actingAs($this->standardsManager, 'sanctum')
+            ->postJson("/api/v1/standard-versions/{$draft->version_id}/lock", [
+                'action'             => 'approve',
+                'approval_code'      => 'DEC-COUNCIL-2027',
+                'legal_confirmation' => true,
+            ]);
+
+        $approveRes->assertOk();
+        $this->assertEquals(StandardVersion::STATUS_APPROVED, $draft->fresh()->status);
+        $this->assertEquals('DEC-COUNCIL-2027', $draft->fresh()->source_number);
+
+        // التحقق من أن الإصدار النشط السابق لم يتأثر (حماية للدورات الجارية)
+        $this->assertEquals(StandardVersion::STATUS_ACTIVE, StandardVersion::find($originalActiveId)->status);
+
+        // 3. تفعيل فوري للدورة الحالية (action = activate)
+        $activateRes = $this->actingAs($this->standardsManager, 'sanctum')
+            ->postJson("/api/v1/standard-versions/{$draft->version_id}/lock", [
+                'action'             => 'activate',
+                'approval_code'      => 'DEC-COUNCIL-2027-ACT',
+                'legal_confirmation' => true,
+            ]);
+
+        $activateRes->assertOk();
+        $this->assertEquals(StandardVersion::STATUS_ACTIVE, $draft->fresh()->status);
+
+        // التحقق من أرشفة الإصدار النشط السابق تلقائياً
+        $this->assertEquals(StandardVersion::STATUS_ARCHIVED, StandardVersion::find($originalActiveId)->status);
+    }
 }

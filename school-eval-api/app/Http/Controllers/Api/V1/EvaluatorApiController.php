@@ -93,6 +93,27 @@ class EvaluatorApiController extends Controller
     }
 
     /**
+     * Resolves the authoritative standard version for an evaluation.
+     * Prioritizes the evaluation's cycle version, then Active version, then latest.
+     */
+    protected function getEvaluationStandardVersion(?Evaluation $evaluation): StandardVersion
+    {
+        if ($evaluation && $evaluation->cycle && $evaluation->cycle->version_id) {
+            $version = StandardVersion::find($evaluation->cycle->version_id);
+            if ($version) {
+                return $version;
+            }
+        }
+
+        $activeVersion = StandardVersion::where('status', StandardVersion::STATUS_ACTIVE)->orderBy('version_id', 'desc')->first();
+        if ($activeVersion) {
+            return $activeVersion;
+        }
+
+        return StandardVersion::orderBy('version_id', 'desc')->firstOrFail();
+    }
+
+    /**
      * GET /api/v1/evaluator/dashboard-stats
      * Fetch aggregated KPIs and progress tracker
      */
@@ -101,10 +122,12 @@ class EvaluatorApiController extends Controller
         $user = $request->user();
         $evaluation = $this->getActiveEvaluation($request);
         $school = $user?->school ?? School::find($evaluation->school_id);
+        $version = $this->getEvaluationStandardVersion($evaluation);
 
-        $totalIndicators = Indicator::count();
+        // Scope total indicators strictly to the current evaluation's standard version
+        $totalIndicators = Indicator::whereHas('subStandard.standard', fn($q) => $q->where('version_id', $version->version_id))->count();
         if ($totalIndicators === 0) {
-            $totalIndicators = 56;
+            $totalIndicators = 109;
         }
 
         $results = EvaluationResult::where('evaluation_id', $evaluation->evaluation_id)->get();
@@ -186,7 +209,10 @@ class EvaluatorApiController extends Controller
             ->flatMap(fn($s) => $s['indicators'] ?? [])
             ->keyBy('indicator_id');
 
-        $standards = Standard::with('subStandards.indicators')->get();
+        $standards = Standard::where('version_id', $version->version_id)
+            ->with('subStandards.indicators')
+            ->orderBy('code')
+            ->get();
         $standardsProgress = [];
 
         foreach ($standards as $std) {
@@ -234,7 +260,10 @@ class EvaluatorApiController extends Controller
             ->pluck('count', 'indicator_id')
             ->toArray();
 
-        $allIndicatorsList = Indicator::with('subStandard.standard')->orderBy('indicator_id')->get();
+        $allIndicatorsList = Indicator::whereHas('subStandard.standard', fn($q) => $q->where('version_id', $version->version_id))
+            ->with('subStandard.standard')
+            ->orderBy('indicator_id')
+            ->get();
         $pendingIndicators = [];
 
         foreach ($allIndicatorsList as $ind) {
@@ -294,8 +323,23 @@ class EvaluatorApiController extends Controller
                 'status' => $submissionStatus,
                 'statusArabic' => $submissionStatus === 'NeedsCompletion' ? 'طلب استكمال من المشرف' : ($submissionStatus === 'Submitted' ? 'تم الرفع (للقراءة فقط)' : 'مسودة قيد الإدخال'),
                 'currentEvaluator' => $user?->full_name ?? 'مقيم المدرسة',
-                'academicYear' => $evaluation->cycle?->academic_year ?? '2026/2027',
-                'cycleName' => $evaluation->cycle?->name ?? 'دورة التقييم الذاتي المعتمدة 2026',
+                'academicYear' => $evaluation->cycle?->academic_year ?? '2025/2026',
+                'cycleName' => $evaluation->cycle?->name ?: ('الدورة التقييمية ' . ($evaluation->cycle?->academic_year ?? '2025/2026')),
+                'standardVersion' => [
+                    'versionId' => $version->version_id,
+                    'versionNumber' => $version->version_no ?? ('v' . $version->version_id),
+                    'title' => $version->source_description ?? ('الإصدار الوطني ' . $version->version_no),
+                    'status' => $version->status,
+                    'issueDate' => $version->issue_date?->toDateString(),
+                ],
+                'evaluationCycle' => [
+                    'cycleId' => $evaluation->cycle?->cycle_id ?? 1,
+                    'name' => $evaluation->cycle?->name ?: ('الدورة التقييمية ' . ($evaluation->cycle?->academic_year ?? '2025/2026')),
+                    'academicYear' => $evaluation->cycle?->academic_year ?? '2025/2026',
+                    'status' => $evaluation->cycle?->status ?? 'Active',
+                    'startDate' => $evaluation->cycle?->start_date?->toDateString(),
+                    'endDate' => $evaluation->cycle?->end_date?->toDateString(),
+                ],
                 'trackingCode' => $submission?->tracking_code,
                 'digitalHash' => $submission?->digital_hash,
                 'submittedAt' => $submission?->submitted_at?->toIso8601String(),
@@ -338,8 +382,8 @@ class EvaluatorApiController extends Controller
      */
     public function activeStandardsTree(Request $request): JsonResponse
     {
-        $version = StandardVersion::where('status', 'Active')->orderBy('version_id', 'desc')->first()
-            ?? StandardVersion::orderBy('version_id', 'desc')->first();
+        $evaluation = $this->getActiveEvaluation($request);
+        $version = $this->getEvaluationStandardVersion($evaluation);
 
         if (!$version) {
             return ApiResponse::success([
@@ -349,8 +393,6 @@ class EvaluatorApiController extends Controller
                 'standards' => [],
             ]);
         }
-
-        $evaluation = $this->getActiveEvaluation($request);
         $results = $evaluation ? EvaluationResult::where('evaluation_id', $evaluation->evaluation_id)->get() : collect();
         $linksByIndicator = $evaluation ? EvidenceLink::where('school_id', $evaluation->school_id)
             ->where('evaluation_id', $evaluation->evaluation_id)
@@ -484,8 +526,13 @@ class EvaluatorApiController extends Controller
         return ApiResponse::success([
             'evaluationId' => $evaluation?->evaluation_id,
             'versionId' => $version->version_id,
-            'versionCode' => $version->version_code ?? 'NSS-2026-V1',
-            'title' => $version->version_name ?? 'المعايير الوطنية لتقويم الأداء المدرسي 2026',
+            'versionCode' => $version->version_no ?? '2026.1',
+            'versionNumber' => $version->version_no ?? '1.0',
+            'title' => $version->source_description ?? 'المعايير الوطنية لتقويم الأداء المدرسي 2026',
+            'versionStatus' => $version->status,
+            'cycleId' => $evaluation?->cycle?->cycle_id,
+            'academicYear' => $evaluation?->cycle?->academic_year ?? '2025/2026',
+            'cycleName' => $evaluation?->cycle?->name ?: ('الدورة التقييمية ' . ($evaluation?->cycle?->academic_year ?? '2025/2026')),
             'standards' => $tree,
         ]);
     }
@@ -1270,7 +1317,8 @@ class EvaluatorApiController extends Controller
         $coveredIndicatorsCount = EvidenceLink::where('evaluation_id', $evaluation->evaluation_id)
             ->distinct('indicator_id')
             ->count('indicator_id');
-        $totalIndicatorsCount = Indicator::count() ?: 109;
+        $version = $this->getEvaluationStandardVersion($evaluation);
+        $totalIndicatorsCount = Indicator::whereHas('subStandard.standard', fn($q) => $q->where('version_id', $version->version_id))->count() ?: 109;
 
         return ApiResponse::success([
             'vaultStats' => [
@@ -2452,7 +2500,8 @@ class EvaluatorApiController extends Controller
     public function preflightCheck(Request $request): JsonResponse
     {
         $evaluation = $this->getActiveEvaluation($request);
-        $totalIndicators = Indicator::count() ?: 109;
+        $version = $this->getEvaluationStandardVersion($evaluation);
+        $totalIndicators = Indicator::whereHas('subStandard.standard', fn($q) => $q->where('version_id', $version->version_id))->count() ?: 109;
         $scoredCount = EvaluationResult::where('evaluation_id', $evaluation->evaluation_id)
             ->whereNotNull('score')
             ->count();
@@ -2460,13 +2509,14 @@ class EvaluatorApiController extends Controller
 
         // 1. اكتمال التقديرات لكافة المؤشرات الوطنية
         $scoresCompleted = ($scoredCount >= $totalIndicators);
-        $unscoredIndicators = Indicator::whereNotIn('indicator_id', function ($q) use ($evaluation) {
-            $q->select('indicator_id')->from('evaluation_results')->where('evaluation_id', $evaluation->evaluation_id)->whereNotNull('score');
-        })->take(15)->get(['indicator_id', 'code', 'name'])->map(fn($ind) => [
-            'indicatorId' => $ind->indicator_id,
-            'code' => $ind->code,
-            'name' => $ind->name,
-        ]);
+        $unscoredIndicators = Indicator::whereHas('subStandard.standard', fn($q) => $q->where('version_id', $version->version_id))
+            ->whereNotIn('indicator_id', function ($q) use ($evaluation) {
+                $q->select('indicator_id')->from('evaluation_results')->where('evaluation_id', $evaluation->evaluation_id)->whereNotNull('score');
+            })->take(15)->get(['indicator_id', 'code', 'name'])->map(fn($ind) => [
+                'indicatorId' => $ind->indicator_id,
+                'code' => $ind->code,
+                'name' => $ind->name,
+            ]);
 
         // 2. الشواهد مربوطة
         $evidenceLinksCount = EvidenceLink::where('evaluation_id', $evaluation->evaluation_id)->count();

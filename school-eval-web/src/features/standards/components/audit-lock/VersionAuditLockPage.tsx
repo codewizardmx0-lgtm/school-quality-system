@@ -226,8 +226,12 @@ export const VersionAuditLockPage: React.FC<VersionAuditLockPageProps> = ({
         isDraft={isDraft}
         isApproved={isApproved}
         isLocking={isLocking}
-        onLock={async (approvalCode, legalConfirmed) => {
-          await executeOfficialLock({ approval_code: approvalCode, legal_confirmation: legalConfirmed });
+        onLock={async (approvalCode, legalConfirmed, action) => {
+          await executeOfficialLock({
+            approval_code: approvalCode,
+            legal_confirmation: legalConfirmed,
+            action: action || 'approve',
+          });
         }}
       />
 

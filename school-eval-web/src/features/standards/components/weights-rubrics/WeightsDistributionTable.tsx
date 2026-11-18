@@ -1,9 +1,9 @@
 /**
  * Component: WeightsDistributionTable
- * جدول هرمي ثلاثي المستويات لمعايرة أوزان المعايير والمجالات والمؤشرات
+ * جدول هرمي ثلاثي المستويات لمعايرة أوزان المعايير الرئيسية والمعايير الفرعية والمؤشرات
  * 1. المعيار الرئيسي (إلزامي المجموع 100%)
  * 2. المعيار الفرعي (إلزامي مجموعه = وزن المعيار الرئيسي)
- * 3. المؤشرات (توزيع تلقائي متساوٍ افتراضي مع إمكانية التعديل)
+ * 3. المؤشرات (توزيع مبدئي متساوٍ افتراضي مع إمكانية التعديل)
  */
 
 import React, { useState } from 'react';
@@ -79,7 +79,7 @@ export const WeightsDistributionTable: React.FC<WeightsDistributionTableProps> =
       <div className="flex items-center justify-between px-6 py-4 bg-slate-50 border-b border-slate-200 flex-wrap gap-3">
         <div>
           <h3 className="text-sm font-extrabold text-slate-900">
-            جدول المعايرة الهرمية للأوزان النسبية (معايير • مجالات فرعية • مؤشرات)
+            جدول المعايرة الهرمية للأوزان النسبية (معايير رئيسية • معايير فرعية • مؤشرات)
           </h3>
           <p className="text-xs text-slate-500 mt-0.5">
             توزيع النسب المئوية على المستويات الثلاثة وضمان اتزان كل مستوى مع مستواه الأعلى
@@ -132,7 +132,7 @@ export const WeightsDistributionTable: React.FC<WeightsDistributionTableProps> =
           <thead>
             <tr className="bg-slate-100/75 border-b border-slate-200 text-slate-700 text-xs font-bold uppercase">
               <th className="py-3 px-4 w-12 text-center">#</th>
-              <th className="py-3 px-4">المعيار / المجال الفرعي / المؤشر</th>
+              <th className="py-3 px-4">المعيار الرئيسي / المعيار الفرعي / المؤشر</th>
               <th className="py-3 px-4 text-center">عدد المؤشرات</th>
               <th className="py-3 px-4 text-center w-40">الوزن النسبي (%)</th>
               <th className="py-3 px-4 text-center">حالة الاتزان الداخلي</th>
@@ -163,7 +163,7 @@ export const WeightsDistributionTable: React.FC<WeightsDistributionTableProps> =
                           type="button"
                           onClick={() => toggleStandard(std.standardId)}
                           className="w-6 h-6 rounded flex items-center justify-center bg-slate-100 hover:bg-slate-200 text-slate-600 cursor-pointer"
-                          title={isExpanded ? 'طي المجالات الفرعية' : 'عرض المجالات الفرعية'}
+                          title={isExpanded ? 'طي المعايير الفرعية' : 'عرض المعايير الفرعية'}
                         >
                           {isExpanded ? <ChevronDown size={14} /> : <ChevronLeft size={14} />}
                         </button>
@@ -178,7 +178,7 @@ export const WeightsDistributionTable: React.FC<WeightsDistributionTableProps> =
                             </span>
                           </div>
                           <span className="text-[11px] text-slate-500 mt-0.5">
-                            {subStandards.length} مجالات فرعية • {std.indicatorsCount || 0} مؤشرات معتمدة
+                            {subStandards.length} معايير فرعية • {std.indicatorsCount || 0} مؤشرات معتمدة
                           </span>
                         </div>
                       </div>
@@ -215,7 +215,7 @@ export const WeightsDistributionTable: React.FC<WeightsDistributionTableProps> =
                           <span>متزن ({balanceInfo.currentSum}%)</span>
                         </span>
                       ) : (
-                        <span className="inline-flex items-center gap-1 text-rose-700 bg-rose-50 px-2 py-0.5 rounded-full border border-rose-200 font-bold" title={`مجموع المجالات الفرعية (${balanceInfo.currentSum}%) لا يطابق وزن المعيار (${balanceInfo.expected}%)`}>
+                        <span className="inline-flex items-center gap-1 text-rose-700 bg-rose-50 px-2 py-0.5 rounded-full border border-rose-200 font-bold" title={`مجموع المعايير الفرعية (${balanceInfo.currentSum}%) لا يطابق وزن المعيار (${balanceInfo.expected}%)`}>
                           <AlertCircle size={12} />
                           <span>غير متزن ({balanceInfo.currentSum}% / {balanceInfo.expected}%)</span>
                         </span>
@@ -284,9 +284,14 @@ export const WeightsDistributionTable: React.FC<WeightsDistributionTableProps> =
                               </div>
                             </td>
 
-                            <td className="py-2.5 px-4 text-center text-[11px] text-slate-500">
-                              <span>
-                                متوسط المؤشر: {indicators.length > 0 ? (Math.round((sub.weight / indicators.length) * 100) / 100) : 0}%
+                            <td className="py-2.5 px-4 text-center text-[11px] text-slate-600">
+                              <span className="inline-flex items-center gap-1 bg-slate-100 text-slate-700 px-2 py-0.5 rounded-full border border-slate-200">
+                                <span>موزع على {indicators.length} مؤشرات</span>
+                                {indicators.length > 0 && (
+                                  <span className="font-mono text-[10px] text-slate-500">
+                                    (~{(Math.round((sub.weight / indicators.length) * 100) / 100)}% لكل مؤشر)
+                                  </span>
+                                )}
                               </span>
                             </td>
                           </tr>

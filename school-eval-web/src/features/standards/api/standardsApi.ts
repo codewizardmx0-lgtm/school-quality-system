@@ -336,6 +336,7 @@ export const standardsApi = {
       approval_code: payload.approval_code ?? payload.approvalCode,
       legal_confirmation: payload.legal_confirmation ?? payload.legalConfirmation ?? true,
       council_notes: payload.council_notes ?? payload.release_notes,
+      action: payload.action ?? 'approve',
     };
     const res = await apiClient.post(`/standard-versions/${versionId}/lock`, body);
     return extractData<any>(res);

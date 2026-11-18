@@ -399,14 +399,14 @@ export const IndicatorEditorModal: React.FC<IndicatorEditorModalProps> = ({
 
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">
-                  إرشادات وتوجيهات المقيم (Rubric Notes)
+                  الوصف وإرشادات المقيم الميداني (Description & Guidance)
                 </label>
                 <textarea
                   rows={4}
                   value={rubricNotes}
                   onChange={(e) => setRubricNotes(e.target.value)}
                   disabled={!isDraft}
-                  placeholder="ملاحظات وتوجيهات للمقيمين حول كيفية تطبيق سلم التقدير والتثبت من الشواهد..."
+                  placeholder="وصف تفصيلي للمؤشر وتوجيهات للمقيمين الميدانيين حول كيفية تطبيق سلم التقدير وفحص الشواهد..."
                   className="w-full px-3.5 py-2 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 focus:bg-white resize-none disabled:opacity-60"
                 />
               </div>

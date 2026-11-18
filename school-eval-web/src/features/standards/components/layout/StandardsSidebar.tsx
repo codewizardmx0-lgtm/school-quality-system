@@ -11,7 +11,6 @@ import React, { useState } from 'react';
 import {
   BookOpen,
   GitFork,
-  Scale,
   ShieldCheck,
   ChevronLeft,
   ChevronRight,
@@ -19,7 +18,7 @@ import {
   Award,
 } from 'lucide-react';
 
-export type StandardsScreenKey = 'versions' | 'tree' | 'weights' | 'audit-lock';
+export type StandardsScreenKey = 'versions' | 'workspace' | 'diff-log' | 'tree' | 'weights' | 'audit-lock';
 
 interface StandardsSidebarProps {
   activeScreen: StandardsScreenKey;
@@ -35,10 +34,9 @@ interface NavItemConfig {
 }
 
 const navItems: NavItemConfig[] = [
-  { key: 'versions', label: 'سجل الإصدارات', icon: BookOpen },
-  { key: 'tree', label: 'بناء الشجرة', icon: GitFork },
-  { key: 'weights', label: 'معايرة الأوزان', icon: Scale },
-  { key: 'audit-lock', label: 'تدقيق الإقرار', icon: ShieldCheck, badge: '4/4' },
+  { key: 'versions', label: 'سجل وثائق المعايير', icon: BookOpen },
+  { key: 'workspace', label: 'بيئة عمل الإصدار', icon: GitFork },
+  { key: 'diff-log', label: 'سجل الفروقات والتدقيق', icon: ShieldCheck, badge: 'SHA-256' },
 ];
 
 export const StandardsSidebar: React.FC<StandardsSidebarProps> = ({
@@ -181,7 +179,10 @@ export const StandardsSidebar: React.FC<StandardsSidebarProps> = ({
 
         {navItems.map((item) => {
           const Icon = item.icon;
-          const isActive = activeScreen === item.key;
+          const isActive =
+            activeScreen === item.key ||
+            (item.key === 'workspace' && (activeScreen === 'tree' || activeScreen === 'weights')) ||
+            (item.key === 'diff-log' && activeScreen === 'audit-lock');
 
           return (
             <button

@@ -4,11 +4,10 @@
  * مع التكيف بين وضع المسودة التفاعلي ووضع الإصدار المُقرّ بالختم الثابت (القرار 6)
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   CheckCircle2,
   XCircle,
-  Lock,
   Loader2,
   AlertCircle,
   Award,
@@ -16,6 +15,7 @@ import {
   Calendar,
   UserCheck,
   ShieldCheck,
+  Zap,
 } from 'lucide-react';
 import type { VersionLockPreconditions, DiffLogResponse } from '../../api/standardsTypes';
 
@@ -25,7 +25,7 @@ interface GovernanceChecksListProps {
   isDraft?: boolean;
   isApproved?: boolean;
   isLocking: boolean;
-  onLock: (approvalCode: string, legalConfirmed: boolean) => Promise<any>;
+  onLock: (approvalCode: string, legalConfirmed: boolean, action?: 'approve' | 'activate') => Promise<any>;
 }
 
 export const GovernanceChecksList: React.FC<GovernanceChecksListProps> = ({
@@ -36,9 +36,17 @@ export const GovernanceChecksList: React.FC<GovernanceChecksListProps> = ({
   isLocking,
   onLock,
 }) => {
-  const [approvalCode, setApprovalCode] = useState('DEC-NAT-2026-88');
+  const [approvalCode, setApprovalCode] = useState(
+    preconditions?.approvalCode || diffData?.approvalCode || ''
+  );
   const [legalConfirmed, setLegalConfirmed] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!approvalCode && (preconditions?.approvalCode || diffData?.approvalCode)) {
+      setApprovalCode(preconditions?.approvalCode || diffData?.approvalCode || '');
+    }
+  }, [preconditions?.approvalCode, diffData?.approvalCode]);
 
   const checks = preconditions?.checks || [
     {
@@ -82,8 +90,7 @@ export const GovernanceChecksList: React.FC<GovernanceChecksListProps> = ({
   const passesAll = preconditions ? preconditions.passesAll : checks.every((c) => c.passed);
   const passedCount = checks.filter((c) => c.passed).length;
 
-  const handleExecuteLock = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleExecute = async (action: 'approve' | 'activate') => {
     if (!passesAll) {
       setError(`لا يمكن إقرار الوثيقة قبل استيفاء كافة الشروط الحاكمة (${checks.length} من ${checks.length}).`);
       return;
@@ -99,7 +106,7 @@ export const GovernanceChecksList: React.FC<GovernanceChecksListProps> = ({
 
     setError(null);
     try {
-      await onLock(approvalCode.trim(), legalConfirmed);
+      await onLock(approvalCode.trim(), legalConfirmed, action);
     } catch (err: any) {
       setError(err?.message || 'فشل إتمام القفل الرقمي والإقرار.');
     }
@@ -248,7 +255,7 @@ export const GovernanceChecksList: React.FC<GovernanceChecksListProps> = ({
       </div>
 
       {/* Lock Form */}
-      <form onSubmit={handleExecuteLock} className="space-y-4 pt-2 border-t border-slate-200">
+      <form onSubmit={(e) => { e.preventDefault(); handleExecute('approve'); }} className="space-y-4 pt-2 border-t border-slate-200">
         {error && (
           <div className="flex items-center gap-2 p-3 text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-lg">
             <AlertCircle className="w-4 h-4 shrink-0" />
@@ -287,24 +294,41 @@ export const GovernanceChecksList: React.FC<GovernanceChecksListProps> = ({
           </span>
         </label>
 
-        {/* Lock Button */}
-        <button
-          type="submit"
-          disabled={!passesAll || !legalConfirmed || isLocking}
-          className="w-full inline-flex items-center justify-center gap-2 px-6 py-3 text-sm font-extrabold text-white bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 rounded-xl shadow-md shadow-emerald-600/20 active:scale-[0.99] transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
-        >
-          {isLocking ? (
-            <>
-              <Loader2 className="w-5 h-5 animate-spin" />
-              <span>جاري توثيق الختم الرقمي والإقرار...</span>
-            </>
-          ) : (
-            <>
-              <Lock className="w-5 h-5" />
-              <span>إقرار وقفل الإصدار المعياري رسمياً للتقييم ✓</span>
-            </>
-          )}
-        </button>
+        {/* Dual Lock/Approve Actions */}
+        <div className="flex flex-col sm:flex-row gap-3 pt-2">
+          {/* Action 1: Approve and Schedule for Next Cycle (Recommended) */}
+          <button
+            type="button"
+            onClick={() => handleExecute('approve')}
+            disabled={!passesAll || !legalConfirmed || isLocking}
+            className="flex-1 inline-flex items-center justify-center gap-2 px-5 py-3 text-xs sm:text-sm font-extrabold text-white bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 rounded-xl shadow-md shadow-emerald-600/20 active:scale-[0.99] transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+            title="إقرار الوثيقة وجدولتها للدورة القادمة دون التأثير على دورات التقييم الجارية"
+          >
+            {isLocking ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>جاري توثيق الختم...</span>
+              </>
+            ) : (
+              <>
+                <ShieldCheck className="w-5 h-5" />
+                <span>إقرار وجدولة للدورة القادمة (موصى به ✓)</span>
+              </>
+            )}
+          </button>
+
+          {/* Action 2: Immediate Activation for Current Cycle */}
+          <button
+            type="button"
+            onClick={() => handleExecute('activate')}
+            disabled={!passesAll || !legalConfirmed || isLocking}
+            className="inline-flex items-center justify-center gap-2 px-5 py-3 text-xs sm:text-sm font-bold text-amber-900 bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded-xl active:scale-[0.99] transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+            title="تفعيل فوري للدورة الحالية مع أرشفة الإصدار النشط السابق تلقائياً"
+          >
+            <Zap className="w-4 h-4 text-amber-700" />
+            <span>إقرار وتفعيل فوري للدورة الجارية</span>
+          </button>
+        </div>
       </form>
     </div>
   );

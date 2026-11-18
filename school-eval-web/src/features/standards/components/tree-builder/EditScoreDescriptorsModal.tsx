@@ -17,10 +17,10 @@ interface EditScoreDescriptorsModalProps {
 }
 
 const defaultLevelTemplates = [
-  { scoreValue: 3, label: 'مستوفٍ بالكامل (Exemplary)', color: '#059669', bg: '#ECFDF5', border: '#A7F3D0', range: '85% – 100%' },
-  { scoreValue: 2, label: 'مستوفٍ جزئياً (Proficient)', color: '#2563EB', bg: '#EFF6FF', border: '#BFDBFE', range: '65% – 84%' },
-  { scoreValue: 1, label: 'أدنى / قيد التطوير (Developing)', color: '#D97706', bg: '#FFFBEB', border: '#FDE68A', range: '40% – 64%' },
-  { scoreValue: 0, label: 'غير متوفر / غائب (Unsatisfactory)', color: '#DC2626', bg: '#FEF2F2', border: '#FECACA', range: '0% – 39%' },
+  { scoreValue: 3, label: 'متحقق / مستوفٍ', color: '#059669', bg: '#ECFDF5', border: '#A7F3D0', range: '85% – 100%' },
+  { scoreValue: 2, label: 'متحقق بدرجة متوسطة', color: '#2563EB', bg: '#EFF6FF', border: '#BFDBFE', range: '65% – 84%' },
+  { scoreValue: 1, label: 'متحقق بدرجة ضعيفة', color: '#D97706', bg: '#FFFBEB', border: '#FDE68A', range: '40% – 64%' },
+  { scoreValue: 0, label: 'غير متوفر', color: '#DC2626', bg: '#FEF2F2', border: '#FECACA', range: '0% – 39%' },
 ];
 
 export const EditScoreDescriptorsModal: React.FC<EditScoreDescriptorsModalProps> = ({
@@ -184,109 +184,112 @@ export const EditScoreDescriptorsModal: React.FC<EditScoreDescriptorsModalProps>
         </div>
 
         {/* Indicator summary line */}
-        <div style={{ padding: '10px 24px', backgroundColor: '#F1F5F9', borderBottom: '1px solid #E2E8F0', fontSize: '12px', color: '#475569' }}>
+        <div style={{ flexShrink: 0, padding: '10px 24px', backgroundColor: '#F1F5F9', borderBottom: '1px solid #E2E8F0', fontSize: '12px', color: '#475569' }}>
           <span style={{ fontWeight: 700, color: '#1E293B' }}>المؤشر: </span>
           <span>{indicatorName}</span>
         </div>
 
         {/* Scrollable Form Body */}
-        <form onSubmit={handleSubmit} style={{ overflowY: 'auto', padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          {error && (
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                padding: '12px',
-                borderRadius: '10px',
-                backgroundColor: '#FEF2F2',
-                border: '1px solid #FECACA',
-                color: '#991B1B',
-                fontSize: '13px',
-              }}
-            >
-              <AlertCircle size={16} />
-              <span>{error}</span>
-            </div>
-          )}
-
-          {defaultLevelTemplates.map((lvl) => (
-            <div
-              key={lvl.scoreValue}
-              style={{
-                borderRadius: '12px',
-                border: `1px solid ${lvl.border}`,
-                backgroundColor: '#FFFFFF',
-                overflow: 'hidden',
-              }}
-            >
+        <form onSubmit={handleSubmit} style={{ flex: '1 1 auto', minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+          <div style={{ flex: '1 1 auto', overflowY: 'auto', padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            {error && (
               <div
                 style={{
                   display: 'flex',
                   alignItems: 'center',
-                  justifyContent: 'space-between',
-                  padding: '10px 14px',
-                  backgroundColor: lvl.bg,
-                  borderBottom: `1px solid ${lvl.border}`,
+                  gap: '8px',
+                  padding: '12px',
+                  borderRadius: '10px',
+                  backgroundColor: '#FEF2F2',
+                  border: '1px solid #FECACA',
+                  color: '#991B1B',
+                  fontSize: '13px',
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span
-                    style={{
-                      width: '22px',
-                      height: '22px',
-                      borderRadius: '6px',
-                      backgroundColor: lvl.color,
-                      color: '#FFFFFF',
-                      fontSize: '12px',
-                      fontWeight: 800,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                    }}
-                  >
-                    {lvl.scoreValue}
-                  </span>
-                  <span style={{ fontSize: '13px', fontWeight: 800, color: lvl.color }}>
-                    {lvl.label}
+                <AlertCircle size={16} />
+                <span>{error}</span>
+              </div>
+            )}
+
+            {defaultLevelTemplates.map((lvl) => (
+              <div
+                key={lvl.scoreValue}
+                style={{
+                  borderRadius: '12px',
+                  border: `1px solid ${lvl.border}`,
+                  backgroundColor: '#FFFFFF',
+                  overflow: 'hidden',
+                }}
+              >
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: '10px 14px',
+                    backgroundColor: lvl.bg,
+                    borderBottom: `1px solid ${lvl.border}`,
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span
+                      style={{
+                        width: '22px',
+                        height: '22px',
+                        borderRadius: '6px',
+                        backgroundColor: lvl.color,
+                        color: '#FFFFFF',
+                        fontSize: '12px',
+                        fontWeight: 800,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      {lvl.scoreValue}
+                    </span>
+                    <span style={{ fontSize: '13px', fontWeight: 800, color: lvl.color }}>
+                      {lvl.label}
+                    </span>
+                  </div>
+                  <span style={{ fontSize: '11px', fontWeight: 700, color: lvl.color }}>
+                    النطاق المستهدف: {lvl.range}
                   </span>
                 </div>
-                <span style={{ fontSize: '11px', fontWeight: 700, color: lvl.color }}>
-                  النطاق المستهدف: {lvl.range}
-                </span>
-              </div>
 
-              <div style={{ padding: '12px' }}>
-                <textarea
-                  rows={2}
-                  value={levelTexts[lvl.scoreValue] || ''}
-                  onChange={(e) => handleTextChange(lvl.scoreValue, e.target.value)}
-                  placeholder={`صياغة الأداء المطلوب لتحقيق المستوى (${lvl.scoreValue})...`}
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    borderRadius: '8px',
-                    border: '1px solid #CBD5E1',
-                    fontSize: '13px',
-                    outline: 'none',
-                    lineHeight: 1.5,
-                    resize: 'vertical',
-                  }}
-                />
+                <div style={{ padding: '12px' }}>
+                  <textarea
+                    rows={2}
+                    value={levelTexts[lvl.scoreValue] || ''}
+                    onChange={(e) => handleTextChange(lvl.scoreValue, e.target.value)}
+                    placeholder={`صياغة الأداء المطلوب لتحقيق المستوى (${lvl.scoreValue})...`}
+                    style={{
+                      width: '100%',
+                      padding: '8px 12px',
+                      borderRadius: '8px',
+                      border: '1px solid #CBD5E1',
+                      fontSize: '13px',
+                      outline: 'none',
+                      lineHeight: 1.5,
+                      resize: 'vertical',
+                    }}
+                  />
+                </div>
               </div>
-            </div>
-          ))}
+            ))}
+          </div>
 
-          {/* Footer Actions */}
+          {/* Sticky Footer Actions */}
           <div
             style={{
+              flexShrink: 0,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'flex-end',
               gap: '10px',
-              marginTop: '12px',
-              paddingTop: '16px',
+              padding: '16px 24px',
               borderTop: '1px solid #E2E8F0',
+              backgroundColor: '#F8FAFC',
             }}
           >
             <button

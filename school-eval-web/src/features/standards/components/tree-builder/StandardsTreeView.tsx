@@ -1,13 +1,13 @@
 /**
  * Component: StandardsTreeView (Seamless Expandable Master View)
- * الهيكل الشجري الهرمي التفاعلي للمعايير السبعة والمجالات والمؤشرات
- * - تصفح فسيح وسلس بدون أي قيود ارتفاع
- * - فلتر متقدم منسدل (تحديد مفرد ومتعدد للمعايير)
- * - أزرار تعديل وحذف للمعايير الرئيسية والمعايير الفرعية (في وضع المسودة)
- * - استدعاء نافذة تحرير المؤشر عند النقر
+ * الهيكل الشجري الهرمي التفاعلي للمعايير السبعة والمعايير الفرعية والمؤشرات
+ * - تصفح فسيح وسلس مع شريط تنقل سريع
+ * - بحث فوري مع تمييز النصوص المطابقة (Highlighting)
+ * - عرض وصف المعيار الرئيسي مقتضباً مع زر عرض الوصف الكامل
+ * - أزرار تعديل وحذف موضعية للمعايير الرئيسية والفرعية والمؤشرات
  */
 
-import React, { useState, useMemo, useRef, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   ChevronDown,
   ChevronLeft,
@@ -20,14 +20,33 @@ import {
   Minimize2,
   CheckCircle2,
   FileCheck2,
-  Filter,
   Edit3,
   Trash2,
-  CheckSquare,
-  Square,
   X,
 } from 'lucide-react';
 import type { StandardNode, SubStandardNode, IndicatorNode } from '../../api/standardsTypes';
+
+// مساعد تمييز كلمات البحث في النصوص
+const highlightMatch = (text?: string | null, query?: string) => {
+  if (!text) return null;
+  if (!query || !query.trim()) return text;
+  const q = query.trim();
+  const escaped = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const parts = text.split(new RegExp(`(${escaped})`, 'gi'));
+  return (
+    <>
+      {parts.map((part, i) =>
+        part.toLowerCase() === q.toLowerCase() ? (
+          <mark key={i} style={{ backgroundColor: '#FDE68A', color: '#78350F', borderRadius: '3px', padding: '0 2px', fontWeight: 800 }}>
+            {part}
+          </mark>
+        ) : (
+          part
+        )
+      )}
+    </>
+  );
+};
 
 interface StandardsTreeViewProps {
   standards: StandardNode[];
@@ -55,11 +74,11 @@ export const StandardsTreeView: React.FC<StandardsTreeViewProps> = ({
   onDeleteSubStandard,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
-  
-  // فلترة المعايير المحددة (قائمة المعايير المختارة - فارغة تعني الكل)
-  const [selectedStandardIds, setSelectedStandardIds] = useState<number[]>([]);
-  const [isFilterDropdownOpen, setIsFilterDropdownOpen] = useState(false);
-  const filterDropdownRef = useRef<HTMLDivElement>(null);
+  const [expandedDescriptions, setExpandedDescriptions] = useState<Record<number, boolean>>({});
+
+  const toggleDescription = (stdId: number) => {
+    setExpandedDescriptions((prev) => ({ ...prev, [stdId]: !prev[stdId] }));
+  };
 
   // تتبع المعايير المفتوحة - المعيار الأول مفتوح افتراضياً
   const [expandedStandards, setExpandedStandards] = useState<Record<number, boolean>>(() => {
@@ -70,19 +89,8 @@ export const StandardsTreeView: React.FC<StandardsTreeViewProps> = ({
     return init;
   });
 
-  // تتبع المجالات الفرعية المفتوحة
+  // تتبع المعايير الفرعية المفتوحة
   const [expandedSubStandards, setExpandedSubStandards] = useState<Record<number, boolean>>({});
-
-  // Close filter dropdown on outside click
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (filterDropdownRef.current && !filterDropdownRef.current.contains(event.target as Node)) {
-        setIsFilterDropdownOpen(false);
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
 
   const toggleStandard = (stdId: number) => {
     setExpandedStandards((prev) => ({
@@ -124,50 +132,33 @@ export const StandardsTreeView: React.FC<StandardsTreeViewProps> = ({
     }
   };
 
-  // فلترة المعايير بحسب البحث وقائمة الاختيار
+  // فلترة المعايير بحسب البحث الفوري
   const filteredStandards = useMemo(() => {
-    let result = standards;
-
-    // تصفية حسب المعايير المحددة بالفلتر إن وجدت
-    if (selectedStandardIds.length > 0) {
-      result = result.filter((std) => selectedStandardIds.includes(std.standardId));
+    if (!searchQuery.trim()) {
+      return standards;
     }
 
-    // تصفية حسب نص البحث
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      result = result.filter((std) => {
-        const matchStd = std.name.toLowerCase().includes(q) || std.code.toLowerCase().includes(q);
-        const matchSub = (std.subStandards || []).some(
-          (sub) =>
-            sub.name.toLowerCase().includes(q) ||
-            sub.code.toLowerCase().includes(q) ||
-            (sub.indicators || []).some(
-              (ind) => ind.name.toLowerCase().includes(q) || ind.code.toLowerCase().includes(q)
-            )
-        );
-        return matchStd || matchSub;
-      });
-    }
-
-    return result;
-  }, [standards, searchQuery, selectedStandardIds]);
-
-  // إدارة فلتر المعايير المتعدد / المفرد
-  const toggleStandardFilter = (stdId: number) => {
-    setSelectedStandardIds((prev) =>
-      prev.includes(stdId) ? prev.filter((id) => id !== stdId) : [...prev, stdId]
-    );
-  };
-
-  const selectOnlyOneStandard = (stdId: number) => {
-    setSelectedStandardIds([stdId]);
-    setIsFilterDropdownOpen(false);
-  };
-
-  const selectAllStandards = () => {
-    setSelectedStandardIds([]);
-  };
+    const q = searchQuery.toLowerCase().trim();
+    return standards.filter((std) => {
+      const matchStd =
+        std.name.toLowerCase().includes(q) ||
+        std.code.toLowerCase().includes(q) ||
+        (std.description || '').toLowerCase().includes(q);
+      const matchSub = (std.subStandards || []).some(
+        (sub) =>
+          sub.name.toLowerCase().includes(q) ||
+          sub.code.toLowerCase().includes(q) ||
+          (sub.description || '').toLowerCase().includes(q) ||
+          (sub.indicators || []).some(
+            (ind) =>
+              ind.name.toLowerCase().includes(q) ||
+              ind.code.toLowerCase().includes(q) ||
+              (ind.description || '').toLowerCase().includes(q)
+          )
+      );
+      return matchStd || matchSub;
+    });
+  }, [standards, searchQuery]);
 
   return (
     <div
@@ -195,8 +186,8 @@ export const StandardsTreeView: React.FC<StandardsTreeViewProps> = ({
           gap: '12px',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, minWidth: '320px', maxWidth: '640px' }}>
-          {/* Search Bar */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, minWidth: '280px', maxWidth: '520px' }}>
+          {/* Search Bar with match indicator */}
           <div
             style={{
               position: 'relative',
@@ -214,10 +205,10 @@ export const StandardsTreeView: React.FC<StandardsTreeViewProps> = ({
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="بحث فوري في أسماء المعايير أو أكواد المؤشرات..."
+              placeholder="بحث فوري في المعايير والمؤشرات والواصفات..."
               style={{
                 width: '100%',
-                padding: '9px 38px 9px 12px',
+                padding: '9px 38px 9px 32px',
                 borderRadius: '10px',
                 border: '1px solid #CBD5E1',
                 fontSize: '13px',
@@ -238,175 +229,10 @@ export const StandardsTreeView: React.FC<StandardsTreeViewProps> = ({
                   cursor: 'pointer',
                   padding: '2px',
                 }}
+                title="مسح البحث"
               >
                 <X size={14} />
               </button>
-            )}
-          </div>
-
-          {/* Standards Filter Dropdown */}
-          <div ref={filterDropdownRef} style={{ position: 'relative' }}>
-            <button
-              type="button"
-              onClick={() => setIsFilterDropdownOpen((prev) => !prev)}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-                padding: '9px 14px',
-                borderRadius: '10px',
-                border: selectedStandardIds.length > 0 ? '1px solid #D97706' : '1px solid #CBD5E1',
-                backgroundColor: selectedStandardIds.length > 0 ? '#FFFBEB' : '#FFFFFF',
-                color: selectedStandardIds.length > 0 ? '#92400E' : '#334155',
-                fontSize: '12px',
-                fontWeight: 700,
-                cursor: 'pointer',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              <Filter size={14} color={selectedStandardIds.length > 0 ? '#D97706' : '#64748B'} />
-              <span>
-                {selectedStandardIds.length === 0
-                  ? 'تصفية المعايير (الكل)'
-                  : `المعايير المحددة (${selectedStandardIds.length})`}
-              </span>
-              <ChevronDown size={14} />
-            </button>
-
-            {isFilterDropdownOpen && (
-              <div
-                style={{
-                  position: 'absolute',
-                  top: '100%',
-                  right: 0,
-                  marginTop: '6px',
-                  width: '320px',
-                  backgroundColor: '#FFFFFF',
-                  borderRadius: '12px',
-                  border: '1px solid #E2E8F0',
-                  boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)',
-                  zIndex: 30,
-                  padding: '12px',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '8px',
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #F1F5F9', paddingBottom: '8px' }}>
-                  <span style={{ fontSize: '12px', fontWeight: 800, color: '#1E293B' }}>
-                    تحديد المعايير المعروضة
-                  </span>
-                  {selectedStandardIds.length > 0 && (
-                    <button
-                      type="button"
-                      onClick={selectAllStandards}
-                      style={{
-                        background: 'none',
-                        border: 'none',
-                        fontSize: '11px',
-                        color: '#D97706',
-                        fontWeight: 700,
-                        cursor: 'pointer',
-                        padding: 0,
-                      }}
-                    >
-                      عرض الكل
-                    </button>
-                  )}
-                </div>
-
-                <div style={{ maxHeight: '240px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <div
-                    onClick={selectAllStandards}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                      padding: '8px 10px',
-                      borderRadius: '8px',
-                      cursor: 'pointer',
-                      backgroundColor: selectedStandardIds.length === 0 ? '#FFFBEB' : '#FFFFFF',
-                      fontSize: '12px',
-                      fontWeight: selectedStandardIds.length === 0 ? 800 : 500,
-                      color: selectedStandardIds.length === 0 ? '#92400E' : '#334155',
-                    }}
-                  >
-                    {selectedStandardIds.length === 0 ? (
-                      <CheckSquare size={16} color="#D97706" />
-                    ) : (
-                      <Square size={16} color="#94A3B8" />
-                    )}
-                    <span>كافة المعايير (عرض شامل)</span>
-                  </div>
-
-                  {standards.map((std, i) => {
-                    const isChecked = selectedStandardIds.includes(std.standardId);
-                    return (
-                      <div
-                        key={std.standardId}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          padding: '8px 10px',
-                          borderRadius: '8px',
-                          backgroundColor: isChecked ? '#FFFBEB' : '#FFFFFF',
-                          fontSize: '12px',
-                          transition: 'background-color 0.15s',
-                        }}
-                      >
-                        <div
-                          onClick={() => toggleStandardFilter(std.standardId)}
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '8px',
-                            cursor: 'pointer',
-                            flex: 1,
-                            minWidth: 0,
-                          }}
-                        >
-                          {isChecked ? (
-                            <CheckSquare size={16} color="#D97706" />
-                          ) : (
-                            <Square size={16} color="#94A3B8" />
-                          )}
-                          <span
-                            style={{
-                              fontWeight: isChecked ? 800 : 500,
-                              color: isChecked ? '#92400E' : '#334155',
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis',
-                              whiteSpace: 'nowrap',
-                            }}
-                          >
-                            {i + 1}. {std.name}
-                          </span>
-                        </div>
-
-                        <button
-                          type="button"
-                          onClick={() => selectOnlyOneStandard(std.standardId)}
-                          style={{
-                            fontSize: '10px',
-                            color: '#64748B',
-                            backgroundColor: '#F1F5F9',
-                            border: 'none',
-                            padding: '2px 6px',
-                            borderRadius: '4px',
-                            cursor: 'pointer',
-                            marginRight: '6px',
-                            fontWeight: 600,
-                          }}
-                          title="عرض هذا المعيار فقط"
-                        >
-                          فقط
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
             )}
           </div>
         </div>
@@ -607,7 +433,7 @@ export const StandardsTreeView: React.FC<StandardsTreeViewProps> = ({
                     <div style={{ minWidth: 0 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                         <span style={{ fontWeight: 800, color: '#0F172A', fontSize: '15px' }}>
-                          {std.name}
+                          {highlightMatch(std.name, searchQuery)}
                         </span>
                         <span
                           style={{
@@ -620,9 +446,49 @@ export const StandardsTreeView: React.FC<StandardsTreeViewProps> = ({
                             fontWeight: 600,
                           }}
                         >
-                          {std.code}
+                          {highlightMatch(std.code, searchQuery)}
                         </span>
                       </div>
+
+                      {/* Main Standard Description (Observation 4) */}
+                      {std.description && (
+                        <div
+                          style={{ marginTop: '6px', fontSize: '12px', color: '#64748B' }}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <span
+                            style={{
+                              display: '-webkit-box',
+                              WebkitBoxOrient: 'vertical',
+                              WebkitLineClamp: expandedDescriptions[std.standardId] ? 'unset' : 1,
+                              overflow: expandedDescriptions[std.standardId] ? 'visible' : 'hidden',
+                              lineHeight: '1.5',
+                            }}
+                          >
+                            {highlightMatch(std.description, searchQuery)}
+                          </span>
+                          {std.description.length > 70 && (
+                            <button
+                              type="button"
+                              onClick={() => toggleDescription(std.standardId)}
+                              style={{
+                                border: 'none',
+                                background: 'none',
+                                padding: '2px 0',
+                                color: '#D97706',
+                                fontSize: '11px',
+                                fontWeight: 700,
+                                cursor: 'pointer',
+                                textDecoration: 'underline',
+                                display: 'inline-block',
+                                marginTop: '2px',
+                              }}
+                            >
+                              {expandedDescriptions[std.standardId] ? 'طي الوصف' : 'عرض الوصف الكامل'}
+                            </button>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -657,7 +523,7 @@ export const StandardsTreeView: React.FC<StandardsTreeViewProps> = ({
                         fontWeight: 600,
                       }}
                     >
-                      {subStandards.length} مجالات • {totalIndicators} مؤشراً
+                      {subStandards.length} معايير فرعية • {totalIndicators} مؤشراً
                     </span>
 
                     {/* Actions for Draft Mode */}
@@ -692,7 +558,7 @@ export const StandardsTreeView: React.FC<StandardsTreeViewProps> = ({
                           <button
                             type="button"
                             onClick={() => {
-                              if (window.confirm(`هل أنت متأكد من رغبتك في حذف المعيار الرئيسي (${std.name}) وكافة مجالاته ومؤشراته؟`)) {
+                              if (window.confirm(`هل أنت متأكد من رغبتك في حذف المعيار الرئيسي (${std.name}) وكافة معاييره الفرعية ومؤشراته؟`)) {
                                 onDeleteStandard(std);
                               }
                             }}
@@ -734,10 +600,10 @@ export const StandardsTreeView: React.FC<StandardsTreeViewProps> = ({
                             cursor: 'pointer',
                             transition: 'background-color 0.15s ease',
                           }}
-                          title="+ إضافة معيار فرعي لهذا المعيار"
+                          title="+ إضافة معيار فرعي لهذا المعيار الرئيسي"
                         >
                           <Plus size={14} />
-                          <span>+ إضافة مجال</span>
+                          <span>+ إضافة معيار فرعي</span>
                         </button>
                       </div>
                     )}
@@ -749,7 +615,7 @@ export const StandardsTreeView: React.FC<StandardsTreeViewProps> = ({
                   <div style={{ padding: '20px', backgroundColor: '#F8FAFC', display: 'flex', flexDirection: 'column', gap: '16px' }}>
                     {subStandards.length === 0 ? (
                       <div style={{ textAlign: 'center', padding: '24px', fontSize: '13px', color: '#94A3B8' }}>
-                        لا توجد مجالات فرعية مضافة في هذا المعيار بعد. انقر على "+ إضافة مجال" للبدء.
+                        لا توجد معايير فرعية مضافة في هذا المعيار بعد. انقر على "+ إضافة معيار فرعي" للبدء.
                       </div>
                     ) : (
                       subStandards.map((sub) => {
@@ -790,14 +656,14 @@ export const StandardsTreeView: React.FC<StandardsTreeViewProps> = ({
                                   <Folder size={18} color="#94A3B8" />
                                 )}
                                 <span style={{ fontSize: '14px', fontWeight: 800, color: '#1E293B' }}>
-                                  {sub.name}
+                                  {highlightMatch(sub.name, searchQuery)}
                                 </span>
                                 <span style={{ fontSize: '11px', fontFamily: 'monospace', color: '#64748B', backgroundColor: '#F1F5F9', padding: '1px 6px', borderRadius: '4px' }}>
-                                  {sub.code}
+                                  {highlightMatch(sub.code, searchQuery)}
                                 </span>
                                 {sub.weight !== undefined && sub.weight !== null && (
                                   <span style={{ fontSize: '11px', fontWeight: 700, color: '#B45309', backgroundColor: '#FEF3C7', padding: '1px 7px', borderRadius: '9999px', border: '1px solid #FDE68A' }}>
-                                    وزن المجال: {sub.weight}%
+                                    وزن المعيار الفرعي: {sub.weight}%
                                   </span>
                                 )}
                               </div>
@@ -877,7 +743,7 @@ export const StandardsTreeView: React.FC<StandardsTreeViewProps> = ({
                                         alignItems: 'center',
                                         gap: '4px',
                                       }}
-                                      title="+ إضافة مؤشر لهذا المجال"
+                                      title="+ إضافة مؤشر لهذا المعيار الفرعي"
                                     >
                                       <Plus size={13} />
                                       <span>+ مؤشر جديد</span>
@@ -892,7 +758,7 @@ export const StandardsTreeView: React.FC<StandardsTreeViewProps> = ({
                               <div style={{ padding: '16px', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: '12px', backgroundColor: '#FAFAFA' }}>
                                 {indicators.length === 0 ? (
                                   <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '16px', fontSize: '12px', color: '#94A3B8' }}>
-                                    لا توجد مؤشرات في هذا المجال بعد.
+                                    لا توجد مؤشرات في هذا المعيار الفرعي بعد.
                                   </div>
                                 ) : (
                                   indicators.map((ind) => {
@@ -929,7 +795,7 @@ export const StandardsTreeView: React.FC<StandardsTreeViewProps> = ({
                                                 color: isSelected ? '#FFFFFF' : '#334155',
                                               }}
                                             >
-                                              {ind.code}
+                                              {highlightMatch(ind.code, searchQuery)}
                                             </span>
                                             <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 600 }}>
                                               الوزن: {ind.weight || 1}%
@@ -959,7 +825,7 @@ export const StandardsTreeView: React.FC<StandardsTreeViewProps> = ({
                                             lineHeight: 1.5,
                                           }}
                                         >
-                                          {ind.name}
+                                          {highlightMatch(ind.name, searchQuery)}
                                         </p>
 
                                         {/* Indicator Footer Badges */}
@@ -971,9 +837,36 @@ export const StandardsTreeView: React.FC<StandardsTreeViewProps> = ({
                                             </span>
                                           </span>
 
-                                          {ind.verificationTools && ind.verificationTools.length > 0 && (
-                                            <span style={{ fontSize: '10px', color: '#B45309', backgroundColor: '#FEF3C7', padding: '1px 6px', borderRadius: '4px', fontWeight: 700 }}>
-                                              {ind.verificationTools.length} أدوات
+                                          {ind.verificationTools && ind.verificationTools.length > 0 ? (
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '3px', flexWrap: 'wrap' }}>
+                                              {ind.verificationTools.map((t, tidx) => {
+                                                let shortLabel = t;
+                                                if (t.includes('ملاحظة') || t === 'CLASSROOM_OBSERVATION') shortLabel = 'ملاحظة';
+                                                else if (t.includes('مقابلة') || t === 'INTERVIEW') shortLabel = 'مقابلة';
+                                                else if (t.includes('وثائق') || t.includes('سجلات') || t === 'DOCUMENT_REVIEW') shortLabel = 'وثائق';
+                                                else if (t.includes('استبان') || t === 'SURVEY') shortLabel = 'استبانة';
+                                                return (
+                                                  <span
+                                                    key={tidx}
+                                                    style={{
+                                                      fontSize: '10px',
+                                                      color: '#B45309',
+                                                      backgroundColor: '#FEF3C7',
+                                                      border: '1px solid #FDE68A',
+                                                      padding: '1px 5px',
+                                                      borderRadius: '4px',
+                                                      fontWeight: 700,
+                                                    }}
+                                                    title={`أداة تحقق معتمدة: ${t}`}
+                                                  >
+                                                    {shortLabel}
+                                                  </span>
+                                                );
+                                              })}
+                                            </div>
+                                          ) : (
+                                            <span style={{ fontSize: '10px', color: '#94A3B8' }} title="لم تُحدد أدوات تحقق بعد">
+                                              أدوات: —
                                             </span>
                                           )}
                                         </div>

@@ -75,6 +75,7 @@ export const StandardsVersionsPage: React.FC<StandardsVersionsPageProps> = ({
     return {
       all: versions.length,
       active: versions.filter((v) => v.status?.toLowerCase() === 'active').length,
+      approved: versions.filter((v) => v.status?.toLowerCase() === 'approved').length,
       draft: versions.filter((v) => v.status?.toLowerCase() === 'draft').length,
       archived: versions.filter((v) => v.status?.toLowerCase() === 'archived').length,
     };
@@ -213,7 +214,28 @@ export const StandardsVersionsPage: React.FC<StandardsVersionsPageProps> = ({
               backgroundColor: '#10B981',
             }}
           />
-          مُقرّ ونافذ للدورات
+          مُقرّ ونافذ للدورة الحالية
+        </span>
+      );
+    }
+    if (s === 'approved') {
+      return (
+        <span
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '6px',
+            padding: '4px 12px',
+            borderRadius: '9999px',
+            fontSize: '11px',
+            fontWeight: 700,
+            backgroundColor: '#EFF6FF',
+            color: '#1D4ED8',
+            border: '1px solid #BFDBFE',
+          }}
+        >
+          <ShieldCheck size={12} color="#2563EB" />
+          مُقرّ ومجدول للدورة القادمة
         </span>
       );
     }
@@ -527,8 +549,9 @@ export const StandardsVersionsPage: React.FC<StandardsVersionsPageProps> = ({
             </span>
             {[
               { key: 'all', label: 'كافة الإصدارات', count: statusCounts.all },
-              { key: 'active', label: 'الإصدار المُقرّ', count: statusCounts.active },
-              { key: 'draft', label: 'المسودات', count: statusCounts.draft },
+              { key: 'active', label: 'النافذ للدورة الجارية', count: statusCounts.active },
+              { key: 'approved', label: 'المُقرّ للدورة القادمة', count: statusCounts.approved },
+              { key: 'draft', label: 'المسودات قيد التطوير', count: statusCounts.draft },
               { key: 'archived', label: 'الأرشيف', count: statusCounts.archived },
             ].map((tab) => {
               const isSelected = filterStatus === tab.key;
@@ -630,7 +653,14 @@ export const StandardsVersionsPage: React.FC<StandardsVersionsPageProps> = ({
                       color: '#92400E',
                     }}
                   >
-                    الحالة: {filterStatus === 'active' ? 'المُقرّ' : filterStatus === 'draft' ? 'المسودات' : 'الأرشيف'}
+                    الحالة:{' '}
+                    {filterStatus === 'active'
+                      ? 'النافذ للدورة الجارية'
+                      : filterStatus === 'approved'
+                      ? 'المُقرّ للدورة القادمة'
+                      : filterStatus === 'draft'
+                      ? 'المسودات قيد التطوير'
+                      : 'الأرشيف'}
                     <button
                       type="button"
                       onClick={() => setFilterStatus('all')}

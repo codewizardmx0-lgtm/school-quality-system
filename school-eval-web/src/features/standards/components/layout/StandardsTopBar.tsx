@@ -30,7 +30,9 @@ interface StandardsTopBarProps {
 }
 
 const screenTitles: Record<StandardsScreenKey, string> = {
-  versions: 'إدارة إصدارات وثيقة المعايير الوطنية',
+  versions: 'سجل وثائق المعايير الوطنية',
+  workspace: 'بيئة عمل وتطوير الإصدار المعياري الموحدة',
+  'diff-log': 'سجل الفروقات والتدقيق الوزاري وقفل الإقرار',
   tree: 'بناء وهيكلة الشجرة المعيارية والمؤشرات',
   weights: 'معايرة الأوزان وسلالم التقدير',
   'audit-lock': 'تدقيق الفروقات وقفل الإقرار المعياري',
