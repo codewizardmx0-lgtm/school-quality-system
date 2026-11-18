@@ -225,6 +225,7 @@ Route::prefix('v1')->group(function () {
             Route::get('/{id}', [\App\Http\Controllers\Api\V1\StandardVersionController::class, 'show'])->name('api.v1.standard-versions.show');
             Route::get('/{id}/tree', [\App\Http\Controllers\Api\V1\StandardManagementController::class, 'tree'])->name('api.v1.standard-versions.tree');
             Route::put('/{id}', [\App\Http\Controllers\Api\V1\StandardManagementController::class, 'update'])->name('api.v1.standard-versions.update');
+            Route::delete('/{id}', [\App\Http\Controllers\Api\V1\StandardManagementController::class, 'destroy'])->name('api.v1.standard-versions.destroy');
             Route::post('/{id}/clone', [\App\Http\Controllers\Api\V1\StandardManagementController::class, 'clone'])->name('api.v1.standard-versions.clone');
             Route::get('/{id}/weights', [\App\Http\Controllers\Api\V1\StandardManagementController::class, 'getWeights'])->name('api.v1.standard-versions.weights.show');
             Route::put('/{id}/weights', [\App\Http\Controllers\Api\V1\StandardManagementController::class, 'updateWeights'])->name('api.v1.standard-versions.weights.update');
@@ -263,6 +264,13 @@ Route::prefix('v1')->group(function () {
             Route::post('/{id}/requirements', [\App\Http\Controllers\Api\V1\StandardManagementController::class, 'storeRequirement'])->name('api.v1.indicators.requirements.store');
             Route::put('/{indicatorId}/requirements/{requirementId}', [\App\Http\Controllers\Api\V1\StandardManagementController::class, 'updateRequirement'])->name('api.v1.indicators.requirements.update');
             Route::delete('/{indicatorId}/requirements/{requirementId}', [\App\Http\Controllers\Api\V1\StandardManagementController::class, 'deleteRequirement'])->name('api.v1.indicators.requirements.delete');
+        });
+
+        // إدارة أدوات ووسائل التحقق المعتمدة
+        Route::prefix('verification-tools')->group(function () {
+            Route::get('/', [\App\Http\Controllers\Api\V1\StandardManagementController::class, 'getVerificationTools'])->name('api.v1.verification-tools.index');
+            Route::post('/', [\App\Http\Controllers\Api\V1\StandardManagementController::class, 'storeVerificationTool'])->name('api.v1.verification-tools.store');
+            Route::delete('/{id}', [\App\Http\Controllers\Api\V1\StandardManagementController::class, 'deleteVerificationTool'])->name('api.v1.verification-tools.destroy');
         });
 
         // إدارة دورات التقييم المركزية وتسجيل مشاركة المدارس (Evaluation Cycles - الشريحة 10)

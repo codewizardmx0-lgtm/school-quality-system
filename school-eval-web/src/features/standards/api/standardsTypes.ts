@@ -52,11 +52,21 @@ export interface SaveEvidenceRequirementPayload {
   display_order?: number;
 }
 
+export interface VerificationTool {
+  toolId: number;
+  name: string;
+  toolType?: string;
+  description?: string;
+  approved?: boolean;
+  indicatorsCount?: number;
+  createdAt?: string;
+}
+
 export interface VerificationToolItem {
   id: string;
   label: string;
   checked: boolean;
-  type: 'document' | 'observation' | 'interview' | 'survey';
+  type: 'document' | 'observation' | 'interview' | 'survey' | string;
 }
 
 export interface IndicatorNode {
@@ -68,6 +78,8 @@ export interface IndicatorNode {
   status?: string;
   verificationMethod?: string;
   verificationTools?: string[];
+  verificationToolIds?: number[];
+  verificationToolDetails?: VerificationTool[];
   rubricNotes?: string;
   scoreDescriptors?: ScoreDescriptor[];
   evidenceRequirements?: EvidenceRequirement[];
@@ -187,6 +199,8 @@ export interface VersionLockPreconditions {
   versionNo: string;
   status?: string;
   isDraft?: boolean;
+  isApproved?: boolean;
+  isScheduled?: boolean;
   approvalCode?: string;
   passesAll: boolean;
   isScaleSupported?: boolean;
@@ -233,13 +247,55 @@ export interface DiffRealStats {
   previousVersionNo?: string | null;
 }
 
+export interface StandardDiffComparisonItem {
+  code: string;
+  name: string;
+  baselineName: string;
+  weight: number;
+  baselineWeight: number;
+  weightDiff: number;
+  indicatorsCount: number;
+  status: 'same' | 'added' | 'removed' | 'modified' | 'reweighted';
+}
+
+export interface IndicatorDiffComparisonItem {
+  code: string;
+  name: string;
+  baselineName: string;
+  description?: string;
+  baselineDescription?: string;
+  standardCode: string;
+  weight: number;
+  baselineWeight: number;
+  weightDiff: number;
+  status: 'same' | 'added' | 'removed' | 'modified' | 'reweighted';
+  tools?: string[];
+  baselineTools?: string[];
+  evidence?: Array<{ title: string; required: boolean }>;
+  baselineEvidence?: Array<{ title: string; required: boolean }>;
+  descriptors?: Record<number, string>;
+  baselineDescriptors?: Record<number, string>;
+}
+
+export interface RubricDiffComparisonItem {
+  scoreValue: number;
+  label: string;
+  baselineLabel: string;
+  description?: string;
+  baselineDescription?: string;
+  status: 'same' | 'added' | 'removed' | 'modified';
+}
+
 export interface DiffLogResponse {
   versionId: number;
   versionNo: string;
+  baselineVersionId?: number | null;
   baselineVersionNo?: string | null;
   hasBaseline?: boolean;
   status?: string;
   isDraft?: boolean;
+  isApproved?: boolean;
+  isScheduled?: boolean;
   approvalCode?: string;
   approverName?: string;
   approvedAt?: string;
@@ -247,6 +303,9 @@ export interface DiffLogResponse {
   releaseNotes?: string;
   realStats?: DiffRealStats;
   diffs: DiffTimelineItem[];
+  standardsComparison?: StandardDiffComparisonItem[];
+  indicatorsComparison?: IndicatorDiffComparisonItem[];
+  rubricsComparison?: RubricDiffComparisonItem[];
   stats?: {
     addedCount: number;
     modifiedCount: number;
@@ -316,9 +375,15 @@ export interface UpdateIndicatorPayload {
   name?: string;
   description?: string;
   weight?: number;
+  status?: string;
   verification_method?: string;
+  verificationMethod?: string;
   verification_tools?: string[];
+  verificationTools?: string[];
+  verification_tool_ids?: number[];
+  verificationToolIds?: number[];
   rubric_notes?: string;
+  rubricNotes?: string;
 }
 
 export interface LockVersionPayload {
@@ -328,5 +393,5 @@ export interface LockVersionPayload {
   legalConfirmation?: boolean;
   council_notes?: string;
   release_notes?: string;
-  action?: 'approve' | 'activate';
+  action?: 'approve' | 'activate' | 'schedule';
 }

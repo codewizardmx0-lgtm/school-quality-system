@@ -30,6 +30,7 @@ import type {
   EvidenceRequirement,
 } from '../../api/standardsTypes';
 import { EditScoreDescriptorsModal } from './EditScoreDescriptorsModal';
+import { standardsApi } from '../../api/standardsApi';
 
 interface IndicatorEditorPanelProps {
   indicator: IndicatorNode | null;
@@ -75,6 +76,23 @@ export const IndicatorEditorPanel: React.FC<IndicatorEditorPanelProps> = ({
 
   // حالة مودال الواصفات
   const [isDescriptorsModalOpen, setIsDescriptorsModalOpen] = useState(false);
+
+  // قائمة أدوات التحقق الديناميكية
+  const [toolsList, setToolsList] = useState<Array<{ id: string | number; label: string; desc?: string }>>(availableTools);
+
+  useEffect(() => {
+    standardsApi.getVerificationTools().then((res) => {
+      if (res.tools && res.tools.length > 0) {
+        setToolsList(
+          res.tools.map((t) => ({
+            id: t.toolId,
+            label: t.name,
+            desc: t.description || t.toolType || '',
+          }))
+        );
+      }
+    }).catch(() => {});
+  }, []);
 
   // حالة إضافة وتعديل متطلب شاهد
   const [newReqTitle, setNewReqTitle] = useState('');
@@ -634,7 +652,7 @@ export const IndicatorEditorPanel: React.FC<IndicatorEditorPanelProps> = ({
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', backgroundColor: '#F8FAFC', padding: '12px', borderRadius: '12px', border: '1px solid #E2E8F0' }}>
-              {availableTools.map((tool) => {
+              {toolsList.map((tool) => {
                 const isChecked = selectedTools.includes(tool.label);
                 return (
                   <button

@@ -192,7 +192,24 @@ export function useStandardsTree(versionId?: number | string) {
     try {
       await standardsApi.updateIndicator(id, payload);
 
-      setSelectedIndicator((prev) => (prev ? { ...prev, ...payload } : null));
+      const updatedTools = payload.verification_tools || payload.verificationTools;
+      const updatedToolIds = payload.verification_tool_ids || payload.verificationToolIds;
+      const updatedMethod = payload.verification_method || payload.verificationMethod;
+      const updatedDesc = payload.description || payload.rubric_notes || payload.rubricNotes;
+
+      setSelectedIndicator((prev) =>
+        prev && prev.indicatorId === id
+          ? {
+              ...prev,
+              ...payload,
+              verificationTools: updatedTools ?? prev.verificationTools,
+              verificationToolIds: updatedToolIds ?? prev.verificationToolIds,
+              verificationMethod: updatedMethod ?? prev.verificationMethod,
+              description: updatedDesc ?? prev.description,
+              rubricNotes: updatedDesc ?? prev.rubricNotes,
+            }
+          : prev
+      );
 
       setTreeData((prev) => {
         if (!prev) return prev;
@@ -201,12 +218,25 @@ export function useStandardsTree(versionId?: number | string) {
           subStandards: std.subStandards.map((sub) => ({
             ...sub,
             indicators: sub.indicators.map((ind) =>
-              ind.indicatorId === id ? { ...ind, ...payload } : ind
+              ind.indicatorId === id
+                ? {
+                    ...ind,
+                    ...payload,
+                    verificationTools: updatedTools ?? ind.verificationTools,
+                    verificationToolIds: updatedToolIds ?? ind.verificationToolIds,
+                    verificationMethod: updatedMethod ?? ind.verificationMethod,
+                    description: updatedDesc ?? ind.description,
+                    rubricNotes: updatedDesc ?? ind.rubricNotes,
+                  }
+                : ind
             ),
           })),
         }));
         return { ...prev, standards: updatedStandards };
       });
+
+      // Background sync from server to ensure complete consistency
+      fetchTree().catch(() => {});
 
       setSaveStatus('saved');
       setTimeout(() => setSaveStatus('idle'), 3000);

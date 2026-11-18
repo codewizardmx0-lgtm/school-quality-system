@@ -1177,4 +1177,330 @@ class StandardsManagementFeatureTest extends TestCase
         // التحقق من أرشفة الإصدار النشط السابق تلقائياً
         $this->assertEquals(StandardVersion::STATUS_ARCHIVED, StandardVersion::find($originalActiveId)->status);
     }
+
+    /**
+     * اختبار حذف مسودة إصدار معياري وحذف كافة بياناته التابعة (Cascade).
+     */
+    public function test_can_delete_draft_standard_version_and_cascade_all_data(): void
+    {
+        $draft = StandardVersion::create([
+            'version_no'          => '2099.DELETE-ME',
+            'issue_date'          => now()->toDateString(),
+            'source_organization' => 'وزارة التربية والتعليم',
+            'status'              => StandardVersion::STATUS_DRAFT,
+        ]);
+
+        $std = Standard::create([
+            'version_id' => $draft->version_id,
+            'code'       => 'STD-DEL',
+            'name'       => 'معيار للحذف',
+            'weight'     => 100.0,
+        ]);
+
+        $sub = SubStandard::create([
+            'standard_id' => $std->standard_id,
+            'code'        => 'SUB-DEL',
+            'name'        => 'مجال للحذف',
+            'weight'      => 100.0,
+        ]);
+
+        $ind = Indicator::create([
+            'sub_standard_id' => $sub->sub_standard_id,
+            'code'            => 'IND-DEL-1',
+            'name'            => 'مؤشر للحذف',
+            'status'          => 'Active',
+        ]);
+
+        $level = ScoreLevel::create([
+            'standard_version_id' => $draft->version_id,
+            'score_value'         => 0,
+            'label'               => 'غير متوفر',
+            'display_order'       => 1,
+        ]);
+
+        $descriptor = IndicatorScoreDescriptor::create([
+            'indicator_id'        => $ind->indicator_id,
+            'score_level_id'      => $level->score_level_id,
+            'standard_version_id' => $draft->version_id,
+            'label'               => 'غير متوفر',
+            'description'         => 'وصف المستوى للحذف',
+            'display_order'       => 1,
+            'is_active'           => true,
+        ]);
+
+        // تنفيذ الحذف
+        $res = $this->actingAs($this->standardsManager, 'sanctum')
+            ->deleteJson("/api/v1/standard-versions/{$draft->version_id}");
+
+        $res->assertOk();
+        $this->assertDatabaseMissing('standard_versions', ['version_id' => $draft->version_id]);
+        $this->assertDatabaseMissing('standards', ['standard_id' => $std->standard_id]);
+        $this->assertDatabaseMissing('sub_standards', ['sub_standard_id' => $sub->sub_standard_id]);
+        $this->assertDatabaseMissing('indicators', ['indicator_id' => $ind->indicator_id]);
+        $this->assertDatabaseMissing('score_levels', ['score_level_id' => $level->score_level_id]);
+        $this->assertDatabaseMissing('indicator_score_descriptors', ['descriptor_id' => $descriptor->descriptor_id]);
+    }
+
+    /**
+     * اختبار منع حذف إصدار نشط أو مُقرّ.
+     */
+    public function test_cannot_delete_active_or_approved_standard_version(): void
+    {
+        $res = $this->actingAs($this->standardsManager, 'sanctum')
+            ->deleteJson("/api/v1/standard-versions/{$this->seededVersion->version_id}");
+
+        $res->assertStatus(422);
+        $this->assertDatabaseHas('standard_versions', ['version_id' => $this->seededVersion->version_id]);
+    }
+
+    /**
+     * اختبار منع المستخدم غير المصرح له من حذف مسودة إصدار معياري.
+     */
+    public function test_unauthorized_user_cannot_delete_standard_version(): void
+    {
+        $draft = StandardVersion::create([
+            'version_no'          => '2099.UNAUTH-DEL',
+            'issue_date'          => now()->toDateString(),
+            'source_organization' => 'وزارة التربية والتعليم',
+            'status'              => StandardVersion::STATUS_DRAFT,
+        ]);
+
+        $res = $this->actingAs($this->schoolEvaluator, 'sanctum')
+            ->deleteJson("/api/v1/standard-versions/{$draft->version_id}");
+
+        $res->assertStatus(403);
+        $this->assertDatabaseHas('standard_versions', ['version_id' => $draft->version_id]);
+
+        // تنظيف المسودة
+        $draft->delete();
+    }
+
+    /**
+     * اختبار استرجاع قائمة أدوات التحقق المعتمدة مع إحصاء عدد المؤشرات المرتبطة.
+     */
+    public function test_can_list_verification_tools_with_indicators_count(): void
+    {
+        $res = $this->actingAs($this->standardsManager, 'sanctum')
+            ->getJson('/api/v1/verification-tools');
+
+        $res->assertOk();
+        $res->assertJsonStructure([
+            'data' => [
+                'tools' => [
+                    '*' => ['toolId', 'name', 'toolType', 'description', 'approved', 'indicatorsCount']
+                ],
+                'totalCount'
+            ]
+        ]);
+        $this->assertGreaterThanOrEqual(1, count($res->json('data.tools')));
+    }
+
+    /**
+     * اختبار إضافة أداة تحقق جديدة وحذفها إذا لم تكن مرتبطة بمؤشرات.
+     */
+    public function test_can_create_and_delete_custom_verification_tool(): void
+    {
+        $toolName = 'اختبار أداة رقمية تجريبية ' . uniqid();
+
+        // 1. إضافة أداة جديدة
+        $createRes = $this->actingAs($this->standardsManager, 'sanctum')
+            ->postJson('/api/v1/verification-tools', [
+                'name'        => $toolName,
+                'tool_type'   => 'رقمي ذكي',
+                'description' => 'أداة رقمية للتحقق الذاتي واختبار الجودة',
+            ]);
+
+        $createRes->assertStatus(201);
+        $toolId = $createRes->json('data.toolId');
+        $this->assertNotNull($toolId);
+        $this->assertDatabaseHas('verification_tools', ['tool_id' => $toolId, 'name' => $toolName]);
+
+        // 2. حذف الأداة غير المرتبطة
+        $delRes = $this->actingAs($this->standardsManager, 'sanctum')
+            ->deleteJson("/api/v1/verification-tools/{$toolId}");
+
+        $delRes->assertOk();
+        $this->assertDatabaseMissing('verification_tools', ['tool_id' => $toolId]);
+    }
+
+    /**
+     * اختبار منع حذف أداة تحقق مرتبطة بمؤشرات معيارية.
+     */
+    public function test_cannot_delete_verification_tool_linked_to_indicators(): void
+    {
+        // أداة 1 مرتبطة بمؤشرات في البيانات الافتراضية
+        $tool = \App\Models\VerificationTool::first();
+        $this->assertNotNull($tool);
+
+        // التأكد من وجود ارتباط
+        \Illuminate\Support\Facades\DB::table('indicator_verification_methods')->updateOrInsert(
+            ['indicator_id' => 1, 'tool_id' => $tool->tool_id],
+            ['required' => true, 'usage_guidance' => 'فحص وثائقي', 'created_at' => now()]
+        );
+
+        $delRes = $this->actingAs($this->standardsManager, 'sanctum')
+            ->deleteJson("/api/v1/verification-tools/{$tool->tool_id}");
+
+        $delRes->assertStatus(422);
+        $this->assertDatabaseHas('verification_tools', ['tool_id' => $tool->tool_id]);
+    }
+
+    /**
+     * اختبار مزامنة وتحديث أدوات التحقق المرتبطة بمؤشر داخل مسودة.
+     */
+    public function test_can_sync_indicator_verification_tools_in_draft(): void
+    {
+        $draft = StandardVersion::create([
+            'version_no'          => '2099.TOOLS-SYNC',
+            'issue_date'          => now()->toDateString(),
+            'source_organization' => 'وزارة التربية والتعليم',
+            'status'              => StandardVersion::STATUS_DRAFT,
+        ]);
+
+        $std = Standard::create([
+            'version_id' => $draft->version_id,
+            'code'       => 'STD-SYNC',
+            'name'       => 'معيار المزامنة',
+            'weight'     => 100,
+        ]);
+
+        $sub = SubStandard::create([
+            'standard_id' => $std->standard_id,
+            'code'        => 'SUB-SYNC',
+            'name'        => 'فرعي المزامنة',
+            'weight'      => 100,
+        ]);
+
+        $indicator = Indicator::create([
+            'sub_standard_id' => $sub->sub_standard_id,
+            'code'            => 'IND-SYNC',
+            'name'            => 'مؤشر المزامنة',
+            'weight'          => 100,
+            'status'          => 'Active',
+        ]);
+
+        $tools = \App\Models\VerificationTool::take(2)->get();
+        $toolIds = $tools->pluck('tool_id')->all();
+
+        $res = $this->actingAs($this->standardsManager, 'sanctum')
+            ->putJson("/api/v1/indicators/{$indicator->indicator_id}", [
+                'name'                  => $indicator->name . ' - محدث الأدوات',
+                'verification_tool_ids' => $toolIds,
+            ]);
+
+        $res->assertOk();
+
+        // التحقق من جدول الربط
+        $linkedCount = \Illuminate\Support\Facades\DB::table('indicator_verification_methods')
+            ->where('indicator_id', $indicator->indicator_id)
+            ->whereIn('tool_id', $toolIds)
+            ->count();
+
+        $this->assertEquals(count($toolIds), $linkedCount);
+
+        // التحقق من استجابة شجرة المعايير
+        $treeRes = $this->actingAs($this->standardsManager, 'sanctum')
+            ->getJson("/api/v1/standard-versions/{$draft->version_id}/tree");
+
+        $treeRes->assertOk();
+        $firstInd = $treeRes->json('data.standards.0.subStandards.0.indicators.0');
+        $this->assertNotEmpty($firstInd['verificationTools']);
+        $this->assertNotEmpty($firstInd['verificationToolIds']);
+
+        // تنظيف باستخدام الخدمة لضمان الحذف التتابعي
+        app(\App\Services\StandardManagementService::class)->deleteVersion($draft);
+    }
+
+    /**
+     * اختبار نموذج الإقرار على مرحلتين: المرحلة الأولى إقرار وقفل رقمي (Approved)، والمرحلة الثانية جدولة للدورة القادمة.
+     */
+    public function test_two_stage_approval_and_scheduling(): void
+    {
+        $draft = StandardVersion::create([
+            'version_no'          => '2099.TWO-STAGE',
+            'issue_date'          => now()->toDateString(),
+            'source_organization' => 'وزارة التربية والتعليم',
+            'status'              => StandardVersion::STATUS_DRAFT,
+        ]);
+
+        $std = Standard::create([
+            'version_id' => $draft->version_id,
+            'code'       => 'STD-2STG',
+            'name'       => 'معيار المرحلتين',
+            'weight'     => 100,
+        ]);
+
+        $sub = SubStandard::create([
+            'standard_id' => $std->standard_id,
+            'code'        => 'SUB-2STG',
+            'name'        => 'فرعي المرحلتين',
+            'weight'      => 100,
+        ]);
+
+        $ind = Indicator::create([
+            'sub_standard_id' => $sub->sub_standard_id,
+            'code'            => 'IND-2STG',
+            'name'            => 'مؤشر المرحلتين',
+            'weight'          => 100,
+            'status'          => 'Active',
+        ]);
+
+        // المرحلة الأولى: إقرار وقفل الإصدار المعياري (approve)
+        $lockRes = $this->actingAs($this->standardsManager, 'sanctum')
+            ->postJson("/api/v1/standard-versions/{$draft->version_id}/lock", [
+                'approval_code'      => 'DEC-STAGE1-2099',
+                'legal_confirmation' => true,
+                'action'             => 'approve',
+            ]);
+
+        $lockRes->assertOk();
+        $this->assertEquals(StandardVersion::STATUS_APPROVED, $draft->fresh()->status);
+        $this->assertStringContainsString('DEC-STAGE1-2099', $draft->fresh()->source_number);
+
+        // المرحلة الثانية: جدولة الإصدار للدورة القادمة (schedule)
+        $scheduleRes = $this->actingAs($this->standardsManager, 'sanctum')
+            ->postJson("/api/v1/standard-versions/{$draft->version_id}/lock", [
+                'approval_code'      => 'DEC-STAGE2-2099',
+                'legal_confirmation' => true,
+                'action'             => 'schedule',
+            ]);
+
+        $scheduleRes->assertOk();
+        $this->assertStringContainsString('مجدول', $draft->fresh()->source_description);
+
+        // تنظيف
+        app(\App\Services\StandardManagementService::class)->deleteVersion($draft);
+    }
+
+    /**
+     * اختبار سجل الفروقات الغني بمقارنة المؤشرات التفصيلية (الأدوات والشواهد وسلالم التقدير).
+     */
+    public function test_diff_log_includes_enriched_indicator_comparisons(): void
+    {
+        $res = $this->actingAs($this->standardsManager, 'sanctum')
+            ->getJson("/api/v1/standard-versions/{$this->seededVersion->version_id}/diff-log");
+
+        $res->assertOk()
+            ->assertJsonStructure([
+                'data' => [
+                    'versionId',
+                    'versionNo',
+                    'integrityHash',
+                    'standardsComparison',
+                    'indicatorsComparison' => [
+                        '*' => [
+                            'code',
+                            'name',
+                            'standardCode',
+                            'weight',
+                            'status',
+                            'tools',
+                            'evidence',
+                            'descriptors',
+                        ],
+                    ],
+                    'rubricsComparison',
+                ],
+            ]);
+    }
 }

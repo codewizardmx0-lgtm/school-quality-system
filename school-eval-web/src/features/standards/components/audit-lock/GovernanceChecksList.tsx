@@ -15,7 +15,7 @@ import {
   Calendar,
   UserCheck,
   ShieldCheck,
-  Zap,
+  CalendarCheck,
 } from 'lucide-react';
 import type { VersionLockPreconditions, DiffLogResponse } from '../../api/standardsTypes';
 
@@ -25,7 +25,7 @@ interface GovernanceChecksListProps {
   isDraft?: boolean;
   isApproved?: boolean;
   isLocking: boolean;
-  onLock: (approvalCode: string, legalConfirmed: boolean, action?: 'approve' | 'activate') => Promise<any>;
+  onLock: (approvalCode: string, legalConfirmed: boolean, action?: 'approve' | 'activate' | 'schedule') => Promise<any>;
 }
 
 export const GovernanceChecksList: React.FC<GovernanceChecksListProps> = ({
@@ -41,6 +41,35 @@ export const GovernanceChecksList: React.FC<GovernanceChecksListProps> = ({
   );
   const [legalConfirmed, setLegalConfirmed] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
+  const [supervisorPassword, setSupervisorPassword] = useState('');
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+
+  const [isScheduledState, setIsScheduledState] = useState(
+    preconditions?.isScheduled || diffData?.isScheduled || false
+  );
+  const [isScheduling, setIsScheduling] = useState(false);
+
+  useEffect(() => {
+    if (preconditions?.isScheduled !== undefined) {
+      setIsScheduledState(preconditions.isScheduled);
+    } else if (diffData?.isScheduled !== undefined) {
+      setIsScheduledState(diffData.isScheduled);
+    }
+  }, [preconditions?.isScheduled, diffData?.isScheduled]);
+
+  const handleScheduleForNextCycle = async () => {
+    setIsScheduling(true);
+    setError(null);
+    try {
+      await onLock(approvalCode || 'DEC-NAT-2026-88', true, 'schedule');
+      setIsScheduledState(true);
+    } catch (err: any) {
+      setError(err?.message || 'تعذر جدولة الإصدار للدورة القادمة.');
+    } finally {
+      setIsScheduling(false);
+    }
+  };
 
   useEffect(() => {
     if (!approvalCode && (preconditions?.approvalCode || diffData?.approvalCode)) {
@@ -90,7 +119,7 @@ export const GovernanceChecksList: React.FC<GovernanceChecksListProps> = ({
   const passesAll = preconditions ? preconditions.passesAll : checks.every((c) => c.passed);
   const passedCount = checks.filter((c) => c.passed).length;
 
-  const handleExecute = async (action: 'approve' | 'activate') => {
+  const handleInitiateLock = () => {
     if (!passesAll) {
       setError(`لا يمكن إقرار الوثيقة قبل استيفاء كافة الشروط الحاكمة (${checks.length} من ${checks.length}).`);
       return;
@@ -105,10 +134,23 @@ export const GovernanceChecksList: React.FC<GovernanceChecksListProps> = ({
     }
 
     setError(null);
+    setPasswordError(null);
+    setSupervisorPassword('');
+    setIsPasswordModalOpen(true);
+  };
+
+  const handleConfirmPasswordAndLock = async () => {
+    if (!supervisorPassword.trim()) {
+      setPasswordError('يرجى إدخال كلمة مرور المشرف الوزاري لتأكيد الهوية.');
+      return;
+    }
+
+    setPasswordError(null);
     try {
-      await onLock(approvalCode.trim(), legalConfirmed, action);
+      await onLock(approvalCode.trim(), legalConfirmed, 'approve');
+      setIsPasswordModalOpen(false);
     } catch (err: any) {
-      setError(err?.message || 'فشل إتمام القفل الرقمي والإقرار.');
+      setPasswordError(err?.message || 'فشل إتمام القفل الرقمي والإقرار.');
     }
   };
 
@@ -131,9 +173,11 @@ export const GovernanceChecksList: React.FC<GovernanceChecksListProps> = ({
             </div>
           </div>
 
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-bold bg-emerald-600 text-white rounded-full shadow-sm">
+          <span className={`inline-flex items-center gap-1.5 px-3 py-1 text-xs font-bold rounded-full shadow-sm ${
+            isScheduledState ? 'bg-emerald-600 text-white' : 'bg-blue-600 text-white'
+          }`}>
             <ShieldCheck className="w-4 h-4" />
-            <span>مُقرّ / نافذ للتقييم المدرسي</span>
+            <span>{isScheduledState ? 'مُقرّ ومجدول للدورة القادمة ✓' : 'مُقرّ ومقفل (المرحلة الأولى مكتملة)'}</span>
           </span>
         </div>
 
@@ -182,6 +226,48 @@ export const GovernanceChecksList: React.FC<GovernanceChecksListProps> = ({
           <span className="text-[10px] text-emerald-400 bg-emerald-950 px-2 py-0.5 rounded border border-emerald-800 shrink-0">
             وثيقة مصدقة رسمياً ✓
           </span>
+        </div>
+
+        {/* Stage 2: Schedule for Next Evaluation Cycle */}
+        <div className="p-4 bg-white/95 rounded-xl border border-amber-300 shadow-xs flex items-center justify-between flex-wrap gap-3">
+          <div className="space-y-1">
+            <h4 className="text-xs font-black text-slate-900 flex items-center gap-1.5">
+              <CalendarCheck size={16} className="text-amber-700" />
+              <span>المرحلة الثانية: جدولة الإصدار للدورة التقييمية القادمة</span>
+            </h4>
+            <p className="text-xs text-slate-600">
+              {isScheduledState
+                ? 'تمت جدولة هذا الإصدار رسمياً للدورة التقييمية القادمة، وسيدخل حيز التنفيذ التلقائي مع بدء الدورة القادمة.'
+                : 'الإصدار مُقرّ ومقفل برمجياً بحصانة عدم التعديل. اضغط على الزر لتأكيد جدولته رسمياً للدورة التقييمية القادمة.'}
+            </p>
+          </div>
+
+          {!isScheduledState ? (
+            <button
+              type="button"
+              onClick={handleScheduleForNextCycle}
+              disabled={isScheduling}
+              className="inline-flex items-center gap-2 px-5 py-2.5 text-xs font-extrabold text-white bg-gradient-to-r from-amber-600 via-amber-700 to-amber-800 hover:from-amber-700 hover:to-amber-900 rounded-xl shadow-md transition-all cursor-pointer disabled:opacity-50"
+              title="تأكيد جدولة هذا الإصدار المعتمد للدورة التقييمية القادمة"
+            >
+              {isScheduling ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>جارٍ تسجيل الجدولة...</span>
+                </>
+              ) : (
+                <>
+                  <CalendarCheck className="w-4 h-4" />
+                  <span>جدولة للدورة القادمة</span>
+                </>
+              )}
+            </button>
+          ) : (
+            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-extrabold text-emerald-800 bg-emerald-100 border border-emerald-300 rounded-xl">
+              <CheckCircle2 size={15} />
+              <span>مجدول رسمياً للدورة القادمة ✓</span>
+            </span>
+          )}
         </div>
       </div>
     );
@@ -255,7 +341,7 @@ export const GovernanceChecksList: React.FC<GovernanceChecksListProps> = ({
       </div>
 
       {/* Lock Form */}
-      <form onSubmit={(e) => { e.preventDefault(); handleExecute('approve'); }} className="space-y-4 pt-2 border-t border-slate-200">
+      <form onSubmit={(e) => { e.preventDefault(); handleInitiateLock(); }} className="space-y-4 pt-2 border-t border-slate-200">
         {error && (
           <div className="flex items-center gap-2 p-3 text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-lg">
             <AlertCircle className="w-4 h-4 shrink-0" />
@@ -294,42 +380,177 @@ export const GovernanceChecksList: React.FC<GovernanceChecksListProps> = ({
           </span>
         </label>
 
-        {/* Dual Lock/Approve Actions */}
-        <div className="flex flex-col sm:flex-row gap-3 pt-2">
-          {/* Action 1: Approve and Schedule for Next Cycle (Recommended) */}
+        {/* Single Prominent Approve & Lock Action */}
+        <div className="pt-2">
           <button
             type="button"
-            onClick={() => handleExecute('approve')}
+            onClick={handleInitiateLock}
             disabled={!passesAll || !legalConfirmed || isLocking}
-            className="flex-1 inline-flex items-center justify-center gap-2 px-5 py-3 text-xs sm:text-sm font-extrabold text-white bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 rounded-xl shadow-md shadow-emerald-600/20 active:scale-[0.99] transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
-            title="إقرار الوثيقة وجدولتها للدورة القادمة دون التأثير على دورات التقييم الجارية"
+            className="w-full inline-flex items-center justify-center gap-2.5 px-6 py-3.5 text-sm font-extrabold text-white bg-gradient-to-r from-emerald-600 via-emerald-700 to-teal-700 hover:from-emerald-700 hover:to-teal-800 rounded-xl shadow-lg shadow-emerald-700/25 active:scale-[0.99] transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+            title="المرحلة الأولى: إقرار الوثيقة وقفلها وتجميدها برمجياً بعد استيفاء الشروط وتأكيد كلمة المرور"
           >
             {isLocking ? (
               <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                <span>جاري توثيق الختم...</span>
+                <Loader2 className="w-5 h-5 animate-spin" />
+                <span>جاري توثيق الختم الرقمي...</span>
               </>
             ) : (
               <>
                 <ShieldCheck className="w-5 h-5" />
-                <span>إقرار وجدولة للدورة القادمة (موصى به ✓)</span>
+                <span>إقرار وقفل الإصدار المعياري رسمياً (المرحلة الأولى: قفل وتجميد رقمي)</span>
               </>
             )}
           </button>
-
-          {/* Action 2: Immediate Activation for Current Cycle */}
-          <button
-            type="button"
-            onClick={() => handleExecute('activate')}
-            disabled={!passesAll || !legalConfirmed || isLocking}
-            className="inline-flex items-center justify-center gap-2 px-5 py-3 text-xs sm:text-sm font-bold text-amber-900 bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded-xl active:scale-[0.99] transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
-            title="تفعيل فوري للدورة الحالية مع أرشفة الإصدار النشط السابق تلقائياً"
-          >
-            <Zap className="w-4 h-4 text-amber-700" />
-            <span>إقرار وتفعيل فوري للدورة الجارية</span>
-          </button>
         </div>
       </form>
+
+      {/* Supervisor Password Confirmation Modal */}
+      {isPasswordModalOpen && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(15, 23, 42, 0.65)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+            padding: '16px',
+          }}
+        >
+          <div
+            style={{
+              backgroundColor: '#FFFFFF',
+              borderRadius: '16px',
+              maxWidth: '460px',
+              width: '100%',
+              padding: '24px',
+              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)',
+              direction: 'rtl',
+              textAlign: 'right',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+              <div
+                style={{
+                  width: '40px',
+                  height: '40px',
+                  borderRadius: '10px',
+                  backgroundColor: '#ECFDF5',
+                  color: '#047857',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                }}
+              >
+                <ShieldCheck size={22} />
+              </div>
+              <div>
+                <h3 style={{ fontSize: '16px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
+                  تأكيد هوية المشرف الوزاري
+                </h3>
+                <p style={{ fontSize: '12px', color: '#64748B', margin: '4px 0 0 0' }}>
+                  قرار الإقرار: <strong>{approvalCode}</strong>
+                </p>
+              </div>
+            </div>
+
+            <p style={{ fontSize: '13px', color: '#475569', lineHeight: 1.6, marginBottom: '16px' }}>
+              يتطلب إقرار وقفل الوثيقة المعيارية رسمياً تأكيد هويتك الوزارية عبر إدخال كلمة المرور. بمجرد الإقرار، تكتسب الوثيقة حصانة عدم التعديل (Immutability) وتُقفل نهائياً.
+            </p>
+
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#334155', marginBottom: '6px' }}>
+                كلمة مرور المشرف الوزاري <span style={{ color: '#DC2626' }}>*</span>
+              </label>
+              <input
+                type="password"
+                autoFocus
+                placeholder="أدخل كلمة المرور الخاصة بحسابك..."
+                value={supervisorPassword}
+                onChange={(e) => setSupervisorPassword(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleConfirmPasswordAndLock();
+                  }
+                }}
+                disabled={isLocking}
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  fontSize: '13px',
+                  borderRadius: '8px',
+                  border: '1px solid #CBD5E1',
+                  outline: 'none',
+                }}
+              />
+            </div>
+
+            {passwordError && (
+              <div
+                style={{
+                  padding: '10px 14px',
+                  backgroundColor: '#FEF2F2',
+                  color: '#DC2626',
+                  borderRadius: '8px',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  marginBottom: '16px',
+                }}
+              >
+                {passwordError}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+              <button
+                type="button"
+                disabled={isLocking}
+                onClick={() => setIsPasswordModalOpen(false)}
+                style={{
+                  padding: '8px 16px',
+                  borderRadius: '8px',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  backgroundColor: '#F1F5F9',
+                  color: '#475569',
+                  border: 'none',
+                  cursor: 'pointer',
+                }}
+              >
+                إلغاء
+              </button>
+              <button
+                type="button"
+                disabled={isLocking || !supervisorPassword.trim()}
+                onClick={handleConfirmPasswordAndLock}
+                style={{
+                  padding: '8px 20px',
+                  borderRadius: '8px',
+                  fontSize: '13px',
+                  fontWeight: 700,
+                  backgroundColor: '#059669',
+                  color: '#FFFFFF',
+                  border: 'none',
+                  cursor: isLocking || !supervisorPassword.trim() ? 'not-allowed' : 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                }}
+              >
+                {isLocking ? <Loader2 size={15} className="animate-spin" /> : <ShieldCheck size={15} />}
+                <span>{isLocking ? 'جارٍ الإقرار والقفل...' : 'تأكيد الإقرار والقفل النهائي'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

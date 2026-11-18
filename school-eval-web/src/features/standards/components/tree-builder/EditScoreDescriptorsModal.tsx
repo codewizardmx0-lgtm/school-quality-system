@@ -259,18 +259,19 @@ export const EditScoreDescriptorsModal: React.FC<EditScoreDescriptorsModalProps>
 
                 <div style={{ padding: '12px' }}>
                   <textarea
-                    rows={2}
+                    rows={4}
                     value={levelTexts[lvl.scoreValue] || ''}
                     onChange={(e) => handleTextChange(lvl.scoreValue, e.target.value)}
                     placeholder={`صياغة الأداء المطلوب لتحقيق المستوى (${lvl.scoreValue})...`}
                     style={{
                       width: '100%',
-                      padding: '8px 12px',
+                      minHeight: '100px',
+                      padding: '10px 14px',
                       borderRadius: '8px',
                       border: '1px solid #CBD5E1',
                       fontSize: '13px',
                       outline: 'none',
-                      lineHeight: 1.5,
+                      lineHeight: 1.6,
                       resize: 'vertical',
                     }}
                   />
@@ -318,7 +319,7 @@ export const EditScoreDescriptorsModal: React.FC<EditScoreDescriptorsModalProps>
               ) : (
                 <>
                   <CheckCircle2 size={14} />
-                  <span>حفظ واصفات المستويات الأربعة</span>
+                  <span>حفظ واصفات سلم التقدير المعتمد ({defaultLevelTemplates.length} مستويات)</span>
                 </>
               )}
             </button>

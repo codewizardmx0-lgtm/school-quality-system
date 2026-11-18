@@ -61,15 +61,15 @@ export const VerificationToolsGuide: React.FC = () => {
           <div className="flex items-center gap-2">
             <CheckSquare className="w-5 h-5 text-amber-600" />
             <h3 className="text-sm font-extrabold text-slate-900">
-              أدوات التحقق الأربعة المعتمدة (Verification Tools)
+              أدوات ووسائل التحقق المعتمدة (Verification Tools)
             </h3>
           </div>
           <p className="text-xs text-slate-500 mt-1">
-            في معايير الهيئة الوطنية، يرتبط كل مؤشر بأداة أو أكثر من هذه الأدوات الأربع لفحص الشواهد والأدلة
+            في معايير الهيئة الوطنية، يرتبط كل مؤشر بأداة أو أكثر من أدوات التحقق المعتمدة لفحص الشواهد والأدلة
           </p>
         </div>
         <span className="text-xs font-bold text-amber-800 bg-amber-50 px-3 py-1 rounded-full border border-amber-200">
-          4 أدوات مقننة معتمدة
+          أدوات تقييم معتمدة
         </span>
       </div>
 
@@ -104,7 +104,7 @@ export const VerificationToolsGuide: React.FC = () => {
 
       <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs text-slate-600 flex items-center justify-between flex-wrap gap-2">
         <span>
-          💡 <strong>إرشاد التحرير:</strong> يمكنك تعيين أداة واحدة، أداتين، ثلاث، أو الأربع أدوات معاً لأي مؤشر عبر الضغط على المؤشر ثم تبويب <strong>&quot;أدوات التحقق&quot;</strong>.
+          💡 <strong>إرشاد التحرير:</strong> يمكنك تعيين أي عدد من الأدوات لأي مؤشر عبر تبويب <strong>&quot;أدوات التحقق&quot;</strong>، كما يمكنك إدارة وإضافة أدوات مخصصة جديدة عبر زر <strong>&quot;إدارة أدوات التحقق&quot;</strong>.
         </span>
       </div>
     </div>

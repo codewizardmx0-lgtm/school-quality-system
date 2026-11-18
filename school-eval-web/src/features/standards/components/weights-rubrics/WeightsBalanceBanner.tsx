@@ -21,7 +21,7 @@ export const WeightsBalanceBanner: React.FC<WeightsBalanceBannerProps> = ({
 }) => {
   if (isBalanced) {
     return (
-      <div className="sticky top-0 z-20 bg-emerald-50/95 backdrop-blur-md border-2 border-emerald-300 rounded-2xl p-4 flex items-center justify-between text-emerald-900 shadow-md animate-fade-in">
+      <div className="bg-emerald-50 border border-emerald-300 rounded-2xl p-4 flex items-center justify-between text-emerald-900 animate-fade-in">
         <div className="flex items-center gap-3.5">
           <div className="w-10 h-10 rounded-xl bg-emerald-100 border border-emerald-300 flex items-center justify-center text-emerald-700 shrink-0">
             <CheckCircle2 className="w-6 h-6" />
@@ -51,7 +51,7 @@ export const WeightsBalanceBanner: React.FC<WeightsBalanceBannerProps> = ({
   const mainIsActually100 = isMainBalanced !== undefined ? isMainBalanced : Math.abs(totalWeight - 100) < 0.05;
   if (mainIsActually100 && isAllSubStandardsBalanced === false) {
     return (
-      <div className="sticky top-0 z-20 bg-amber-50/95 backdrop-blur-md border-2 border-amber-400 rounded-2xl p-4 flex items-center justify-between text-amber-950 shadow-md animate-fade-in">
+      <div className="bg-amber-50 border border-amber-400 rounded-2xl p-4 flex items-center justify-between text-amber-950 animate-fade-in">
         <div className="flex items-start gap-3.5">
           <div className="w-10 h-10 rounded-xl bg-amber-100 border border-amber-400 flex items-center justify-center text-amber-700 shrink-0 mt-0.5">
             <AlertTriangle className="w-6 h-6 text-amber-700" />
@@ -81,7 +81,7 @@ export const WeightsBalanceBanner: React.FC<WeightsBalanceBannerProps> = ({
   const isOver = totalWeight > 100;
 
   return (
-    <div className="sticky top-0 z-20 bg-amber-50/95 backdrop-blur-md border-2 border-amber-400 rounded-2xl p-4 flex items-center justify-between text-amber-950 shadow-md animate-fade-in">
+    <div className="bg-amber-50 border border-amber-400 rounded-2xl p-4 flex items-center justify-between text-amber-950 animate-fade-in">
       <div className="flex items-start gap-3.5">
         <div className="w-10 h-10 rounded-xl bg-amber-100 border border-amber-400 flex items-center justify-center text-amber-700 shrink-0 mt-0.5">
           <AlertTriangle className="w-6 h-6 text-amber-700" />

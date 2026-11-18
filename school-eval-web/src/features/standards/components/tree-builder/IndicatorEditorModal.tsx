@@ -32,6 +32,8 @@ import type {
   EvidenceRequirement,
 } from '../../api/standardsTypes';
 import { EditScoreDescriptorsModal } from './EditScoreDescriptorsModal';
+import { VerificationToolsManagerModal } from './VerificationToolsManagerModal';
+import { standardsApi } from '../../api/standardsApi';
 
 interface IndicatorEditorModalProps {
   isOpen: boolean;
@@ -50,10 +52,12 @@ interface IndicatorEditorModalProps {
 }
 
 const availableTools = [
-  { id: 'docs', label: 'فحص وثائق وسجلات رسمية', desc: 'تقارير، محاضر اجتماعات، خطط مدرسية' },
-  { id: 'observation', label: 'بطاقة ملاحظة صفية وبيئية', desc: 'ملاحظة التدريس الصفي والمرافق المدرسية' },
-  { id: 'interview', label: 'مقابلة مقننة مع المعنيين', desc: 'المدير، المعلمون، أولياء الأمور، الطلاب' },
-  { id: 'survey', label: 'استبانة قياس رضا الفئات المعنية', desc: 'استطلاع رأي موثق ومقاس رقمياً' },
+  { id: 1, label: 'فحص الوثائق', desc: 'تقارير، محاضر اجتماعات، خطط مدرسية، وسجلات رسمية' },
+  { id: 2, label: 'الملاحظة', desc: 'ملاحظة التدريس الصفي وسير الحصص والمرافق المدرسية' },
+  { id: 3, label: 'المقابلة', desc: 'مقابلات مع القيادة المدرسية، المعلمين، والطلاب' },
+  { id: 4, label: 'تحليل المضمون', desc: 'تحليل نتاجات التعلم ودفاتر التحضير والاختبارات' },
+  { id: 5, label: 'استبانة', desc: 'استطلاع رأي موثق ومقاس رقمياً لقياس الرضا' },
+  { id: 6, label: 'بطاقة ملاحظة', desc: 'بطاقة ملاحظة ميدانية مقننة لمعاينة البيئة والسلامة' },
 ];
 
 export const IndicatorEditorModal: React.FC<IndicatorEditorModalProps> = ({
@@ -86,6 +90,33 @@ export const IndicatorEditorModal: React.FC<IndicatorEditorModalProps> = ({
   // Score descriptors modal state
   const [isDescriptorsModalOpen, setIsDescriptorsModalOpen] = useState(false);
 
+  // Dynamic verification tools management
+  const [toolsList, setToolsList] = useState<Array<{ id: string | number; label: string; desc?: string }>>(availableTools);
+  const [isToolsManagerOpen, setIsToolsManagerOpen] = useState(false);
+
+  const fetchDynamicTools = async () => {
+    try {
+      const res = await standardsApi.getVerificationTools();
+      if (res.tools && res.tools.length > 0) {
+        setToolsList(
+          res.tools.map((t) => ({
+            id: t.toolId,
+            label: t.name,
+            desc: t.description || t.toolType || '',
+          }))
+        );
+      }
+    } catch {
+      // Fallback to availableTools
+    }
+  };
+
+  useEffect(() => {
+    if (isOpen) {
+      fetchDynamicTools();
+    }
+  }, [isOpen]);
+
   // Evidence requirements state
   const [newReqTitle, setNewReqTitle] = useState('');
   const [newReqRequired, setNewReqRequired] = useState(true);
@@ -93,6 +124,23 @@ export const IndicatorEditorModal: React.FC<IndicatorEditorModalProps> = ({
   const [editingReqId, setEditingReqId] = useState<number | null>(null);
   const [editingReqTitle, setEditingReqTitle] = useState('');
   const [editingReqRequired, setEditingReqRequired] = useState(true);
+
+  // حماية التعديلات غير المحفوظة في بيانات المؤشر (الملاحظة 8)
+  const handleRequestClose = () => {
+    const isFormDirty =
+      code !== (indicator?.code || '') ||
+      name !== (indicator?.name || '') ||
+      rubricNotes !== (indicator?.rubricNotes || indicator?.description || '') ||
+      String(weight) !== String(indicator?.weight !== undefined && indicator?.weight !== null ? indicator.weight : '');
+
+    if (isFormDirty && isDraft) {
+      const proceed = window.confirm(
+        'تنبيه: لديك تعديلات غير محفوظة في بيانات المؤشر المعياري.\nهل تريد المتابعة دون حفظ وإغلاق النافذة؟\n\n(موافق = المتابعة دون حفظ، إلغاء = البقاء لحفظ التعديلات)'
+      );
+      if (!proceed) return;
+    }
+    onClose();
+  };
 
   // Initialize form when indicator changes or modal opens
   useEffect(() => {
@@ -104,7 +152,7 @@ export const IndicatorEditorModal: React.FC<IndicatorEditorModalProps> = ({
 
       const tools = indicator.verificationTools || [];
       if (tools.length === 0 && indicator.verificationMethod) {
-        setSelectedTools([indicator.verificationMethod]);
+        setSelectedTools(indicator.verificationMethod.split(' • ').map((s) => s.trim()).filter(Boolean));
       } else {
         setSelectedTools(tools);
       }
@@ -119,7 +167,7 @@ export const IndicatorEditorModal: React.FC<IndicatorEditorModalProps> = ({
 
   if (!isOpen || !indicator) return null;
 
-  // Toggle tool checkbox (Flexible 1-4 tools)
+  // Toggle tool checkbox (Flexible 1-N tools)
   const toggleTool = (toolLabel: string) => {
     if (!isDraft) return;
     setSelectedTools((prev) =>
@@ -138,17 +186,26 @@ export const IndicatorEditorModal: React.FC<IndicatorEditorModalProps> = ({
       return;
     }
 
+    const toolIds = selectedTools
+      .map((label) => {
+        const found = toolsList.find((t) => t.label === label || String(t.id) === label);
+        return found && typeof found.id === 'number' ? found.id : null;
+      })
+      .filter((id): id is number => id !== null);
+
     setError(null);
     try {
       await onSave(indicator.indicatorId, {
         code: code.trim() || undefined,
         name: name.trim(),
         weight: weight !== '' ? Number(weight) : undefined,
+        description: rubricNotes.trim() || undefined,
         rubric_notes: rubricNotes.trim() || undefined,
         verification_method: selectedTools.join(' • '),
         verification_tools: selectedTools,
+        verification_tool_ids: toolIds.length > 0 ? toolIds : undefined,
       });
-      setSuccessMessage('تم حفظ تعديلات المؤشر بنجاح.');
+      setSuccessMessage('تم حفظ تعديلات المؤشر وأدوات التحقق بنجاح.');
       setTimeout(() => setSuccessMessage(null), 3000);
     } catch (err: any) {
       setError(err?.message || 'فشل حفظ تعديلات المؤشر.');
@@ -252,7 +309,7 @@ export const IndicatorEditorModal: React.FC<IndicatorEditorModalProps> = ({
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={onClose}
+              onClick={handleRequestClose}
               className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-200/60 transition-colors cursor-pointer"
               title="إغلاق النافذة"
             >
@@ -286,7 +343,7 @@ export const IndicatorEditorModal: React.FC<IndicatorEditorModalProps> = ({
             }`}
           >
             <CheckSquare className="w-4 h-4" />
-            <span>أدوات التحقق المعتمدة ({selectedTools.length}/4)</span>
+            <span>أدوات التحقق المعتمدة ({selectedTools.length}/{toolsList.length || 4})</span>
           </button>
 
           <button
@@ -413,20 +470,32 @@ export const IndicatorEditorModal: React.FC<IndicatorEditorModalProps> = ({
             </div>
           )}
 
-          {/* TAB 2: VERIFICATION TOOLS (FLEXIBLE 1-4) */}
+          {/* TAB 2: VERIFICATION TOOLS (FLEXIBLE 1-N) */}
           {activeTab === 'tools' && (
             <div className="space-y-4">
-              <div className="bg-amber-50/60 border border-amber-200 rounded-xl p-4">
-                <h4 className="text-xs font-bold text-amber-900 mb-1">
-                  مرونة اختيار أدوات التحقق (Verification Tools)
-                </h4>
-                <p className="text-xs text-amber-800/80 leading-relaxed">
-                  يمكن تحديد أي عدد من الأدوات (أداة واحدة، اثنتان، ثلاث، أو الأربع أدوات كاملة) حسب طبيعة المؤشر. يتم حفظ الأدوات المختارة صراحة مع المؤشر.
-                </p>
+              <div className="bg-amber-50/60 border border-amber-200 rounded-xl p-4 flex items-center justify-between gap-4">
+                <div>
+                  <h4 className="text-xs font-bold text-amber-900 mb-1">
+                    مرونة اختيار أدوات التحقق (Verification Tools)
+                  </h4>
+                  <p className="text-xs text-amber-800/80 leading-relaxed">
+                    يمكن تحديد أي عدد من الأدوات المعتمدة حسب طبيعة المؤشر، أو إضافة أدوات مخصصة جديدة وحفظها صراحة.
+                  </p>
+                </div>
+                {isDraft && (
+                  <button
+                    type="button"
+                    onClick={() => setIsToolsManagerOpen(true)}
+                    className="flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-800 hover:bg-amber-900 text-white rounded-lg text-xs font-bold shadow-xs transition-colors"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>إدارة الأدوات ({toolsList.length})</span>
+                  </button>
+                )}
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {availableTools.map((tool) => {
+                {toolsList.map((tool) => {
                   const isChecked = selectedTools.includes(tool.label);
                   return (
                     <div
@@ -459,7 +528,7 @@ export const IndicatorEditorModal: React.FC<IndicatorEditorModalProps> = ({
               </div>
 
               <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs text-slate-600 flex items-center justify-between">
-                <span>الأدوات المحددة حالياً: <strong>{selectedTools.length}</strong> من أصل 4</span>
+                <span>الأدوات المحددة حالياً: <strong>{selectedTools.length}</strong> من أصل {toolsList.length} أداة</span>
                 <span className="font-mono text-xs text-amber-700 font-bold">
                   {selectedTools.length > 0 ? selectedTools.join(' • ') : 'لم يتم اختيار أي أداة بعد'}
                 </span>
@@ -476,7 +545,7 @@ export const IndicatorEditorModal: React.FC<IndicatorEditorModalProps> = ({
                     واصفات سلم التقدير اللفظي (Rubric Descriptors)
                   </h4>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    الواصفات الأربعة المعتمدة (0: غير متحقق، 1: متحقق جزئياً، 2: متحقق، 3: متميز)
+                    الواصفات المعتمدة للمستويات (0: غير متوفر، 1: متحقق بدرجة ضعيفة، 2: متحقق بدرجة متوسطة، 3: متحقق / مستوفٍ)
                   </p>
                 </div>
 
@@ -714,7 +783,7 @@ export const IndicatorEditorModal: React.FC<IndicatorEditorModalProps> = ({
           <div className="flex items-center gap-3">
             <button
               type="button"
-              onClick={onClose}
+              onClick={handleRequestClose}
               disabled={isSaving}
               className="px-4 py-2 text-xs font-bold text-slate-600 hover:text-slate-800 bg-white border border-slate-300 hover:bg-slate-50 rounded-xl transition-colors cursor-pointer"
             >
@@ -757,6 +826,14 @@ export const IndicatorEditorModal: React.FC<IndicatorEditorModalProps> = ({
           onSave={async (descriptors: UpdateScoreDescriptorItem[]) => {
             await onUpdateScoreDescriptors(indicator.indicatorId, descriptors);
           }}
+        />
+      )}
+      {/* Verification Tools Manager Modal */}
+      {isToolsManagerOpen && (
+        <VerificationToolsManagerModal
+          isOpen={isToolsManagerOpen}
+          onClose={() => setIsToolsManagerOpen(false)}
+          onToolsUpdated={fetchDynamicTools}
         />
       )}
     </div>

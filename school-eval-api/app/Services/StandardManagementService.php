@@ -10,6 +10,7 @@ use App\Models\ScoreLevel;
 use App\Models\Standard;
 use App\Models\StandardVersion;
 use App\Models\SubStandard;
+use App\Models\VerificationTool;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -689,15 +690,76 @@ class StandardManagementService
         $version = $indicator->subStandard?->standard?->version;
         $this->ensureIsDraft($version);
 
+        $desc = array_key_exists('description', $data)
+            ? $data['description']
+            : (array_key_exists('rubric_notes', $data) ? $data['rubric_notes'] : $indicator->description);
+
         $indicator->update([
             'name'        => $data['name'] ?? $indicator->name,
-            'description' => array_key_exists('description', $data) ? $data['description'] : $indicator->description,
+            'description' => $desc,
             'code'        => $data['code'] ?? $indicator->code,
             'status'      => $data['status'] ?? $indicator->status,
             'weight'      => array_key_exists('weight', $data) ? $data['weight'] : $indicator->weight,
         ]);
 
-        return $indicator;
+        // مزامنة أدوات ووسائل التحقق المعتمدة للمؤشر (مرونة 1-N أداة)
+        if (array_key_exists('verification_tool_ids', $data) && is_array($data['verification_tool_ids']) && !empty($data['verification_tool_ids'])) {
+            $toolIds = array_unique(array_filter(array_map('intval', $data['verification_tool_ids'])));
+            DB::table('indicator_verification_methods')->where('indicator_id', $indicator->indicator_id)->delete();
+            foreach ($toolIds as $toolId) {
+                if ($toolId > 0) {
+                    DB::table('indicator_verification_methods')->insert([
+                        'indicator_id'   => $indicator->indicator_id,
+                        'tool_id'        => $toolId,
+                        'required'       => true,
+                        'usage_guidance' => 'أداة تقييم معتمدة للتحقق من المؤشر',
+                        'created_at'     => now(),
+                    ]);
+                }
+            }
+        } elseif (array_key_exists('verification_tools', $data) && is_array($data['verification_tools'])) {
+            $toolNames = array_filter($data['verification_tools']);
+            $resolvedIds = [];
+            foreach ($toolNames as $rawName) {
+                $cleanName = trim((string) $rawName);
+                if (empty($cleanName)) continue;
+                
+                // البحث بالاسم الدقيق أولاً
+                $tool = VerificationTool::where('name', $cleanName)->first();
+                if (!$tool) {
+                    // البحث بالاسم الجزئي
+                    $tool = VerificationTool::where('name', 'LIKE', '%' . $cleanName . '%')
+                        ->orWhereRaw('? LIKE CONCAT("%", name, "%")', [$cleanName])
+                        ->first();
+                }
+                if (!$tool) {
+                    // إنشاء الأداة المخصصة تلقائياً لضمان عدم ضياع التعديل نهائياً
+                    $tool = VerificationTool::create([
+                        'name'        => $cleanName,
+                        'tool_type'   => 'مخصص',
+                        'description' => 'أداة تحقق مخصصة للمؤشر',
+                        'approved'    => true,
+                    ]);
+                }
+                if ($tool) {
+                    $resolvedIds[] = $tool->tool_id;
+                }
+            }
+
+            $resolvedIds = array_unique($resolvedIds);
+            DB::table('indicator_verification_methods')->where('indicator_id', $indicator->indicator_id)->delete();
+            foreach ($resolvedIds as $toolId) {
+                DB::table('indicator_verification_methods')->insert([
+                    'indicator_id'   => $indicator->indicator_id,
+                    'tool_id'        => $toolId,
+                    'required'       => true,
+                    'usage_guidance' => 'أداة تقييم معتمدة للتحقق من المؤشر',
+                    'created_at'     => now(),
+                ]);
+            }
+        }
+
+        return $indicator->load('verificationTools');
     }
 
     /**
@@ -857,6 +919,60 @@ class StandardManagementService
             }
 
             return $created;
+        });
+    }
+
+    /**
+     * حذف مسودة إصدار معياري وكافة البيانات التابعة لها (Cascade).
+     * مسموح فقط للإصدارات التي بحالة Draft وغير المرتبطة بدورات أو نتائج.
+     *
+     * @param StandardVersion $version
+     * @return bool
+     * @throws ValidationException
+     */
+    public function deleteVersion(StandardVersion $version): bool
+    {
+        if (!$version->isDraft()) {
+            throw ValidationException::withMessages([
+                'version' => ['لا يمكن حذف إصدار إلا إذا كان بحالة مسودة (Draft). الإصدارات المُقرّة أو النشطة محميّة نظامياً.'],
+            ]);
+        }
+
+        $isLinked = DB::table('evaluation_cycles')->where('version_id', $version->version_id)->exists()
+            || DB::table('evaluation_results')->where('standard_version_id', $version->version_id)->exists();
+
+        if ($isLinked) {
+            throw ValidationException::withMessages([
+                'version' => ['لا يمكن حذف هذا الإصدار لارتباطه بدورات تقييم أو نتائج مسجلة في النظام.'],
+            ]);
+        }
+
+        return DB::transaction(function () use ($version) {
+            $standardIds = Standard::where('version_id', $version->version_id)->pluck('standard_id')->toArray();
+            $subStandardIds = SubStandard::whereIn('standard_id', $standardIds)->pluck('sub_standard_id')->toArray();
+            $indicatorIds = Indicator::whereIn('sub_standard_id', $subStandardIds)->pluck('indicator_id')->toArray();
+
+            if (!empty($indicatorIds)) {
+                DB::table('indicator_verification_methods')->whereIn('indicator_id', $indicatorIds)->delete();
+                DB::table('indicator_evidence_requirements')->whereIn('indicator_id', $indicatorIds)->delete();
+                DB::table('indicator_score_descriptors')->whereIn('indicator_id', $indicatorIds)->delete();
+                DB::table('indicators')->whereIn('indicator_id', $indicatorIds)->delete();
+            }
+
+            DB::table('indicator_evidence_requirements')->where('standard_version_id', $version->version_id)->delete();
+            DB::table('indicator_score_descriptors')->where('standard_version_id', $version->version_id)->delete();
+
+            if (!empty($subStandardIds)) {
+                DB::table('sub_standards')->whereIn('sub_standard_id', $subStandardIds)->delete();
+            }
+
+            if (!empty($standardIds)) {
+                DB::table('standards')->whereIn('standard_id', $standardIds)->delete();
+            }
+
+            DB::table('score_levels')->where('standard_version_id', $version->version_id)->delete();
+
+            return (bool) $version->delete();
         });
     }
 }

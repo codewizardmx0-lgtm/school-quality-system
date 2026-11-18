@@ -11,6 +11,7 @@ import {
   ArrowLeft,
   BookmarkPlus,
   Lock,
+  FileCheck,
 } from 'lucide-react';
 import type { StandardNode, SubStandardNode, IndicatorNode, RubricLevelInfo } from '../../api/standardsTypes';
 import { standardsApi } from '../../api/standardsApi';
@@ -21,7 +22,7 @@ import { EditStandardModal } from './EditStandardModal';
 import { AddSubStandardModal } from './AddSubStandardModal';
 import { EditSubStandardModal } from './EditSubStandardModal';
 import { AddIndicatorModal } from './AddIndicatorModal';
-import { VerificationToolsGuide } from './VerificationToolsGuide';
+import { VerificationToolsManagerModal } from './VerificationToolsManagerModal';
 import { RubricLevelsGuide } from '../weights-rubrics/RubricLevelsGuide';
 import { useStandardsTree } from '../../hooks/useStandardsTree';
 import { exportStandardsTreeToExcel } from '../../utils/standardsExportUtils';
@@ -45,6 +46,7 @@ export const StandardsTreeBuilderPage: React.FC<StandardsTreeBuilderPageProps> =
     selectedSubStandard,
     selectedIndicator,
     isSaving,
+    refetch,
     selectIndicator,
     addStandard,
     updateStandard,
@@ -76,6 +78,7 @@ export const StandardsTreeBuilderPage: React.FC<StandardsTreeBuilderPageProps> =
   const [modalTargetSub, setModalTargetSub] = useState<SubStandardNode | null>(null);
 
   const [isIndicatorModalOpen, setIsIndicatorModalOpen] = useState(false);
+  const [isToolsManagerOpen, setIsToolsManagerOpen] = useState(false);
   const [rubricLevels, setRubricLevels] = useState<RubricLevelInfo[]>([]);
 
   useEffect(() => {
@@ -132,7 +135,11 @@ export const StandardsTreeBuilderPage: React.FC<StandardsTreeBuilderPageProps> =
 
   const handleExportExcel = () => {
     if (treeData) {
-      exportStandardsTreeToExcel(treeData);
+      exportStandardsTreeToExcel(treeData, {
+        versionNo: treeData.versionNo,
+        versionName: treeData.versionName,
+        status: treeData.status,
+      });
     }
   };
 
@@ -206,6 +213,28 @@ export const StandardsTreeBuilderPage: React.FC<StandardsTreeBuilderPageProps> =
               <span>+ إضافة معيار رئيسي</span>
             </button>
           )}
+
+          <button
+            type="button"
+            onClick={() => setIsToolsManagerOpen(true)}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '9px 16px',
+              fontSize: '12px',
+              fontWeight: 700,
+              color: '#FFFFFF',
+              backgroundColor: 'rgba(255, 255, 255, 0.15)',
+              borderRadius: '10px',
+              border: '1px solid rgba(255, 255, 255, 0.35)',
+              cursor: 'pointer',
+              transition: 'all 0.15s ease',
+            }}
+          >
+            <FileCheck size={15} color="#FEF3C7" />
+            <span>إدارة أدوات التحقق</span>
+          </button>
           {!isDraft && (
             <div
               style={{
@@ -241,8 +270,6 @@ export const StandardsTreeBuilderPage: React.FC<StandardsTreeBuilderPageProps> =
         onDeleteSubStandard={(sub) => deleteSubStandard(sub.subStandardId)}
       />
 
-      {/* Verification Tools Guide (Observation 12) */}
-      <VerificationToolsGuide />
 
       {/* Rubric Levels Guide (0-3) */}
       <RubricLevelsGuide levels={rubricLevels} />
@@ -412,6 +439,17 @@ export const StandardsTreeBuilderPage: React.FC<StandardsTreeBuilderPageProps> =
           onSubmit={async (subId, payload) => {
             await addIndicator(subId, payload);
             setIsAddIndModalOpen(false);
+          }}
+        />
+      )}
+
+      {/* Verification Tools Manager Modal */}
+      {isToolsManagerOpen && (
+        <VerificationToolsManagerModal
+          isOpen={isToolsManagerOpen}
+          onClose={() => setIsToolsManagerOpen(false)}
+          onToolsUpdated={() => {
+            refetch();
           }}
         />
       )}

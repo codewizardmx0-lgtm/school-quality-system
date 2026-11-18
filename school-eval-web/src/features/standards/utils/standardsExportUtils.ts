@@ -9,6 +9,15 @@
 import * as XLSX from 'xlsx';
 import type { StandardNode, StandardVersionDetail, StandardWeightItem } from '../api/standardsTypes';
 
+export interface StandardsExportMetadata {
+  versionNo?: string;
+  versionName?: string;
+  status?: string;
+  issueDate?: string;
+  sourceNumber?: string;
+  sourceOrganization?: string;
+}
+
 /**
  * توليد الطابع الزمني الموحد بصيغة YYYY-MM-DD_HH-mm
  */
@@ -24,10 +33,11 @@ export function getStandardTimestamp(): string {
 }
 
 /**
- * تصدير هيكل الشجرة المعيارية إلى مصنف Excel (.xlsx) كامل ومتوافق
+ * تصدير هيكل الشجرة المعيارية إلى مصنف Excel (.xlsx) مع الترويسة الوزارية الرسمية وبيانات الإصدار
  */
 export function exportStandardsTreeToExcel(
-  treeData: StandardVersionDetail | { versionName?: string; versionNo?: string; standards: StandardNode[] }
+  treeData: StandardVersionDetail | { versionName?: string; versionNo?: string; status?: string; standards: StandardNode[] },
+  metadata?: StandardsExportMetadata
 ): void {
   const rows: Array<Record<string, any>> = [];
 
@@ -91,8 +101,35 @@ export function exportStandardsTreeToExcel(
     });
   });
 
+  // استخلاص بيانات الترويسة الرسمية (الملاحظة 10)
+  const versionNo = metadata?.versionNo || (treeData as any).versionNo || '2026.1';
+  const versionName = metadata?.versionName || (treeData as any).versionName || 'وثيقة المعايير الوطنية المطورة للتقويم المدرسي';
+  const rawStatus = (metadata?.status || (treeData as any).status || 'Draft').toLowerCase();
+  const statusLabel =
+    rawStatus === 'active'
+      ? 'مُقرّ ونافذ حاكم للدورة الجارية'
+      : rawStatus === 'approved'
+      ? 'مُقرّ ومجدول للدورة القادمة'
+      : rawStatus === 'draft'
+      ? 'مسودة قيد التطوير والمراجعة'
+      : 'إصدار سابق مؤرشف';
+  const issueDate = metadata?.issueDate || (treeData as any).issueDate || new Date().toISOString().split('T')[0];
+  const sourceNumber = metadata?.sourceNumber || (treeData as any).sourceNumber || 'قرار وزاري رقم (14) لسنة 2026م';
+  const sourceOrg = metadata?.sourceOrganization || (treeData as any).sourceOrganization || 'وزارة التربية والتعليم والبحث العلمي';
+  const exportTimestamp = new Date().toLocaleString('ar-YE', { dateStyle: 'full', timeStyle: 'short' });
+
+  // أسطر الترويسة الوزارية الرسمية
+  const headerRows = [
+    ['الجمهورية اليمنية - وزارة التربية والتعليم والبحث العلمي - قطاع المعايير والرقابة والجودة'],
+    [`اسم الوثيقة: ${versionName} • رقم الإصدار: ${versionNo} • الحالة الرسمية: ${statusLabel}`],
+    [`تاريخ الإصدار: ${issueDate} • قرار الاعتماد: ${sourceNumber} • الجهة المصدرة: ${sourceOrg}`],
+    [`تاريخ وساعة التصدير المكتبي: ${exportTimestamp} • توثيق رسمي معتمد للمنظومة`],
+    [], // سطر فاصل فارغ قبل بيانات الجدول
+  ];
+
   // إنشاء ورقة العمل والمصنف
-  const worksheet = XLSX.utils.json_to_sheet(rows);
+  const worksheet = XLSX.utils.aoa_to_sheet(headerRows);
+  XLSX.utils.sheet_add_json(worksheet, rows, { origin: 'A6' });
 
   // إعداد اتجاه RTL للورقة
   worksheet['!dir'] = 'rtl';
@@ -120,12 +157,13 @@ export function exportStandardsTreeToExcel(
 }
 
 /**
- * تصدير جدول أوزان المعايير وتوزيعها إلى مصنف Excel (.xlsx)
+ * تصدير جدول أوزان المعايير وتوزيعها إلى مصنف Excel (.xlsx) مع الترويسة الوزارية وبيانات الإصدار
  */
 export function exportWeightsTableToExcel(
   weights: StandardWeightItem[],
   totalWeight: number,
-  versionNo: string
+  versionNo: string,
+  metadata?: StandardsExportMetadata
 ): void {
   const rows: Array<Record<string, any>> = weights.map((w, index) => ({
     'الرقم': index + 1,
@@ -148,7 +186,33 @@ export function exportWeightsTableToExcel(
     'متوسط وزن المؤشر': totalWeight === 100 ? 'متزن 100% ✓' : 'غير متزن ⚠',
   });
 
-  const worksheet = XLSX.utils.json_to_sheet(rows);
+  // استخلاص بيانات الترويسة الرسمية (الملاحظة 10)
+  const rawStatus = (metadata?.status || 'Draft').toLowerCase();
+  const statusLabel =
+    rawStatus === 'active'
+      ? 'مُقرّ ونافذ حاكم للدورة الجارية'
+      : rawStatus === 'approved'
+      ? 'مُقرّ ومجدول للدورة القادمة'
+      : rawStatus === 'draft'
+      ? 'مسودة قيد التطوير والمراجعة'
+      : 'إصدار سابق مؤرشف';
+  const issueDate = metadata?.issueDate || new Date().toISOString().split('T')[0];
+  const sourceNumber = metadata?.sourceNumber || 'قرار وزاري رقم (14) لسنة 2026م';
+  const sourceOrg = metadata?.sourceOrganization || 'وزارة التربية والتعليم والبحث العلمي';
+  const exportTimestamp = new Date().toLocaleString('ar-YE', { dateStyle: 'full', timeStyle: 'short' });
+
+  // أسطر الترويسة الوزارية الرسمية
+  const headerRows = [
+    ['الجمهورية اليمنية - وزارة التربية والتعليم والبحث العلمي - قطاع المعايير والرقابة والجودة'],
+    [`جدول توزيع ومعايرة الأوزان النسبية للمعايير الوطنية • رقم الإصدار: ${versionNo} • الحالة: ${statusLabel}`],
+    [`تاريخ الإصدار: ${issueDate} • مرجعية الاعتماد: ${sourceNumber} • الجهة: ${sourceOrg}`],
+    [`تاريخ وساعة التصدير المكتبي: ${exportTimestamp} • إجمالي الوزن الموزع: ${totalWeight}% (${totalWeight === 100 ? 'متزن قانونياً ✓' : 'غير متزن ⚠'})`],
+    [], // سطر فاصل فارغ قبل بيانات الجدول
+  ];
+
+  const worksheet = XLSX.utils.aoa_to_sheet(headerRows);
+  XLSX.utils.sheet_add_json(worksheet, rows, { origin: 'A6' });
+
   worksheet['!dir'] = 'rtl';
   worksheet['!cols'] = [
     { wch: 8 },

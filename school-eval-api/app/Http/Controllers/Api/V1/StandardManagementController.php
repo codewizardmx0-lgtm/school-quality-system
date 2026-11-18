@@ -23,10 +23,12 @@ use App\Models\ScoreLevel;
 use App\Models\Standard;
 use App\Models\StandardVersion;
 use App\Models\SubStandard;
+use App\Models\VerificationTool;
 use App\Services\StandardManagementService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\View;
 use Illuminate\Validation\ValidationException;
 
 /**
@@ -98,6 +100,30 @@ class StandardManagementController extends Controller
         try {
             $updated = $this->service->updateVersion($version, $request->validated());
             return ApiResponse::success(data: $updated, message: 'تم تحديث بيانات مسودة الإصدار بنجاح.');
+        } catch (ValidationException $e) {
+            return ApiResponse::validationError($e->errors(), $e->getMessage());
+        }
+    }
+
+    /**
+     * حذف مسودة إصدار معياري (Draft فقط).
+     * الصلاحية المطلوبة: standards.manage
+     */
+    public function destroy(Request $request, int $id): JsonResponse
+    {
+        $user = $request->user();
+        if (!$user || !$user->hasPermission('standards.manage')) {
+            return ApiResponse::forbidden('غير مصرح لك بحذف الإصدارات المعيارية.');
+        }
+
+        $version = StandardVersion::find($id);
+        if (!$version) {
+            return ApiResponse::notFound('الإصدار المعياري غير موجود.');
+        }
+
+        try {
+            $this->service->deleteVersion($version);
+            return ApiResponse::success(data: null, message: 'تم حذف مسودة الإصدار المعياري بنجاح.');
         } catch (ValidationException $e) {
             return ApiResponse::validationError($e->errors(), $e->getMessage());
         }
@@ -595,36 +621,151 @@ class StandardManagementController extends Controller
     }
 
     /**
-     * استرجاع سجل الفروقات والتغييرات الحقيقية مقارنة بالإصدار المعتمد.
+     * استرجاع كافة أدوات ووسائل التحقق المعتمدة مع إحصاءات ارتباطها بالمؤشرات.
+     * الصلاحية المطلوبة: standards.view
      */
-    public function diffLog(int $id): JsonResponse
+    public function getVerificationTools(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        if (!$user || !$user->hasPermission('standards.view')) {
+            return ApiResponse::forbidden('غير مصرح لك باستعراض أدوات التحقق.');
+        }
+
+        $tools = VerificationTool::withCount('indicatorVerificationMethods')
+            ->orderBy('tool_id', 'asc')
+            ->get()
+            ->map(function ($tool) {
+                return [
+                    'toolId'          => $tool->tool_id,
+                    'name'            => $tool->name,
+                    'toolType'        => $tool->tool_type,
+                    'description'     => $tool->description,
+                    'approved'        => (bool) $tool->approved,
+                    'indicatorsCount' => $tool->indicator_verification_methods_count,
+                    'createdAt'       => $tool->created_at?->toIso8601ZuluString(),
+                ];
+            });
+
+        return ApiResponse::success([
+            'tools'      => $tools,
+            'totalCount' => $tools->count(),
+        ], 'تم استرجاع قائمة أدوات التحقق المعتمدة بنجاح.');
+    }
+
+    /**
+     * إضافة أداة تحقق جديدة معتمدة في النظام.
+     * الصلاحية المطلوبة: standards.manage
+     */
+    public function storeVerificationTool(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        if (!$user || !$user->hasPermission('standards.manage')) {
+            return ApiResponse::forbidden('غير مصرح لك بإضافة أدوات تحقق.');
+        }
+
+        $validated = $request->validate([
+            'name'        => ['required', 'string', 'max:100', 'unique:verification_tools,name'],
+            'tool_type'   => ['nullable', 'string', 'max:50'],
+            'description' => ['nullable', 'string', 'max:1000'],
+        ], [
+            'name.required' => 'يرجى إدخال اسم أداة التحقق.',
+            'name.unique'   => 'اسم أداة التحقق مسجل مسبقاً في النظام.',
+        ]);
+
+        $tool = VerificationTool::create([
+            'name'        => trim($validated['name']),
+            'tool_type'   => $validated['tool_type'] ?? 'أداة مساندة',
+            'description' => $validated['description'] ?? null,
+            'approved'    => true,
+        ]);
+
+        return ApiResponse::created([
+            'toolId'          => $tool->tool_id,
+            'name'            => $tool->name,
+            'toolType'        => $tool->tool_type,
+            'description'     => $tool->description,
+            'approved'        => (bool) $tool->approved,
+            'indicatorsCount' => 0,
+        ], 'تمت إضافة أداة التحقق المعتمدة بنجاح.');
+    }
+
+    /**
+     * حذف أداة تحقق غير مرتبطة بمؤشرات أو نتائج تقييم.
+     * الصلاحية المطلوبة: standards.manage
+     */
+    public function deleteVerificationTool(Request $request, int $id): JsonResponse
+    {
+        $user = $request->user();
+        if (!$user || !$user->hasPermission('standards.manage')) {
+            return ApiResponse::forbidden('غير مصرح لك بحذف أدوات التحقق.');
+        }
+
+        $tool = VerificationTool::find($id);
+        if (!$tool) {
+            return ApiResponse::notFound('أداة التحقق المطلوبة غير موجودة.');
+        }
+
+        $linkedIndicators = DB::table('indicator_verification_methods')
+            ->where('tool_id', $id)
+            ->count();
+
+        $linkedResults = DB::table('evaluation_result_verification_methods')
+            ->where('tool_id', $id)
+            ->count();
+
+        if ($linkedIndicators > 0 || $linkedResults > 0) {
+            return ApiResponse::unprocessable("لا يمكن حذف أداة التحقق '{$tool->name}' لأنها مرتبطة حالياً بـ ({$linkedIndicators}) مؤشراً معيارياً و ({$linkedResults}) نتيجة تقييم مسجلة.");
+        }
+
+        $tool->delete();
+
+        return ApiResponse::success(null, "تم حذف أداة التحقق '{$tool->name}' بنجاح.");
+    }
+
+    /**
+     * استرجاع سجل الفروقات والتغييرات الحقيقية مقارنة بالإصدار المعتمد أو إصدار أساس محدد.
+     */
+    public function diffLog(Request $request, int $id): JsonResponse
     {
         $version = StandardVersion::with(['standards.subStandards.indicators'])->find($id);
         if (!$version) {
             return ApiResponse::notFound('الإصدار المعياري غير موجود.');
         }
 
-        // تحديد خط الأساس الفعلي: الإصدار السابق المعتمد أو النشط
-        $baseline = StandardVersion::whereIn('status', [StandardVersion::STATUS_ACTIVE, StandardVersion::STATUS_APPROVED])
-            ->where('version_id', '!=', $id)
-            ->where('version_id', '<', $id)
-            ->orderByDesc('version_id')
-            ->first();
-
-        if (!$baseline) {
+        $baseId = $request->query('base_version_id');
+        if ($baseId && (int)$baseId !== $id) {
+            $baseline = StandardVersion::with(['standards.subStandards.indicators'])->find($baseId);
+        } else {
+            // تحديد خط الأساس الفعلي: الإصدار السابق المعتمد أو النشط
             $baseline = StandardVersion::whereIn('status', [StandardVersion::STATUS_ACTIVE, StandardVersion::STATUS_APPROVED])
                 ->where('version_id', '!=', $id)
+                ->where('version_id', '<', $id)
+                ->orderByDesc('version_id')
                 ->first();
+
+            if (!$baseline) {
+                $baseline = StandardVersion::whereIn('status', [StandardVersion::STATUS_ACTIVE, StandardVersion::STATUS_APPROVED])
+                    ->where('version_id', '!=', $id)
+                    ->first();
+            }
         }
 
         $hasBaseline = ($baseline !== null && $baseline->version_id !== $version->version_id);
 
-        $versionStandards = $version->standards;
+        $versionStandards = $version->standards()->with([
+            'subStandards.indicators.scoreDescriptors.scoreLevel',
+            'subStandards.indicators.evidenceRequirements',
+            'subStandards.indicators.verificationTools',
+        ])->get();
         $versionSubs = $versionStandards->flatMap->subStandards;
         $versionIndicators = $versionSubs->flatMap->indicators;
         $versionWeight = round($versionStandards->sum('weight'), 2);
 
-        $baselineStandards = $hasBaseline ? $baseline->standards()->with('subStandards.indicators')->get() : collect();
+        $baselineStandards = $hasBaseline ? $baseline->standards()->with([
+            'subStandards.indicators.scoreDescriptors.scoreLevel',
+            'subStandards.indicators.evidenceRequirements',
+            'subStandards.indicators.verificationTools',
+        ])->get() : collect();
         $baselineSubs = $baselineStandards->flatMap->subStandards;
         $baselineIndicators = $baselineSubs->flatMap->indicators;
         $baselineWeight = $hasBaseline ? round($baselineStandards->sum('weight'), 2) : 0;
@@ -650,6 +791,7 @@ class StandardManagementController extends Controller
             'isWeightBalanced'        => abs($versionWeight - 100.0) < 0.05,
             'isBalanced'              => abs($versionWeight - 100.0) < 0.05,
             'hasBaseline'             => $hasBaseline,
+            'baselineVersionId'       => $hasBaseline ? $baseline->version_id : null,
             'baselineVersionNo'       => $hasBaseline ? $baseline->version_no : null,
             'previousVersionNo'       => $hasBaseline ? $baseline->version_no : null,
         ];
@@ -741,23 +883,163 @@ class StandardManagementController extends Controller
             }
         }
 
+        // جداول المقارنة الهيكلية المنظمة
+        $standardsComparison = [];
+        foreach ($versionStandards as $vStd) {
+            $bStd = $hasBaseline ? $baselineStandards->firstWhere('code', $vStd->code) : null;
+            $status = !$bStd ? 'added' : (abs((float)$bStd->weight - (float)$vStd->weight) > 0.01 ? 'reweighted' : ($bStd->name !== $vStd->name ? 'modified' : 'same'));
+            $standardsComparison[] = [
+                'code'           => $vStd->code,
+                'name'           => $vStd->name,
+                'baselineName'   => $bStd?->name ?? '—',
+                'weight'         => (float) $vStd->weight,
+                'baselineWeight' => $bStd ? (float) $bStd->weight : 0.0,
+                'weightDiff'     => $bStd ? round((float) $vStd->weight - (float) $bStd->weight, 2) : (float) $vStd->weight,
+                'indicatorsCount'=> $vStd->subStandards->flatMap->indicators->count(),
+                'status'         => $status,
+            ];
+        }
+
+        $indicatorsComparison = [];
+        foreach ($versionIndicators as $vInd) {
+            $bInd = $hasBaseline ? $baselineIndicators->firstWhere('code', $vInd->code) : null;
+
+            // Verification Tools
+            $vTools = $vInd->verificationTools->pluck('name')->all();
+            if (empty($vTools) && !empty($vInd->verification_tools)) {
+                $vTools = is_array($vInd->verification_tools) ? $vInd->verification_tools : (json_decode($vInd->verification_tools, true) ?: []);
+            }
+            $bTools = $bInd ? $bInd->verificationTools->pluck('name')->all() : [];
+            if ($bInd && empty($bTools) && !empty($bInd->verification_tools)) {
+                $bTools = is_array($bInd->verification_tools) ? $bInd->verification_tools : (json_decode($bInd->verification_tools, true) ?: []);
+            }
+
+            // Evidence Requirements
+            $vEvidence = $vInd->evidenceRequirements->map(fn($e) => ['title' => $e->title, 'required' => (bool)$e->required])->all();
+            $bEvidence = $bInd ? $bInd->evidenceRequirements->map(fn($e) => ['title' => $e->title, 'required' => (bool)$e->required])->all() : [];
+
+            // Rubric Descriptors (0-3)
+            $vDescriptors = [];
+            foreach ($vInd->scoreDescriptors as $sd) {
+                $lvlVal = $sd->scoreLevel?->score_value ?? $sd->score_level_id;
+                $vDescriptors[$lvlVal] = $sd->description;
+            }
+            $bDescriptors = [];
+            if ($bInd) {
+                foreach ($bInd->scoreDescriptors as $sd) {
+                    $lvlVal = $sd->scoreLevel?->score_value ?? $sd->score_level_id;
+                    $bDescriptors[$lvlVal] = $sd->description;
+                }
+            }
+
+            // Comprehensive status
+            $isReweighted = $bInd && abs((float)$bInd->weight - (float)$vInd->weight) > 0.01;
+            $isTextModified = $bInd && ($bInd->name !== $vInd->name || ($bInd->description ?? '') !== ($vInd->description ?? ''));
+            $isToolsModified = $bInd && array_values($vTools) !== array_values($bTools);
+            $isEvidenceModified = $bInd && count($vEvidence) !== count($bEvidence);
+            $isRubricModified = $bInd && $vDescriptors !== $bDescriptors;
+
+            $status = !$bInd ? 'added' : (
+                $isTextModified || $isToolsModified || $isEvidenceModified || $isRubricModified
+                    ? 'modified'
+                    : ($isReweighted ? 'reweighted' : 'same')
+            );
+
+            $indicatorsComparison[] = [
+                'code'                => $vInd->code,
+                'name'                => $vInd->name,
+                'baselineName'        => $bInd?->name ?? '—',
+                'description'         => $vInd->description ?? '',
+                'baselineDescription' => $bInd?->description ?? '',
+                'standardCode'        => $vInd->subStandard?->standard?->code ?? '—',
+                'weight'              => (float) $vInd->weight,
+                'baselineWeight'      => $bInd ? (float) $bInd->weight : 0.0,
+                'weightDiff'          => $bInd ? round((float) $vInd->weight - (float) $bInd->weight, 2) : (float) $vInd->weight,
+                'status'              => $status,
+                'tools'               => $vTools,
+                'baselineTools'       => $bTools,
+                'evidence'            => $vEvidence,
+                'baselineEvidence'    => $bEvidence,
+                'descriptors'         => $vDescriptors,
+                'baselineDescriptors' => $bDescriptors,
+            ];
+        }
+
+        if ($hasBaseline) {
+            foreach ($baselineIndicators as $bInd) {
+                if (!$versionIndMap->has($bInd->code)) {
+                    $bTools = $bInd->verificationTools->pluck('name')->all();
+                    if (empty($bTools) && !empty($bInd->verification_tools)) {
+                        $bTools = is_array($bInd->verification_tools) ? $bInd->verification_tools : (json_decode($bInd->verification_tools, true) ?: []);
+                    }
+                    $bEvidence = $bInd->evidenceRequirements->map(fn($e) => ['title' => $e->title, 'required' => (bool)$e->required])->all();
+                    $bDescriptors = [];
+                    foreach ($bInd->scoreDescriptors as $sd) {
+                        $lvlVal = $sd->scoreLevel?->score_value ?? $sd->score_level_id;
+                        $bDescriptors[$lvlVal] = $sd->description;
+                    }
+
+                    $indicatorsComparison[] = [
+                        'code'                => $bInd->code,
+                        'name'                => '— (مؤشر محذوف في الإصدار الجديد)',
+                        'baselineName'        => $bInd->name,
+                        'description'         => '',
+                        'baselineDescription' => $bInd->description ?? '',
+                        'standardCode'        => $bInd->subStandard?->standard?->code ?? '—',
+                        'weight'              => 0.0,
+                        'baselineWeight'      => (float) $bInd->weight,
+                        'weightDiff'          => - round((float) $bInd->weight, 2),
+                        'status'              => 'removed',
+                        'tools'               => [],
+                        'baselineTools'       => $bTools,
+                        'evidence'            => [],
+                        'baselineEvidence'    => $bEvidence,
+                        'descriptors'         => [],
+                        'baselineDescriptors' => $bDescriptors,
+                    ];
+                }
+            }
+        }
+
+        // مقارنة سلالم التقدير اللفظي
+        $versionLevels = ScoreLevel::where('standard_version_id', $version->version_id)->orderBy('score_value')->get();
+        $baselineLevels = $hasBaseline ? ScoreLevel::where('standard_version_id', $baseline->version_id)->orderBy('score_value')->get() : collect();
+        $rubricsComparison = [];
+        foreach ($versionLevels as $lvl) {
+            $bLvl = $baselineLevels->firstWhere('score_value', $lvl->score_value);
+            $rubricsComparison[] = [
+                'scoreValue'          => $lvl->score_value,
+                'label'               => $lvl->label,
+                'baselineLabel'       => $bLvl?->label ?? '—',
+                'description'         => $lvl->general_description,
+                'baselineDescription' => $bLvl?->general_description ?? '—',
+                'status'              => !$bLvl ? 'added' : ($bLvl->label !== $lvl->label || $bLvl->general_description !== $lvl->general_description ? 'modified' : 'same'),
+            ];
+        }
+
         $hash = hash('sha256', "VERSION_{$version->version_id}_{$version->version_no}_DIFF_LOG");
 
         return ApiResponse::success([
-            'versionId'         => $version->version_id,
-            'versionNo'         => $version->version_no,
-            'baselineVersionNo' => $hasBaseline ? $baseline->version_no : null,
-            'hasBaseline'       => $hasBaseline,
-            'status'            => $version->status,
-            'isDraft'           => $version->isDraft(),
-            'approvalCode'      => $version->approval_code,
-            'approverName'      => $version->approver_name,
-            'approvedAt'        => $version->approved_at?->toIso8601ZuluString(),
-            'integrityHash'     => $hash,
-            'releaseNotes'      => $version->source_description ?? 'مذكرات الإصدار والتغييرات المنهجية الرسمية.',
-            'realStats'         => $realStats,
-            'diffs'             => $diffs,
-            'stats'             => [
+            'versionId'           => $version->version_id,
+            'versionNo'           => $version->version_no,
+            'baselineVersionId'   => $hasBaseline ? $baseline->version_id : null,
+            'baselineVersionNo'   => $hasBaseline ? $baseline->version_no : null,
+            'hasBaseline'         => $hasBaseline,
+            'status'              => $version->status,
+            'isDraft'             => $version->isDraft(),
+            'isApproved'          => $version->isApproved(),
+            'isScheduled'         => str_contains($version->source_description ?? '', 'مجدول'),
+            'approvalCode'        => $version->approval_code ?? $version->source_number,
+            'approverName'        => $version->approver_name,
+            'approvedAt'          => $version->approved_at?->toIso8601ZuluString(),
+            'integrityHash'       => $hash,
+            'releaseNotes'        => $version->source_description ?? 'مذكرات الإصدار والتغييرات المنهجية الرسمية.',
+            'realStats'           => $realStats,
+            'diffs'               => $diffs,
+            'standardsComparison' => $standardsComparison,
+            'indicatorsComparison'=> $indicatorsComparison,
+            'rubricsComparison'   => $rubricsComparison,
+            'stats'               => [
                 'addedCount'        => count(array_filter($diffs, fn($d) => $d['type'] === 'added')),
                 'modifiedCount'     => count(array_filter($diffs, fn($d) => $d['type'] === 'modified')),
                 'reweightedCount'   => count(array_filter($diffs, fn($d) => $d['type'] === 'reweighted')),
@@ -828,6 +1110,11 @@ class StandardManagementController extends Controller
         return ApiResponse::success([
             'versionId'        => $version->version_id,
             'versionNo'        => $version->version_no,
+            'status'           => $version->status,
+            'isDraft'          => $version->isDraft(),
+            'isApproved'       => $version->isApproved(),
+            'isScheduled'      => str_contains($version->source_description ?? '', 'مجدول'),
+            'approvalCode'     => $version->source_number,
             'passesAll'        => $passesAll,
             'isScaleSupported' => $isStandardScale,
             'integrityHash'    => $integrityHash,
@@ -915,13 +1202,21 @@ class StandardManagementController extends Controller
             $version->save();
         }
 
+        if ($action === 'schedule') {
+            $version->source_description = 'مُقرّ ومجدول رسمياً للدورة التقييمية القادمة بقرار وزاري رقم ' . ($approvalCode ?: ($version->source_number ?: 'DEC-NAT-2026-88'));
+            $version->save();
+            return ApiResponse::success($version, 'تمت جدولة الإصدار المعياري للدورة التقييمية القادمة بنجاح.');
+        }
+
         try {
             if ($action === 'activate') {
                 $activated = $this->service->activateVersion($version);
                 return ApiResponse::success($activated, 'تم قفل وتنشيط وثيقة المعايير رسمياً للدورة التقييمية الحالية بنجاح وأرشفة الإصدار السابق.');
             } else {
                 $approved = $this->service->approveVersion($version);
-                return ApiResponse::success($approved, 'تم إقرار وثيقة المعايير رسمياً وجدولتها للدورة التقييمية القادمة بنجاح مع الحفاظ على الدورة الحالية.');
+                $approved->source_description = 'مُقرّ ومقفل رسمياً بختم النزاهة الرقمية (بانتظار الجدولة للدورة التقييمية القادمة).';
+                $approved->save();
+                return ApiResponse::success($approved, 'تم إقرار وثيقة المعايير رسمياً وقفلها بختم النزاهة الرقمية (المرحلة الأولى).');
             }
         } catch (ValidationException $e) {
             return ApiResponse::validationError($e->errors(), $e->getMessage());
@@ -929,25 +1224,73 @@ class StandardManagementController extends Controller
     }
 
     /**
-     * تصدير التقرير المعياري الرسمي PDF.
+     * تصدير التقرير المعياري الرسمي PDF (بيانات وصفية أو ملف فيزيائي للتحميل).
      */
-    public function exportPdf(int $id): JsonResponse
+    public function exportPdf(Request $request, int $id)
     {
         $version = StandardVersion::with(['standards.subStandards.indicators'])->find($id);
         if (!$version) {
             return ApiResponse::notFound('الإصدار المعياري غير موجود.');
         }
 
+        // حساب بصمة الأمان
+        $hash = hash('sha256', "OFFICIAL_STANDARDS_{$version->version_id}_{$version->version_no}");
+
+        // إذا كان الطلب بصيغة PDF أو طلب تنزيل مباشر
+        if ($request->header('Accept') === 'application/pdf' || $request->query('download')) {
+            $viewData = [
+                'version' => $version,
+                'hash'    => $hash,
+            ];
+
+            $html = View::make('reports.standards_approval_certificate', $viewData)->render();
+
+            $tempDir = storage_path('app/temp-mpdf');
+            if (!is_dir($tempDir)) {
+                mkdir($tempDir, 0755, true);
+            }
+
+            $mpdfConfig = [
+                'mode'             => 'utf-8',
+                'format'           => 'A4',
+                'orientation'      => 'P',
+                'margin_left'      => 10,
+                'margin_right'     => 10,
+                'margin_top'       => 10,
+                'margin_bottom'    => 10,
+                'autoScriptToLang' => true,
+                'autoArabic'       => true,
+                'autoLangToFont'   => true,
+                'tempDir'          => $tempDir,
+            ];
+
+            $mpdf = new \Mpdf\Mpdf($mpdfConfig);
+            $mpdf->SetDirectionality('rtl');
+            $mpdf->SetTitle("وثيقة إقرار معايير الاعتماد - {$version->version_no}");
+            $mpdf->WriteHTML($html);
+
+            $pdfContent = $mpdf->Output('', 'S');
+            $fileName = "standards_approval_certificate_{$version->version_no}_" . date('Y-m-d_H-i') . '.pdf';
+
+            return response($pdfContent, 200, [
+                'Content-Type'        => 'application/pdf',
+                'Content-Disposition' => 'attachment; filename="' . $fileName . '"',
+                'Cache-Control'       => 'private, max-age=0, must-revalidate',
+                'Pragma'              => 'public',
+            ]);
+        }
+
         return ApiResponse::success([
-            'versionId' => $version->version_id,
-            'versionNo' => $version->version_no,
-            'title' => "وثيقة معايير الاعتماد المدرسي - {$version->version_no}",
-            'systemName' => 'منصة ارتقاء للتقييم الذاتي والتحسين المدرسي',
-            'authority' => 'أمانة المعايير ومجلس الاعتماد الأكاديمي وضمان جودة التعليم',
-            'generatedAt' => now()->toIso8601String(),
+            'versionId'      => $version->version_id,
+            'versionNo'      => $version->version_no,
+            'title'          => "وثيقة معايير الاعتماد المدرسي - {$version->version_no}",
+            'systemName'     => 'منصة ارتقاء للتقييم الذاتي والتحسين المدرسي',
+            'authority'      => 'أمانة المعايير ومجلس الاعتماد الأكاديمي وضمان جودة التعليم',
+            'generatedAt'    => now()->toIso8601String(),
             'standardsCount' => $version->standards->count(),
-            'totalWeight' => 100.0,
-            'hash' => hash('sha256', "OFFICIAL_PDF_{$version->version_id}_{$version->version_no}"),
+            'totalWeight'    => 100.0,
+            'hash'           => $hash,
+            'downloadUrl'    => "/api/v1/standard-versions/{$version->version_id}/export-pdf?download=1",
         ], 'تم توليد تقرير الاعتماد المعياري الرسمي بنجاح.');
     }
 

@@ -3,7 +3,7 @@
  * معايرة توزيع الأوزان النسبية وفرض شرط التوازن الحتمي 100.0%
  */
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import {
   Save,
   ArrowRight,
@@ -23,12 +23,14 @@ interface StandardsWeightsRubricsPageProps {
   versionId?: number | string;
   onNavigateToTree: (versionId?: number | string) => void;
   onNavigateToLock: (versionId?: number | string) => void;
+  onDirtyChange?: (dirty: boolean) => void;
 }
 
 export const StandardsWeightsRubricsPage: React.FC<StandardsWeightsRubricsPageProps> = ({
   versionId = 1,
   onNavigateToTree,
   onNavigateToLock,
+  onDirtyChange,
 }) => {
   const {
     weights,
@@ -41,16 +43,44 @@ export const StandardsWeightsRubricsPage: React.FC<StandardsWeightsRubricsPagePr
     subStandardsBalanceMap,
     isSaving,
     saveSuccess,
+    isDirty,
     error,
     handleWeightChange,
     handleSubStandardWeightChange,
-    handleIndicatorWeightChange,
     resetToEqualWeights,
     saveWeights,
   } = useWeightsRubrics(versionId);
 
   const handleExportExcel = () => {
-    exportWeightsTableToExcel(weights, totalWeight, versionNo || '2026.1');
+    exportWeightsTableToExcel(weights, totalWeight, versionNo || '2026.1', {
+      versionNo: versionNo || '2026.1',
+      status: isDraft ? 'Draft' : 'Approved',
+    });
+  };
+
+  // حماية التعديلات غير المحفوظة عند محاولة مغادرة الصفحة أو إغلاق المتصفح (الملاحظة 8)
+  useEffect(() => {
+    if (onDirtyChange) {
+      onDirtyChange(isDirty);
+    }
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (isDirty) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [isDirty, onDirtyChange]);
+
+  const confirmNavigation = (navigateCallback: () => void) => {
+    if (isDirty) {
+      const proceed = window.confirm(
+        'تنبيه: لديك تعديلات غير محفوظة في أوزان المعايير والمؤشرات.\nهل تريد المتابعة دون حفظ؟\n\n(موافق = المتابعة دون حفظ، إلغاء = البقاء لحفظ التعديلات)'
+      );
+      if (!proceed) return;
+    }
+    navigateCallback();
   };
 
   return (
@@ -225,7 +255,6 @@ export const StandardsWeightsRubricsPage: React.FC<StandardsWeightsRubricsPagePr
           subStandardsBalanceMap={subStandardsBalanceMap}
           onWeightChange={handleWeightChange}
           onSubStandardWeightChange={handleSubStandardWeightChange}
-          onIndicatorWeightChange={handleIndicatorWeightChange}
           onResetEqual={resetToEqualWeights}
         />
       </div>
@@ -249,7 +278,7 @@ export const StandardsWeightsRubricsPage: React.FC<StandardsWeightsRubricsPagePr
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <button
             type="button"
-            onClick={() => onNavigateToTree(versionId)}
+            onClick={() => confirmNavigation(() => onNavigateToTree(versionId))}
             className="std-btn-secondary"
           >
             <ArrowRight size={14} />
@@ -281,7 +310,7 @@ export const StandardsWeightsRubricsPage: React.FC<StandardsWeightsRubricsPagePr
         <div>
           <button
             type="button"
-            onClick={() => onNavigateToLock(versionId)}
+            onClick={() => confirmNavigation(() => onNavigateToLock(versionId))}
             className="std-btn-primary"
           >
             <span>الانتقال لتدقيق القفل والاعتماد</span>
@@ -289,6 +318,83 @@ export const StandardsWeightsRubricsPage: React.FC<StandardsWeightsRubricsPagePr
           </button>
         </div>
       </div>
+
+      {/* 5. Sticky Prominent Save Footer (§7 UX Standards) */}
+      {isDraft && (
+        <div
+          style={{
+            position: 'sticky',
+            bottom: 0,
+            zIndex: 30,
+            backgroundColor: 'rgba(255, 255, 255, 0.96)',
+            backdropFilter: 'blur(8px)',
+            borderTop: '2px solid #10B981',
+            padding: '14px 24px',
+            borderRadius: '16px 16px 0 0',
+            boxShadow: '0 -4px 16px rgba(0, 0, 0, 0.08)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '14px',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div
+              style={{
+                width: '12px',
+                height: '12px',
+                borderRadius: '50%',
+                backgroundColor: isBalanced ? '#10B981' : '#EF4444',
+                boxShadow: isBalanced ? '0 0 0 3px rgba(16, 185, 129, 0.2)' : '0 0 0 3px rgba(239, 68, 68, 0.2)',
+              }}
+            />
+            <div>
+              <span style={{ fontSize: '14px', fontWeight: 800, color: '#0F172A', display: 'block' }}>
+                حالة اتزان الأوزان: {isBalanced ? 'متزن 100.0% — جاهز للحفظ' : `غير متزن حالياً (المجموع: ${totalWeight}%)`}
+              </span>
+              <span style={{ fontSize: '11px', color: '#64748B' }}>
+                {isBalanced
+                  ? 'يمكنك حفظ توزيع الأوزان النسبية وتثبيته في قاعدة بيانات وثيقة المعايير.'
+                  : 'يلزم أن يكون مجموع الأوزان 100.0% تماماً وتطابق فروع المعايير لتفعيل زر الحفظ.'}
+              </span>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={saveWeights}
+            disabled={!isBalanced || isSaving}
+            style={{
+              padding: '12px 28px',
+              borderRadius: '12px',
+              fontSize: '14px',
+              fontWeight: 800,
+              backgroundColor: isBalanced && !isSaving ? '#059669' : '#94A3B8',
+              color: '#FFFFFF',
+              border: 'none',
+              boxShadow: isBalanced && !isSaving ? '0 4px 14px rgba(5, 150, 105, 0.35)' : 'none',
+              cursor: isBalanced && !isSaving ? 'pointer' : 'not-allowed',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '8px',
+              transition: 'all 0.2s ease',
+            }}
+          >
+            {isSaving ? (
+              <>
+                <Loader2 size={18} className="animate-spin" />
+                <span>جارٍ حفظ توزيع الأوزان...</span>
+              </>
+            ) : (
+              <>
+                <Save size={18} />
+                <span>حفظ وتثبيت الأوزان في الوثيقة</span>
+              </>
+            )}
+          </button>
+        </div>
+      )}
     </div>
   );
 };

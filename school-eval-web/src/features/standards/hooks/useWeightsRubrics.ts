@@ -24,6 +24,7 @@ export function useWeightsRubrics(versionId?: number | string) {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [saveSuccess, setSaveSuccess] = useState<boolean>(false);
+  const [isDirty, setIsDirty] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
   const fetchWeightsAndRubrics = useCallback(async () => {
@@ -45,6 +46,7 @@ export function useWeightsRubrics(versionId?: number | string) {
       if (rubricsRes) {
         setRubricLevels(rubricsRes);
       }
+      setIsDirty(false);
     } catch (err: any) {
       setError(err?.message || 'فشل تحميل بيانات الأوزان وسلالم التقدير.');
     } finally {
@@ -93,6 +95,7 @@ export function useWeightsRubrics(versionId?: number | string) {
   // تعديل وزن معيار رئيسي محدد
   const handleWeightChange = (standardId: number, newWeight: number) => {
     setSaveSuccess(false);
+    setIsDirty(true);
     setWeights((prev) =>
       prev.map((item) => {
         if (item.standardId !== standardId) return item;
@@ -133,6 +136,7 @@ export function useWeightsRubrics(versionId?: number | string) {
   // تعديل وزن معيار فرعي محدد
   const handleSubStandardWeightChange = (standardId: number, subStandardId: number, newWeight: number) => {
     setSaveSuccess(false);
+    setIsDirty(true);
     const val = Number(newWeight) || 0;
     setWeights((prev) =>
       prev.map((std) => {
@@ -167,6 +171,7 @@ export function useWeightsRubrics(versionId?: number | string) {
     newWeight: number
   ) => {
     setSaveSuccess(false);
+    setIsDirty(true);
     const val = Number(newWeight) || 0;
     setWeights((prev) =>
       prev.map((std) => {
@@ -190,6 +195,7 @@ export function useWeightsRubrics(versionId?: number | string) {
   const resetToEqualWeights = () => {
     if (weights.length === 0) return;
     setSaveSuccess(false);
+    setIsDirty(true);
     const equalDistribution = distributeWeightsEqually(weights.length);
     setWeights((prev) =>
       prev.map((item, index) => {
@@ -253,17 +259,10 @@ export function useWeightsRubrics(versionId?: number | string) {
             weight: sub.weight,
           }))
         ),
-        indicators_weights: weights.flatMap((w) =>
-          (w.subStandards || []).flatMap((sub) =>
-            (sub.indicators || []).map((ind) => ({
-              indicator_id: ind.indicatorId,
-              weight: ind.weight,
-            }))
-          )
-        ),
       };
 
       await standardsApi.updateWeights(versionId, payload);
+      setIsDirty(false);
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3500);
     } catch (err: any) {
@@ -288,6 +287,8 @@ export function useWeightsRubrics(versionId?: number | string) {
     isLoading,
     isSaving,
     saveSuccess,
+    isDirty,
+    setIsDirty,
     error,
     refetch: fetchWeightsAndRubrics,
     handleWeightChange,

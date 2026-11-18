@@ -1,20 +1,18 @@
 /**
  * Component: WeightsDistributionTable
- * جدول هرمي ثلاثي المستويات لمعايرة أوزان المعايير الرئيسية والمعايير الفرعية والمؤشرات
- * 1. المعيار الرئيسي (إلزامي المجموع 100%)
- * 2. المعيار الفرعي (إلزامي مجموعه = وزن المعيار الرئيسي)
- * 3. المؤشرات (توزيع مبدئي متساوٍ افتراضي مع إمكانية التعديل)
+ * جدول معايرة الأوزان النسبية للمعايير الرئيسية والمعايير الفرعية
+ * 1. المعيار الرئيسي (إلزامي المجموع 100.0%)
+ * 2. المعيار الفرعي (إلزامي مجموعه = وزن المعيار الرئيسي، ويتوزع تلقائياً بالتساوي على مؤشراته)
  */
 
 import React, { useState } from 'react';
 import {
-  RotateCcw,
   Check,
   AlertCircle,
   ChevronDown,
   ChevronLeft,
   Folder,
-  FileCheck2,
+  Layers,
   Lock,
 } from 'lucide-react';
 import type { StandardWeightItem } from '../../api/standardsTypes';
@@ -27,8 +25,7 @@ interface WeightsDistributionTableProps {
   subStandardsBalanceMap?: Record<number, { isBalanced: boolean; currentSum: number; expected: number }>;
   onWeightChange: (standardId: number, newWeight: number) => void;
   onSubStandardWeightChange?: (standardId: number, subStandardId: number, newWeight: number) => void;
-  onIndicatorWeightChange?: (standardId: number, subStandardId: number, indicatorId: number, newWeight: number) => void;
-  onResetEqual: () => void;
+  onResetEqual?: () => void;
 }
 
 export const WeightsDistributionTable: React.FC<WeightsDistributionTableProps> = ({
@@ -39,38 +36,30 @@ export const WeightsDistributionTable: React.FC<WeightsDistributionTableProps> =
   subStandardsBalanceMap = {},
   onWeightChange,
   onSubStandardWeightChange,
-  onIndicatorWeightChange,
-  onResetEqual,
 }) => {
-  // تتبع المعايير المفتوحة للتفصيل
-  const [expandedStandards, setExpandedStandards] = useState<Record<number, boolean>>({});
-  // تتبع المعايير الفرعية المفتوحة للتفصيل
-  const [expandedSubStandards, setExpandedSubStandards] = useState<Record<number, boolean>>({});
+  // تتبع المعايير الرئيسية المفتوحة (مفتوحة افتراضياً لعرض المعايير الفرعية الـ 14)
+  const [expandedStandards, setExpandedStandards] = useState<Record<number, boolean>>(() => {
+    const initial: Record<number, boolean> = {};
+    weights.forEach((std) => {
+      initial[std.standardId] = true;
+    });
+    return initial;
+  });
 
   const toggleStandard = (stdId: number) => {
     setExpandedStandards((prev) => ({ ...prev, [stdId]: !prev[stdId] }));
   };
 
-  const toggleSubStandard = (subId: number) => {
-    setExpandedSubStandards((prev) => ({ ...prev, [subId]: !prev[subId] }));
-  };
-
   const expandAll = () => {
     const stds: Record<number, boolean> = {};
-    const subs: Record<number, boolean> = {};
     weights.forEach((std) => {
       stds[std.standardId] = true;
-      (std.subStandards || []).forEach((sub) => {
-        subs[sub.subStandardId] = true;
-      });
     });
     setExpandedStandards(stds);
-    setExpandedSubStandards(subs);
   };
 
   const collapseAll = () => {
     setExpandedStandards({});
-    setExpandedSubStandards({});
   };
 
   return (
@@ -79,10 +68,10 @@ export const WeightsDistributionTable: React.FC<WeightsDistributionTableProps> =
       <div className="flex items-center justify-between px-6 py-4 bg-slate-50 border-b border-slate-200 flex-wrap gap-3">
         <div>
           <h3 className="text-sm font-extrabold text-slate-900">
-            جدول المعايرة الهرمية للأوزان النسبية (معايير رئيسية • معايير فرعية • مؤشرات)
+            جدول معايرة الأوزان النسبية (المعايير الرئيسية والفرعية)
           </h3>
           <p className="text-xs text-slate-500 mt-0.5">
-            توزيع النسب المئوية على المستويات الثلاثة وضمان اتزان كل مستوى مع مستواه الأعلى
+            توزيع النسب المئوية على المعايير الرئيسية (100%) وتطابق المعايير الفرعية مع التوزيع التلقائي المتساوي على المؤشرات
           </p>
         </div>
 
@@ -91,31 +80,19 @@ export const WeightsDistributionTable: React.FC<WeightsDistributionTableProps> =
             type="button"
             onClick={expandAll}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-amber-900 bg-amber-50 hover:bg-amber-100 border border-amber-300 rounded-lg transition-colors cursor-pointer"
-            title="توسيع كافة المستويات الثلاثة وإظهار جميع المؤشرات (109)"
+            title="توسيع كافة المعايير الرئيسية وعرض معاييرها الفرعية (14 معياراً فرعياً)"
           >
-            <FileCheck2 className="w-3.5 h-3.5 text-amber-700" />
-            <span>إظهار كافة المؤشرات (المستويات الثلاثة)</span>
+            <Layers className="w-3.5 h-3.5 text-amber-700" />
+            <span>توسيع كافة المعايير</span>
           </button>
           <button
             type="button"
             onClick={collapseAll}
             className="px-2.5 py-1.5 text-xs font-semibold text-slate-600 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg transition-colors cursor-pointer"
-            title="طي كافة الفروع وعرض المعايير الرئيسية السبعة فقط"
+            title="طي المعايير الفرعية وعرض المعايير السبعة فقط"
           >
-            طي المؤشرات
+            طي الفروع
           </button>
-
-          {isDraft && (
-            <button
-              type="button"
-              onClick={onResetEqual}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-300 rounded-lg transition-colors cursor-pointer"
-              title="إعادة توزيع الأوزان رياضياً بالتساوي على المعايير السبعة وفروعها ومؤشراتها"
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-              <span>إعادة توزيع متساوٍ ⟲</span>
-            </button>
-          )}
 
           {!isDraft && (
             <span className="inline-flex items-center gap-1 px-3 py-1 text-xs font-bold text-amber-900 bg-amber-100 border border-amber-300 rounded-lg">
@@ -132,10 +109,10 @@ export const WeightsDistributionTable: React.FC<WeightsDistributionTableProps> =
           <thead>
             <tr className="bg-slate-100/75 border-b border-slate-200 text-slate-700 text-xs font-bold uppercase">
               <th className="py-3 px-4 w-12 text-center">#</th>
-              <th className="py-3 px-4">المعيار الرئيسي / المعيار الفرعي / المؤشر</th>
-              <th className="py-3 px-4 text-center">عدد المؤشرات</th>
+              <th className="py-3 px-4">المعيار الرئيسي / المعيار الفرعي</th>
+              <th className="py-3 px-4 text-center">عدد المؤشرات التابعة</th>
               <th className="py-3 px-4 text-center w-40">الوزن النسبي (%)</th>
-              <th className="py-3 px-4 text-center">حالة الاتزان الداخلي</th>
+              <th className="py-3 px-4 text-center">حالة الاتزان والتوزيع المنهجي</th>
             </tr>
           </thead>
 
@@ -212,7 +189,7 @@ export const WeightsDistributionTable: React.FC<WeightsDistributionTableProps> =
                       ) : balanceInfo.isBalanced ? (
                         <span className="inline-flex items-center gap-1 text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 font-bold">
                           <Check size={12} />
-                          <span>متزن ({balanceInfo.currentSum}%)</span>
+                          <span>متزن مع الفروع ({balanceInfo.currentSum}%)</span>
                         </span>
                       ) : (
                         <span className="inline-flex items-center gap-1 text-rose-700 bg-rose-50 px-2 py-0.5 rounded-full border border-rose-200 font-bold" title={`مجموع المعايير الفرعية (${balanceInfo.currentSum}%) لا يطابق وزن المعيار (${balanceInfo.expected}%)`}>
@@ -226,132 +203,70 @@ export const WeightsDistributionTable: React.FC<WeightsDistributionTableProps> =
                   {/* Level 2: Sub-Standards Rows (when expanded) */}
                   {isExpanded &&
                     subStandards.map((sub, subIdx) => {
-                      const isSubExpanded = !!expandedSubStandards[sub.subStandardId];
                       const indicators = sub.indicators || [];
+                      const indCount = indicators.length;
+                      const avgWeight = indCount > 0 ? Math.round((sub.weight / indCount) * 100) / 100 : 0;
 
                       return (
-                        <React.Fragment key={sub.subStandardId}>
-                          <tr className="bg-slate-50/80 hover:bg-slate-100/70 transition-colors border-t border-dashed border-slate-200">
-                            <td className="py-2.5 px-4 text-center text-[11px] font-mono text-slate-400 pr-6">
-                              {index + 1}.{subIdx + 1}
-                            </td>
+                        <tr
+                          key={sub.subStandardId}
+                          className="bg-slate-50/80 hover:bg-slate-100/70 transition-colors border-t border-dashed border-slate-200"
+                        >
+                          <td className="py-2.5 px-4 text-center text-[11px] font-mono text-slate-400 pr-6">
+                            {index + 1}.{subIdx + 1}
+                          </td>
 
-                            <td className="py-2.5 px-4 pr-8">
-                              <div className="flex items-center gap-2">
-                                <button
-                                  type="button"
-                                  onClick={() => toggleSubStandard(sub.subStandardId)}
-                                  className="w-5 h-5 rounded flex items-center justify-center bg-white border border-slate-200 hover:bg-slate-100 text-slate-500 cursor-pointer"
-                                  title={isSubExpanded ? 'طي المؤشرات' : 'عرض المؤشرات'}
-                                >
-                                  {isSubExpanded ? <ChevronDown size={12} /> : <ChevronLeft size={12} />}
-                                </button>
-                                <Folder size={14} className="text-amber-600 shrink-0" />
-                                <span className="font-bold text-slate-800 text-xs">
-                                  {sub.name}
-                                </span>
-                                <span className="text-[10px] font-mono text-slate-500 bg-white px-1.5 py-0.2 rounded border border-slate-200">
-                                  {sub.code}
-                                </span>
-                              </div>
-                            </td>
-
-                            <td className="py-2.5 px-4 text-center text-xs text-slate-600">
-                              <span className="text-[11px] text-slate-500">
-                                {indicators.length} مؤشرات
+                          <td className="py-2.5 px-4 pr-10">
+                            <div className="flex items-center gap-2">
+                              <Folder size={14} className="text-amber-600 shrink-0" />
+                              <span className="font-bold text-slate-800 text-xs">
+                                {sub.name}
                               </span>
-                            </td>
-
-                            <td className="py-2.5 px-4 text-center">
-                              <div className="inline-flex items-center gap-1.5">
-                                <input
-                                  type="number"
-                                  min="0"
-                                  max="100"
-                                  step="0.5"
-                                  disabled={!isDraft}
-                                  value={sub.weight}
-                                  onChange={(e) =>
-                                    onSubStandardWeightChange?.(
-                                      std.standardId,
-                                      sub.subStandardId,
-                                      Number(e.target.value)
-                                    )
-                                  }
-                                  className="w-16 px-1.5 py-1 text-center text-xs font-bold bg-white border border-slate-300 rounded-md focus:outline-none focus:ring-1 focus:ring-amber-500 text-slate-800 disabled:bg-slate-100 disabled:text-slate-500"
-                                />
-                                <span className="text-[11px] font-bold text-slate-500">%</span>
-                              </div>
-                            </td>
-
-                            <td className="py-2.5 px-4 text-center text-[11px] text-slate-600">
-                              <span className="inline-flex items-center gap-1 bg-slate-100 text-slate-700 px-2 py-0.5 rounded-full border border-slate-200">
-                                <span>موزع على {indicators.length} مؤشرات</span>
-                                {indicators.length > 0 && (
-                                  <span className="font-mono text-[10px] text-slate-500">
-                                    (~{(Math.round((sub.weight / indicators.length) * 100) / 100)}% لكل مؤشر)
-                                  </span>
-                                )}
+                              <span className="text-[10px] font-mono text-slate-500 bg-white px-1.5 py-0.2 rounded border border-slate-200">
+                                {sub.code}
                               </span>
-                            </td>
-                          </tr>
+                            </div>
+                          </td>
 
-                          {/* Level 3: Indicators Rows (when expanded) */}
-                          {isSubExpanded &&
-                            indicators.map((ind) => (
-                              <tr
-                                key={ind.indicatorId}
-                                className="bg-amber-50/20 hover:bg-amber-50/50 transition-colors border-t border-slate-100"
-                              >
-                                <td className="py-2 px-4 text-center text-[10px] font-mono text-slate-300 pr-10">
-                                  •
-                                </td>
+                          <td className="py-2.5 px-4 text-center text-xs text-slate-600">
+                            <span className="text-[11px] font-semibold text-slate-600 bg-white px-2 py-0.5 rounded border border-slate-200">
+                              {indCount} مؤشرات
+                            </span>
+                          </td>
 
-                                <td className="py-2 px-4 pr-16">
-                                  <div className="flex items-center gap-2">
-                                    <FileCheck2 size={13} className="text-emerald-600 shrink-0" />
-                                    <span className="text-xs text-slate-700">
-                                      {ind.name}
-                                    </span>
-                                    <span className="text-[10px] font-mono text-slate-500 bg-white px-1 rounded border border-slate-200">
-                                      {ind.code}
-                                    </span>
-                                  </div>
-                                </td>
+                          <td className="py-2.5 px-4 text-center">
+                            <div className="inline-flex items-center gap-1.5">
+                              <input
+                                type="number"
+                                min="0"
+                                max="100"
+                                step="0.5"
+                                disabled={!isDraft}
+                                value={sub.weight}
+                                onChange={(e) =>
+                                  onSubStandardWeightChange?.(
+                                    std.standardId,
+                                    sub.subStandardId,
+                                    Number(e.target.value)
+                                  )
+                                }
+                                className="w-18 px-2 py-1 text-center text-xs font-bold bg-white border border-slate-300 rounded-md focus:outline-none focus:ring-1 focus:ring-amber-500 text-slate-800 disabled:bg-slate-100 disabled:text-slate-500"
+                              />
+                              <span className="text-[11px] font-bold text-slate-500">%</span>
+                            </div>
+                          </td>
 
-                                <td className="py-2 px-4 text-center text-[10px] text-slate-400">
-                                  مؤشر أداء
-                                </td>
-
-                                <td className="py-2 px-4 text-center">
-                                  <div className="inline-flex items-center gap-1">
-                                    <input
-                                      type="number"
-                                      min="0"
-                                      max="100"
-                                      step="0.25"
-                                      disabled={!isDraft}
-                                      value={ind.weight}
-                                      onChange={(e) =>
-                                        onIndicatorWeightChange?.(
-                                          std.standardId,
-                                          sub.subStandardId,
-                                          ind.indicatorId,
-                                          Number(e.target.value)
-                                        )
-                                      }
-                                      className="w-14 px-1 py-0.5 text-center text-[11px] font-mono font-semibold bg-white border border-slate-200 rounded focus:outline-none focus:ring-1 focus:ring-amber-500 text-slate-700 disabled:bg-slate-100 disabled:text-slate-400"
-                                    />
-                                    <span className="text-[10px] text-slate-400">%</span>
-                                  </div>
-                                </td>
-
-                                <td className="py-2 px-4 text-center text-[10px] text-emerald-700">
-                                  <span>توزيع تفصيلي</span>
-                                </td>
-                              </tr>
-                            ))}
-                        </React.Fragment>
+                          <td className="py-2.5 px-4 text-center text-[11px] text-slate-600">
+                            <span className="inline-flex items-center gap-1.5 bg-white text-slate-700 px-2.5 py-1 rounded-full border border-slate-200 font-medium">
+                              <span>موزع تلقائياً بالتساوي</span>
+                              {indCount > 0 && (
+                                <span className="font-mono text-[10px] text-emerald-700 font-bold bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200">
+                                  (~{avgWeight}% لكل مؤشر)
+                                </span>
+                              )}
+                            </span>
+                          </td>
+                        </tr>
                       );
                     })}
                 </React.Fragment>
@@ -374,16 +289,16 @@ export const WeightsDistributionTable: React.FC<WeightsDistributionTableProps> =
               <td className="py-3 px-4 text-center text-base font-black font-mono">
                 {totalWeight}%
               </td>
-              <td className="py-3 px-4 text-center text-xs">
+              <td className="py-3 px-4 text-center text-xs font-bold">
                 {isBalanced ? (
-                  <span className="text-emerald-700 font-bold flex items-center justify-center gap-1">
-                    <Check className="w-4 h-4" />
-                    <span>متزن 100% لكافة المستويات</span>
+                  <span className="inline-flex items-center gap-1 text-emerald-800">
+                    <Check size={14} />
+                    <span>متزن 100.0% ومستوفٍ لشرط الاعتماد ✓</span>
                   </span>
                 ) : (
-                  <span className="text-amber-800 font-bold flex items-center justify-center gap-1">
-                    <AlertCircle className="w-4 h-4" />
-                    <span>غير متزن</span>
+                  <span className="inline-flex items-center gap-1 text-amber-900">
+                    <AlertCircle size={14} />
+                    <span>يتطلب استيفاء 100.0% للحفظ والاعتماد</span>
                   </span>
                 )}
               </td>

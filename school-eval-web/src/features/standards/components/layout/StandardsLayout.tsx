@@ -13,6 +13,7 @@ import { StandardsSidebar, type StandardsScreenKey } from './StandardsSidebar';
 import { StandardsTopBar } from './StandardsTopBar';
 import { StandardsVersionsPage } from '../versions/StandardsVersionsPage';
 import { StandardVersionWorkspacePage, type WorkspaceTabKey } from '../workspace/StandardVersionWorkspacePage';
+import { StandardsDiffLogPage } from '../diff-log/StandardsDiffLogPage';
 import { useStandardsVersions } from '../../hooks/useStandardsVersions';
 
 interface StandardsLayoutProps {
@@ -35,6 +36,7 @@ export const StandardsLayout: React.FC<StandardsLayoutProps> = ({
     refetch,
     createDraft,
     duplicateVersion,
+    deleteVersion,
   } = useStandardsVersions();
 
   const currentVersionId = selectedVersionId || activeVersion?.versionId || 1;
@@ -63,6 +65,7 @@ export const StandardsLayout: React.FC<StandardsLayoutProps> = ({
             onRefresh={refetch}
             onCreateDraft={createDraft}
             onDuplicateVersion={duplicateVersion}
+            onDeleteVersion={deleteVersion}
             onNavigateToTree={(id) => navigateToScreen('tree', id)}
             onNavigateToWeights={(id) => navigateToScreen('weights', id)}
             onNavigateToLock={(id) => navigateToScreen('audit-lock', id)}
@@ -82,6 +85,13 @@ export const StandardsLayout: React.FC<StandardsLayoutProps> = ({
         );
 
       case 'diff-log':
+        return (
+          <StandardsDiffLogPage
+            initialTargetVersionId={currentVersionId}
+            onNavigateToWorkspace={(id) => navigateToScreen('workspace', id)}
+          />
+        );
+
       case 'audit-lock':
         return (
           <StandardVersionWorkspacePage

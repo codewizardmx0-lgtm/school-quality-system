@@ -24,8 +24,12 @@ import {
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
+  Trash2,
+  AlertTriangle,
+  Loader2,
 } from 'lucide-react';
 import type { StandardVersionSummary } from '../../api/standardsTypes';
+import { standardsApi } from '../../api/standardsApi';
 import { CreateDraftModal } from './CreateDraftModal';
 import { VersionRuleCallout } from './VersionRuleCallout';
 import { EmptyStandardsState } from '../common/EmptyStandardsState';
@@ -38,6 +42,7 @@ interface StandardsVersionsPageProps {
   onRefresh: () => void;
   onCreateDraft: (payload: any) => Promise<any>;
   onDuplicateVersion?: (sourceId: number, newNo: string) => Promise<any>;
+  onDeleteVersion?: (versionId: number) => Promise<any>;
   onNavigateToTree: (versionId?: number) => void;
   onNavigateToWeights: (versionId?: number) => void;
   onNavigateToLock: (versionId?: number) => void;
@@ -58,16 +63,39 @@ export const StandardsVersionsPage: React.FC<StandardsVersionsPageProps> = ({
   error,
   onRefresh,
   onCreateDraft,
+  onDeleteVersion,
   onNavigateToTree,
   onNavigateToWeights,
   onNavigateToLock,
 }) => {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [cloneSourceId, setCloneSourceId] = useState<number | undefined>(undefined);
+  const [deleteTargetVersion, setDeleteTargetVersion] = useState<StandardVersionSummary | null>(null);
+  const [isDeleting, setIsDeleting] = useState<boolean>(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [sortKey, setSortKey] = useState<VersionSortKey>('versionNo');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+
+  const handleConfirmDelete = async () => {
+    if (!deleteTargetVersion) return;
+    setIsDeleting(true);
+    setDeleteError(null);
+    try {
+      if (onDeleteVersion) {
+        await onDeleteVersion(deleteTargetVersion.versionId);
+      } else {
+        await standardsApi.deleteVersion(deleteTargetVersion.versionId);
+        onRefresh();
+      }
+      setDeleteTargetVersion(null);
+    } catch (err: any) {
+      setDeleteError(err?.message || 'حدث خطأ أثناء حذف مسودة الإصدار.');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   const draftVersionsCount = versions.filter((v) => v.status === 'Draft' || v.status === 'draft').length;
 
@@ -975,6 +1003,33 @@ export const StandardsVersionsPage: React.FC<StandardsVersionsPageProps> = ({
                             <ShieldCheck size={13} />
                             <span>{isCurrentActive ? 'الشهادة' : 'القفل'}</span>
                           </button>
+
+                          {isDraft && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setDeleteError(null);
+                                setDeleteTargetVersion(v);
+                              }}
+                              style={{
+                                padding: '6px 12px',
+                                borderRadius: '8px',
+                                fontSize: '11px',
+                                fontWeight: 700,
+                                backgroundColor: '#FEF2F2',
+                                color: '#DC2626',
+                                border: '1px solid #FECACA',
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                              }}
+                              title={`حذف مسودة الإصدار (${v.versionNo}) نهائياً`}
+                            >
+                              <Trash2 size={13} />
+                              <span>حذف المسودة</span>
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -1037,6 +1092,126 @@ export const StandardsVersionsPage: React.FC<StandardsVersionsPageProps> = ({
             setCloneSourceId(undefined);
           }}
         />
+      )}
+
+      {/* Delete Draft Confirmation Modal */}
+      {deleteTargetVersion && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(15, 23, 42, 0.6)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+            padding: '16px',
+          }}
+        >
+          <div
+            style={{
+              backgroundColor: '#FFFFFF',
+              borderRadius: '16px',
+              maxWidth: '480px',
+              width: '100%',
+              padding: '24px',
+              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)',
+              direction: 'rtl',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+              <div
+                style={{
+                  width: '40px',
+                  height: '40px',
+                  borderRadius: '10px',
+                  backgroundColor: '#FEF2F2',
+                  color: '#DC2626',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                }}
+              >
+                <AlertTriangle size={22} />
+              </div>
+              <div>
+                <h3 style={{ fontSize: '16px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
+                  تأكيد حذف مسودة الإصدار
+                </h3>
+                <p style={{ fontSize: '12px', color: '#64748B', margin: '4px 0 0 0' }}>
+                  الإصدار رقم: <strong>{deleteTargetVersion.versionNo}</strong>
+                </p>
+              </div>
+            </div>
+
+            <p style={{ fontSize: '13px', color: '#475569', lineHeight: 1.6, marginBottom: '20px' }}>
+              هل أنت متأكد من رغبتك في حذف مسودة هذا الإصدار نهائياً؟
+              سيؤدي هذا الإجراء إلى حذف جميع المعايير والمؤشرات والواصفات التابعة له ولا يمكن التراجع عن هذا الإجراء.
+            </p>
+
+            {deleteError && (
+              <div
+                style={{
+                  padding: '10px 14px',
+                  backgroundColor: '#FEF2F2',
+                  color: '#DC2626',
+                  borderRadius: '8px',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  marginBottom: '16px',
+                }}
+              >
+                {deleteError}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={() => setDeleteTargetVersion(null)}
+                style={{
+                  padding: '8px 16px',
+                  borderRadius: '8px',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  backgroundColor: '#F1F5F9',
+                  color: '#475569',
+                  border: 'none',
+                  cursor: 'pointer',
+                }}
+              >
+                إلغاء
+              </button>
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={handleConfirmDelete}
+                style={{
+                  padding: '8px 16px',
+                  borderRadius: '8px',
+                  fontSize: '13px',
+                  fontWeight: 700,
+                  backgroundColor: '#DC2626',
+                  color: '#FFFFFF',
+                  border: 'none',
+                  cursor: isDeleting ? 'not-allowed' : 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                }}
+              >
+                {isDeleting ? <Loader2 size={15} className="animate-spin" /> : <Trash2 size={15} />}
+                <span>{isDeleting ? 'جارٍ الحذف...' : 'تأكيد الحذف نهائياً'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

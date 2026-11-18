@@ -53,6 +53,7 @@ export const StandardVersionWorkspacePage: React.FC<StandardVersionWorkspacePage
     initialVersionId || activeVersion?.versionId
   );
   const [isCreateDraftOpen, setIsCreateDraftOpen] = useState(false);
+  const [isWeightsDirty, setIsWeightsDirty] = useState(false);
 
   // Sync selectedVersionId when activeVersion loads if not yet set
   useEffect(() => {
@@ -71,8 +72,37 @@ export const StandardVersionWorkspacePage: React.FC<StandardVersionWorkspacePage
   const isDraft = currentStatus === 'draft';
   const isArchived = currentStatus === 'archived' || (!isActive && !isApproved && !isDraft);
 
-  const handleSelectVersion = (versionId: number) => {
+  const handleSelectVersionSafe = (versionId: number) => {
+    if (isWeightsDirty) {
+      const proceed = window.confirm(
+        'تنبيه: لديك تعديلات غير محفوظة في أوزان المعايير والمؤشرات.\nهل تريد المتابعة دون حفظ؟\n\n(موافق = المتابعة دون حفظ، إلغاء = البقاء لحفظ التعديلات)'
+      );
+      if (!proceed) return;
+      setIsWeightsDirty(false);
+    }
     setSelectedVersionId(versionId);
+  };
+
+  const handleTabSwitch = (newTab: WorkspaceTabKey) => {
+    if (activeTab === 'weights' && isWeightsDirty && newTab !== 'weights') {
+      const proceed = window.confirm(
+        'تنبيه: لديك تعديلات غير محفوظة في أوزان المعايير والمؤشرات.\nهل تريد المتابعة دون حفظ؟\n\n(موافق = المتابعة دون حفظ، إلغاء = البقاء لحفظ التعديلات)'
+      );
+      if (!proceed) return;
+      setIsWeightsDirty(false);
+    }
+    setActiveTab(newTab);
+  };
+
+  const handleNavigateToVersionsSafe = () => {
+    if (isWeightsDirty) {
+      const proceed = window.confirm(
+        'تنبيه: لديك تعديلات غير محفوظة في أوزان المعايير والمؤشرات.\nهل تريد المتابعة دون حفظ؟\n\n(موافق = المتابعة دون حفظ، إلغاء = البقاء لحفظ التعديلات)'
+      );
+      if (!proceed) return;
+      setIsWeightsDirty(false);
+    }
+    onNavigateToVersions();
   };
 
   const handleCreateDraftSuccess = async (payload: any) => {
@@ -99,7 +129,7 @@ export const StandardVersionWorkspacePage: React.FC<StandardVersionWorkspacePage
             <div className="flex items-center gap-2 text-xs font-semibold text-slate-500 mb-1">
               <button
                 type="button"
-                onClick={onNavigateToVersions}
+                onClick={handleNavigateToVersionsSafe}
                 className="hover:text-amber-700 transition-colors flex items-center gap-1 cursor-pointer"
               >
                 <BookOpen className="w-3.5 h-3.5" />
@@ -118,7 +148,7 @@ export const StandardVersionWorkspacePage: React.FC<StandardVersionWorkspacePage
               <div className="relative inline-block">
                 <select
                   value={currentVersion?.versionId || ''}
-                  onChange={(e) => handleSelectVersion(Number(e.target.value))}
+                  onChange={(e) => handleSelectVersionSafe(Number(e.target.value))}
                   disabled={isVersionsLoading || versions.length === 0}
                   className="appearance-none bg-amber-50/70 hover:bg-amber-100/70 text-amber-950 font-black text-sm px-4 py-2 pl-9 rounded-xl border border-amber-300 focus:outline-none focus:ring-2 focus:ring-amber-500 cursor-pointer transition-all shadow-sm"
                 >
@@ -178,7 +208,7 @@ export const StandardVersionWorkspacePage: React.FC<StandardVersionWorkspacePage
         <div className="flex items-center gap-3 shrink-0">
           <button
             type="button"
-            onClick={onNavigateToVersions}
+            onClick={handleNavigateToVersionsSafe}
             className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors cursor-pointer"
             title="الانتقال لعرض خط الزمن والمقارنات"
           >
@@ -203,7 +233,7 @@ export const StandardVersionWorkspacePage: React.FC<StandardVersionWorkspacePage
           {/* Tab 1: Tree Builder */}
           <button
             type="button"
-            onClick={() => setActiveTab('tree')}
+            onClick={() => handleTabSwitch('tree')}
             className={`flex items-center justify-center gap-2.5 px-5 py-3 rounded-xl transition-all cursor-pointer flex-1 whitespace-nowrap ${
               activeTab === 'tree'
                 ? 'bg-amber-600 text-white font-black shadow-md shadow-amber-600/25'
@@ -217,7 +247,7 @@ export const StandardVersionWorkspacePage: React.FC<StandardVersionWorkspacePage
           {/* Tab 2: Weights Calibration */}
           <button
             type="button"
-            onClick={() => setActiveTab('weights')}
+            onClick={() => handleTabSwitch('weights')}
             className={`flex items-center justify-center gap-2.5 px-5 py-3 rounded-xl transition-all cursor-pointer flex-1 whitespace-nowrap ${
               activeTab === 'weights'
                 ? 'bg-amber-600 text-white font-black shadow-md shadow-amber-600/25'
@@ -226,12 +256,15 @@ export const StandardVersionWorkspacePage: React.FC<StandardVersionWorkspacePage
           >
             <Scale className="w-4 h-4" />
             <span>2. معايرة وتوزيع الأوزان (Weights Calibration)</span>
+            {isWeightsDirty && (
+              <span className="w-2 h-2 rounded-full bg-amber-300 animate-pulse mr-1" title="تعديلات غير محفوظة" />
+            )}
           </button>
 
           {/* Tab 3: Audit & Lock Seal */}
           <button
             type="button"
-            onClick={() => setActiveTab('audit-lock')}
+            onClick={() => handleTabSwitch('audit-lock')}
             className={`flex items-center justify-center gap-2.5 px-5 py-3 rounded-xl transition-all cursor-pointer flex-1 whitespace-nowrap ${
               activeTab === 'audit-lock'
                 ? 'bg-amber-600 text-white font-black shadow-md shadow-amber-600/25'
@@ -250,8 +283,8 @@ export const StandardVersionWorkspacePage: React.FC<StandardVersionWorkspacePage
           <StandardsTreeBuilderPage
             key={`tree-${currentVersion?.versionId}`}
             versionId={currentVersion?.versionId}
-            onNavigateToVersions={onNavigateToVersions}
-            onNavigateToWeights={() => setActiveTab('weights')}
+            onNavigateToVersions={handleNavigateToVersionsSafe}
+            onNavigateToWeights={() => handleTabSwitch('weights')}
           />
         )}
 
@@ -259,8 +292,9 @@ export const StandardVersionWorkspacePage: React.FC<StandardVersionWorkspacePage
           <StandardsWeightsRubricsPage
             key={`weights-${currentVersion?.versionId}`}
             versionId={currentVersion?.versionId}
-            onNavigateToTree={() => setActiveTab('tree')}
-            onNavigateToLock={() => setActiveTab('audit-lock')}
+            onNavigateToTree={() => handleTabSwitch('tree')}
+            onNavigateToLock={() => handleTabSwitch('audit-lock')}
+            onDirtyChange={setIsWeightsDirty}
           />
         )}
 
@@ -268,8 +302,8 @@ export const StandardVersionWorkspacePage: React.FC<StandardVersionWorkspacePage
           <VersionAuditLockPage
             key={`lock-${currentVersion?.versionId}`}
             versionId={currentVersion?.versionId}
-            onNavigateToWeights={() => setActiveTab('weights')}
-            onNavigateToVersions={onNavigateToVersions}
+            onNavigateToWeights={() => handleTabSwitch('weights')}
+            onNavigateToVersions={handleNavigateToVersionsSafe}
           />
         )}
       </div>

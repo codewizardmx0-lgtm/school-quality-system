@@ -25,6 +25,7 @@ import type {
   LockVersionPayload,
   EvidenceRequirement,
   ScoreDescriptor,
+  VerificationTool,
 } from './standardsTypes';
 
 // Helper to normalize backend envelope response
@@ -102,6 +103,11 @@ export const standardsApi = {
 
   async archiveVersion(versionId: number | string): Promise<any> {
     const res = await apiClient.post(`/standard-versions/${versionId}/archive`);
+    return extractData<any>(res);
+  },
+
+  async deleteVersion(versionId: number | string): Promise<any> {
+    const res = await apiClient.delete(`/standard-versions/${versionId}`);
     return extractData<any>(res);
   },
 
@@ -197,6 +203,27 @@ export const standardsApi = {
   },
 
   // ==========================================
+  // 3.5 إدارة أدوات ووسائل التحقق المعتمدة
+  // ==========================================
+  async getVerificationTools(): Promise<{ tools: VerificationTool[]; totalCount: number }> {
+    const res = await apiClient.get('/verification-tools');
+    const data = extractData<any>(res);
+    return {
+      tools: data?.tools || [],
+      totalCount: data?.totalCount || (data?.tools?.length ?? 0),
+    };
+  },
+
+  async createVerificationTool(payload: { name: string; tool_type?: string; description?: string }): Promise<VerificationTool> {
+    const res = await apiClient.post('/verification-tools', payload);
+    return extractData<VerificationTool>(res);
+  },
+
+  async deleteVerificationTool(id: number | string): Promise<void> {
+    await apiClient.delete(`/verification-tools/${id}`);
+  },
+
+  // ==========================================
   // 4. معايرة الأوزان وسلالم التقدير اللفظي (القرار 1)
   // ==========================================
   async getWeights(versionId: number | string): Promise<WeightsCalibrationResponse> {
@@ -262,14 +289,18 @@ export const standardsApi = {
   // ==========================================
   // 5. التدقيق والفروقات والقفل الرقمي (القراران 5 و 6)
   // ==========================================
-  async getDiffLog(versionId: number | string): Promise<DiffLogResponse> {
-    const res = await apiClient.get(`/standard-versions/${versionId}/diff-log`);
+  async getDiffLog(versionId: number | string, baseVersionId?: number | string): Promise<DiffLogResponse> {
+    const url = baseVersionId
+      ? `/standard-versions/${versionId}/diff-log?base_version_id=${baseVersionId}`
+      : `/standard-versions/${versionId}/diff-log`;
+    const res = await apiClient.get(url);
     const raw = extractData<any>(res);
     const rs = raw?.real_stats || raw?.realStats;
 
     return {
       versionId: Number(raw?.versionId ?? raw?.version_id ?? versionId),
       versionNo: String(raw?.versionNo ?? raw?.version_no ?? ''),
+      baselineVersionId: raw?.baselineVersionId ?? raw?.baseline_version_id ?? null,
       baselineVersionNo: raw?.baselineVersionNo ?? raw?.baseline_version_no ?? rs?.previous_version_no ?? null,
       hasBaseline: Boolean(raw?.hasBaseline ?? raw?.has_baseline ?? (raw?.baselineVersionNo && raw?.baselineVersionNo !== raw?.versionNo)),
       status: raw?.status,
@@ -296,6 +327,9 @@ export const standardsApi = {
         baselineVersionNo: rs.baselineVersionNo ?? rs.baseline_version_no ?? null,
       } : undefined,
       diffs: raw?.diffs || [],
+      standardsComparison: raw?.standardsComparison || raw?.standards_comparison || [],
+      indicatorsComparison: raw?.indicatorsComparison || raw?.indicators_comparison || [],
+      rubricsComparison: raw?.rubricsComparison || raw?.rubrics_comparison || [],
       stats: raw?.stats || {
         addedCount: 0,
         modifiedCount: 0,
@@ -346,7 +380,39 @@ export const standardsApi = {
   // 6. التصدير الرسمي
   // ==========================================
   async exportPdfReport(versionId: number | string): Promise<{ downloadUrl?: string; message?: string }> {
-    const res = await apiClient.get(`/standard-versions/${versionId}/export-pdf`);
-    return extractData<{ downloadUrl?: string; message?: string }>(res);
+    const baseURL = (import.meta as any).env?.VITE_API_BASE_URL || '/api/v1';
+    const token =
+      sessionStorage.getItem('school_eval_auth_token') ||
+      localStorage.getItem('school_eval_auth_token');
+
+    try {
+      const response = await fetch(`${baseURL}/standard-versions/${versionId}/export-pdf?download=1`, {
+        method: 'GET',
+        headers: {
+          Authorization: token ? `Bearer ${token}` : '',
+          Accept: 'application/pdf',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error('فشل تحميل وثيقة الإقرار المعياري الرسمية بصيغة PDF.');
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `standards_approval_certificate_${versionId}_${Date.now()}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+
+      return { message: 'تم تحميل وثيقة الإقرار والاعتماد المعياري الرسمية بصيغة PDF بنجاح.' };
+    } catch {
+      // Fallback to JSON endpoint
+      const res = await apiClient.get(`/standard-versions/${versionId}/export-pdf`);
+      return extractData<{ downloadUrl?: string; message?: string }>(res);
+    }
   },
 };

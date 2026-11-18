@@ -65,6 +65,21 @@ export function useStandardsVersions() {
     }
   };
 
+  const deleteVersion = async (versionId: number): Promise<void> => {
+    setIsSubmitting(true);
+    setError(null);
+    try {
+      await standardsApi.deleteVersion(versionId);
+      await fetchVersions();
+    } catch (err: any) {
+      const msg = err?.message || 'فشل حذف مسودة الإصدار المعياري.';
+      setError(msg);
+      throw err;
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   return {
     versions,
     activeVersion,
@@ -74,6 +89,7 @@ export function useStandardsVersions() {
     refetch: fetchVersions,
     createDraft,
     duplicateVersion,
+    deleteVersion,
     setActiveVersion,
   };
 }

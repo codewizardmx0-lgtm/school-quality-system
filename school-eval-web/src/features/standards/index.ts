@@ -44,6 +44,7 @@ export { VersionAuditLockPage } from './components/audit-lock/VersionAuditLockPa
 export { DiffTimelineView } from './components/audit-lock/DiffTimelineView';
 export { GovernanceChecksList } from './components/audit-lock/GovernanceChecksList';
 export { OfficialLockSealModal } from './components/audit-lock/OfficialLockSealModal';
+export { StandardsDiffLogPage } from './components/diff-log/StandardsDiffLogPage';
 
 export { BalanceIndicatorPill } from './components/common/BalanceIndicatorPill';
 export { EmptyStandardsState } from './components/common/EmptyStandardsState';
