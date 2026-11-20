@@ -1,6 +1,6 @@
 /**
  * Component: SupervisorDecisionPanel
- * لوحة القرار الإشرافي: الفحص الآلي وخيار الاستكمال مقابل الاعتماد
+ * لوحة القرار الإشرافي: الفحص الآلي وخيار الاستكمال مقابل إغلاق المراجعة الإشرافية بنجاح
  */
 
 import React from 'react';
@@ -190,10 +190,10 @@ export const SupervisorDecisionPanel: React.FC<SupervisorDecisionPanelProps> = (
             />
             <div>
               <div style={{ fontSize: '13px', fontWeight: 700, color: '#1E40AF' }}>
-                تأكيد اكتمال المراجعة الإدارية للمخرج
+                تأكيد إغلاق المراجعة الإشرافية بنجاح
               </div>
               <div style={{ fontSize: '11px', color: '#1D4ED8', marginTop: '2px' }}>
-                اعتماد المخرج واكتمال المرحلة الإشرافية وإحالته للمصفوفة التراكمية.
+                استيفاء المتطلبات ونقل حالة التقييم إلى مكتمل (Completed) وفق BR-MIN-03.
               </div>
             </div>
           </label>
@@ -319,12 +319,12 @@ export const SupervisorDecisionPanel: React.FC<SupervisorDecisionPanelProps> = (
             {isActionLoading ? (
               <>
                 <Loader2 size={16} className="animate-spin" />
-                <span>جاري الاعتماد...</span>
+                <span>جاري إغلاق المراجعة...</span>
               </>
             ) : (
               <>
                 <Check size={16} />
-                <span>تأكيد اعتماد المخرج إدارياً</span>
+                <span>إغلاق المراجعة الإشرافية بنجاح (مكتمل)</span>
               </>
             )}
           </button>

@@ -102,7 +102,7 @@ export const CompletionGovernanceBox: React.FC<CompletionGovernanceBoxProps> = (
         }}
       >
         <Clock size={16} color="#D97706" />
-        <span>مهلة الاستجابة النظامية: {deadlineDays} يوماً تبدأ فور اعتماد وإرسال هذا الطلب للمدرسة.</span>
+        <span>مهلة الاستجابة النظامية: {deadlineDays} يوماً تبدأ فور إصدار وإرسال هذا الطلب للمدرسة.</span>
       </div>
     </div>
   );

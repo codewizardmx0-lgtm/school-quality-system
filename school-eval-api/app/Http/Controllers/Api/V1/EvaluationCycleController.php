@@ -76,7 +76,19 @@ class EvaluationCycleController extends Controller
             'academic_year'      => ['required', 'string', 'max:20'],
             'name'               => ['nullable', 'string', 'max:100'],
             'start_date'         => ['required', 'date'],
-            'end_date'           => ['required', 'date', 'after_or_equal:start_date'],
+            'end_date'           => [
+                'required',
+                'date',
+                'after_or_equal:start_date',
+                function ($attribute, $value, $fail) use ($request) {
+                    if ($request->filled('start_date') && strtotime($value) && strtotime($request->start_date)) {
+                        $diffDays = (strtotime($value) - strtotime($request->start_date)) / 86400;
+                        if ($diffDays < 30) {
+                            $fail('يجب ألا تقل مدة الدورة التقييمية عن 30 يوماً نظامياً وفق قواعد الحوكمة (FR-SUP-01).');
+                        }
+                    }
+                },
+            ],
             'status'             => ['nullable', 'string', 'in:Active,Closed'],
             'school_ids'         => ['nullable', 'array'],
             'school_ids.*'       => ['integer', 'exists:schools,school_id'],
@@ -90,6 +102,17 @@ class EvaluationCycleController extends Controller
 
         if ($validator->fails()) {
             return ApiResponse::validationError($validator->errors()->toArray());
+        }
+
+        // حوكمة تفرد الدورة التقييمية النشطة (FR-SUP-01): منع تداخل دورتين نشطتين
+        $targetStatus = $request->input('status', 'Active');
+        if ($targetStatus === 'Active') {
+            $existingActiveCycle = EvaluationCycle::where('status', 'Active')->first();
+            if ($existingActiveCycle) {
+                return ApiResponse::validationError([
+                    'cycle' => ["توجد بالفعل دورة تقييم نشطة جارية حالياً ({$existingActiveCycle->name} - {$existingActiveCycle->academic_year}). يجب إغلاق الدورة الجارية أولاً قبل إطلاق دورة نشطة جديدة وفق قواعد الحوكمة (FR-SUP-01)."],
+                ], 'تعذر إطلاق الدورة: توجد دورة تقييم نشطة بالفعل.');
+            }
         }
 
         // الربط التلقائي بآخر إصدار معايير مُقرّ ونشط
@@ -215,6 +238,16 @@ class EvaluationCycleController extends Controller
             $cycle->end_date = $request->end_date;
         }
         if ($request->has('status')) {
+            if ($request->status === 'Active' && $cycle->status !== 'Active') {
+                $otherActive = EvaluationCycle::where('status', 'Active')
+                    ->where('cycle_id', '!=', $cycle->cycle_id)
+                    ->first();
+                if ($otherActive) {
+                    return ApiResponse::validationError([
+                        'status' => ["توجد بالفعل دورة تقييم نشطة جارية ({$otherActive->name} - {$otherActive->academic_year}). يجب إغلاقها أولاً قبل تنشيط هذه الدورة."],
+                    ], 'تعذر التنشيط: توجد دورة نشطة جارية بالفعل.');
+                }
+            }
             $cycle->status = $request->status;
         }
 

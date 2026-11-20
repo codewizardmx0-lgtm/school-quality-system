@@ -170,7 +170,6 @@ Route::prefix('v1')->group(function () {
 
         Route::prefix('evaluation-submissions')->group(function () {
             Route::get('/{id}/review', [\App\Http\Controllers\Api\V1\SupervisionController::class, 'reviewSubmission'])->name('api.v1.evaluation-submissions.review');
-            Route::post('/{id}/approve', [\App\Http\Controllers\Api\V1\SupervisionController::class, 'approveSubmission'])->name('api.v1.evaluation-submissions.approve');
             Route::post('/{id}/completion-requests', [\App\Http\Controllers\Api\V1\SupervisionController::class, 'createCompletionRequest'])->name('api.v1.evaluation-submissions.completion-requests');
         });
 

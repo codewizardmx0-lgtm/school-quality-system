@@ -126,7 +126,7 @@ export const LaunchCyclePage: React.FC<LaunchCyclePageProps> = ({ onNavigate }) 
           <div>
             <div style={{ fontWeight: 800, fontSize: '14px' }}>تم إطلاق دورة التقييم بنجاح!</div>
             <div style={{ fontSize: '12px', marginTop: '2px' }}>
-              تم تفعيل الدورة وتعميمها على 48 مدرسة بأمانة العاصمة، جاري تحويلك إلى لوحة المتابعة...
+              تم تفعيل الدورة وتعميمها على مدارس النطاق الإشرافي بنجاح، جاري تحويلك إلى سجل الدورات...
             </div>
           </div>
         </div>
@@ -478,7 +478,7 @@ export const LaunchCyclePage: React.FC<LaunchCyclePageProps> = ({ onNavigate }) 
                   حجم النطاق الميداني المقدر
                 </span>
                 <span style={{ fontSize: '20px', fontWeight: 800, color: '#0F172A' }}>
-                  48 مدرسة حكومية وأهلية
+                  مدارس النطاق الإشرافي
                 </span>
               </div>
               <Building size={28} color="#2563EB" />

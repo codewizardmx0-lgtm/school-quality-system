@@ -25,9 +25,30 @@ export function useCentralReports(schoolId: number = 104) {
   const [historicalData, setHistoricalData] = useState<HistoricalComparisonData | null>(null);
   const [isLoadingHistorical, setIsLoadingHistorical] = useState<boolean>(false);
   const [historicalError, setHistoricalError] = useState<string | null>(null);
+  const [availableCycles, setAvailableCycles] = useState<any[]>([]);
 
   const [baseCycle, setBaseCycle] = useState<string>('2026/2027');
   const [compareCycle, setCompareCycle] = useState<string>('2025/2026');
+
+  // جلب قائمة الدورات التقييمية المسجلة
+  useEffect(() => {
+    let isMounted = true;
+    supervisionApi.getEvaluationCycles().then((cycles) => {
+      if (isMounted && Array.isArray(cycles)) {
+        setAvailableCycles(cycles);
+        if (cycles.length > 0) {
+          const sorted = [...cycles].sort((a, b) => (b.id || 0) - (a.id || 0));
+          if (sorted[0]?.academic_year) {
+            setBaseCycle(sorted[0].academic_year);
+          }
+          if (sorted[1]?.academic_year) {
+            setCompareCycle(sorted[1].academic_year);
+          }
+        }
+      }
+    }).catch(() => {});
+    return () => { isMounted = false; };
+  }, []);
 
   // جلب التحليلات المركزية
   const fetchAnalytics = useCallback(async () => {
@@ -94,10 +115,10 @@ export function useCentralReports(schoolId: number = 104) {
   const handleExportHistoricalExcel = () => {
     if (historicalData) {
       exportHistoricalComparisonToExcel(
-        historicalData.school.schoolName,
-        historicalData.baseCycle.academicYear,
-        historicalData.comparedCycle.academicYear,
-        historicalData.standardsDeltas
+        historicalData.school?.schoolName ?? 'مدرسة التقييم',
+        historicalData.baseCycle?.academicYear ?? baseCycle,
+        historicalData.comparedCycle?.academicYear ?? compareCycle,
+        historicalData.standardsDeltas ?? []
       );
     }
   };
@@ -127,6 +148,7 @@ export function useCentralReports(schoolId: number = 104) {
 
     // Historical
     historicalData,
+    availableCycles,
     isLoadingHistorical,
     historicalError,
     refetchHistorical: fetchHistorical,

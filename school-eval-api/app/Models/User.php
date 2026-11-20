@@ -52,6 +52,7 @@ class User extends Authenticatable
     protected $fillable = [
         'school_id',
         'ministry_id',
+        'governorate',
         'username',
         'password_hash',
         'full_name',
@@ -80,6 +81,7 @@ class User extends Authenticatable
             'user_id' => 'integer',
             'school_id' => 'integer',
             'ministry_id' => 'integer',
+            'governorate' => 'string',
             'created_at' => 'datetime',
             'updated_at' => 'datetime',
         ];

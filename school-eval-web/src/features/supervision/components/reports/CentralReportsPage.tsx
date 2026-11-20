@@ -72,7 +72,7 @@ export const CentralReportsPage: React.FC<CentralReportsPageProps> = ({ onNaviga
             التقارير التحليلية الشاملة ومؤشرات الجودة الوطنية
           </h1>
           <p style={{ fontSize: '13px', color: '#64748B', marginTop: '4px', margin: 0 }}>
-            تحليل مجمّع لنتائج التقييم المدرسي لنطاق أمانة العاصمة عبر المعايير الوطنية السبعة
+            تحليل مجمّع لنتائج التقييم المدرسي لنطاق {analyticsData?.scopeSummary?.governorate ?? 'النطاق الإشرافي'} عبر المعايير الوطنية السبعة
           </p>
         </div>
 
@@ -176,10 +176,10 @@ export const CentralReportsPage: React.FC<CentralReportsPageProps> = ({ onNaviga
                 </span>
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px' }}>
                   <span style={{ fontSize: '26px', fontWeight: 800, color: '#0F172A' }}>
-                    {analyticsData?.scopeSummary.averageScore.toFixed(2) ?? '2.34'}
+                    {analyticsData?.scopeSummary?.averageScore != null ? analyticsData.scopeSummary.averageScore.toFixed(2) : '---'}
                   </span>
                   <span style={{ fontSize: '13px', color: '#64748B', fontWeight: 700 }}>
-                    / 3.0 ({analyticsData?.scopeSummary.overallPercentage ?? 78.0}%)
+                    / 3.0 ({analyticsData?.scopeSummary?.overallPercentage ?? 0}%)
                   </span>
                 </div>
               </div>
@@ -219,7 +219,7 @@ export const CentralReportsPage: React.FC<CentralReportsPageProps> = ({ onNaviga
                   أعلى المعايير أداءً (نقطة تميز)
                 </span>
                 <span style={{ fontSize: '15px', fontWeight: 800, color: '#047857' }}>
-                  {analyticsData?.scopeSummary.highestStandard ?? 'الإدارة المدرسية والقيادة (2.71)'}
+                  {analyticsData?.scopeSummary?.highestStandard ?? '---'}
                 </span>
               </div>
             </div>
@@ -258,7 +258,7 @@ export const CentralReportsPage: React.FC<CentralReportsPageProps> = ({ onNaviga
                   المعيار الأقل أداءً (فجوة ذات أولوية)
                 </span>
                 <span style={{ fontSize: '15px', fontWeight: 800, color: '#B91C1C' }}>
-                  {analyticsData?.scopeSummary.lowestStandard ?? 'التعليم والتعلم والتقويم (1.82)'}
+                  {analyticsData?.scopeSummary?.lowestStandard ?? '---'}
                 </span>
               </div>
             </div>
@@ -295,7 +295,7 @@ export const CentralReportsPage: React.FC<CentralReportsPageProps> = ({ onNaviga
                     خلاصة التحليل التوجيهي للسياسات الإشرافية
                   </h3>
                   <p style={{ fontSize: '13px', color: '#1E3A8A', margin: 0, lineHeight: 1.6 }}>
-                    {analyticsData?.scopeSummary.policySynthesisNote ??
+                    {analyticsData?.scopeSummary?.policySynthesisNote ??
                       'تشير مؤشرات الجودة إلى تفوق واضح في معايير القيادة والإدارة والبيئة المدرسية، مع حاجة ملحة لبرامج دعم مركزية موجهة لمعيار التعليم والتعلم والتقويم وتدريب المعلمين.'}
                   </p>
                 </div>
@@ -322,14 +322,13 @@ export const CentralReportsPage: React.FC<CentralReportsPageProps> = ({ onNaviga
                   <div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', marginBottom: '6px' }}>
                       <span style={{ fontWeight: 700, color: '#1E40AF' }}>
-                        المتميز (أعلى من 80%): {analyticsData?.distribution.advancedPercentage ?? 37}%
+                        المتميز (أعلى من 80%): {analyticsData?.distribution?.advancedPercentage ?? 0}%
                       </span>
-                      <span style={{ color: '#64748B' }}>18 مدرسة</span>
                     </div>
                     <div style={{ width: '100%', height: '8px', backgroundColor: '#F1F5F9', borderRadius: '999px', overflow: 'hidden' }}>
                       <div
                         style={{
-                          width: `${analyticsData?.distribution.advancedPercentage ?? 37}%`,
+                          width: `${analyticsData?.distribution?.advancedPercentage ?? 0}%`,
                           height: '100%',
                           backgroundColor: '#2563EB',
                         }}
@@ -340,14 +339,13 @@ export const CentralReportsPage: React.FC<CentralReportsPageProps> = ({ onNaviga
                   <div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', marginBottom: '6px' }}>
                       <span style={{ fontWeight: 700, color: '#065F46' }}>
-                        المتوسط (60% - 79%): {analyticsData?.distribution.proficientPercentage ?? 53}%
+                        المتوسط (60% - 79%): {analyticsData?.distribution?.proficientPercentage ?? 0}%
                       </span>
-                      <span style={{ color: '#64748B' }}>25 مدرسة</span>
                     </div>
                     <div style={{ width: '100%', height: '8px', backgroundColor: '#F1F5F9', borderRadius: '999px', overflow: 'hidden' }}>
                       <div
                         style={{
-                          width: `${analyticsData?.distribution.proficientPercentage ?? 53}%`,
+                          width: `${analyticsData?.distribution?.proficientPercentage ?? 0}%`,
                           height: '100%',
                           backgroundColor: '#059669',
                         }}
@@ -358,14 +356,13 @@ export const CentralReportsPage: React.FC<CentralReportsPageProps> = ({ onNaviga
                   <div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', marginBottom: '6px' }}>
                       <span style={{ fontWeight: 700, color: '#991B1B' }}>
-                        بحاجة لدعم (أقل من 60%): {analyticsData?.distribution.needsSupportPercentage ?? 10}%
+                        بحاجة لدعم (أقل من 60%): {analyticsData?.distribution?.needsSupportPercentage ?? 0}%
                       </span>
-                      <span style={{ color: '#64748B' }}>5 مدارس</span>
                     </div>
                     <div style={{ width: '100%', height: '8px', backgroundColor: '#F1F5F9', borderRadius: '999px', overflow: 'hidden' }}>
                       <div
                         style={{
-                          width: `${analyticsData?.distribution.needsSupportPercentage ?? 10}%`,
+                          width: `${analyticsData?.distribution?.needsSupportPercentage ?? 0}%`,
                           height: '100%',
                           backgroundColor: '#DC2626',
                         }}
@@ -390,7 +387,7 @@ export const CentralReportsPage: React.FC<CentralReportsPageProps> = ({ onNaviga
                 </h2>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                  {analyticsData?.stageBreakdown.map((stage, idx) => (
+                  {analyticsData?.stageBreakdown?.map((stage, idx) => (
                     <div
                       key={idx}
                       style={{
@@ -412,7 +409,7 @@ export const CentralReportsPage: React.FC<CentralReportsPageProps> = ({ onNaviga
                         </span>
                       </div>
                       <span style={{ fontSize: '16px', fontWeight: 800, color: '#2563EB' }}>
-                        {stage.averageScore.toFixed(2)}
+                        {typeof stage.averageScore === 'number' ? stage.averageScore.toFixed(2) : stage.averageScore}
                       </span>
                     </div>
                   ))}
@@ -437,12 +434,12 @@ export const CentralReportsPage: React.FC<CentralReportsPageProps> = ({ onNaviga
             }}
           >
             <span style={{ fontSize: '13px', color: '#64748B' }}>
-              للاطلاع على مسار نمو مدرسة محددة عبر الدورات السابقة:
+              للاطلاع على مسار نمو ومقارنة المدارس عبر الدورات السابقة:
             </span>
 
             <button
               type="button"
-              onClick={() => onNavigate('historical', { schoolId: 104 })}
+              onClick={() => onNavigate('historical')}
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
@@ -458,7 +455,7 @@ export const CentralReportsPage: React.FC<CentralReportsPageProps> = ({ onNaviga
               }}
             >
               <History size={16} />
-              <span>مقارنة مدرسة بلقيس النموذجية عبر الدورات (SCH-104)</span>
+              <span>الانتقال إلى التحليل والمقارنة التاريخية عبر الدورات</span>
             </button>
           </div>
         </>

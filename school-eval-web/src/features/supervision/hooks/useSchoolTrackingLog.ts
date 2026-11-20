@@ -61,7 +61,7 @@ export function useSchoolTrackingLog(schoolId: number = 104) {
               : 'supervisor_memo',
           title: `${memoData.memoType}: ${memoData.subject}`,
           description: memoData.details,
-          actorName: 'أ. عبدالرحمن الشامي',
+          actorName: 'المشرف الوزاري المكلف',
           actorRole: 'المشرف الوزاري',
           timestamp: new Date().toISOString(),
           statusBadge: memoData.memoType,

@@ -11,6 +11,7 @@
 import React, { useState } from 'react';
 import {
   LayoutDashboard,
+  Calendar,
   PlusCircle,
   FileCheck2,
   FileEdit,
@@ -40,9 +41,10 @@ interface NavItemConfig {
 
 const navItems: NavItemConfig[] = [
   { key: 'dashboard', label: 'لوحة المتابعة', icon: LayoutDashboard },
+  { key: 'cycles-list', label: 'سجل الدورات التقييمية', icon: Calendar },
   { key: 'cycles-new', label: 'إطلاق دورة تقييم', icon: PlusCircle },
-  { key: 'submissions', label: 'استلام ومراجعة', icon: FileCheck2, badge: '12' },
-  { key: 'completion-requests', label: 'طلبات الاستكمال', icon: FileEdit, badge: '5' },
+  { key: 'submissions', label: 'استلام ومراجعة', icon: FileCheck2 },
+  { key: 'completion-requests', label: 'طلبات الاستكمال', icon: FileEdit },
   { key: 'tracking-log', label: 'سجل إجراءات المتابعة', icon: ClipboardList },
   { key: 'reports', label: 'التقارير والتحليل', icon: BarChart3 },
   { key: 'historical', label: 'المقارنة التاريخية', icon: History },
@@ -351,12 +353,12 @@ export const SupervisionSidebar: React.FC<SupervisionSidebarProps> = ({
                 borderRadius: '4px',
               }}
             >
-              v2.1
+              2026.1
             </span>
           </div>
         ) : (
           <div
-            title="وثيقة المعايير الوطنية v2.1"
+            title="وثيقة المعايير الوطنية 2026.1"
             style={{
               display: 'flex',
               justifyContent: 'center',

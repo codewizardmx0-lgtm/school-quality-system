@@ -1194,7 +1194,47 @@ class StandardManagementController extends Controller
         $action = $request->input('action', 'approve'); // 'approve' (إقرار وجدولة) أو 'activate' (إقرار وتفعيل فوري)
 
         if (!$legalConfirmation) {
-            return ApiResponse::validationError(['legalConfirmation' => ['يجب الإقرار بالمسؤولية القانونية للاعتماد.']], 'يجب تأكيد الإقرار القانوني');
+            return ApiResponse::validationError(['legalConfirmation' => ['يجب الإقرار بالمسؤولية القانونية للإقرار الرسمي.']], 'يجب تأكيد الإقرار القانوني');
+        }
+
+        if ($action === 'approve') {
+            if (!$version->isDraft()) {
+                return ApiResponse::validationError([
+                    'version' => ["لا يمكن إعادة إقرار وثيقة غير مسودة (الإصدار الحالي بحالة {$version->status} ومقفل بالفعل)."],
+                ], 'الإصدار المعياري مُقرّ ومقفل بالفعل.');
+            }
+        }
+
+        if ($action === 'schedule') {
+            if ($version->isArchived()) {
+                return ApiResponse::validationError([
+                    'version' => ['لا يمكن جدولة إصدار مؤرشف للدورة القادمة.'],
+                ], 'الإصدار المعياري مؤرشف ومقفل تاريخياً.');
+            }
+            if ($version->status === StandardVersion::STATUS_ACTIVE) {
+                return ApiResponse::validationError([
+                    'version' => ['الإصدار المعياري نافذ ومُفعّل حالياً بالفعل ولا يحتاج إلى جدولة للدورة القادمة.'],
+                ], 'الإصدار المعياري نافذ ومُفعّل حالياً.');
+            }
+            if ($version->isDraft()) {
+                // يجب إقراره أولاً قبل الجدولة
+                $this->service->approveVersion($version);
+            }
+
+            // حوكمة تفرد الإصدار المجدول (FR-MSM-03): إلغاء جدولة أي إصدار سابق مجدول
+            StandardVersion::where('version_id', '!=', $version->version_id)
+                ->where('source_description', 'LIKE', '%مجدول رسمياً للدورة التقييمية القادمة%')
+                ->each(function ($other) {
+                    $other->source_description = 'مُقرّ ومقفل رسمياً بختم النزاهة الرقمية (أُلغيت جدولته السابقة لصالح إصدار أحدث).';
+                    $other->save();
+                });
+
+            if ($approvalCode) {
+                $version->source_number = $approvalCode;
+            }
+            $version->source_description = 'مُقرّ ومجدول رسمياً للدورة التقييمية القادمة بقرار وزاري رقم ' . ($approvalCode ?: ($version->source_number ?: 'DEC-NAT-2026-88'));
+            $version->save();
+            return ApiResponse::success($version, 'تمت جدولة الإصدار المعياري للدورة التقييمية القادمة بنجاح.');
         }
 
         if ($approvalCode) {
@@ -1202,14 +1242,13 @@ class StandardManagementController extends Controller
             $version->save();
         }
 
-        if ($action === 'schedule') {
-            $version->source_description = 'مُقرّ ومجدول رسمياً للدورة التقييمية القادمة بقرار وزاري رقم ' . ($approvalCode ?: ($version->source_number ?: 'DEC-NAT-2026-88'));
-            $version->save();
-            return ApiResponse::success($version, 'تمت جدولة الإصدار المعياري للدورة التقييمية القادمة بنجاح.');
-        }
-
         try {
             if ($action === 'activate') {
+                if ($version->isArchived()) {
+                    return ApiResponse::validationError([
+                        'version' => ['لا يمكن تفعيل إصدار مؤرشف.'],
+                    ], 'الإصدار المعياري مؤرشف ومقفل تاريخياً.');
+                }
                 $activated = $this->service->activateVersion($version);
                 return ApiResponse::success($activated, 'تم قفل وتنشيط وثيقة المعايير رسمياً للدورة التقييمية الحالية بنجاح وأرشفة الإصدار السابق.');
             } else {

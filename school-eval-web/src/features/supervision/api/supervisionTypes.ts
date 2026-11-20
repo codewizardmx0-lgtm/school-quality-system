@@ -6,6 +6,7 @@
 
 export type SupervisionScreenKey =
   | 'dashboard'
+  | 'cycles-list'
   | 'cycles-new'
   | 'submissions'
   | 'completion-requests'
@@ -25,6 +26,7 @@ export interface SupervisionKpis {
   pendingReviewCount: number;
   openCompletionRequestsCount: number;
   completedReviewCount: number;
+  delayedSchoolsCount?: number;
 }
 
 export interface GovernanceCallout {
@@ -49,11 +51,15 @@ export interface SchoolStatusMatrixRow {
   selfEvaluationProgress: number; // 0 to 100
   outputStatus: OutputStatusType;
   outputStatusArabic: string;
+  isDelayed?: boolean;
   completionRequestsCount: number;
   openCompletionRequestId: number | null;
   improvementPlanStatus: string;
+  improvementPlanProgress?: number;
+  hasImprovementPlan?: boolean;
   lastActionDate: string;
   latestSubmissionId: number;
+  evaluationId?: number;
 }
 
 export interface SupervisionDashboardData {

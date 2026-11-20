@@ -44,8 +44,8 @@ export function useVersionAuditLock(versionId?: number | string) {
 
   // حالة الإصدار والإقرار
   const status = diffData?.status || preconditions?.status || 'Draft';
-  const isDraft = diffData?.isDraft ?? (status === 'Draft');
-  const isApproved = status === 'Approved' || isLockedSuccessfully;
+  const isDraft = (diffData?.isDraft ?? (status === 'Draft')) && status === 'Draft';
+  const isApproved = status === 'Approved' || status === 'Active' || status === 'Archived' || isLockedSuccessfully;
 
   // تنفيذ الإقرار والقفل الرسمي النهائي
   const executeOfficialLock = async (payload: LockVersionPayload) => {

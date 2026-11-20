@@ -42,8 +42,14 @@ class SupervisorNote extends Model
      */
     protected $fillable = [
         'submission_id',
+        'school_id',
+        'cycle_id',
+        'completion_request_id',
         'author_user_id',
+        'memo_type',
+        'subject',
         'text',
+        'is_visible_to_school',
     ];
 
     /**
@@ -54,19 +60,50 @@ class SupervisorNote extends Model
     protected function casts(): array
     {
         return [
+            'is_visible_to_school' => 'boolean',
             'created_at' => 'datetime',
             'updated_at' => 'datetime',
         ];
     }
 
     /**
-     * محاولة الإرسال التي دُوِّنت عليها هذه الملاحظة الإشرافية.
+     * محاولة الإرسال التي دُوِّنت عليها هذه الملاحظة الإشرافية (إن وجدت).
      *
      * @return BelongsTo
      */
     public function submission(): BelongsTo
     {
         return $this->belongsTo(EvaluationSubmission::class, 'submission_id', 'submission_id');
+    }
+
+    /**
+     * المدرسة المعنية بالملاحظة أو الزيارة الميدانية.
+     *
+     * @return BelongsTo
+     */
+    public function school(): BelongsTo
+    {
+        return $this->belongsTo(School::class, 'school_id', 'school_id');
+    }
+
+    /**
+     * الدورة التقييمية المرتبطة بالملاحظة الإشرافية.
+     *
+     * @return BelongsTo
+     */
+    public function cycle(): BelongsTo
+    {
+        return $this->belongsTo(EvaluationCycle::class, 'cycle_id', 'cycle_id');
+    }
+
+    /**
+     * طلب الاستكمال المعني بالملاحظة (إن وجد).
+     *
+     * @return BelongsTo
+     */
+    public function completionRequest(): BelongsTo
+    {
+        return $this->belongsTo(CompletionRequest::class, 'completion_request_id', 'request_id');
     }
 
     /**

@@ -5,7 +5,7 @@
  * أي خطأ في الاتصال يُمرر مباشرة للمكونات لعرض رسائل الخطأ النظامية أو EmptyState
  */
 
-import { get, post } from '../../../api/apiClient';
+import { get, post, patch } from '../../../api/apiClient';
 import type {
   SupervisionDashboardData,
   ActiveStandardVersion,
@@ -45,6 +45,21 @@ export const supervisionApi = {
   },
 
   /**
+   * 2.1. استرجاع قائمة الدورات التقييمية المسجلة في النظام
+   * GET /api/v1/evaluation-cycles
+   */
+  async getEvaluationCycles(): Promise<any[]> {
+    const response = await get<any>('/evaluation-cycles');
+    if (Array.isArray(response?.data)) {
+      return response.data;
+    }
+    if (Array.isArray((response?.data as any)?.data)) {
+      return (response.data as any).data;
+    }
+    return [];
+  },
+
+  /**
    * 3. إطلاق دورة تقييمية جديدة وربطها بنطاق المدارس
    * POST /api/v1/evaluation-cycles
    */
@@ -79,16 +94,39 @@ export const supervisionApi = {
   },
 
   /**
-   * 5. اعتماد اكتمال المراجعة الإدارية للمخرج
-   * POST /api/v1/evaluation-submissions/{id}/approve
+   * 5. إغلاق المراجعة الإشرافية بنجاح ونقل التقييم إلى مكتمل (BR-MIN-03)
+   * POST /api/v1/evaluations/{id}/close
    */
-  async approveSubmission(submissionId: number, notes?: string): Promise<{ submissionId: number; status: string }> {
-    const response = await post<{ submissionId: number; status: string }>(
-      `/evaluation-submissions/${submissionId}/approve`,
+  async closeSubmissionReview(evaluationId: number, notes?: string): Promise<{ evaluationId: number; status: string }> {
+    const response = await post<{ evaluationId: number; status: string }>(
+      `/evaluations/${evaluationId}/close`,
       { notes }
     );
     if (!response?.data) {
-      throw new Error(response?.message || 'تعذر اعتماد المخرج.');
+      throw new Error(response?.message || 'تعذر إغلاق المراجعة الإشرافية.');
+    }
+    return response.data;
+  },
+
+  /**
+   * اسم بديل متوافق مع المكونات الحالية (Deprecated alias complying with BR-MIN-03)
+   */
+  async approveSubmission(submissionId: number, notes?: string): Promise<{ submissionId: number; status: string }> {
+    const result = await this.closeSubmissionReview(submissionId, notes);
+    return { submissionId: result.evaluationId, status: result.status };
+  },
+
+  /**
+   * تمديد مهلة طلب الاستكمال وتوثيق المبرر (FR-SUP-11)
+   * PATCH /api/v1/completion-requests/{id}/deadline
+   */
+  async extendCompletionDeadline(requestId: number, newDeadline: string, reason?: string): Promise<any> {
+    const response = await patch<any>(
+      `/completion-requests/${requestId}/deadline`,
+      { new_deadline: newDeadline, reason }
+    );
+    if (!response?.data) {
+      throw new Error(response?.message || 'تعذر تمديد مهلة طلب الاستكمال.');
     }
     return response.data;
   },

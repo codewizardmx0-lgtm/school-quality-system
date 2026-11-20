@@ -106,6 +106,7 @@ export interface User {
   schoolCode: string | null;
   directorateId: number | null;
   directorate: string | null;
+  governorate?: string | null;
   lastActivity: string;
   isOnline: boolean;
   createdAt: string;
@@ -200,6 +201,7 @@ export interface CreateUserDto {
   roleId: number;
   schoolId: number | null;
   directorateId: number | null;
+  governorate?: string | null;
   status: AccountStatus;
 }
 
@@ -211,6 +213,7 @@ export interface EditUserDto {
   roleId: number;
   schoolId: number | null;
   directorateId: number | null;
+  governorate?: string | null;
   status: AccountStatus;
 }
 

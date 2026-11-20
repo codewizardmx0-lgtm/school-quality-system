@@ -110,6 +110,7 @@ class UserController extends Controller
                 'full_name'     => $data['fullName'],
                 'email'         => $data['email'],
                 'user_type'     => $data['userType'],
+                'governorate'   => $data['userType'] === 'ministry' ? ($data['governorate'] ?? null) : null,
                 'school_id'     => $data['userType'] === 'school' ? ($data['schoolId'] ?? null) : null,
                 'ministry_id'   => $data['userType'] === 'ministry' ? ($data['ministryId'] ?? null) : null,
                 'status'        => $data['status'],
@@ -183,9 +184,11 @@ class UserController extends Controller
                 $fields['user_type'] = $data['userType'];
                 $fields['school_id'] = $data['userType'] === 'school' ? ($data['schoolId'] ?? null) : null;
                 $fields['ministry_id'] = $data['userType'] === 'ministry' ? ($data['ministryId'] ?? null) : null;
-            } elseif (array_key_exists('schoolId', $data) || array_key_exists('ministryId', $data)) {
+                $fields['governorate'] = $data['userType'] === 'ministry' ? ($data['governorate'] ?? null) : null;
+            } elseif (array_key_exists('schoolId', $data) || array_key_exists('ministryId', $data) || array_key_exists('governorate', $data)) {
                 if (array_key_exists('schoolId', $data)) $fields['school_id'] = $data['schoolId'];
                 if (array_key_exists('ministryId', $data)) $fields['ministry_id'] = $data['ministryId'];
+                if (array_key_exists('governorate', $data)) $fields['governorate'] = $data['governorate'];
             }
 
             $targetUser->update($fields);

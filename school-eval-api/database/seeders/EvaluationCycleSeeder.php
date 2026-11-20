@@ -29,10 +29,16 @@ class EvaluationCycleSeeder extends Seeder
                 'version_id'    => $version->version_id,
             ],
             [
-                'start_date' => '2026-01-01',
-                'end_date'   => '2026-06-30',
+                'name'       => 'دورة التقييم الذاتي والاعتماد المدرسي 2025/2026',
+                'start_date' => '2025-09-01',
+                'end_date'   => '2027-06-30',
                 'status'     => 'Active',
             ]
         );
+
+        // إغلاق أي دورة تجريبية سابقة لضمان تفرد الدورة النشطة
+        EvaluationCycle::where('academic_year', '2025/2026')
+            ->where('version_id', '!=', $version->version_id)
+            ->update(['status' => 'Closed']);
     }
 }

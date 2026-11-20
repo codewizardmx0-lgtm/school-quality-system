@@ -92,6 +92,16 @@ class EvaluationCycle extends Model
     }
 
     /**
+     * اسم بديل متطابق مع التسمية المعيارية (Alias for version).
+     *
+     * @return BelongsTo
+     */
+    public function standardVersion(): BelongsTo
+    {
+        return $this->belongsTo(StandardVersion::class, 'version_id', 'version_id');
+    }
+
+    /**
      * سجلات مشاركة المدارس المسجلة في هذه الدورة التقييمية.
      *
      * @return HasMany

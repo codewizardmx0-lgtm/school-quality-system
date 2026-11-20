@@ -127,6 +127,13 @@ export interface EvaluatorDashboardData {
   standardsProgress: StandardProgressItem[];
   pendingIndicators: PendingIndicatorItem[];
   completionAlert: CompletionAlert | null;
+  supervisorNotes?: Array<{
+    noteId: number;
+    memoType: string;
+    subject: string;
+    details: string;
+    createdAt: string;
+  }>;
 }
 
 export interface ScoreDescriptor {

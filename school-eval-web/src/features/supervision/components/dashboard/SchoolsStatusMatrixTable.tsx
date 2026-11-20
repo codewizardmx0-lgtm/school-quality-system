@@ -110,7 +110,30 @@ export const SchoolsStatusMatrixTable: React.FC<SchoolsStatusMatrixTableProps> =
         : strB.localeCompare(strA, 'ar');
     });
   }, [schools, sortKey, sortDirection]);
-  const getStatusBadge = (status: string, statusArabic: string) => {
+  const getStatusBadge = (status: string, statusArabic: string, isDelayed?: boolean) => {
+    if (isDelayed) {
+      return (
+        <span
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '6px',
+            padding: '4px 10px',
+            borderRadius: '999px',
+            backgroundColor: '#FEF2F2',
+            color: '#B91C1C',
+            border: '1px solid #FECACA',
+            fontSize: '12px',
+            fontWeight: 700,
+            whiteSpace: 'nowrap',
+          }}
+        >
+          <AlertCircle size={13} color="#DC2626" />
+          متأخرة عن التسليم
+        </span>
+      );
+    }
+
     switch (status) {
       case 'NeedsCompletion':
         return (
@@ -419,7 +442,7 @@ export const SchoolsStatusMatrixTable: React.FC<SchoolsStatusMatrixTableProps> =
                           {school.selfEvaluationProgress}%
                         </span>
                         <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 500 }}>
-                          {school.selfEvaluationProgress === 100 ? 'مكتمل (56/56)' : 'قيد الإدخال'}
+                          {school.selfEvaluationProgress === 100 ? 'مكتمل (109/109)' : 'قيد الإدخال'}
                         </span>
                       </div>
                       <div
@@ -447,7 +470,7 @@ export const SchoolsStatusMatrixTable: React.FC<SchoolsStatusMatrixTableProps> =
 
                   {/* حالة المخرج */}
                   <td style={{ padding: '14px 14px' }}>
-                    {getStatusBadge(school.outputStatus, school.outputStatusArabic)}
+                    {getStatusBadge(school.outputStatus, school.outputStatusArabic, school.isDelayed)}
                   </td>
 
                   {/* طلبات الاستكمال */}

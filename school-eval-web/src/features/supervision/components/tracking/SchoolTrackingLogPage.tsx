@@ -92,7 +92,7 @@ export const SchoolTrackingLogPage: React.FC<SchoolTrackingLogPageProps> = ({
                   borderRadius: '4px',
                 }}
               >
-                {school?.schoolCode ?? 'SCH-104'}
+                {school?.schoolCode ?? '—'}
               </span>
               <span
                 style={{
@@ -105,14 +105,14 @@ export const SchoolTrackingLogPage: React.FC<SchoolTrackingLogPageProps> = ({
                   borderRadius: '999px',
                 }}
               >
-                {school?.outputStatusArabic ?? 'يحتاج استكمال'}
+                {school?.outputStatusArabic ?? 'قيد المتابعة'}
               </span>
             </div>
             <h1 style={{ fontSize: '20px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
-              سجل إجراءات المتابعة والزيارات الإشرافية — {school?.schoolName ?? 'مدرسة بلقيس النموذجية للبنات'}
+              سجل إجراءات المتابعة والزيارات الإشرافية — {school?.schoolName ?? 'مدرسة التقييم'}
             </h1>
             <div style={{ fontSize: '12px', color: '#64748B', marginTop: '4px' }}>
-              النطاق: {school?.governorate ?? 'أمانة العاصمة'} • إجمالي المحطات الموثقة:{' '}
+              النطاق: {school?.governorate ?? 'غير محدد'} • إجمالي المحطات الموثقة:{' '}
               {school?.totalMilestones ?? milestones.length} محطات
             </div>
           </div>
@@ -345,13 +345,13 @@ export const SchoolTrackingLogPage: React.FC<SchoolTrackingLogPageProps> = ({
         }}
       >
         <span style={{ fontSize: '13px', color: '#64748B' }}>
-          إجراءات سريعة لملف مدرسة بلقيس النموذجية للبنات (SCH-104)
+          إجراءات سريعة لملف {school?.schoolName ?? 'المدرسة'} ({school?.schoolCode ?? (schoolId ? `SCH-${schoolId}` : '---')}):
         </span>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <button
             type="button"
-            onClick={() => onNavigate('submissions', { submissionId: 101, schoolId })}
+            onClick={() => onNavigate('submissions', { schoolId })}
             style={{
               display: 'inline-flex',
               alignItems: 'center',
@@ -372,7 +372,7 @@ export const SchoolTrackingLogPage: React.FC<SchoolTrackingLogPageProps> = ({
 
           <button
             type="button"
-            onClick={() => onNavigate('completion-requests', { submissionId: 101, schoolId })}
+            onClick={() => onNavigate('completion-requests', { schoolId })}
             style={{
               display: 'inline-flex',
               alignItems: 'center',

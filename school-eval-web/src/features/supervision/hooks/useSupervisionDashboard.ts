@@ -45,9 +45,10 @@ export function useSupervisionDashboard() {
         school.schoolName.toLowerCase().includes(searchTerm.toLowerCase()) ||
         school.schoolCode.toLowerCase().includes(searchTerm.toLowerCase());
 
-      // فلترة بالحالة
+      // فلترة بالحالة (بما فيها حالة متأخرة عن التسليم FR-SUP-15)
       const matchesStatus =
-        statusFilter === 'all' || school.outputStatus === statusFilter;
+        statusFilter === 'all' ||
+        (statusFilter === 'Delayed' ? Boolean(school.isDelayed) : school.outputStatus === statusFilter);
 
       // فلترة بالمرحلة
       const matchesStage =

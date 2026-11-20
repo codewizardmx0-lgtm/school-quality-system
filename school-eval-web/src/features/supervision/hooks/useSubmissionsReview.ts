@@ -78,14 +78,15 @@ export function useSubmissionsReview(submissionId: number = 101) {
     });
   };
 
-  // اعتماد المخرج مباشرة
+  // إغلاق المراجعة الإشرافية بنجاح (BR-MIN-03)
   const handleApprove = async () => {
     setIsActionLoading(true);
     setActionErrorMessage(null);
     setActionSuccessMessage(null);
     try {
-      await supervisionApi.approveSubmission(submissionId, supervisorNotes);
-      setActionSuccessMessage('تم اعتماد اكتمال المراجعة الإدارية للمخرج بنجاح.');
+      const evalId = data?.evaluationId ?? submissionId;
+      await supervisionApi.closeSubmissionReview(evalId, supervisorNotes);
+      setActionSuccessMessage('تم إغلاق المراجعة الإشرافية للملف ونقل الحالة إلى مكتمل (Completed) بنجاح.');
       if (data) {
         setData({
           ...data,
@@ -94,7 +95,7 @@ export function useSubmissionsReview(submissionId: number = 101) {
         });
       }
     } catch (err: any) {
-      setActionErrorMessage(err?.message || 'تعذر اعتماد المخرج.');
+      setActionErrorMessage(err?.message || 'تعذر إغلاق المراجعة الإشرافية.');
     } finally {
       setIsActionLoading(false);
     }

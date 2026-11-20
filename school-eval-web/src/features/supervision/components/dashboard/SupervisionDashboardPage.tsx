@@ -53,6 +53,7 @@ export const SupervisionDashboardPage: React.FC<SupervisionDashboardPageProps> =
       NeedsCompletion: raw.filter((s) => s.outputStatus === 'NeedsCompletion').length,
       UnderReview: raw.filter((s) => s.outputStatus === 'UnderReview').length,
       Completed: raw.filter((s) => s.outputStatus === 'Completed').length,
+      Delayed: raw.filter((s) => s.isDelayed).length,
       Draft: raw.filter((s) => s.outputStatus === 'Draft').length,
     };
   }, [dashboardData?.schools]);
@@ -65,6 +66,7 @@ export const SupervisionDashboardPage: React.FC<SupervisionDashboardPageProps> =
     { key: 'NeedsCompletion', label: 'يحتاج استكمال', count: statusCounts.NeedsCompletion, color: '#D97706' },
     { key: 'UnderReview', label: 'قيد التدقيق', count: statusCounts.UnderReview, color: '#7C3AED' },
     { key: 'Completed', label: 'مكتمل المراجعة', count: statusCounts.Completed, color: '#059669' },
+    { key: 'Delayed', label: 'متأخرة عن التسليم (80%)', count: statusCounts.Delayed, color: '#DC2626' },
     { key: 'Draft', label: 'مسودة', count: statusCounts.Draft, color: '#64748B' },
   ];
 
@@ -257,7 +259,7 @@ export const SupervisionDashboardPage: React.FC<SupervisionDashboardPageProps> =
             <Search size={16} color="#64748B" style={{ flexShrink: 0 }} />
             <input
               type="text"
-              placeholder="بحث باسم المدرسة أو الرمز (مثال: بلقيس أو SCH-104)..."
+              placeholder="بحث باسم المدرسة أو الرمز الإحصائي..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               style={{

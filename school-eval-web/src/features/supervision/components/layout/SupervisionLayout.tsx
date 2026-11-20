@@ -14,11 +14,14 @@ import { SupervisionSidebar } from './SupervisionSidebar';
 import { SupervisionTopBar } from './SupervisionTopBar';
 import { SupervisionDashboardPage } from '../dashboard/SupervisionDashboardPage';
 import { LaunchCyclePage } from '../cycles/LaunchCyclePage';
+import { CyclesListPage } from '../cycles/CyclesListPage';
 import { ReviewSubmissionPage } from '../review/ReviewSubmissionPage';
 import { CreateCompletionRequestPage } from '../completion/CreateCompletionRequestPage';
 import { SchoolTrackingLogPage } from '../tracking/SchoolTrackingLogPage';
 import { CentralReportsPage } from '../reports/CentralReportsPage';
 import { HistoricalComparisonPage } from '../reports/HistoricalComparisonPage';
+import { SupervisionErrorBoundary } from '../common/SupervisionErrorBoundary';
+import { useAuth } from '../../../../features/auth/AuthContext';
 import type { SupervisionScreenKey, PreloadedCompletionItem } from '../../api/supervisionTypes';
 
 interface SupervisionLayoutProps {
@@ -30,6 +33,7 @@ export const SupervisionLayout: React.FC<SupervisionLayoutProps> = ({
   initialScreen = 'dashboard',
   onLogout,
 }) => {
+  const { user } = useAuth();
   const [activeScreen, setActiveScreen] = useState<SupervisionScreenKey>(initialScreen);
 
   // سياق الانتقال بين الشاشات
@@ -74,6 +78,9 @@ export const SupervisionLayout: React.FC<SupervisionLayoutProps> = ({
             onNavigate={(screen, params) => navigateToScreen(screen, params)}
           />
         );
+
+      case 'cycles-list':
+        return <CyclesListPage onNavigate={(screen) => navigateToScreen(screen)} />;
 
       case 'cycles-new':
         return <LaunchCyclePage onNavigate={(screen) => navigateToScreen(screen)} />;
@@ -166,12 +173,12 @@ export const SupervisionLayout: React.FC<SupervisionLayoutProps> = ({
         <SupervisionTopBar
           activeScreen={activeScreen}
           onNavigate={(screen) => navigateToScreen(screen)}
-          scopeText="أمانة العاصمة (48 مدرسة)"
-          userName="أ. عبدالرحمن الشامي"
+          scopeText={user?.governorate ? user.governorate : 'كافة المحافظات (إشراف مركزي عام)'}
+          userName={user?.fullName || user?.username || 'المشرف الوزاري'}
           userRole="المشرف الوزاري"
         />
 
-        {/* منطقة المحتوى القابلة للتمرير حصرياً */}
+        {/* منطقة المحتوى القابلة للتمرير حصرياً مع جدار حماية من الأخطاء */}
         <main
           id="supervision-scroll-area"
           style={{
@@ -182,7 +189,9 @@ export const SupervisionLayout: React.FC<SupervisionLayoutProps> = ({
             paddingBottom: '40px',
           }}
         >
-          {renderCurrentScreen()}
+          <SupervisionErrorBoundary onNavigateHome={() => navigateToScreen('dashboard')}>
+            {renderCurrentScreen()}
+          </SupervisionErrorBoundary>
         </main>
       </div>
     </div>

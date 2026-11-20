@@ -31,6 +31,7 @@ export const HistoricalComparisonPage: React.FC<HistoricalComparisonPageProps> =
 }) => {
   const {
     historicalData,
+    availableCycles,
     historicalError,
     refetchHistorical,
     baseCycle,
@@ -91,7 +92,7 @@ export const HistoricalComparisonPage: React.FC<HistoricalComparisonPageProps> =
                   borderRadius: '4px',
                 }}
               >
-                {historicalData?.school.schoolCode ?? 'SCH-104'}
+                {historicalData?.school?.schoolCode ?? (schoolId ? `SCH-${schoolId}` : '---')}
               </span>
 
               {/* شارة مسار النمو المعتمدة */}
@@ -111,13 +112,13 @@ export const HistoricalComparisonPage: React.FC<HistoricalComparisonPageProps> =
               >
                 <TrendingUp size={14} color="#059669" />
                 <span>
-                  {historicalData?.trajectory.growthPillText ?? 'اتجاه نمو إيجابي +12%'}
+                  {historicalData?.trajectory?.growthPillText ?? 'مسار النمو'}
                 </span>
               </span>
             </div>
 
             <h1 style={{ fontSize: '20px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
-              المقارنة التاريخية التراكمية — {historicalData?.school.schoolName ?? 'مدرسة بلقيس النموذجية للبنات'}
+              المقارنة التاريخية التراكمية — {historicalData?.school?.schoolName ?? 'بيانات المدرسة'}
             </h1>
             <p style={{ fontSize: '12px', color: '#64748B', marginTop: '4px', margin: 0 }}>
               تتبع مسار التطور النوعي في درجات المعايير الوطنية وإغلاق الفجوات بين دورتين متتاليتين
@@ -142,7 +143,18 @@ export const HistoricalComparisonPage: React.FC<HistoricalComparisonPageProps> =
                   borderRadius: '6px',
                 }}
               >
-                <option value="2026/2027">2026/2027</option>
+                {availableCycles && availableCycles.length > 0 ? (
+                  availableCycles.map((c: any) => (
+                    <option key={c.id} value={c.academic_year || c.name}>
+                      {c.name ? `${c.name} (${c.academic_year})` : c.academic_year}
+                    </option>
+                  ))
+                ) : (
+                  <>
+                    <option value="2026/2027">2026/2027</option>
+                    <option value="2025/2026">2025/2026</option>
+                  </>
+                )}
               </select>
             </div>
 
@@ -162,8 +174,18 @@ export const HistoricalComparisonPage: React.FC<HistoricalComparisonPageProps> =
                   borderRadius: '6px',
                 }}
               >
-                <option value="2025/2026">2025/2026</option>
-                <option value="2024/2025">2024/2025</option>
+                {availableCycles && availableCycles.length > 0 ? (
+                  availableCycles.map((c: any) => (
+                    <option key={c.id} value={c.academic_year || c.name}>
+                      {c.name ? `${c.name} (${c.academic_year})` : c.academic_year}
+                    </option>
+                  ))
+                ) : (
+                  <>
+                    <option value="2025/2026">2025/2026</option>
+                    <option value="2024/2025">2024/2025</option>
+                  </>
+                )}
               </select>
             </div>
 
@@ -235,9 +257,9 @@ export const HistoricalComparisonPage: React.FC<HistoricalComparisonPageProps> =
             standardsDeltas={historicalData?.standardsDeltas ?? []}
             baseCycleYear={baseCycle}
             comparedCycleYear={compareCycle}
-            previousTotal={historicalData?.trajectory.previousTotalScore ?? 2.11}
-            currentTotal={historicalData?.trajectory.currentTotalScore ?? 2.39}
-            netDelta={historicalData?.trajectory.netDelta ?? 0.28}
+            previousTotal={historicalData?.trajectory?.previousTotalScore ?? 0}
+            currentTotal={historicalData?.trajectory?.currentTotalScore ?? 0}
+            netDelta={historicalData?.trajectory?.netDelta ?? 0}
           />
 
           {/* العمود الأيسر: لوحة الأثر والتحليل والتوصيات */}
@@ -272,7 +294,7 @@ export const HistoricalComparisonPage: React.FC<HistoricalComparisonPageProps> =
                     فجوات الأداء التي تم إغلاقها بنجاح:
                   </span>
                   <span style={{ fontSize: '18px', fontWeight: 800, color: '#047857' }}>
-                    {historicalData?.impactMetrics.planGapsClosedPercentage ?? 75}%
+                    {historicalData?.impactMetrics?.planGapsClosedPercentage ?? 0}%
                   </span>
                 </div>
 
@@ -291,7 +313,7 @@ export const HistoricalComparisonPage: React.FC<HistoricalComparisonPageProps> =
                     نمو جودة وموثوقية الشواهد المرفقة:
                   </span>
                   <span style={{ fontSize: '18px', fontWeight: 800, color: '#1D4ED8' }}>
-                    +{historicalData?.impactMetrics.evidenceQualityGrowthPercentage ?? 31}%
+                    +{historicalData?.impactMetrics?.evidenceQualityGrowthPercentage ?? 0}%
                   </span>
                 </div>
 
@@ -310,7 +332,7 @@ export const HistoricalComparisonPage: React.FC<HistoricalComparisonPageProps> =
                     انخفاض وتيرة طلبات الاستكمال:
                   </span>
                   <span style={{ fontSize: '18px', fontWeight: 800, color: '#059669' }}>
-                    -{historicalData?.impactMetrics.completionRequestsReductionPercentage ?? 57}%
+                    -{historicalData?.impactMetrics?.completionRequestsReductionPercentage ?? 0}%
                   </span>
                 </div>
               </div>
@@ -334,7 +356,7 @@ export const HistoricalComparisonPage: React.FC<HistoricalComparisonPageProps> =
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                {historicalData?.recommendations.map((rec, idx) => (
+                {historicalData?.recommendations?.map((rec, idx) => (
                   <div
                     key={idx}
                     style={{
@@ -372,13 +394,13 @@ export const HistoricalComparisonPage: React.FC<HistoricalComparisonPageProps> =
         }}
       >
         <span style={{ fontSize: '13px', color: '#64748B' }}>
-          خيارات سريعة ذات صلة بمدرسة بلقيس النموذجية:
+          خيارات سريعة ذات صلة بملف المدرسة:
         </span>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <button
             type="button"
-            onClick={() => onNavigate('submissions', { submissionId: 101, schoolId })}
+            onClick={() => onNavigate('submissions', { schoolId })}
             style={{
               display: 'inline-flex',
               alignItems: 'center',

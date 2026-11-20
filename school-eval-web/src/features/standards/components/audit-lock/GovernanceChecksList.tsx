@@ -16,12 +16,14 @@ import {
   UserCheck,
   ShieldCheck,
   CalendarCheck,
+  Archive,
 } from 'lucide-react';
 import type { VersionLockPreconditions, DiffLogResponse } from '../../api/standardsTypes';
 
 interface GovernanceChecksListProps {
   preconditions: VersionLockPreconditions | null;
   diffData?: DiffLogResponse | null;
+  status?: string;
   isDraft?: boolean;
   isApproved?: boolean;
   isLocking: boolean;
@@ -31,6 +33,7 @@ interface GovernanceChecksListProps {
 export const GovernanceChecksList: React.FC<GovernanceChecksListProps> = ({
   preconditions,
   diffData,
+  status,
   isDraft = true,
   isApproved = !isDraft,
   isLocking,
@@ -154,30 +157,58 @@ export const GovernanceChecksList: React.FC<GovernanceChecksListProps> = ({
     }
   };
 
-  // إذا كان الإصدار مُقرّاً بالفعل، نعرض الختم الرسمي كشارة وبطاقة ثابتة موثقة
-  if (isApproved) {
+  // إذا كان الإصدار غير مسودة (مُقرّ أو نشط أو مؤرشف)، نعرض الختم الرسمي كشارة وبطاقة ثابتة موثقة
+  const effectiveStatus = (status || diffData?.status || preconditions?.status || (isApproved ? 'Approved' : 'Draft'));
+  const isActuallyDraft = isDraft && effectiveStatus === 'Draft';
+
+  if (!isActuallyDraft) {
+    const isActiveVersion = effectiveStatus === 'Active';
+    const isArchivedVersion = effectiveStatus === 'Archived';
+
     return (
       <div className="bg-gradient-to-br from-amber-50 via-white to-emerald-50 rounded-2xl border-2 border-emerald-300 shadow-md p-6 text-right space-y-5">
         <div className="flex items-center justify-between border-b border-emerald-200 pb-4 flex-wrap gap-2">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shadow-sm">
-              <Award className="w-6 h-6" />
+            <div className={`w-10 h-10 rounded-xl ${isArchivedVersion ? 'bg-slate-600' : 'bg-emerald-600'} text-white flex items-center justify-center shadow-sm`}>
+              {isArchivedVersion ? <Archive className="w-6 h-6" /> : <Award className="w-6 h-6" />}
             </div>
             <div>
               <h3 className="text-base font-black text-slate-900">
-                وثيقة معيارية مُقرّة ونافذة رسمياً
+                {isActiveVersion
+                  ? 'وثيقة معيارية نشطة ومُفعّلة رسمياً للدورة الحالية'
+                  : isArchivedVersion
+                  ? 'وثيقة معيارية مؤرشفة ومقفلة تاريخياً'
+                  : 'وثيقة معيارية مُقرّة ومقفلة رسمياً بالختم الرقمي'}
               </h3>
               <p className="text-xs text-slate-500 mt-0.5">
-                حائزة على الختم الوزاري الرقمي ومكتسبة لحصانة عدم التعديل (Immutability)
+                {isActiveVersion
+                  ? 'حائزة على الختم الوزاري الرقمي ومطبقة حالياً في دورات التقييم الميداني (BR-GEN-04)'
+                  : isArchivedVersion
+                  ? 'محمية بحصانة القفل الرقمي ومحفوظة لأغراض الأرشفة والمقارنة التاريخية (BR-GEN-05)'
+                  : 'حائزة على الختم الوزاري الرقمي ومكتسبة لحصانة عدم التعديل (Immutability)'}
               </p>
             </div>
           </div>
 
           <span className={`inline-flex items-center gap-1.5 px-3 py-1 text-xs font-bold rounded-full shadow-sm ${
-            isScheduledState ? 'bg-emerald-600 text-white' : 'bg-blue-600 text-white'
+            isActiveVersion
+              ? 'bg-emerald-600 text-white'
+              : isArchivedVersion
+              ? 'bg-slate-700 text-white'
+              : isScheduledState
+              ? 'bg-emerald-600 text-white'
+              : 'bg-blue-600 text-white'
           }`}>
             <ShieldCheck className="w-4 h-4" />
-            <span>{isScheduledState ? 'مُقرّ ومجدول للدورة القادمة ✓' : 'مُقرّ ومقفل (المرحلة الأولى مكتملة)'}</span>
+            <span>
+              {isActiveVersion
+                ? 'نافذ ومُفعّل للدورة الحالية (Active)'
+                : isArchivedVersion
+                ? 'إصدار مؤرشف ومقفل (Archived)'
+                : isScheduledState
+                ? 'مُقرّ ومجدول للدورة القادمة ✓'
+                : 'مُقرّ ومقفل (بانتظار الجدولة)'}
+            </span>
           </span>
         </div>
 
@@ -218,57 +249,92 @@ export const GovernanceChecksList: React.FC<GovernanceChecksListProps> = ({
         <div className="flex items-center justify-between p-3 bg-slate-900 text-slate-200 rounded-xl font-mono text-xs border border-slate-800 flex-wrap gap-2">
           <div className="flex items-center gap-2 overflow-hidden">
             <Hash className="w-4 h-4 text-emerald-400 shrink-0" />
-            <span className="text-slate-400 shrink-0">بصمة الإقرار الرقمية:</span>
+            <span className="text-slate-400 shrink-0">بصمة الإقرار الرقمية (SHA-256):</span>
             <span className="text-emerald-300 font-bold truncate max-w-sm sm:max-w-md">
               {diffData?.integrityHash || preconditions?.integrityHash || '069e798b2d4b8e92a77e7f55d95c712bb1b48ee13e050820e4078bea7b2b5329'}
             </span>
           </div>
           <span className="text-[10px] text-emerald-400 bg-emerald-950 px-2 py-0.5 rounded border border-emerald-800 shrink-0">
-            وثيقة مصدقة رسمياً ✓
+            وثيقة مصدقة ومقفلة رسمياً ✓
           </span>
         </div>
 
-        {/* Stage 2: Schedule for Next Evaluation Cycle */}
-        <div className="p-4 bg-white/95 rounded-xl border border-amber-300 shadow-xs flex items-center justify-between flex-wrap gap-3">
-          <div className="space-y-1">
-            <h4 className="text-xs font-black text-slate-900 flex items-center gap-1.5">
-              <CalendarCheck size={16} className="text-amber-700" />
-              <span>المرحلة الثانية: جدولة الإصدار للدورة التقييمية القادمة</span>
-            </h4>
-            <p className="text-xs text-slate-600">
-              {isScheduledState
-                ? 'تمت جدولة هذا الإصدار رسمياً للدورة التقييمية القادمة، وسيدخل حيز التنفيذ التلقائي مع بدء الدورة القادمة.'
-                : 'الإصدار مُقرّ ومقفل برمجياً بحصانة عدم التعديل. اضغط على الزر لتأكيد جدولته رسمياً للدورة التقييمية القادمة.'}
-            </p>
-          </div>
-
-          {!isScheduledState ? (
-            <button
-              type="button"
-              onClick={handleScheduleForNextCycle}
-              disabled={isScheduling}
-              className="inline-flex items-center gap-2 px-5 py-2.5 text-xs font-extrabold text-white bg-gradient-to-r from-amber-600 via-amber-700 to-amber-800 hover:from-amber-700 hover:to-amber-900 rounded-xl shadow-md transition-all cursor-pointer disabled:opacity-50"
-              title="تأكيد جدولة هذا الإصدار المعتمد للدورة التقييمية القادمة"
-            >
-              {isScheduling ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>جارٍ تسجيل الجدولة...</span>
-                </>
-              ) : (
-                <>
-                  <CalendarCheck className="w-4 h-4" />
-                  <span>جدولة للدورة القادمة</span>
-                </>
-              )}
-            </button>
-          ) : (
+        {/* Status Actions: Active / Archived / Scheduled / Can Schedule */}
+        {isActiveVersion ? (
+          <div className="p-4 bg-emerald-50 rounded-xl border border-emerald-200 shadow-xs flex items-center justify-between flex-wrap gap-3">
+            <div className="space-y-1">
+              <h4 className="text-xs font-black text-emerald-900 flex items-center gap-1.5">
+                <CheckCircle2 size={16} className="text-emerald-700" />
+                <span>الوثيقة الوطنية النشطة والنافذة (Active)</span>
+              </h4>
+              <p className="text-xs text-emerald-700">
+                هذا الإصدار هو الوثيقة الوطنية النشطة المطبقة حالياً في دورات التقييم الميداني والمحمية بحصانة القفل الرقمي التام (BR-GEN-04).
+              </p>
+            </div>
             <span className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-extrabold text-emerald-800 bg-emerald-100 border border-emerald-300 rounded-xl">
-              <CheckCircle2 size={15} />
-              <span>مجدول رسمياً للدورة القادمة ✓</span>
+              <ShieldCheck size={15} />
+              <span>نافذ ومُفعّل ميدانياً ✓</span>
             </span>
-          )}
-        </div>
+          </div>
+        ) : isArchivedVersion ? (
+          <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 shadow-xs flex items-center justify-between flex-wrap gap-3">
+            <div className="space-y-1">
+              <h4 className="text-xs font-black text-slate-800 flex items-center gap-1.5">
+                <Archive size={16} className="text-slate-600" />
+                <span>إصدار معياري مؤرشف ومقفل تاريخياً (Archived)</span>
+              </h4>
+              <p className="text-xs text-slate-600">
+                هذا الإصدار مؤرشف ومقفل تاريخياً بعد إحلال إصدار أحدث. تبقى الدورات التقييمية المرتبطة به تاريخياً موثقة بسلامة تامة (BR-GEN-05).
+              </p>
+            </div>
+            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-extrabold text-slate-700 bg-slate-200 border border-slate-300 rounded-xl">
+              <Archive size={15} />
+              <span>مؤرشف ومقفل تاريخياً</span>
+            </span>
+          </div>
+        ) : (
+          /* Approved Version: Phase 2 Scheduling */
+          <div className="p-4 bg-white/95 rounded-xl border border-amber-300 shadow-xs flex items-center justify-between flex-wrap gap-3">
+            <div className="space-y-1">
+              <h4 className="text-xs font-black text-slate-900 flex items-center gap-1.5">
+                <CalendarCheck size={16} className="text-amber-700" />
+                <span>المرحلة الثانية: جدولة الإصدار للدورة التقييمية القادمة</span>
+              </h4>
+              <p className="text-xs text-slate-600">
+                {isScheduledState
+                  ? 'تمت جدولة هذا الإصدار رسمياً للدورة التقييمية القادمة بقرار وزاري موثق، وسيدخل حيز التنفيذ التلقائي مع بدء الدورة القادمة (FR-MSM-03).'
+                  : 'الإصدار مُقرّ ومقفل برمجياً بحصانة عدم التعديل. اضغط على الزر لتأكيد جدولته رسمياً للدورة التقييمية القادمة.'}
+              </p>
+            </div>
+
+            {!isScheduledState ? (
+              <button
+                type="button"
+                onClick={handleScheduleForNextCycle}
+                disabled={isScheduling}
+                className="inline-flex items-center gap-2 px-5 py-2.5 text-xs font-extrabold text-white bg-gradient-to-r from-amber-600 via-amber-700 to-amber-800 hover:from-amber-700 hover:to-amber-900 rounded-xl shadow-md transition-all cursor-pointer disabled:opacity-50"
+                title="تأكيد جدولة هذا الإصدار المعتمد للدورة التقييمية القادمة"
+              >
+                {isScheduling ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>جارٍ تسجيل الجدولة...</span>
+                  </>
+                ) : (
+                  <>
+                    <CalendarCheck className="w-4 h-4" />
+                    <span>جدولة للدورة القادمة</span>
+                  </>
+                )}
+              </button>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-extrabold text-emerald-800 bg-emerald-100 border border-emerald-300 rounded-xl">
+                <CheckCircle2 size={15} />
+                <span>مجدول رسمياً للدورة القادمة ✓</span>
+              </span>
+            )}
+          </div>
+        )}
       </div>
     );
   }

@@ -61,7 +61,7 @@ export const SupervisorKpiGrid: React.FC<SupervisorKpiGridProps> = ({
       color: '#059669',
       bgColor: '#ECFDF5',
       borderColor: '#A7F3D0',
-      note: 'تم استيفاء الشواهد واعتماد المخرج',
+      note: 'تم استيفاء الشواهد وإغلاق المراجعة بنجاح',
     },
   ];
 

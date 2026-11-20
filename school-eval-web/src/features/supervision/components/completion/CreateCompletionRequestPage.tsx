@@ -15,6 +15,7 @@ import {
   Calendar,
 } from 'lucide-react';
 import { useCompletionManagement } from '../../hooks/useCompletionManagement';
+import { useSubmissionsReview } from '../../hooks/useSubmissionsReview';
 import { CompletionGovernanceBox } from './CompletionGovernanceBox';
 import { CompletionItemsSelector } from './CompletionItemsSelector';
 import type { SupervisionScreenKey, PreloadedCompletionItem } from '../../api/supervisionTypes';
@@ -32,6 +33,11 @@ export const CreateCompletionRequestPage: React.FC<CreateCompletionRequestPagePr
   preloadedItems,
   onNavigate,
 }) => {
+  const { reviewData } = useSubmissionsReview(submissionId);
+  const schoolName = reviewData?.school?.schoolName || 'مدرسة التقييم';
+  const schoolCode = reviewData?.school?.schoolCode || `SCH-${schoolId}`;
+  const attemptNo = reviewData?.attemptNo || 1;
+
   const {
     items,
     itemsCount,
@@ -56,11 +62,11 @@ export const CreateCompletionRequestPage: React.FC<CreateCompletionRequestPagePr
   const handleAddNewItem = () => {
     addItem({
       indicatorId: Date.now(),
-      code: '3-1-2',
-      title: 'توثيق قنوات التواصل المستمرة مع أولياء الأمور والمجتمع',
-      defectReason: 'نقص محضر استبيان رضا أولياء الأمور عن خدمات المدرسة',
-      grantedPermission: 'تحديث مرفق الشاهد',
-      directives: 'إرفاق استبيان الرضا الفصلي المعتمد ومحضر مناقشة النتائج.',
+      code: '',
+      title: 'بند استكمال إضافي للمؤشر',
+      defectReason: '',
+      grantedPermission: 'تحديث مرفق الشاهد والمبرر',
+      directives: 'يرجى استيفاء الشاهد المطلوب والمبررات.',
     });
   };
 
@@ -117,14 +123,14 @@ export const CreateCompletionRequestPage: React.FC<CreateCompletionRequestPagePr
                 طلب استكمال رسمي موجه
               </span>
               <span style={{ fontSize: '12px', color: '#64748B' }}>
-                المحاولة الإرسالية الأولى • SCH-104
+                المحاولة الإرسالية {attemptNo} • {schoolCode}
               </span>
             </div>
             <h1 style={{ fontSize: '20px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
-              مدرسة بلقيس النموذجية للبنات — إصدار طلب استكمال نواقص التقييم
+              {schoolName} — إصدار طلب استكمال نواقص التقييم
             </h1>
             <p style={{ fontSize: '12px', color: '#64748B', marginTop: '4px', margin: 0 }}>
-              سيتم فك الحظر الجزئي عن {itemsCount} مؤشرات معينة فقط وإعطاء مهلة نظامية قدرها 14 يوماً
+              سيتم فك الحظر الجزئي عن {itemsCount} مؤشرات معينة فقط وإعطاء مهلة نظامية قدرها {deadlineDays} يوماً
             </p>
           </div>
 

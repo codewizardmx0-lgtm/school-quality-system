@@ -11,34 +11,13 @@ import type {
   PreloadedCompletionItem,
 } from '../api/supervisionTypes';
 
-const DEFAULT_PRELOADED_ITEMS: PreloadedCompletionItem[] = [
-  {
-    indicatorId: 412,
-    code: '4-1-2',
-    title: 'تحليل نتائج الاختبارات الفصلية ورصد فجوات تعلم الطلاب',
-    defectReason: 'نقص وثيقة الشاهد الميداني ومحضر المعالجة الفصلية المعتمد',
-    grantedPermission: 'استبدال / رفع الشاهد والمبرر',
-    directives: 'يرجى إرفاق المحضر المعتمد للاجتماع التحليلي مع نتائج الاختبارات التشخيصية.',
-    evidenceLinkId: 881,
-  },
-  {
-    indicatorId: 514,
-    code: '5-1-4',
-    title: 'تفعيل مجتمعات التعلم المهنية لمعلمي المواد الأساسية',
-    defectReason: 'نقص محضر التنفيذ الأخير وتوقيع المشرف التربوي المقيم',
-    grantedPermission: 'تحديث مرفق الشاهد',
-    directives: 'تحديث مرفق الشاهد ليتضمن المحضر الأخير لجلسة التغذية الراجعة وتوقيع الإدارة.',
-    evidenceLinkId: 882,
-  },
-];
-
 export function useCompletionManagement(
   submissionId: number = 101,
   initialItems?: PreloadedCompletionItem[],
   onSuccess?: () => void
 ) {
   const [items, setItems] = useState<PreloadedCompletionItem[]>(
-    initialItems && initialItems.length > 0 ? initialItems : DEFAULT_PRELOADED_ITEMS
+    initialItems && initialItems.length > 0 ? initialItems : []
   );
 
   const [notes, setNotes] = useState<string>(

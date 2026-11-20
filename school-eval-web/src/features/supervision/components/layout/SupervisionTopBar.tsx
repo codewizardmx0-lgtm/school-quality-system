@@ -6,7 +6,7 @@
  * - مسار التنقل (Breadcrumb) يبدأ بـ SYSTEM_SHORT_NAME («منصة ارتقاء»)
  * - منع وجود تواريخ أو تقاويم عشوائية في الشريط العلوي (NO RANDOM DATES)
  * - كبسولة المستخدم: الحروف الأولى (ع.ش)، الاسم الكامل، واللقب (المشرف الوزاري)
- * - شارة النطاق المعتمدة: نطاق: أمانة العاصمة (48 مدرسة)
+ * - شارة النطاق المعتمدة: نطاق الإشراف الجغرافي الميداني المعتمد
  */
 
 import React from 'react';
@@ -23,6 +23,7 @@ interface SupervisionTopBarProps {
 
 const screenTitleMap: Record<SupervisionScreenKey, string> = {
   dashboard: 'لوحة المتابعة الميدانية',
+  'cycles-list': 'سجل الدورات التقييمية',
   'cycles-new': 'إطلاق دورة تقييم جديدة',
   submissions: 'استلام ومراجعة المخرجات',
   'completion-requests': 'طلبات الاستكمال الموجهة',
@@ -31,13 +32,23 @@ const screenTitleMap: Record<SupervisionScreenKey, string> = {
   historical: 'المقارنة التاريخية التراكمية',
 };
 
+const getInitials = (name: string): string => {
+  if (!name) return 'م.و';
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) {
+    return `${parts[0][0]}.${parts[parts.length - 1][0]}`;
+  }
+  return parts[0]?.substring(0, 2) ?? 'م.و';
+};
+
 export const SupervisionTopBar: React.FC<SupervisionTopBarProps> = ({
   activeScreen,
   onNavigate,
-  scopeText = 'أمانة العاصمة (48 مدرسة)',
-  userName = 'أ. عبدالرحمن الشامي',
+  scopeText = 'الإشراف العام',
+  userName = 'المشرف الوزاري',
   userRole = 'المشرف الوزاري',
 }) => {
+  const initials = getInitials(userName);
   return (
     <header
       style={{
@@ -151,7 +162,7 @@ export const SupervisionTopBar: React.FC<SupervisionTopBarProps> = ({
             border: '1px solid #E2E8F0',
           }}
         >
-          {/* الصورة الرمزية بالحروف الأولى (ع.ش) */}
+          {/* الصورة الرمزية بالحروف الأولى */}
           <div
             style={{
               width: '34px',
@@ -168,7 +179,7 @@ export const SupervisionTopBar: React.FC<SupervisionTopBarProps> = ({
               boxShadow: '0 2px 6px rgba(37, 99, 235, 0.25)',
             }}
           >
-            ع.ش
+            {initials}
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', textAlign: 'right' }}>

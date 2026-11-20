@@ -88,6 +88,16 @@ class CompletionRequestController extends Controller
             return ApiResponse::validationError($validator->errors()->toArray());
         }
 
+        // 4.ب التحقق من قيد نهاية الدورة التقييمية (FR-SUP-09)
+        $cycle = $evaluation->cycle;
+        if ($cycle && $cycle->end_date && Carbon::parse($request->input('completion_deadline'))->gt(Carbon::parse($cycle->end_date))) {
+            return ApiResponse::validationError([
+                'completion_deadline' => [
+                    'مهلة الاستكمال لا يمكن أن تتجاوز تاريخ نهاية الدورة التقييمية (' . Carbon::parse($cycle->end_date)->format('Y/m/d') . '). يرجى تمديد الدورة أولاً أو تحديد مهلة تنتهي قبل إغلاقها.'
+                ],
+            ], 'مهلة الاستكمال تتجاوز موعد إغلاق الدورة التقييمية.');
+        }
+
         // 5. التنفيذ داخل Transaction
         $createdRequest = DB::transaction(function () use ($evaluation, $user, $request) {
             // ضمان وجود التقرير
@@ -285,6 +295,7 @@ class CompletionRequestController extends Controller
 
         $validator = Validator::make($request->all(), [
             'new_deadline' => 'required|date',
+            'reason' => 'nullable|string|max:1000',
         ], [
             'new_deadline.required' => 'حقل المهلة الجديدة (new_deadline) إلزامي.',
             'new_deadline.date' => 'صيغة تاريخ المهلة الجديدة غير صحيحة.',
@@ -303,12 +314,23 @@ class CompletionRequestController extends Controller
             ], 'يجب أن يكون تاريخ المهلة الجديد بعد تاريخ المهلة الحالي.');
         }
 
+        // التحقق من قيد نهاية الدورة التقييمية (FR-SUP-09)
+        $cycle = $completionRequest->submission?->report?->evaluation?->cycle ?? $completionRequest->evaluation?->cycle;
+        if ($cycle && $cycle->end_date && $newDeadline->gt(Carbon::parse($cycle->end_date))) {
+            return ApiResponse::validationError([
+                'new_deadline' => [
+                    'مهلة التمديد لا يمكن أن تتجاوز تاريخ نهاية الدورة التقييمية (' . Carbon::parse($cycle->end_date)->format('Y/m/d') . '). يرجى تمديد الدورة أولاً أو تحديد مهلة تقع ضمن الدورة.'
+                ],
+            ], 'مهلة التمديد تتجاوز موعد إغلاق الدورة التقييمية.');
+        }
+
+        $reason = $request->input('reason');
         $completionRequest->completion_deadline = $newDeadline;
         $completionRequest->deadline_extended_at = now();
         $completionRequest->deadline_extensions_count = ((int) $completionRequest->deadline_extensions_count) + 1;
         $completionRequest->save();
 
-        // تسجيل تمديد المهلة في سجل التدقيق
+        // تسجيل تمديد المهلة مع المبرر الإشرافي في سجل التدقيق (FR-SUP-11)
         app(\App\Services\AuditLoggerService::class)->log(
             action: 'completion.deadline_extended',
             targetType: 'CompletionRequest',
@@ -317,6 +339,7 @@ class CompletionRequestController extends Controller
             newValues: [
                 'completion_deadline' => $newDeadline->toIso8601ZuluString(),
                 'deadline_extensions_count' => $completionRequest->deadline_extensions_count,
+                'extension_reason' => $reason,
             ],
             userId: $user->user_id,
             schoolId: $completionRequest->submission?->report?->evaluation?->school_id

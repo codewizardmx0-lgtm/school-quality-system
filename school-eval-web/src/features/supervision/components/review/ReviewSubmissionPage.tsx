@@ -74,7 +74,7 @@ export const ReviewSubmissionPage: React.FC<ReviewSubmissionPageProps> = ({
 
     onNavigate('completion-requests', {
       submissionId,
-      schoolId: reviewData.school.schoolId,
+      schoolId: reviewData?.school?.schoolId ?? _schoolId,
       preloadedItems: preloaded,
     });
   };
@@ -137,7 +137,7 @@ export const ReviewSubmissionPage: React.FC<ReviewSubmissionPageProps> = ({
                   borderRadius: '4px',
                 }}
               >
-                {reviewData?.school.schoolCode ?? 'SCH-104'}
+                {reviewData?.school?.schoolCode ?? '—'}
               </span>
               <span
                 style={{
@@ -150,15 +150,22 @@ export const ReviewSubmissionPage: React.FC<ReviewSubmissionPageProps> = ({
                   borderRadius: '999px',
                 }}
               >
-                {reviewData?.statusArabic ?? 'مرفوع للمراجعة الأولى'}
+                {reviewData?.statusArabic ?? 'مرفوع للمراجعة'}
               </span>
             </div>
             <h1 style={{ fontSize: '20px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
-              {reviewData?.school.schoolName ?? 'مدرسة بلقيس النموذجية للبنات'}
+              {reviewData?.school?.schoolName ?? 'مدرسة التقييم'}
             </h1>
             <div style={{ fontSize: '12px', color: '#64748B', marginTop: '4px' }}>
-              المرحلة: {reviewData?.school.educationalStage ?? 'أساسي / ثانوي (1-12)'} • مدير المدرسة:{' '}
-              {reviewData?.school.principalName ?? 'أ. سعاد القاضي'} • تاريخ الرفع: 14 سبتمبر 2026
+              المرحلة: {reviewData?.school?.educationalStage ?? '—'} • مدير المدرسة:{' '}
+              {reviewData?.school?.principalName ?? 'إدارة المدرسة'} • تاريخ الرفع:{' '}
+              {reviewData?.submittedAt
+                ? new Date(reviewData.submittedAt).toLocaleDateString('ar-YE', {
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric',
+                  })
+                : '—'}
             </div>
           </div>
 
@@ -220,9 +227,9 @@ export const ReviewSubmissionPage: React.FC<ReviewSubmissionPageProps> = ({
               }}
             >
               {[
-                { key: 'indicators', label: 'عناصر التقييم والتقديرات', count: reviewData?.summary.totalElements ?? 56, icon: Layers },
-                { key: 'evidences', label: 'ملفات الشواهد المرفقة', count: reviewData?.summary.attachedEvidencesCount ?? 48, icon: FileText },
-                { key: 'improvement-plan', label: 'خطة تحسين الأداء', count: reviewData?.improvementPlan.actionsCount ?? 4, icon: Target },
+                { key: 'indicators', label: 'عناصر التقييم والتقديرات', count: reviewData?.summary?.totalElements ?? 109, icon: Layers },
+                { key: 'evidences', label: 'ملفات الشواهد المرفقة', count: reviewData?.summary?.attachedEvidencesCount ?? 0, icon: FileText },
+                { key: 'improvement-plan', label: 'خطة تحسين الأداء', count: reviewData?.improvementPlan?.actionsCount ?? 0, icon: Target },
               ].map((tab) => {
                 const isActive = activeTab === tab.key;
                 const Icon = tab.icon;
@@ -316,7 +323,7 @@ export const ReviewSubmissionPage: React.FC<ReviewSubmissionPageProps> = ({
                 }}
               >
                 <h3 style={{ fontSize: '15px', fontWeight: 800, color: '#0F172A', marginBottom: '14px' }}>
-                  فهرس الشواهد الميدانية المرفقة ({reviewData?.summary.attachedEvidencesCount} وثيقة)
+                  فهرس الشواهد الميدانية المرفقة ({reviewData?.summary?.attachedEvidencesCount ?? 0} وثيقة)
                 </h3>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   {reviewData?.indicators.flatMap((ind) =>
@@ -378,13 +385,13 @@ export const ReviewSubmissionPage: React.FC<ReviewSubmissionPageProps> = ({
                 }}
               >
                 <h3 style={{ fontSize: '15px', fontWeight: 800, color: '#0F172A', marginBottom: '14px' }}>
-                  {reviewData?.improvementPlan.title}
+                  {reviewData?.improvementPlan?.title ?? 'خطة التحسين والتطوير المدرسي'}
                 </h3>
                 <p style={{ fontSize: '13px', color: '#64748B', marginBottom: '16px' }}>
-                  تتضمن الخطة {reviewData?.improvementPlan.actionsCount} أولويات معتمدة لمعالجة فجوات الأداء:
+                  تتضمن الخطة {reviewData?.improvementPlan?.actionsCount ?? 0} أولويات معتمدة لمعالجة فجوات الأداء:
                 </p>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {reviewData?.improvementPlan.priorities.map((item, idx) => (
+                  {(reviewData?.improvementPlan?.priorities ?? []).map((item, idx) => (
                     <div
                       key={idx}
                       style={{

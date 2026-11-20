@@ -24,6 +24,7 @@ class UpdateUserRequest extends FormRequest
             'email'      => ['sometimes', 'required', 'email', 'max:150', 'unique:users,email,' . $userId . ',user_id'],
             'password'   => ['nullable', 'string', 'min:8'],
             'userType'   => ['sometimes', 'required', 'string', 'in:school,ministry,system'],
+            'governorate'=> ['nullable', 'string', 'max:100'],
             'schoolId'   => ['nullable', 'exists:schools,school_id'],
             'ministryId' => ['nullable', 'exists:ministries,ministry_id'],
             'roleId'     => ['nullable', 'integer', 'exists:roles,role_id'],

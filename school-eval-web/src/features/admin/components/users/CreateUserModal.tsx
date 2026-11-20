@@ -18,7 +18,7 @@ interface CreateUserModalProps {
 export const CreateUserModal: React.FC<CreateUserModalProps> = ({ isOpen, onClose, onSuccess, addToast }) => {
   const [form, setForm] = useState<CreateUserDto>({
     fullName: '', username: '', email: '', password: '', userType: 'school',
-    roleId: 2, schoolId: null, directorateId: null, status: 'Active',
+    roleId: 2, schoolId: null, directorateId: null, governorate: null, status: 'Active',
   });
   const [roles, setRoles] = useState<Role[]>([]);
   const [schools, setSchools] = useState<Array<{ schoolId: number; schoolName: string; schoolCode: string }>>([]);
@@ -271,17 +271,41 @@ export const CreateUserModal: React.FC<CreateUserModalProps> = ({ isOpen, onClos
           )}
 
           {form.userType === 'ministry' && (
-            <div>
-              <label style={labelStyle}>المديرية التابعة *</label>
-              <SearchableSelect
-                options={directorateOptions}
-                value={form.directorateId}
-                onChange={(val) => handleChange('directorateId', val ? Number(val) : null)}
-                placeholder="ابحث باسم المديرية أو المحافظة..."
-                error={errors.directorateId}
-              />
-              {errors.directorateId && <p style={errorStyle}>{errors.directorateId}</p>}
-            </div>
+            <>
+              <div>
+                <label style={labelStyle}>نطاق المحافظة الإشرافي (اختياري للإشراف العام)</label>
+                <select
+                  style={inputStyle()}
+                  value={form.governorate || ''}
+                  onChange={(e) => handleChange('governorate', e.target.value || null)}
+                >
+                  <option value="">كافة المحافظات (إشراف مركزي عام)</option>
+                  <option value="أمانة العاصمة">أمانة العاصمة</option>
+                  <option value="محافظة تعز">محافظة تعز</option>
+                  <option value="محافظة صنعاء">محافظة صنعاء</option>
+                  <option value="محافظة إب">محافظة إب</option>
+                  <option value="محافظة الحديدة">محافظة الحديدة</option>
+                  <option value="محافظة ذمار">محافظة ذمار</option>
+                  <option value="محافظة عدن">محافظة عدن</option>
+                  <option value="محافظة حضرموت">محافظة حضرموت</option>
+                </select>
+                <p style={{ fontSize: '11px', color: '#64748B', marginTop: '4px', margin: 0 }}>
+                  إذا تُرك فارغاً، يُعامل المشرف كمشرف مركزي عام على مستوى الوزارة بدون قيود جغرافية.
+                </p>
+              </div>
+
+              <div>
+                <label style={labelStyle}>المديرية التابعة *</label>
+                <SearchableSelect
+                  options={directorateOptions}
+                  value={form.directorateId}
+                  onChange={(val) => handleChange('directorateId', val ? Number(val) : null)}
+                  placeholder="ابحث باسم المديرية أو المحافظة..."
+                  error={errors.directorateId}
+                />
+                {errors.directorateId && <p style={errorStyle}>{errors.directorateId}</p>}
+              </div>
+            </>
           )}
 
           <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '8px', paddingTop: '16px', borderTop: `1px solid ${theme.colors.neutral[100]}` }}>

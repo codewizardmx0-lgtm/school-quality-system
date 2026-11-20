@@ -43,6 +43,7 @@ export const usersApi = {
           schoolCode: u.schoolCode ?? null,
           directorateId: u.directorateId ?? null,
           directorate: u.directorate ?? null,
+          governorate: u.governorate ?? null,
           lastActivity: u.lastActivity ?? u.updatedAt ?? new Date().toISOString(),
           isOnline: u.isOnline ?? false,
           createdAt: u.createdAt ?? new Date().toISOString(),

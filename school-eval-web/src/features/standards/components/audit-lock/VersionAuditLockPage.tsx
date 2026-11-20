@@ -33,6 +33,7 @@ export const VersionAuditLockPage: React.FC<VersionAuditLockPageProps> = ({
   const {
     diffData,
     preconditions,
+    status,
     isDraft,
     isApproved,
     isLocking,
@@ -292,6 +293,7 @@ export const VersionAuditLockPage: React.FC<VersionAuditLockPageProps> = ({
       <GovernanceChecksList
         preconditions={preconditions}
         diffData={diffData}
+        status={status}
         isDraft={isDraft}
         isApproved={isApproved}
         isLocking={isLocking}
@@ -353,7 +355,7 @@ export const VersionAuditLockPage: React.FC<VersionAuditLockPageProps> = ({
                 ⚖️ الحجية القانونية والتوثيق الرسمي:
               </strong>
               <span style={{ fontSize: '11px', color: '#64748B' }}>
-                تُثبّت البصمة على شهادات الاعتماد والتقارير المطبوعة لإثبات أن التقييم الميداني استند إلى النسخة المعتمدة بقرار وزاري.
+                تُثبّت البصمة على شهادات الجودة والتقارير المطبوعة لإثبات أن التقييم الميداني استند إلى النسخة المقرة بقرار وزاري.
               </span>
             </div>
             <div style={{ backgroundColor: '#F8FAFC', padding: '12px 14px', borderRadius: '10px', border: '1px solid #E2E8F0' }}>
@@ -418,7 +420,7 @@ export const VersionAuditLockPage: React.FC<VersionAuditLockPageProps> = ({
             ) : (
               <FileText size={15} color="#D97706" />
             )}
-            <span>تصدير تقرير الاعتماد الرسمي (PDF)</span>
+            <span>تصدير تقرير الإقرار المعياري الرسمي (PDF)</span>
           </button>
         </div>
 

@@ -60,6 +60,9 @@ class CyclesAndNotificationsFeatureTest extends TestCase
         $latestApproved = StandardVersion::whereIn('status', ['Approved', 'Active'])->latest('version_id')->first();
         $this->assertNotNull($latestApproved, 'يجب أن يوجد إصدار مُقرّ في قاعدة البيانات');
 
+        // إغلاق الدورة القائمة للسماح بإطلاق دورة جديدة وفق ضابط منع التداخل (FR-SUP-01)
+        EvaluationCycle::where('status', 'Active')->update(['status' => 'Closed']);
+
         $payload = [
             'name'               => 'الدورة التقييمية لعام 2026-2027',
             'academic_year'      => '2026/2027',
@@ -100,8 +103,9 @@ class CyclesAndNotificationsFeatureTest extends TestCase
     {
         Sanctum::actingAs($this->supervisorMinistry);
 
-        // تعديل مؤقت لحالات الإصدارات لتكون مسودة أو مؤرشفة فقط
+        // تعديل مؤقت لحالات الإصدارات لتكون مسودة أو مؤرشفة فقط وإغلاق الدورات القائمة
         StandardVersion::query()->update(['status' => 'Draft']);
+        EvaluationCycle::where('status', 'Active')->update(['status' => 'Closed']);
 
         $payload = [
             'academic_year' => '2027/2028',

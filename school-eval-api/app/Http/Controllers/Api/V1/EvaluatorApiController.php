@@ -373,6 +373,18 @@ class EvaluatorApiController extends Controller
                 'deadline' => $completionRequest->completion_deadline?->toDateString() ?? now()->addDays(7)->toDateString(),
                 'itemsCount' => CompletionRequestItem::where('request_id', $completionRequest->request_id)->whereIn('status', ['Pending', 'pending'])->count(),
             ] : null,
+            'supervisorNotes' => \App\Models\SupervisorNote::where('school_id', $school->school_id)
+                ->where('is_visible_to_school', true)
+                ->latest('created_at')
+                ->take(5)
+                ->get()
+                ->map(fn($n) => [
+                    'noteId' => $n->note_id,
+                    'memoType' => $n->memo_type ?? 'توجيه إشرافي',
+                    'subject' => $n->subject,
+                    'details' => $n->details,
+                    'createdAt' => $n->created_at?->toIso8601String(),
+                ])->values(),
         ]);
     }
 
