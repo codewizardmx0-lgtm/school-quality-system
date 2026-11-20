@@ -24,8 +24,9 @@ export const supervisionApi = {
    * 1. استرجاع لوحة المتابعة الإشرافية المركزية ومصفوفة حالة المدارس
    * GET /api/v1/supervision/dashboard
    */
-  async getDashboard(): Promise<SupervisionDashboardData> {
-    const response = await get<SupervisionDashboardData>('/supervision/dashboard');
+  async getDashboard(cycleId?: number): Promise<SupervisionDashboardData> {
+    const url = cycleId ? `/supervision/dashboard?cycle_id=${cycleId}` : '/supervision/dashboard';
+    const response = await get<SupervisionDashboardData>(url);
     if (!response?.data) {
       throw new Error(response?.message || 'تعذر استرجاع بيانات لوحة المتابعة الإشرافية.');
     }
@@ -60,13 +61,56 @@ export const supervisionApi = {
   },
 
   /**
+   * 2.2. استرجاع المدارس المتاحة للتسجيل في الدورة والغير مسجلة بعد
+   * GET /api/v1/evaluation-cycles/{id}/available-schools
+   */
+  async getAvailableSchoolsForCycle(cycleId: number): Promise<any[]> {
+    const response = await get<any[]>(`/evaluation-cycles/${cycleId}/available-schools`);
+    return Array.isArray(response?.data) ? response.data : [];
+  },
+
+  /**
+   * 2.3. إلحاق وتسجيل مدارس إضافية بالدورة التقييمية
+   * POST /api/v1/evaluation-cycles/{id}/participations
+   */
+  async enrollSchoolsInCycle(cycleId: number, schoolIds: number[]): Promise<any> {
+    const response = await post<any>(`/evaluation-cycles/${cycleId}/participations`, {
+      school_ids: schoolIds,
+    });
+    return response?.data ?? response;
+  },
+
+  /**
+   * 2.4. استرجاع قائمة المدارس الفعّالة (مع فلترة اختيارية بحسب المحافظة)
+   * GET /api/v1/schools?status=Active
+   */
+  async getActiveSchools(governorate?: string | null): Promise<any[]> {
+    const params = new URLSearchParams();
+    params.set('status', 'Active');
+    if (governorate && governorate !== 'كافة المحافظات') {
+      params.set('governorate', governorate);
+    }
+    const response = await get<any>(`/schools?${params.toString()}`);
+    if (Array.isArray(response)) return response;
+    if (Array.isArray(response?.data)) return response.data;
+    if (Array.isArray((response?.data as any)?.data)) return (response.data as any).data;
+    return [];
+  },
+
+  /**
    * 3. إطلاق دورة تقييمية جديدة وربطها بنطاق المدارس
    * POST /api/v1/evaluation-cycles
    */
   async launchCycle(payload: CycleLaunchPayload): Promise<any> {
+    const scopeGov =
+      payload.targetGovernorate && payload.targetGovernorate !== 'كافة المحافظات'
+        ? payload.targetGovernorate
+        : null;
+
     const response = await post<any>('/evaluation-cycles', {
       academic_year: payload.academicYear,
       name: payload.name,
+      scope_governorate: scopeGov,
       start_date: payload.startDate,
       end_date: payload.endDate,
       school_ids: payload.schoolIds,
@@ -79,6 +123,48 @@ export const supervisionApi = {
       throw new Error(firstError || response.message || 'فشل إطلاق دورة التقييم.');
     }
     return response?.data ?? response;
+  },
+
+  /**
+   * 3.1. تحديث بيانات دورة تقييمية (المشرف الوزاري المركزي العام حصرًا)
+   * PATCH /api/v1/evaluation-cycles/{id}
+   */
+  async updateCycle(
+    cycleId: number,
+    payload: {
+      name?: string;
+      startDate?: string;
+      endDate?: string;
+      scopeGovernorate?: string | null;
+      status?: 'Active' | 'Closed';
+    }
+  ): Promise<any> {
+    const body: Record<string, any> = {};
+    if (payload.name !== undefined) body.name = payload.name;
+    if (payload.startDate !== undefined) body.start_date = payload.startDate;
+    if (payload.endDate !== undefined) body.end_date = payload.endDate;
+    if (payload.scopeGovernorate !== undefined) {
+      body.scope_governorate =
+        payload.scopeGovernorate && payload.scopeGovernorate !== 'كافة المحافظات'
+          ? payload.scopeGovernorate
+          : null;
+    }
+    if (payload.status !== undefined) body.status = payload.status;
+
+    const response = await patch<any>(`/evaluation-cycles/${cycleId}`, body);
+    if (!response?.data && response?.errors) {
+      const firstError = Object.values(response.errors)[0]?.[0];
+      throw new Error(firstError || response.message || 'فشل تحديث بيانات دورة التقييم.');
+    }
+    return response?.data ?? response;
+  },
+
+  /**
+   * 3.2. إغلاق وأرشفة الدورة التقييمية النشطة
+   * PATCH /api/v1/evaluation-cycles/{id} (status: 'Closed')
+   */
+  async closeCycle(cycleId: number): Promise<any> {
+    return this.updateCycle(cycleId, { status: 'Closed' });
   },
 
   /**

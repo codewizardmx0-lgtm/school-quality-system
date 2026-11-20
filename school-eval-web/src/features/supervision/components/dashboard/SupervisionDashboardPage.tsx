@@ -24,13 +24,17 @@ import { exportSchoolsStatusMatrixToExcel } from '../../utils/supervisionExportU
 import type { SupervisionScreenKey } from '../../api/supervisionTypes';
 
 interface SupervisionDashboardPageProps {
+  cycleId?: number;
   onNavigate: (
     screen: SupervisionScreenKey,
-    params?: { submissionId?: number; schoolId?: number; schoolName?: string }
+    params?: { cycleId?: number; submissionId?: number; schoolId?: number; schoolName?: string }
   ) => void;
 }
 
-export const SupervisionDashboardPage: React.FC<SupervisionDashboardPageProps> = ({ onNavigate }) => {
+export const SupervisionDashboardPage: React.FC<SupervisionDashboardPageProps> = ({
+  cycleId,
+  onNavigate,
+}) => {
   const {
     dashboardData,
     schools,
@@ -47,7 +51,7 @@ export const SupervisionDashboardPage: React.FC<SupervisionDashboardPageProps> =
     setStatusFilter,
     stageFilter,
     setStageFilter,
-  } = useSupervisionDashboard();
+  } = useSupervisionDashboard(cycleId);
 
   const statusCounts = useMemo(() => {
     const raw = dashboardData?.schools || [];
@@ -63,6 +67,7 @@ export const SupervisionDashboardPage: React.FC<SupervisionDashboardPageProps> =
   }, [dashboardData?.schools]);
 
   const hasActiveFilters = searchTerm.trim() !== '' || statusFilter !== 'all' || stageFilter !== 'all';
+  const isCentralSupervisor = !scope?.governorate;
 
   const statusTabs = [
     { key: 'all', label: 'كافة المدارس', count: statusCounts.all },
@@ -188,14 +193,14 @@ export const SupervisionDashboardPage: React.FC<SupervisionDashboardPageProps> =
           <button
             type="button"
             onClick={() => {
-              if (!scope?.hasActiveCycle) {
-                onNavigate('cycles-new');
-              }
+              onNavigate('cycles-new');
             }}
-            disabled={scope?.hasActiveCycle}
+            disabled={!isCentralSupervisor && scope?.hasActiveCycle}
             title={
-              scope?.hasActiveCycle
-                ? `توجد دورة تقييم نشطة حالياً (${scope.activeCycleName || scope.activeCycle}). يمنع النظام إطلاق دورة ثانية حتى يتم إغلاق الدورة القائمة من سجل الدورات.`
+              isCentralSupervisor
+                ? 'إدارة وإطلاق دورات التقييم المركزية والمحلية'
+                : scope?.hasActiveCycle
+                ? `توجد دورة تقييم نشطة حالياً لنطاقك (${scope.activeCycleName || scope.activeCycle}).`
                 : 'إطلاق دورة تقييم جديدة وتحديد المدارس المستهدفة'
             }
             style={{
@@ -203,15 +208,15 @@ export const SupervisionDashboardPage: React.FC<SupervisionDashboardPageProps> =
               alignItems: 'center',
               gap: '8px',
               padding: '9px 18px',
-              backgroundColor: scope?.hasActiveCycle ? '#94A3B8' : '#2563EB',
+              backgroundColor: !isCentralSupervisor && scope?.hasActiveCycle ? '#94A3B8' : '#2563EB',
               color: '#FFFFFF',
               borderRadius: '8px',
               fontSize: '13px',
               fontWeight: 700,
-              cursor: scope?.hasActiveCycle ? 'not-allowed' : 'pointer',
+              cursor: !isCentralSupervisor && scope?.hasActiveCycle ? 'not-allowed' : 'pointer',
               border: 'none',
-              boxShadow: scope?.hasActiveCycle ? 'none' : '0 4px 12px rgba(37, 99, 235, 0.3)',
-              opacity: scope?.hasActiveCycle ? 0.7 : 1,
+              boxShadow: !isCentralSupervisor && scope?.hasActiveCycle ? 'none' : '0 4px 12px rgba(37, 99, 235, 0.3)',
+              opacity: !isCentralSupervisor && scope?.hasActiveCycle ? 0.7 : 1,
               transition: 'background-color 0.15s ease',
             }}
             onMouseEnter={(e) => {

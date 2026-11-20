@@ -67,7 +67,7 @@ export const ActiveVersionBadge: React.FC<ActiveVersionBadgeProps> = ({
                 borderRadius: '999px',
               }}
             >
-              {version?.versionNumber || 'v2.1'} مُقر ومعتمد
+              {version?.versionNumber || '1.0.0'} مُقر نظامياً ونشط
             </span>
             {version?.checksum && (
               <span
@@ -91,7 +91,7 @@ export const ActiveVersionBadge: React.FC<ActiveVersionBadgeProps> = ({
           </div>
           <p style={{ fontSize: '12px', color: '#94A3B8', margin: '3px 0 0 0' }}>
             {version?.governanceNote ||
-              'الإصدار مقفل ومعتمد من أمانة المعايير ومجلس الاعتماد الأكاديمي (BR-SCH-05). جميع المؤشرات مقفلة ضد التعديل الميداني.'}
+              'الإصدار مقفل ومُقرّ رسمياً من وزارة التربية والتعليم والبحث العلمي (BR-GEN-04). كافة المعايير والمؤشرات مقفلة ضد التعديل الميداني.'}
           </p>
         </div>
       </div>

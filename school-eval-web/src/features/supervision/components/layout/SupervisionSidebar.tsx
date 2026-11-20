@@ -12,7 +12,6 @@ import React, { useState } from 'react';
 import {
   LayoutDashboard,
   Calendar,
-  PlusCircle,
   FileCheck2,
   FileEdit,
   ClipboardList,
@@ -43,8 +42,7 @@ interface NavItemConfig {
 // القسم 1: المتابعة المركزية وإدارة الدورات (نطاق الإشراف العام)
 const centralNavItems: NavItemConfig[] = [
   { key: 'dashboard', label: 'لوحة المتابعة', icon: LayoutDashboard },
-  { key: 'cycles-list', label: 'سجل الدورات التقييمية', icon: Calendar },
-  { key: 'cycles-new', label: 'إطلاق دورة تقييم', icon: PlusCircle },
+  { key: 'cycles-list', label: 'إدارة الدورات التقييمية', icon: Calendar },
   { key: 'reports', label: 'التقارير والتحليل', icon: BarChart3 },
 ];
 
@@ -189,7 +187,10 @@ export const SupervisionSidebar: React.FC<SupervisionSidebarProps> = ({
         )}
 
         {centralNavItems.map((item) => {
-          const isActive = activeScreen === item.key;
+          const isActive =
+            item.key === 'cycles-list'
+              ? activeScreen === 'cycles-list' || activeScreen === 'cycles-new'
+              : activeScreen === item.key;
           const Icon = item.icon;
 
           return (

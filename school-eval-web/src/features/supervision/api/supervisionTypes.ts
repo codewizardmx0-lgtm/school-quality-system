@@ -347,3 +347,32 @@ export interface HistoricalComparisonData {
   standardsDeltas: HistoricalStandardDelta[];
   recommendations: string[];
 }
+
+export interface ParticipatingSchoolItem {
+  schoolId: number;
+  schoolName: string;
+  schoolCode: string;
+  stage?: string;
+  governorate?: string;
+  district?: string;
+  enrolledAt?: string;
+}
+
+export interface EvaluationCycleItem {
+  cycleId: number;
+  name: string;
+  academicYear: string;
+  scopeGovernorate?: string | null;
+  startDate?: string;
+  endDate?: string;
+  status: 'Active' | 'Closed';
+  participationsCount?: number;
+  evaluationsCount?: number;
+  version?: {
+    versionId: number;
+    versionName: string;
+    versionNumber: string;
+  };
+  participatingSchools?: ParticipatingSchoolItem[];
+}
+

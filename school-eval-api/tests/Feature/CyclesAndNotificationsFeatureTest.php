@@ -595,4 +595,257 @@ class CyclesAndNotificationsFeatureTest extends TestCase
         ]);
         $resExpired->assertStatus(422)->assertJsonValidationErrors(['token']);
     }
+
+    /**
+     * 16. تعديل الدورة النشطة مع التحقق من قفل تغيير الإصدار المعياري (BR-GEN-05).
+     */
+    public function test_supervisor_cannot_change_standard_version_on_active_cycle_update(): void
+    {
+        Sanctum::actingAs($this->supervisorMinistry);
+
+        $cycle = EvaluationCycle::where('status', 'Active')->first() ?? EvaluationCycle::create([
+            'name'          => 'دورة اختبار التعديل',
+            'version_id'    => StandardVersion::first()->version_id,
+            'academic_year' => '2026/2027',
+            'start_date'    => now()->format('Y-m-d'),
+            'end_date'      => now()->addMonths(3)->format('Y-m-d'),
+            'status'        => 'Active',
+        ]);
+
+        // محاولة تعديل اسم الدورة وتمديد التاريخ بنجاح
+        $newEndDate = now()->addMonths(4)->format('Y-m-d');
+        $validUpdate = $this->patchJson("/api/v1/evaluation-cycles/{$cycle->cycle_id}", [
+            'name'     => 'مسمى معدل للدورة التقييمية',
+            'end_date' => $newEndDate,
+        ]);
+        $validUpdate->assertStatus(200)
+            ->assertJsonPath('data.name', 'مسمى معدل للدورة التقييمية')
+            ->assertJsonPath('data.endDate', $newEndDate);
+
+        // محاولة تغيير الإصدار المعياري المرتبط بالدورة (يجب أن تُرفض بـ 422)
+        $fakeOtherVersionId = $cycle->version_id + 999;
+        $invalidUpdate = $this->patchJson("/api/v1/evaluation-cycles/{$cycle->cycle_id}", [
+            'version_id' => $fakeOtherVersionId,
+        ]);
+        $invalidUpdate->assertStatus(422)
+            ->assertJsonValidationErrors(['version_id']);
+    }
+
+    /**
+     * 17. إغلاق الدورة وتحويلها إلى Closed وتجميد بوابة المقيم عن بدء تقييم جديد أو رفع المخرج.
+     */
+    public function test_closing_cycle_freezes_evaluator_submission_and_new_evaluation(): void
+    {
+        Sanctum::actingAs($this->supervisorMinistry);
+
+        $cycle = EvaluationCycle::where('status', 'Active')->first() ?? EvaluationCycle::create([
+            'name'          => 'دورة الإغلاق والتجميد',
+            'version_id'    => StandardVersion::first()->version_id,
+            'academic_year' => '2026/2027',
+            'start_date'    => now()->subMonths(2)->format('Y-m-d'),
+            'end_date'      => now()->addMonths(1)->format('Y-m-d'),
+            'status'        => 'Active',
+        ]);
+
+        // إغلاق الدورة من قبل المشرف العام
+        $closeRes = $this->patchJson("/api/v1/evaluation-cycles/{$cycle->cycle_id}", [
+            'status' => 'Closed',
+        ]);
+        $closeRes->assertStatus(200)
+            ->assertJsonPath('data.status', 'Closed');
+
+        // التحقق من تجميد بدء تقييم جديد للمدرسة في الدورة المغلقة
+        Sanctum::actingAs($this->evaluatorFarouq);
+        $startRes = $this->postJson('/api/v1/evaluations', [
+            'cycle_id' => $cycle->cycle_id,
+        ]);
+        $startRes->assertStatus(422)
+            ->assertJsonValidationErrors(['cycle_id']);
+
+        // التحقق من منع الرفع والتسليم النهائي للمخرج بعد إغلاق الدورة
+        $eval = Evaluation::firstOrCreate([
+            'school_id' => $this->schoolBelqees->school_id,
+            'cycle_id'  => $cycle->cycle_id,
+        ], [
+            'created_by_user_id' => $this->evaluatorBelqees->user_id,
+            'status'             => 'InProgress',
+        ]);
+
+        Sanctum::actingAs($this->evaluatorBelqees);
+        $submitRes = $this->postJson("/api/v1/evaluations/{$eval->evaluation_id}/submit");
+        $submitRes->assertStatus(422)
+            ->assertJsonValidationErrors(['cycle']);
+    }
+
+    /**
+     * 18. حظر المشرف الجغرافي المقيد بمحافظة من إطلاق أو تعديل أو إغلاق الدورات (403 Forbidden).
+     */
+    public function test_geographic_supervisor_forbidden_from_launching_editing_or_closing_cycles(): void
+    {
+        // تهيئة مشرف مقيد جغرافياً بمحافظة محددة
+        $localSupervisor = User::create([
+            'username'      => 'local_supervisor_taiz',
+            'full_name'     => 'مشرف محلي تجريبي تعز',
+            'email'         => 'supervisor.taiz@moe.gov.ye',
+            'password_hash' => Hash::make('TestingEnv_Seed_Password_2026_Strict!'),
+            'user_type'     => 'ministry',
+            'ministry_id'   => \App\Models\Ministry::first()->ministry_id,
+            'governorate'   => 'محافظة تعز',
+            'status'        => 'Active',
+        ]);
+        $role = \App\Models\Role::where('role_name', 'ministry_supervisor')->firstOrFail();
+        $localSupervisor->roles()->attach($role->role_id, ['assigned_at' => now(), 'active' => 1]);
+
+        Sanctum::actingAs($localSupervisor);
+
+        $cycle = EvaluationCycle::firstOrFail();
+
+        // 1. حظر الإطلاق (403)
+        $launchRes = $this->postJson('/api/v1/evaluation-cycles', [
+            'academic_year' => '2026/2027',
+            'start_date'    => now()->format('Y-m-d'),
+            'end_date'      => now()->addMonths(3)->format('Y-m-d'),
+        ]);
+        $launchRes->assertStatus(403);
+
+        // 2. حظر التعديل (403)
+        $editRes = $this->patchJson("/api/v1/evaluation-cycles/{$cycle->cycle_id}", [
+            'name' => 'تعديل غير مصرح به',
+        ]);
+        $editRes->assertStatus(403);
+
+        // 3. حظر الإغلاق (403)
+        $closeRes = $this->patchJson("/api/v1/evaluation-cycles/{$cycle->cycle_id}", [
+            'status' => 'Closed',
+        ]);
+        $closeRes->assertStatus(403);
+    }
+
+    /**
+     * 19. التحقق الذكي من عدم التداخل الجغرافي (Scope-Aware Conflict Check):
+     * يسمح بإطلاق دورة نشطة لـ محافظة تعز بالتزامن مع وجود دورة نشطة لـ أمانة العاصمة،
+     * ويرفض إطلاق دورة ثانية لنفس المحافظة أو دورة عامة متداخلة.
+     */
+    public function test_scope_aware_active_cycle_validation_allows_distinct_governorates_and_rejects_overlaps(): void
+    {
+        Sanctum::actingAs($this->supervisorMinistry);
+
+        // إغلاق أي دورات سابقة لتهيئة بيئة الاختبار
+        EvaluationCycle::where('status', 'Active')->update(['status' => 'Closed']);
+
+        $version = StandardVersion::whereIn('status', ['Approved', 'Active'])->latest('version_id')->firstOrFail();
+
+        // 1. إنشاء دورة نشطة لنطاق «أمانة العاصمة»
+        $capitalCycle = EvaluationCycle::create([
+            'name'              => 'دورة التقييم الذاتي - أمانة العاصمة',
+            'version_id'        => $version->version_id,
+            'academic_year'     => '2026/2027',
+            'scope_governorate' => 'أمانة العاصمة',
+            'start_date'        => now()->format('Y-m-d'),
+            'end_date'          => now()->addMonths(3)->format('Y-m-d'),
+            'status'            => 'Active',
+        ]);
+
+        // 2. إطلاق دورة نشطة لـ «محافظة تعز» -> يجب أن تنجح (201 Created) لعدم وجود تداخل جغرافي
+        $taizRes = $this->postJson('/api/v1/evaluation-cycles', [
+            'name'              => 'دورة التقييم الذاتي - محافظة تعز',
+            'academic_year'     => '2026/2027',
+            'scope_governorate' => 'محافظة تعز',
+            'start_date'        => now()->format('Y-m-d'),
+            'end_date'          => now()->addMonths(3)->format('Y-m-d'),
+            'status'            => 'Active',
+        ]);
+        $taizRes->assertStatus(201);
+        $this->assertDatabaseHas('evaluation_cycles', [
+            'name'              => 'دورة التقييم الذاتي - محافظة تعز',
+            'scope_governorate' => 'محافظة تعز',
+            'status'            => 'Active',
+        ]);
+
+        // 3. محاولة إطلاق دورة نشطة ثانية لنفس نطاق «أمانة العاصمة» -> يجب أن تُرْفض (422)
+        $capitalDuplicateRes = $this->postJson('/api/v1/evaluation-cycles', [
+            'name'              => 'دورة مكررة لأمانة العاصمة',
+            'academic_year'     => '2026/2027',
+            'scope_governorate' => 'أمانة العاصمة',
+            'start_date'        => now()->format('Y-m-d'),
+            'end_date'          => now()->addMonths(3)->format('Y-m-d'),
+            'status'            => 'Active',
+        ]);
+        $capitalDuplicateRes->assertStatus(422);
+
+        // 4. محاولة إطلاق دورة عامة (scope_governorate = null) في ظل وجود دورات نشطة لمحافظات -> يجب أن تُرْفض (422)
+        $generalDuplicateRes = $this->postJson('/api/v1/evaluation-cycles', [
+            'name'              => 'دورة عامة متداخلة',
+            'academic_year'     => '2026/2027',
+            'scope_governorate' => null,
+            'start_date'        => now()->format('Y-m-d'),
+            'end_date'          => now()->addMonths(3)->format('Y-m-d'),
+            'status'            => 'Active',
+        ]);
+        $generalDuplicateRes->assertStatus(422);
+    }
+
+    /**
+     * 20. التحقق من خيار التحديد اليدوي للمدارس وضبط النطاق الجغرافي (الواجهة 28 & FR-SUP-01):
+     * - يمنع الإطلاق اليدوي دون تحديد مدرسة واحدة على الأقل (422).
+     * - يمنع اختيار مدارس تقع خارج النطاق الجغرافي المحدد للدورة (422).
+     * - ينجح في تسجيل المدارس المحددة يدوياً المطابقة للنطاق الجغرافي (201).
+     */
+    public function test_manual_school_selection_and_governorate_scope_boundary_enforcement(): void
+    {
+        Sanctum::actingAs($this->supervisorMinistry);
+
+        // إغلاق أي دورات سابقة
+        EvaluationCycle::where('status', 'Active')->update(['status' => 'Closed']);
+
+        // 1. محاولة إطلاق بتحديد يدوي دون إرسال أي مدارس -> 422
+        $emptyRes = $this->postJson('/api/v1/evaluation-cycles', [
+            'name'               => 'دورة تجريبية بدون مدارس',
+            'academic_year'      => '2026/2027',
+            'scope_governorate'  => 'أمانة العاصمة',
+            'enroll_all_schools' => false,
+            'school_ids'         => [],
+            'start_date'         => now()->format('Y-m-d'),
+            'end_date'           => now()->addMonths(2)->format('Y-m-d'),
+            'status'             => 'Active',
+        ]);
+        $emptyRes->assertStatus(422);
+
+        // 2. محاولة إطلاق لدورة أمانة العاصمة مع مدرسة تابعة لمحافظة تعز (المدرسة 6) -> 422
+        $schoolTaiz = School::where('governorate', 'محافظة تعز')->first();
+        if ($schoolTaiz) {
+            $foreignRes = $this->postJson('/api/v1/evaluation-cycles', [
+                'name'               => 'دورة تجريبية مع مدرسة خارج النطاق',
+                'academic_year'      => '2026/2027',
+                'scope_governorate'  => 'أمانة العاصمة',
+                'enroll_all_schools' => false,
+                'school_ids'         => [$schoolTaiz->school_id],
+                'start_date'         => now()->format('Y-m-d'),
+                'end_date'           => now()->addMonths(2)->format('Y-m-d'),
+                'status'             => 'Active',
+            ]);
+            $foreignRes->assertStatus(422);
+        }
+
+        // 3. إطلاق ناجح بتحديد يدوي لمدارس تابعة لأمانة العاصمة حصراً (المدرسة 1 و 2) -> 201
+        $capitalSchools = School::where('governorate', 'أمانة العاصمة')->take(2)->pluck('school_id')->toArray();
+        $successRes = $this->postJson('/api/v1/evaluation-cycles', [
+            'name'               => 'دورة مخصصة لمدارس محددة بأمانة العاصمة',
+            'academic_year'      => '2026/2027',
+            'scope_governorate'  => 'أمانة العاصمة',
+            'enroll_all_schools' => false,
+            'school_ids'         => $capitalSchools,
+            'start_date'         => now()->format('Y-m-d'),
+            'end_date'           => now()->addMonths(2)->format('Y-m-d'),
+            'status'             => 'Active',
+        ]);
+        $successRes->assertStatus(201);
+
+        $newCycleId = $successRes->json('data.cycleId') ?? $successRes->json('data.cycle_id');
+        $this->assertNotNull($newCycleId);
+
+        // التحقق من تسجيل المدارس المحددة فقط في جدول cycle_participations
+        $enrolledCount = \App\Models\CycleParticipation::where('cycle_id', $newCycleId)->count();
+        $this->assertEquals(count($capitalSchools), $enrolledCount);
+    }
 }

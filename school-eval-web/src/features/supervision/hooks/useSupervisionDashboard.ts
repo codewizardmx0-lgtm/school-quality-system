@@ -7,7 +7,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { supervisionApi } from '../api/supervisionApi';
 import type { SupervisionDashboardData } from '../api/supervisionTypes';
 
-export function useSupervisionDashboard() {
+export function useSupervisionDashboard(cycleId?: number) {
   const [data, setData] = useState<SupervisionDashboardData | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -21,14 +21,14 @@ export function useSupervisionDashboard() {
     setIsLoading(true);
     setError(null);
     try {
-      const result = await supervisionApi.getDashboard();
+      const result = await supervisionApi.getDashboard(cycleId);
       setData(result);
     } catch (err: any) {
       setError(err?.message || 'تعذر استرجاع بيانات لوحة المتابعة الإشرافية.');
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [cycleId]);
 
   useEffect(() => {
     fetchDashboard();

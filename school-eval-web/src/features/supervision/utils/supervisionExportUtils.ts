@@ -8,7 +8,12 @@
  */
 
 import * as XLSX from 'xlsx';
-import type { SchoolStatusMatrixRow, StandardMeanItem, HistoricalStandardDelta } from '../api/supervisionTypes';
+import type {
+  SchoolStatusMatrixRow,
+  StandardMeanItem,
+  HistoricalStandardDelta,
+  ParticipatingSchoolItem,
+} from '../api/supervisionTypes';
 
 /**
  * تنسيق الطابع الزمني الموحد لأسماء الملفات: YYYY-MM-DD_HH-mm
@@ -147,5 +152,54 @@ export function exportHistoricalComparisonToExcel(
 
   const safeSchoolName = schoolName.replace(/[\\/:*?"<>|]/g, '_');
   const fileName = `historical_comparison_${safeSchoolName}_${getTimestampString()}.xlsx`;
+  XLSX.writeFile(workbook, fileName);
+}
+
+/**
+ * 4. تصدير كشف المدارس المشاركة في الدورة التقييمية (Cycle Participating Schools)
+ */
+export function exportCycleParticipatingSchoolsToExcel(
+  cycleName: string,
+  academicYear: string,
+  schools: ParticipatingSchoolItem[]
+): void {
+  const rows = schools.map((school, index) => ({
+    'م': index + 1,
+    'رمز المدرسة': school.schoolCode,
+    'اسم المدرسة': school.schoolName,
+    'المرحلة الدراسية': school.stage || 'غير محدد',
+    'المحافظة': school.governorate || 'غير محدد',
+    'المديرية': school.district || 'غير محدد',
+    'تاريخ التسجيل بالدورة': school.enrolledAt
+      ? new Date(school.enrolledAt).toLocaleDateString('ar-YE', {
+          year: 'numeric',
+          month: 'short',
+          day: 'numeric',
+        })
+      : 'غير محدد',
+    'الدورة التقييمية': cycleName,
+    'حالة القيد': 'مسجلة بالدورة',
+  }));
+
+  const worksheet = XLSX.utils.json_to_sheet(rows);
+  worksheet['!dir'] = 'rtl';
+
+  worksheet['!cols'] = [
+    { wch: 5 },  // م
+    { wch: 15 }, // رمز المدرسة
+    { wch: 34 }, // اسم المدرسة
+    { wch: 20 }, // المرحلة الدراسية
+    { wch: 18 }, // المحافظة
+    { wch: 18 }, // المديرية
+    { wch: 22 }, // تاريخ التسجيل
+    { wch: 32 }, // الدورة التقييمية
+    { wch: 18 }, // حالة القيد
+  ];
+
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'المدارس المشاركة');
+
+  const safeYear = academicYear.replace(/[\\/:*?"<>|]/g, '_');
+  const fileName = `cycle_schools_${safeYear}_${getTimestampString()}.xlsx`;
   XLSX.writeFile(workbook, fileName);
 }

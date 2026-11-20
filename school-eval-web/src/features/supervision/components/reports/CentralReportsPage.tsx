@@ -21,10 +21,11 @@ import { EmptySupervisionState } from '../common/EmptySupervisionState';
 import type { SupervisionScreenKey } from '../../api/supervisionTypes';
 
 interface CentralReportsPageProps {
-  onNavigate: (screen: SupervisionScreenKey, params?: { schoolId?: number }) => void;
+  cycleId?: number;
+  onNavigate: (screen: SupervisionScreenKey, params?: { schoolId?: number; cycleId?: number }) => void;
 }
 
-export const CentralReportsPage: React.FC<CentralReportsPageProps> = ({ onNavigate }) => {
+export const CentralReportsPage: React.FC<CentralReportsPageProps> = ({ cycleId, onNavigate }) => {
   const {
     analyticsData,
     standardsMeans,
@@ -32,7 +33,7 @@ export const CentralReportsPage: React.FC<CentralReportsPageProps> = ({ onNaviga
     refetchAnalytics,
     handleExportAnalyticsExcel,
     handleExportAnalyticsPdf,
-  } = useCentralReports(104);
+  } = useCentralReports(cycleId || 104);
 
   return (
     <div style={{ padding: '24px 32px', maxWidth: '1440px', margin: '0 auto' }}>

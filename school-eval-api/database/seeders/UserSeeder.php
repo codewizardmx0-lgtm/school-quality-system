@@ -108,7 +108,7 @@ class UserSeeder extends Seeder
                 'status'      => 'Active',
             ],
 
-            // 6. المشرف والمراجع الوزاري (Ministry User - مرتبط بالوزارة ونطاق أمانة العاصمة)
+            // 6. المشرف والمراجع الوزاري (Ministry User - مشرف مركزي عام على مستوى الجمهورية)
             [
                 'username'    => 'supervisor_ministry',
                 'full_name'   => 'مشرف وزاري تجريبي',
@@ -116,7 +116,7 @@ class UserSeeder extends Seeder
                 'user_type'   => 'ministry',
                 'school_id'   => null,
                 'ministry_id' => $ministry->ministry_id,
-                'governorate' => 'أمانة العاصمة',
+                'governorate' => null,
                 'status'      => 'Active',
             ],
 

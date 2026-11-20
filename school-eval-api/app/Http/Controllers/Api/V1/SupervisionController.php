@@ -47,8 +47,11 @@ class SupervisionController extends Controller
      */
     public function dashboard(Request $request): JsonResponse
     {
-        $activeCycle = EvaluationCycle::where('status', 'Active')->latest('cycle_id')->first()
-            ?? EvaluationCycle::latest('cycle_id')->first();
+        $requestedCycleId = $request->input('cycle_id') ?? $request->input('cycleId');
+        $activeCycle = $requestedCycleId
+            ? EvaluationCycle::find($requestedCycleId)
+            : (EvaluationCycle::where('status', 'Active')->latest('cycle_id')->first()
+                ?? EvaluationCycle::latest('cycle_id')->first());
 
         // 1. حساب شرط التأخير الزمني (FR-SUP-15): مضي 80% من فترة الدورة
         $isOverdueCycleThreshold = false;

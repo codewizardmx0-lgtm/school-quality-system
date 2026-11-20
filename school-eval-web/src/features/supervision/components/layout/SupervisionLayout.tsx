@@ -13,7 +13,6 @@ import React, { useState } from 'react';
 import { SupervisionSidebar } from './SupervisionSidebar';
 import { SupervisionTopBar } from './SupervisionTopBar';
 import { SupervisionDashboardPage } from '../dashboard/SupervisionDashboardPage';
-import { LaunchCyclePage } from '../cycles/LaunchCyclePage';
 import { CyclesListPage } from '../cycles/CyclesListPage';
 import { ReviewSubmissionPage } from '../review/ReviewSubmissionPage';
 import { CreateCompletionRequestPage } from '../completion/CreateCompletionRequestPage';
@@ -40,6 +39,8 @@ export const SupervisionLayout: React.FC<SupervisionLayoutProps> = ({
   const [selectedSubmissionId, setSelectedSubmissionId] = useState<number>(101);
   const [selectedSchoolId, setSelectedSchoolId] = useState<number>(104);
   const [selectedSchoolName, setSelectedSchoolName] = useState<string>('مدرسة الفاروق النموذجية');
+  const [selectedCycleId, setSelectedCycleId] = useState<number | undefined>(undefined);
+  const [prefillCycleLaunch, setPrefillCycleLaunch] = useState<any | undefined>(undefined);
   const [preloadedItems, setPreloadedItems] = useState<PreloadedCompletionItem[] | undefined>(
     undefined
   );
@@ -47,12 +48,20 @@ export const SupervisionLayout: React.FC<SupervisionLayoutProps> = ({
   const navigateToScreen = (
     screen: SupervisionScreenKey,
     params?: {
+      cycleId?: number;
       submissionId?: number;
       schoolId?: number;
       schoolName?: string;
       preloadedItems?: PreloadedCompletionItem[];
+      prefillCycleLaunch?: any;
     }
   ) => {
+    if (params?.cycleId !== undefined) {
+      setSelectedCycleId(params.cycleId);
+    }
+    if (params?.prefillCycleLaunch !== undefined) {
+      setPrefillCycleLaunch(params.prefillCycleLaunch);
+    }
     if (params?.submissionId) {
       setSelectedSubmissionId(params.submissionId);
     }
@@ -80,15 +89,28 @@ export const SupervisionLayout: React.FC<SupervisionLayoutProps> = ({
       case 'dashboard':
         return (
           <SupervisionDashboardPage
+            cycleId={selectedCycleId}
             onNavigate={(screen, params) => navigateToScreen(screen, params)}
           />
         );
 
       case 'cycles-list':
-        return <CyclesListPage onNavigate={(screen) => navigateToScreen(screen)} />;
+        return (
+          <CyclesListPage
+            initialTab="list"
+            prefillData={prefillCycleLaunch}
+            onNavigate={(screen, params) => navigateToScreen(screen, params)}
+          />
+        );
 
       case 'cycles-new':
-        return <LaunchCyclePage onNavigate={(screen) => navigateToScreen(screen)} />;
+        return (
+          <CyclesListPage
+            initialTab="form"
+            prefillData={prefillCycleLaunch}
+            onNavigate={(screen, params) => navigateToScreen(screen, params)}
+          />
+        );
 
       case 'submissions':
         return (
@@ -120,6 +142,7 @@ export const SupervisionLayout: React.FC<SupervisionLayoutProps> = ({
       case 'reports':
         return (
           <CentralReportsPage
+            cycleId={selectedCycleId}
             onNavigate={(screen, params) => navigateToScreen(screen, params)}
           />
         );

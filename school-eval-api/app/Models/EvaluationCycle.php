@@ -43,6 +43,7 @@ class EvaluationCycle extends Model
         'name',
         'version_id',
         'academic_year',
+        'scope_governorate',
         'start_date',
         'end_date',
         'status',

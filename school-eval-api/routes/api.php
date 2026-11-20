@@ -278,7 +278,9 @@ Route::prefix('v1')->group(function () {
             Route::post('/', [\App\Http\Controllers\Api\V1\EvaluationCycleController::class, 'store'])->name('api.v1.evaluation-cycles.store');
             Route::get('/{id}', [\App\Http\Controllers\Api\V1\EvaluationCycleController::class, 'show'])->name('api.v1.evaluation-cycles.show');
             Route::patch('/{id}', [\App\Http\Controllers\Api\V1\EvaluationCycleController::class, 'update'])->name('api.v1.evaluation-cycles.update');
+            Route::delete('/{id}', [\App\Http\Controllers\Api\V1\EvaluationCycleController::class, 'destroy'])->name('api.v1.evaluation-cycles.destroy');
             Route::post('/{id}/participations', [\App\Http\Controllers\Api\V1\EvaluationCycleController::class, 'enrollSchools'])->name('api.v1.evaluation-cycles.participations.store');
+            Route::get('/{id}/available-schools', [\App\Http\Controllers\Api\V1\EvaluationCycleController::class, 'availableSchools'])->name('api.v1.evaluation-cycles.available-schools');
         });
 
         // عمليات التقييم المدرسي مع العزل المؤسسي ورصد الدرجات (Evaluations)

@@ -29,10 +29,11 @@ class EvaluationCycleSeeder extends Seeder
                 'version_id'    => $version->version_id,
             ],
             [
-                'name'       => 'دورة التقييم الذاتي والاعتماد المدرسي 2025/2026',
-                'start_date' => '2025-09-01',
-                'end_date'   => '2027-06-30',
-                'status'     => 'Active',
+                'name'              => 'دورة التقييم الذاتي للعام الدراسي 2025/2026 - أمانة العاصمة',
+                'scope_governorate' => 'أمانة العاصمة',
+                'start_date'        => '2025-09-01',
+                'end_date'          => '2027-06-30',
+                'status'            => 'Active',
             ]
         );
 

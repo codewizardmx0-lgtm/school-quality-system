@@ -2680,6 +2680,12 @@ class EvaluatorApiController extends Controller
 
         $evaluation = $this->getActiveEvaluation($request);
 
+        if ($evaluation && $evaluation->cycle && $evaluation->cycle->status === 'Closed') {
+            return ApiResponse::validationError([
+                'cycle' => ['دورة التقييم مغلقة حالياً ولا يُسمح بتقديم أو تعديل التقييم.'],
+            ], 'دورة التقييم مغلقة حالياً ولا يُسمح بتقديم التقييم.');
+        }
+
         // التحقق من كلمة المرور (في بيئة التطوير نقبل كلمة المرور أو كلمة المرور الافتراضية)
         $password = $request->input('password');
         $validPassword = true;
