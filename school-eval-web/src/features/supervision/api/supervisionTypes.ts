@@ -37,8 +37,23 @@ export interface GovernanceCallout {
 
 export interface SchoolScope {
   name: string;
+  governorate?: string;
   totalSchools: number;
   activeCycle: string;
+  activeCycleId?: number;
+  activeCycleName?: string;
+  cycleStatus?: string;
+  startDate?: string | null;
+  endDate?: string | null;
+  daysRemaining?: number;
+  hasActiveCycle?: boolean;
+  isOverdueThresholdReached?: boolean;
+  overdueThresholdDate?: string | null;
+  standardVersion?: {
+    versionId: number;
+    versionNo: string;
+    versionTitle: string;
+  };
 }
 
 export interface SchoolStatusMatrixRow {
@@ -48,7 +63,15 @@ export interface SchoolStatusMatrixRow {
   educationalStage: string;
   governorate: string;
   directorate?: string;
+  principalName?: string;
+  evaluatorName?: string;
   selfEvaluationProgress: number; // 0 to 100
+  scoredIndicatorsCount?: number;
+  totalIndicatorsCount?: number;
+  coveredRequirementsCount?: number;
+  totalRequirementsCount?: number;
+  evidenceCount?: number;
+  documentsCount?: number;
   outputStatus: OutputStatusType;
   outputStatusArabic: string;
   isDelayed?: boolean;

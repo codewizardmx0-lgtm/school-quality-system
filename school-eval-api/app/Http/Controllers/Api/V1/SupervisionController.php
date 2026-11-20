@@ -86,12 +86,18 @@ class SupervisionController extends Controller
             : null;
 
         $schoolsQuery = School::with([
+            'principal',
+            'evaluators',
+            'documents',
             'evaluations' => function ($q) {
                 $q->latest('evaluation_id');
             },
             'evaluations.cycle',
+            'evaluations.creator',
             'evaluations.reports.submissions.completionRequests',
+            'evaluations.reports.submissions.submittedBy',
             'evaluations.results',
+            'evaluations.evidenceLinks',
         ]);
 
         if ($supervisorGovernorate) {
@@ -137,11 +143,36 @@ class SupervisionController extends Controller
                 }
             }
 
+            $principalName = $school->principal?->full_name ?? $school->principal?->name ?? 'غير محدد';
+            $evaluatorName = $submission?->submittedBy?->full_name 
+                ?? $submission?->submittedBy?->name
+                ?? $eval?->creator?->full_name 
+                ?? $school->evaluators->first()?->full_name 
+                ?? 'غير محدد';
+
+            $totalIndicatorsCount = $totalStandardIndicators;
+            $scoredIndicatorsCount = $scoredCount;
+            $totalRequirementsCount = 278;
+            $evidenceCount = $eval ? $eval->evidenceLinks->count() : 0;
+            $documentsCount = $school->documents ? $school->documents->count() : 0;
+
+            $coveredRequirementsCount = 0;
+            if ($eval) {
+                try {
+                    $sufficiencyData = app(\App\Services\EvidenceSufficiencyService::class)->evaluateEvaluation($eval);
+                    $coveredRequirementsCount = (int) collect($sufficiencyData['standards'] ?? [])
+                        ->flatMap(fn($s) => $s['indicators'] ?? [])
+                        ->sum('effective_covered_count');
+                } catch (\Throwable $e) {
+                    $coveredRequirementsCount = $evidenceCount;
+                }
+            }
+
             $statusArabic = match ($status) {
                 'NeedsCompletion' => 'يحتاج استكمال',
                 'Submitted' => 'مرفوع جديد',
                 'UnderReview' => 'قيد التدقيق الإشرافي',
-                'Completed' => 'مكتمل المراجعة',
+                'Completed' => 'مكتمل',
                 default => ($isDelayed ? 'متأخرة عن التسليم' : 'مسودة قيد الإعداد'),
             };
 
@@ -194,7 +225,15 @@ class SupervisionController extends Controller
                 'educationalStage' => $school->educational_stage ?? 'أساسي / ثانوي',
                 'governorate' => $school->governorate ?? 'غير محدد',
                 'directorate' => $school->educational_district ?? 'غير محدد',
+                'principalName' => $principalName,
+                'evaluatorName' => $evaluatorName,
                 'selfEvaluationProgress' => $selfEvalProgress,
+                'scoredIndicatorsCount' => $scoredIndicatorsCount,
+                'totalIndicatorsCount' => $totalIndicatorsCount,
+                'coveredRequirementsCount' => $coveredRequirementsCount,
+                'totalRequirementsCount' => $totalRequirementsCount,
+                'evidenceCount' => $evidenceCount,
+                'documentsCount' => $documentsCount,
                 'outputStatus' => $status,
                 'outputStatusArabic' => $statusArabic,
                 'isDelayed' => $isDelayed,
@@ -223,13 +262,24 @@ class SupervisionController extends Controller
                 'description' => 'إجراءات المشرف تنحصر في المراجعة الإشرافية وطلب الاستكمال بمهلة زمنية أو إغلاق المراجعة كمكتمل؛ ولا يملك المشرف صلاحية تعديل درجات المدرسة أو إعادة تقييمها أو ترتيب المدارس تنافسياً.',
             ],
             'scope' => [
-                'name' => $supervisorGovernorate ? "نطاق محافظة {$supervisorGovernorate}" : 'الإدارة العامة لضمان الجودة والاعتماد المدرسي',
+                'name' => $supervisorGovernorate ? "نطاق محافظة {$supervisorGovernorate}" : 'الإدارة العامة لتقويم الجودة المدرسية',
                 'governorate' => $supervisorGovernorate ?: 'كافة المحافظات (إشراف مركزي عام)',
                 'totalSchools' => $totalSchools,
                 'activeCycle' => $activeCycle?->academic_year ?? '2026/2027',
+                'activeCycleId' => $activeCycle?->cycle_id,
+                'activeCycleName' => $activeCycle?->name ?? 'الدورة الوطنية للتقييم الذاتي المدرسي',
                 'cycleStatus' => $activeCycle?->status ?? 'Active',
+                'startDate' => $activeCycle?->start_date ? Carbon::parse($activeCycle->start_date)->toDateString() : null,
+                'endDate' => $activeCycle?->end_date ? Carbon::parse($activeCycle->end_date)->toDateString() : null,
+                'daysRemaining' => ($activeCycle && $activeCycle->end_date) ? max(0, (int) now()->diffInDays(Carbon::parse($activeCycle->end_date), false)) : 0,
+                'hasActiveCycle' => ($activeCycle && $activeCycle->status === 'Active'),
                 'isOverdueThresholdReached' => $isOverdueCycleThreshold,
                 'overdueThresholdDate' => $overdueThresholdDate?->toIso8601String(),
+                'standardVersion' => [
+                    'versionId' => $activeVersion?->version_id,
+                    'versionNo' => $activeVersion?->version_number ?? '1.0',
+                    'versionTitle' => $activeVersion?->version_title ?? $activeVersion?->title ?? 'الوثيقة الوطنية لمعايير جودة التعليم المدرسي',
+                ],
             ],
             'schools' => $schoolsData,
         ], 'تم تحميل لوحة المتابعة الإشرافية المركزية بنجاح.');

@@ -33,12 +33,16 @@ export function exportSchoolsStatusMatrixToExcel(schools: SchoolStatusMatrixRow[
     'اسم المدرسة': school.schoolName,
     'المرحلة الدراسية': school.educationalStage,
     'المحافظة': school.governorate,
-    'المديرية': school.directorate || 'التحرير',
-    'نسبة إنجاز التقييم الذاتي': `${school.selfEvaluationProgress}%`,
+    'المديرية': school.directorate || 'غير محدد',
+    'مدير المدرسة': school.principalName || 'غير محدد',
+    'المقيم المدرسي': school.evaluatorName || 'غير محدد',
+    'المؤشرات المقيمة': `${school.scoredIndicatorsCount ?? 0} من أصل ${school.totalIndicatorsCount ?? 109} (${school.selfEvaluationProgress}%)`,
+    'تغطية متطلبات الشواهد': `${school.coveredRequirementsCount ?? 0} من أصل ${school.totalRequirementsCount ?? 278}`,
+    'عدد الوثائق والمرفقات': `${school.documentsCount ?? 0} وثيقة (${school.evidenceCount ?? 0} رابط)`,
     'حالة المخرج': school.outputStatusArabic,
     'طلبات الاستكمال': school.completionRequestsCount > 0 ? `${school.completionRequestsCount} طلبات` : 'لا يوجد',
     'خطة التحسين': school.improvementPlanStatus,
-    'تاريخ آخر إجراء': new Date(school.lastActionDate).toLocaleDateString('ar-YE', {
+    'تاريخ آخر رفع/إجراء': new Date(school.lastActionDate).toLocaleDateString('ar-YE', {
       year: 'numeric',
       month: 'short',
       day: 'numeric',
@@ -53,11 +57,15 @@ export function exportSchoolsStatusMatrixToExcel(schools: SchoolStatusMatrixRow[
     { wch: 5 },  // م
     { wch: 14 }, // رمز المدرسة
     { wch: 32 }, // اسم المدرسة
-    { wch: 22 }, // المرحلة
+    { wch: 18 }, // المرحلة
     { wch: 16 }, // المحافظة
     { wch: 16 }, // المديرية
-    { wch: 24 }, // نسبة الإنجاز
-    { wch: 20 }, // حالة المخرج
+    { wch: 22 }, // مدير المدرسة
+    { wch: 22 }, // المقيم المدرسي
+    { wch: 26 }, // المؤشرات المقيمة
+    { wch: 24 }, // تغطية الشواهد
+    { wch: 24 }, // عدد الوثائق والمرفقات
+    { wch: 18 }, // حالة المخرج
     { wch: 18 }, // طلبات الاستكمال
     { wch: 18 }, // خطة التحسين
     { wch: 20 }, // تاريخ الإجراء

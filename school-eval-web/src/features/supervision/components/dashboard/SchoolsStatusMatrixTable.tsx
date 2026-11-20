@@ -22,10 +22,10 @@ import type { SchoolStatusMatrixRow } from '../../api/supervisionTypes';
 
 interface SchoolsStatusMatrixTableProps {
   schools: SchoolStatusMatrixRow[];
-  onReviewSubmission: (submissionId: number, schoolId: number) => void;
-  onOpenTrackingLog: (schoolId: number) => void;
-  onOpenCompletionRequest?: (submissionId: number, schoolId: number) => void;
-  onCompareHistorical: (schoolId: number) => void;
+  onReviewSubmission: (submissionId: number, schoolId: number, schoolName?: string) => void;
+  onOpenTrackingLog: (schoolId: number, schoolName?: string) => void;
+  onOpenCompletionRequest?: (submissionId: number, schoolId: number, schoolName?: string) => void;
+  onCompareHistorical: (schoolId: number, schoolName?: string) => void;
 }
 
 type MatrixSortKey =
@@ -35,6 +35,45 @@ type MatrixSortKey =
   | 'completionRequestsCount'
   | 'improvementPlanStatus';
 type SortDirection = 'asc' | 'desc';
+
+/**
+ * احتساب وزن الأولوية الإشرافية المركبة لفرز حالات المدارس:
+ * Submitted (50) -> UnderReview (40) -> NeedsCompletion (30) -> Draft (20) -> Completed (10)
+ * مع منح شارة التأخير (+5) لرفع أولوية المدرسة المتأخرة داخل مجموعتها
+ */
+const getStatusPriorityWeight = (school: SchoolStatusMatrixRow): number => {
+  let weight = 0;
+  switch (school.outputStatus) {
+    case 'Submitted':
+      weight = 50;
+      break;
+    case 'UnderReview':
+      weight = 40;
+      break;
+    case 'NeedsCompletion':
+      weight = 30;
+      break;
+    case 'Draft':
+      weight = 20;
+      break;
+    case 'Completed':
+      weight = 10;
+      break;
+    default:
+      weight = 0;
+  }
+  if (school.isDelayed) {
+    weight += 5; // ترفع أولوية المدرسة المتأخرة عن التسليم
+  }
+  return weight;
+};
+
+const formatLastActionDate = (dateStr?: string): string => {
+  if (!dateStr) return 'لم يُسجل إجراء بعد';
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return 'لم يُسجل إجراء بعد';
+  return d.toLocaleDateString('ar-YE', { year: 'numeric', month: 'short', day: 'numeric' });
+};
 
 export const SchoolsStatusMatrixTable: React.FC<SchoolsStatusMatrixTableProps> = ({
   schools,
@@ -51,7 +90,7 @@ export const SchoolsStatusMatrixTable: React.FC<SchoolsStatusMatrixTableProps> =
     } else {
       setSortKey(key);
       setSortDirection(
-        key === 'selfEvaluationProgress' || key === 'completionRequestsCount'
+        key === 'selfEvaluationProgress' || key === 'completionRequestsCount' || key === 'outputStatus'
           ? 'desc'
           : 'asc'
       );
@@ -85,8 +124,8 @@ export const SchoolsStatusMatrixTable: React.FC<SchoolsStatusMatrixTableProps> =
           valB = b.selfEvaluationProgress ?? 0;
           break;
         case 'outputStatus':
-          valA = a.outputStatusArabic || a.outputStatus;
-          valB = b.outputStatusArabic || b.outputStatus;
+          valA = getStatusPriorityWeight(a);
+          valB = getStatusPriorityWeight(b);
           break;
         case 'completionRequestsCount':
           valA = a.completionRequestsCount ?? 0;
@@ -219,7 +258,7 @@ export const SchoolsStatusMatrixTable: React.FC<SchoolsStatusMatrixTableProps> =
             }}
           >
             <CheckCircle2 size={13} color="#059669" />
-            {statusArabic || 'مكتمل المراجعة'}
+            {statusArabic || 'مكتمل'}
           </span>
         );
 
@@ -402,9 +441,9 @@ export const SchoolsStatusMatrixTable: React.FC<SchoolsStatusMatrixTableProps> =
                   onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#F0F7FF')}
                   onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = isEven ? '#FAFBFD' : '#FFFFFF')}
                 >
-                  {/* المدرسة والرمز والمرحلة */}
+                  {/* المدرسة والرمز والمرحلة وفريق التقييم */}
                   <td style={{ padding: '14px 16px' }}>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                       <span
                         style={{
                           fontWeight: 700,
@@ -414,7 +453,7 @@ export const SchoolsStatusMatrixTable: React.FC<SchoolsStatusMatrixTableProps> =
                       >
                         {school.schoolName}
                       </span>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                         <span
                           style={{
                             fontSize: '11px',
@@ -428,21 +467,32 @@ export const SchoolsStatusMatrixTable: React.FC<SchoolsStatusMatrixTableProps> =
                           {school.schoolCode}
                         </span>
                         <span style={{ fontSize: '11px', color: '#64748B' }}>
-                          {school.educationalStage}
+                          {school.educationalStage} • {school.governorate}
+                        </span>
+                      </div>
+                      {/* بيانات مدير المدرسة والمقيم وتاريخ آخر إجراء */}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', marginTop: '2px', fontSize: '11px', color: '#64748B' }}>
+                        <span>
+                          <strong style={{ color: '#475569' }}>المدير:</strong> {school.principalName || 'غير محدد'}
+                          {' • '}
+                          <strong style={{ color: '#475569' }}>المقيم:</strong> {school.evaluatorName || 'غير محدد'}
+                        </span>
+                        <span style={{ fontSize: '10px', color: '#94A3B8' }}>
+                          آخر إجراء: {formatLastActionDate(school.lastActionDate)}
                         </span>
                       </div>
                     </div>
                   </td>
 
-                  {/* نسبة إنجاز التقييم الذاتي */}
+                  {/* نسبة إنجاز التقييم الذاتي وتغطية الشواهد */}
                   <td style={{ padding: '14px 14px' }}>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxWidth: '160px' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxWidth: '210px' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', fontWeight: 700 }}>
                         <span style={{ color: school.selfEvaluationProgress === 100 ? '#059669' : '#D97706' }}>
                           {school.selfEvaluationProgress}%
                         </span>
-                        <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 500 }}>
-                          {school.selfEvaluationProgress === 100 ? 'مكتمل (109/109)' : 'قيد الإدخال'}
+                        <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 600 }}>
+                          {school.scoredIndicatorsCount ?? (school.selfEvaluationProgress === 100 ? 109 : Math.round((school.selfEvaluationProgress * 109) / 100))} / {school.totalIndicatorsCount ?? 109} مؤشراً
                         </span>
                       </div>
                       <div
@@ -464,6 +514,25 @@ export const SchoolsStatusMatrixTable: React.FC<SchoolsStatusMatrixTableProps> =
                             transition: 'width 0.3s ease',
                           }}
                         />
+                      </div>
+                      {/* تفصيلة تغطية متطلبات الشواهد */}
+                      <div
+                        style={{
+                          fontSize: '10.5px',
+                          color: '#475569',
+                          backgroundColor: '#F8FAFC',
+                          padding: '3px 6px',
+                          borderRadius: '4px',
+                          border: '1px solid #E2E8F0',
+                          lineHeight: 1.4,
+                        }}
+                      >
+                        <div>
+                          <strong style={{ color: '#2563EB' }}>الشواهد:</strong> {school.coveredRequirementsCount ?? 0} / {school.totalRequirementsCount ?? 278} متطلب
+                        </div>
+                        <div style={{ color: '#64748B', fontSize: '10px' }}>
+                          ({school.documentsCount ?? 0} وثيقة • {school.evidenceCount ?? 0} مرفق)
+                        </div>
                       </div>
                     </div>
                   </td>
@@ -517,39 +586,64 @@ export const SchoolsStatusMatrixTable: React.FC<SchoolsStatusMatrixTableProps> =
                         gap: '6px',
                       }}
                     >
-                      {/* زر مراجعة المخرج */}
-                      <button
-                        type="button"
-                        onClick={() =>
-                          onReviewSubmission(school.latestSubmissionId, school.schoolId)
-                        }
-                        title="مراجعة وتدقيق المخرج"
-                        style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '4px',
-                          padding: '6px 10px',
-                          backgroundColor: '#2563EB',
-                          color: '#FFFFFF',
-                          borderRadius: '6px',
-                          fontSize: '12px',
-                          fontWeight: 700,
-                          cursor: 'pointer',
-                          border: 'none',
-                          boxShadow: '0 2px 4px rgba(37, 99, 235, 0.2)',
-                          transition: 'background-color 0.15s ease',
-                        }}
-                        onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#1D4ED8')}
-                        onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#2563EB')}
-                      >
-                        <FileCheck2 size={14} />
-                        <span>مراجعة</span>
-                      </button>
+                      {/* زر مراجعة المخرج (معطل بحالة المسودة Draft) */}
+                      {school.outputStatus === 'Draft' ? (
+                        <button
+                          type="button"
+                          disabled={true}
+                          title="لم يُرفع مخرج التقييم من قِبل المدرسة بعد"
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            padding: '6px 10px',
+                            backgroundColor: '#F1F5F9',
+                            color: '#94A3B8',
+                            borderRadius: '6px',
+                            fontSize: '12px',
+                            fontWeight: 600,
+                            cursor: 'not-allowed',
+                            border: '1px solid #E2E8F0',
+                            boxShadow: 'none',
+                          }}
+                        >
+                          <FileCheck2 size={14} color="#94A3B8" />
+                          <span>مراجعة</span>
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            onReviewSubmission(school.latestSubmissionId, school.schoolId, school.schoolName)
+                          }
+                          title="مراجعة وتدقيق مخرج التقييم"
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            padding: '6px 10px',
+                            backgroundColor: '#2563EB',
+                            color: '#FFFFFF',
+                            borderRadius: '6px',
+                            fontSize: '12px',
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            border: 'none',
+                            boxShadow: '0 2px 4px rgba(37, 99, 235, 0.2)',
+                            transition: 'background-color 0.15s ease',
+                          }}
+                          onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#1D4ED8')}
+                          onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#2563EB')}
+                        >
+                          <FileCheck2 size={14} />
+                          <span>مراجعة</span>
+                        </button>
+                      )}
 
                       {/* زر سجل إجراءات المتابعة */}
                       <button
                         type="button"
-                        onClick={() => onOpenTrackingLog(school.schoolId)}
+                        onClick={() => onOpenTrackingLog(school.schoolId, school.schoolName)}
                         title="سجل المتابعة والمذكرات الإشرافية"
                         style={{
                           display: 'inline-flex',
@@ -583,7 +677,7 @@ export const SchoolsStatusMatrixTable: React.FC<SchoolsStatusMatrixTableProps> =
                       {/* زر المقارنة التاريخية */}
                       <button
                         type="button"
-                        onClick={() => onCompareHistorical(school.schoolId)}
+                        onClick={() => onCompareHistorical(school.schoolId, school.schoolName)}
                         title="المقارنة التراكمية عبر الدورات"
                         style={{
                           width: '30px',

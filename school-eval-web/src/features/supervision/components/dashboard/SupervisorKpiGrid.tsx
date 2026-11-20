@@ -11,16 +11,22 @@ import type { SupervisionKpis } from '../../api/supervisionTypes';
 interface SupervisorKpiGridProps {
   kpis?: SupervisionKpis;
   isLoading?: boolean;
+  scopeNote?: string;
+  activeFilter?: string;
+  onSelectFilter?: (filterKey: string) => void;
 }
 
 export const SupervisorKpiGrid: React.FC<SupervisorKpiGridProps> = ({
   kpis = {
-    totalSchools: 48,
-    pendingReviewCount: 12,
-    openCompletionRequestsCount: 5,
-    completedReviewCount: 18,
+    totalSchools: 0,
+    pendingReviewCount: 0,
+    openCompletionRequestsCount: 0,
+    completedReviewCount: 0,
   },
   isLoading = false,
+  scopeNote,
+  activeFilter,
+  onSelectFilter,
 }) => {
   const cards = [
     {
@@ -31,7 +37,8 @@ export const SupervisorKpiGrid: React.FC<SupervisorKpiGridProps> = ({
       color: '#2563EB',
       bgColor: '#EFF6FF',
       borderColor: '#DBEAFE',
-      note: 'نطاق الإشراف: أمانة العاصمة',
+      note: scopeNote ? `نطاق: ${scopeNote}` : 'نطاق الإشراف المركزي العام',
+      filterKey: 'all',
     },
     {
       title: 'مخرجات مرفوعة قيد المراجعة',
@@ -42,6 +49,7 @@ export const SupervisorKpiGrid: React.FC<SupervisorKpiGridProps> = ({
       bgColor: '#EFF6FF',
       borderColor: '#BFDBFE',
       note: 'تتطلب تدقيق الشواهد والتقديرات',
+      filterKey: 'Submitted',
     },
     {
       title: 'طلبات استكمال مفتوحة',
@@ -52,6 +60,7 @@ export const SupervisorKpiGrid: React.FC<SupervisorKpiGridProps> = ({
       bgColor: '#FEF3C7',
       borderColor: '#FDE68A',
       note: 'بانتظار استيفاء المدارس للنواقص',
+      filterKey: 'NeedsCompletion',
     },
     {
       title: 'مخرجات مكتملة المراجعة',
@@ -62,6 +71,7 @@ export const SupervisorKpiGrid: React.FC<SupervisorKpiGridProps> = ({
       bgColor: '#ECFDF5',
       borderColor: '#A7F3D0',
       note: 'تم استيفاء الشواهد وإغلاق المراجعة بنجاح',
+      filterKey: 'Completed',
     },
   ];
 
@@ -76,19 +86,39 @@ export const SupervisorKpiGrid: React.FC<SupervisorKpiGridProps> = ({
     >
       {cards.map((card, idx) => {
         const Icon = card.icon;
+        const isSelected = activeFilter === card.filterKey || (card.filterKey === 'Submitted' && activeFilter === 'UnderReview');
         return (
           <div
             key={idx}
+            onClick={() => onSelectFilter?.(card.filterKey)}
             style={{
               backgroundColor: '#FFFFFF',
               borderRadius: '12px',
-              border: '1px solid #E2E8F0',
+              border: isSelected ? `2px solid ${card.color}` : '1px solid #E2E8F0',
               padding: '20px',
               display: 'flex',
               flexDirection: 'column',
-              boxShadow: '0 1px 3px rgba(0, 0, 0, 0.04)',
+              boxShadow: isSelected
+                ? `0 6px 16px ${card.color}22`
+                : '0 1px 3px rgba(0, 0, 0, 0.04)',
               position: 'relative',
               overflow: 'hidden',
+              cursor: onSelectFilter ? 'pointer' : 'default',
+              transition: 'all 0.18s ease',
+            }}
+            onMouseEnter={(e) => {
+              if (onSelectFilter) {
+                e.currentTarget.style.transform = 'translateY(-2px)';
+                e.currentTarget.style.boxShadow = `0 6px 16px ${card.color}22`;
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (onSelectFilter) {
+                e.currentTarget.style.transform = 'none';
+                e.currentTarget.style.boxShadow = isSelected
+                  ? `0 6px 16px ${card.color}22`
+                  : '0 1px 3px rgba(0, 0, 0, 0.04)';
+              }
             }}
           >
             {/* مؤشر لوني جانبي */}
@@ -97,7 +127,7 @@ export const SupervisorKpiGrid: React.FC<SupervisorKpiGridProps> = ({
                 position: 'absolute',
                 top: 0,
                 right: 0,
-                width: '4px',
+                width: isSelected ? '6px' : '4px',
                 height: '100%',
                 backgroundColor: card.color,
               }}
@@ -166,10 +196,24 @@ export const SupervisorKpiGrid: React.FC<SupervisorKpiGridProps> = ({
                 color: '#64748B',
                 display: 'flex',
                 alignItems: 'center',
+                justifyContent: 'space-between',
                 gap: '4px',
+                marginTop: 'auto',
+                paddingTop: '6px',
               }}
             >
               <span>{card.note}</span>
+              {onSelectFilter && (
+                <span
+                  style={{
+                    fontSize: '11px',
+                    color: isSelected ? card.color : '#94A3B8',
+                    fontWeight: 700,
+                  }}
+                >
+                  {isSelected ? 'مفعّل ▾' : 'تصفية ◂'}
+                </span>
+              )}
             </div>
           </div>
         );

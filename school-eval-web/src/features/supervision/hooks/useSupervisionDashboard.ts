@@ -39,11 +39,16 @@ export function useSupervisionDashboard() {
     if (!data?.schools) return [];
 
     return data.schools.filter((school) => {
-      // بحث بالاسم أو الكود
+      // بحث بالاسم أو الكود أو اسم المدير أو المقيم أو المحافظة والمديرية
+      const term = searchTerm.trim().toLowerCase();
       const matchesSearch =
-        !searchTerm.trim() ||
-        school.schoolName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        school.schoolCode.toLowerCase().includes(searchTerm.toLowerCase());
+        !term ||
+        school.schoolName.toLowerCase().includes(term) ||
+        school.schoolCode.toLowerCase().includes(term) ||
+        (school.principalName && school.principalName.toLowerCase().includes(term)) ||
+        (school.evaluatorName && school.evaluatorName.toLowerCase().includes(term)) ||
+        (school.governorate && school.governorate.toLowerCase().includes(term)) ||
+        (school.directorate && school.directorate.toLowerCase().includes(term));
 
       // فلترة بالحالة (بما فيها حالة متأخرة عن التسليم FR-SUP-15)
       const matchesStatus =

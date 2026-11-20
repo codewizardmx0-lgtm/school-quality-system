@@ -14,6 +14,7 @@ import {
   TrendingUp,
   X,
   Filter,
+  Calendar,
 } from 'lucide-react';
 import { useSupervisionDashboard } from '../../hooks/useSupervisionDashboard';
 import { SupervisorKpiGrid } from './SupervisorKpiGrid';
@@ -23,7 +24,10 @@ import { exportSchoolsStatusMatrixToExcel } from '../../utils/supervisionExportU
 import type { SupervisionScreenKey } from '../../api/supervisionTypes';
 
 interface SupervisionDashboardPageProps {
-  onNavigate: (screen: SupervisionScreenKey, params?: { submissionId?: number; schoolId?: number }) => void;
+  onNavigate: (
+    screen: SupervisionScreenKey,
+    params?: { submissionId?: number; schoolId?: number; schoolName?: string }
+  ) => void;
 }
 
 export const SupervisionDashboardPage: React.FC<SupervisionDashboardPageProps> = ({ onNavigate }) => {
@@ -65,7 +69,7 @@ export const SupervisionDashboardPage: React.FC<SupervisionDashboardPageProps> =
     { key: 'Submitted', label: 'مرفوع جديد', count: statusCounts.Submitted, color: '#2563EB' },
     { key: 'NeedsCompletion', label: 'يحتاج استكمال', count: statusCounts.NeedsCompletion, color: '#D97706' },
     { key: 'UnderReview', label: 'قيد التدقيق', count: statusCounts.UnderReview, color: '#7C3AED' },
-    { key: 'Completed', label: 'مكتمل المراجعة', count: statusCounts.Completed, color: '#059669' },
+    { key: 'Completed', label: 'مكتمل', count: statusCounts.Completed, color: '#059669' },
     { key: 'Delayed', label: 'متأخرة عن التسليم (80%)', count: statusCounts.Delayed, color: '#DC2626' },
     { key: 'Draft', label: 'مسودة', count: statusCounts.Draft, color: '#64748B' },
   ];
@@ -80,7 +84,7 @@ export const SupervisionDashboardPage: React.FC<SupervisionDashboardPageProps> =
           alignItems: 'center',
           justifyContent: 'space-between',
           gap: '16px',
-          marginBottom: '24px',
+          marginBottom: '20px',
         }}
       >
         <div>
@@ -95,7 +99,7 @@ export const SupervisionDashboardPage: React.FC<SupervisionDashboardPageProps> =
                 borderRadius: '999px',
               }}
             >
-              منصة ارتقاء • الإدارة العامة لضمان الجودة والاعتماد
+              منصة ارتقاء • الإدارة العامة لتقويم الجودة المدرسية
             </span>
           </div>
           <h1
@@ -110,7 +114,7 @@ export const SupervisionDashboardPage: React.FC<SupervisionDashboardPageProps> =
             لوحة المتابعة المركزية لحالة المدارس الميدانية
           </h1>
           <p style={{ fontSize: '13px', color: '#64748B', marginTop: '4px', margin: 0 }}>
-            رصد مباشر لتقدم مخرجات التقييم الذاتي وتدقيق الشواهد لنطاق {scope?.name ?? 'أمانة العاصمة'} ({totalCount} مدرسة)
+            رصد مباشر لتقدم مخرجات التقييم الذاتي وتدقيق الشواهد لنطاق {scope?.governorate ? `محافظة ${scope.governorate}` : (scope?.name || 'الإشراف المركزي العام')} ({totalCount} مدرسة)
           </p>
         </div>
 
@@ -148,38 +152,188 @@ export const SupervisionDashboardPage: React.FC<SupervisionDashboardPageProps> =
             <span>تصدير المصفوفة (XLSX)</span>
           </button>
 
-          {/* زر إطلاق دورة تقييم */}
+          {/* زر سجل الدورات التقييمية */}
           <button
             type="button"
-            onClick={() => onNavigate('cycles-new')}
+            onClick={() => onNavigate('cycles-list')}
+            title="الانتقال إلى سجل وإدارة دورات التقييم"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '9px 14px',
+              backgroundColor: '#FFFFFF',
+              color: '#1E293B',
+              border: '1px solid #CBD5E1',
+              borderRadius: '8px',
+              fontSize: '13px',
+              fontWeight: 700,
+              cursor: 'pointer',
+              transition: 'all 0.15s ease',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = '#F1F5F9';
+              e.currentTarget.style.borderColor = '#94A3B8';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = '#FFFFFF';
+              e.currentTarget.style.borderColor = '#CBD5E1';
+            }}
+          >
+            <Calendar size={16} />
+            <span>سجل الدورات</span>
+          </button>
+
+          {/* زر إطلاق دورة تقييم جديدة */}
+          <button
+            type="button"
+            onClick={() => {
+              if (!scope?.hasActiveCycle) {
+                onNavigate('cycles-new');
+              }
+            }}
+            disabled={scope?.hasActiveCycle}
+            title={
+              scope?.hasActiveCycle
+                ? `توجد دورة تقييم نشطة حالياً (${scope.activeCycleName || scope.activeCycle}). يمنع النظام إطلاق دورة ثانية حتى يتم إغلاق الدورة القائمة من سجل الدورات.`
+                : 'إطلاق دورة تقييم جديدة وتحديد المدارس المستهدفة'
+            }
             style={{
               display: 'inline-flex',
               alignItems: 'center',
               gap: '8px',
               padding: '9px 18px',
-              backgroundColor: '#2563EB',
+              backgroundColor: scope?.hasActiveCycle ? '#94A3B8' : '#2563EB',
               color: '#FFFFFF',
               borderRadius: '8px',
               fontSize: '13px',
               fontWeight: 700,
-              cursor: 'pointer',
+              cursor: scope?.hasActiveCycle ? 'not-allowed' : 'pointer',
               border: 'none',
-              boxShadow: '0 4px 12px rgba(37, 99, 235, 0.3)',
+              boxShadow: scope?.hasActiveCycle ? 'none' : '0 4px 12px rgba(37, 99, 235, 0.3)',
+              opacity: scope?.hasActiveCycle ? 0.7 : 1,
               transition: 'background-color 0.15s ease',
             }}
-            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#1D4ED8')}
-            onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#2563EB')}
+            onMouseEnter={(e) => {
+              if (!scope?.hasActiveCycle) e.currentTarget.style.backgroundColor = '#1D4ED8';
+            }}
+            onMouseLeave={(e) => {
+              if (!scope?.hasActiveCycle) e.currentTarget.style.backgroundColor = '#2563EB';
+            }}
           >
             <Plus size={16} />
-            <span>إطلاق دورة تقييم (02-V)</span>
+            <span>إطلاق دورة تقييم جديدة</span>
           </button>
         </div>
       </div>
 
-      {/* 2. بطاقات المؤشرات الرئيسية الأربعة */}
-      <SupervisorKpiGrid kpis={kpis} isLoading={isLoading} />
+      {/* 2. بطاقة سياق الدورة النشطة والوثيقة المعيارية الحاكمة */}
+      <div
+        style={{
+          display: 'flex',
+          flexWrap: 'wrap',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '16px',
+          padding: '16px 20px',
+          backgroundColor: '#FFFFFF',
+          border: '1px solid #E2E8F0',
+          borderRadius: '12px',
+          boxShadow: '0 1px 3px rgba(0, 0, 0, 0.04)',
+          marginBottom: '20px',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
+          <div
+            style={{
+              width: '42px',
+              height: '42px',
+              borderRadius: '10px',
+              backgroundColor: '#EFF6FF',
+              border: '1px solid #BFDBFE',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#2563EB',
+              flexShrink: 0,
+            }}
+          >
+            <Calendar size={22} />
+          </div>
 
-      {/* 3. صندوق التوجيه والمحددات الحوكمية BR-MIN-03 */}
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: '14px', fontWeight: 800, color: '#0F172A' }}>
+                {scope?.activeCycleName || 'الدورة الوطنية للتقييم الذاتي المدرسي'}
+              </span>
+              <span
+                style={{
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  color: scope?.cycleStatus === 'Active' ? '#047857' : '#64748B',
+                  backgroundColor: scope?.cycleStatus === 'Active' ? '#ECFDF5' : '#F1F5F9',
+                  border: `1px solid ${scope?.cycleStatus === 'Active' ? '#A7F3D0' : '#E2E8F0'}`,
+                  padding: '1px 8px',
+                  borderRadius: '999px',
+                }}
+              >
+                {scope?.cycleStatus === 'Active' ? 'دورة نشطة ونافذة' : (scope?.cycleStatus || 'غير محددة')}
+              </span>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginTop: '4px', fontSize: '12px', color: '#64748B', flexWrap: 'wrap' }}>
+              <span>
+                <strong>الفترة:</strong> {scope?.startDate || 'غير محدد'} إلى {scope?.endDate || 'غير محدد'}
+              </span>
+              <span>•</span>
+              <span style={{ color: (scope?.daysRemaining ?? 30) <= 7 ? '#DC2626' : '#2563EB', fontWeight: 700 }}>
+                متبقي {scope?.daysRemaining ?? 0} يوماً على إغلاق الدورة
+              </span>
+              <span>•</span>
+              <span>
+                <strong>الوثيقة المعيارية:</strong> {scope?.standardVersion?.versionTitle || 'الوثيقة الوطنية لمعايير جودة التعليم المدرسي'} (v{scope?.standardVersion?.versionNo || '1.0'})
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {scope?.isOverdueThresholdReached && (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '6px 12px',
+              backgroundColor: '#FEF2F2',
+              border: '1px solid #FECACA',
+              borderRadius: '8px',
+              fontSize: '11px',
+              fontWeight: 700,
+              color: '#B91C1C',
+            }}
+          >
+            <ShieldAlert size={15} color="#DC2626" />
+            <span>انقضى 80% أو أكثر من فترة الدورة (فترة تقديم متأخرة للمدارس)</span>
+          </div>
+        )}
+      </div>
+
+      {/* 3. بطاقات المؤشرات الرئيسية الأربعة */}
+      <SupervisorKpiGrid
+        kpis={kpis}
+        isLoading={isLoading}
+        scopeNote={scope?.governorate ? `محافظة ${scope.governorate}` : (scope?.name || 'الإشراف المركزي العام')}
+        activeFilter={statusFilter}
+        onSelectFilter={(filterKey) => {
+          setStatusFilter(filterKey);
+          const targetSection = document.getElementById('schools-status-matrix-section');
+          if (targetSection) {
+            targetSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }
+        }}
+      />
+
+      {/* 4. صندوق التوجيه والمحددات الحوكمية BR-MIN-03 */}
       <div
         style={{
           display: 'flex',
@@ -213,13 +367,14 @@ export const SupervisionDashboardPage: React.FC<SupervisionDashboardPageProps> =
           </div>
           <p style={{ fontSize: '12px', color: '#1E3A8A', margin: 0, lineHeight: 1.5 }}>
             {governanceCallout?.description ??
-              'تقتصر صلاحيات المشرف الوزاري على المراجعة الإدارية وإصدار طلبات الاستكمال الموجهة للمدارس فقط، دون أي تعديل مباشر على درجات التقييم أو منح الاعتماد الخارجي النهائي.'}
+              'تقتصر صلاحيات المشرف الوزاري على المراجعة الإشرافية وإصدار طلبات الاستكمال الموجهة للمدارس فقط، دون أي تعديل مباشر على درجات التقييم أو إعادة ترتيب المدارس تنافسياً (قاعدة BR-MIN-03).'}
           </p>
         </div>
       </div>
 
       {/* 4. كرت البحث والتصفية المتقدم بالهوية الإشرافية الزرقاء */}
       <div
+        id="schools-status-matrix-section"
         style={{
           backgroundColor: '#FFFFFF',
           border: '1px solid #E2E8F0',
@@ -253,13 +408,13 @@ export const SupervisionDashboardPage: React.FC<SupervisionDashboardPageProps> =
               padding: '8px 14px',
               minWidth: '280px',
               flex: 1,
-              maxWidth: '420px',
+              maxWidth: '460px',
             }}
           >
             <Search size={16} color="#64748B" style={{ flexShrink: 0 }} />
             <input
               type="text"
-              placeholder="بحث باسم المدرسة أو الرمز الإحصائي..."
+              placeholder="بحث باسم المدرسة أو الرمز، المدير، المقيم، أو المحافظة..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               style={{
@@ -557,14 +712,18 @@ export const SupervisionDashboardPage: React.FC<SupervisionDashboardPageProps> =
       ) : (
         <SchoolsStatusMatrixTable
           schools={schools}
-          onReviewSubmission={(submissionId, schoolId) =>
-            onNavigate('submissions', { submissionId, schoolId })
+          onReviewSubmission={(submissionId, schoolId, schoolName) =>
+            onNavigate('submissions', { submissionId, schoolId, schoolName })
           }
-          onOpenTrackingLog={(schoolId) => onNavigate('tracking-log', { schoolId })}
-          onOpenCompletionRequest={(submissionId, schoolId) =>
-            onNavigate('completion-requests', { submissionId, schoolId })
+          onOpenTrackingLog={(schoolId, schoolName) =>
+            onNavigate('tracking-log', { schoolId, schoolName })
           }
-          onCompareHistorical={(schoolId) => onNavigate('historical', { schoolId })}
+          onOpenCompletionRequest={(submissionId, schoolId, schoolName) =>
+            onNavigate('completion-requests', { submissionId, schoolId, schoolName })
+          }
+          onCompareHistorical={(schoolId, schoolName) =>
+            onNavigate('historical', { schoolId, schoolName })
+          }
         />
       )}
 

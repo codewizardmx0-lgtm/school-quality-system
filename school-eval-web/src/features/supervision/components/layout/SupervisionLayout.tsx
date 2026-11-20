@@ -39,6 +39,7 @@ export const SupervisionLayout: React.FC<SupervisionLayoutProps> = ({
   // سياق الانتقال بين الشاشات
   const [selectedSubmissionId, setSelectedSubmissionId] = useState<number>(101);
   const [selectedSchoolId, setSelectedSchoolId] = useState<number>(104);
+  const [selectedSchoolName, setSelectedSchoolName] = useState<string>('مدرسة الفاروق النموذجية');
   const [preloadedItems, setPreloadedItems] = useState<PreloadedCompletionItem[] | undefined>(
     undefined
   );
@@ -48,6 +49,7 @@ export const SupervisionLayout: React.FC<SupervisionLayoutProps> = ({
     params?: {
       submissionId?: number;
       schoolId?: number;
+      schoolName?: string;
       preloadedItems?: PreloadedCompletionItem[];
     }
   ) => {
@@ -56,6 +58,9 @@ export const SupervisionLayout: React.FC<SupervisionLayoutProps> = ({
     }
     if (params?.schoolId) {
       setSelectedSchoolId(params.schoolId);
+    }
+    if (params?.schoolName) {
+      setSelectedSchoolName(params.schoolName);
     }
     if (params?.preloadedItems) {
       setPreloadedItems(params.preloadedItems);
@@ -155,6 +160,7 @@ export const SupervisionLayout: React.FC<SupervisionLayoutProps> = ({
         activeScreen={activeScreen}
         onSelectScreen={(screen) => navigateToScreen(screen)}
         onLogout={onLogout}
+        selectedSchoolName={selectedSchoolName}
       />
 
       {/* 2. منطقة العمل الرئيسية: الشريط العلوي + المحتوى الداخلي القابل للتمرير */}
