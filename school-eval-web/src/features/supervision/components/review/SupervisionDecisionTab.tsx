@@ -329,12 +329,26 @@ export const SupervisionDecisionTab: React.FC<SupervisionDecisionTabProps> = ({
                         backgroundColor: '#FFFDFD',
                       }}
                     >
-                      <td style={{ padding: '14px 16px', whiteSpace: 'nowrap' }}>
-                        <div style={{ fontSize: '12px', fontWeight: 800, color: '#0F172A' }}>
-                          {def.indicatorCode}
-                        </div>
-                        <div style={{ fontSize: '11px', color: '#64748B', maxWidth: '200px' }}>
-                          {def.indicatorTitle}
+                      <td style={{ padding: '14px 16px', minWidth: '240px' }}>
+                        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+                          <span
+                            style={{
+                              padding: '2px 8px',
+                              borderRadius: '4px',
+                              backgroundColor: '#0F172A',
+                              color: '#FFFFFF',
+                              fontSize: '11px',
+                              fontWeight: 800,
+                              fontFamily: 'monospace',
+                              whiteSpace: 'nowrap',
+                              flexShrink: 0,
+                            }}
+                          >
+                            {def.indicatorCode}
+                          </span>
+                          <span style={{ fontSize: '12px', fontWeight: 700, color: '#1E293B', lineHeight: '1.4' }}>
+                            {def.indicatorTitle}
+                          </span>
                         </div>
                       </td>
 

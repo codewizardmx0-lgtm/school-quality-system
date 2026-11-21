@@ -66,8 +66,15 @@ export const ReviewSubmissionPage: React.FC<ReviewSubmissionPageProps> = ({
 
   // التبويب النشط (افتراضياً: شجرة المعايير)
   const [activeTab, setActiveTab] = useState<'standards' | 'vault' | 'plan' | 'decision'>('standards');
+  const [targetIndicatorId, setTargetIndicatorId] = useState<number | null>(null);
   const [isExportingPdf, setIsExportingPdf] = useState(false);
   const [isExportingExcel, setIsExportingExcel] = useState(false);
+
+  // الانتقال المباشر للمؤشر في شجرة المعايير
+  const handleNavigateToIndicator = (indicatorId: number) => {
+    setActiveTab('standards');
+    setTargetIndicatorId(indicatorId);
+  };
 
   // تصدير PDF مصادق
   const handleExportPdf = async () => {
@@ -623,6 +630,7 @@ export const ReviewSubmissionPage: React.FC<ReviewSubmissionPageProps> = ({
             submissionId={reviewData.submissionId}
             isReadOnly={status === 'Completed'}
             onDeficiencyUpdated={refetch}
+            targetIndicatorId={targetIndicatorId}
           />
         )}
 
@@ -640,6 +648,7 @@ export const ReviewSubmissionPage: React.FC<ReviewSubmissionPageProps> = ({
             plans={reviewData.plans || reviewData.allPlans || (reviewData.planDetails ? [reviewData.planDetails] : [])}
             lowIndicatorsMatrix={reviewData.lowIndicatorsMatrix}
             indicatorsAudit={reviewData.indicators}
+            onNavigateToIndicator={handleNavigateToIndicator}
           />
         )}
 

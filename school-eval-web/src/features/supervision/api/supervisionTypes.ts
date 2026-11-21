@@ -122,6 +122,10 @@ export interface CycleLaunchPayload {
 
 export interface EvidenceItem {
   id: number;
+  evidenceLinkId?: number;
+  versionId?: number;
+  documentVersionId?: number;
+  documentId?: number;
   fileName: string;
   fileUrl: string;
   fileSizeBytes: number;
@@ -131,10 +135,13 @@ export interface EvidenceItem {
 }
 
 export const DEFICIENCY_CATEGORIES = [
-  'تضخيم الدرجة الممنوحة دون شاهد كافٍ',
   'نقص الشواهد الإلزامية المطلوبة في أداة التحقق',
-  'غموض أو عدم كفاية التبرير الميداني',
-  'عدم إدراج المؤشر المنخفض في خطة التحسين',
+  'عدم تطابق الشاهد المرفق مع نص المؤشر أو المعيار الفرعي',
+  'تضخيم أو عدم دقة الدرجة الممنوحة للمؤشر',
+  'غموض أو عدم كفاية المبرر الميداني للمقيم',
+  'شواهد ناقصة التوثيق الرسمي (أختام / تواريخ / توقيعات)',
+  'عدم إدراج المؤشر المنخفض في خطة التحسين المدرسية',
+  'أسباب إشرافية أخرى (موضحة في التوجيهات)',
 ] as const;
 
 export type DeficiencyCategory = (typeof DEFICIENCY_CATEGORIES)[number];
@@ -189,7 +196,13 @@ export interface SupervisionIndicatorItem {
   scoreLevelName: string;
   scoreDescription?: string;
   evaluatorJustification?: string;
-  internalReviewNotes?: string | null;
+  internalReviewNotes?: Array<{
+    noteId: number;
+    authorName: string;
+    authorRole: string;
+    text: string;
+    createdAt: string;
+  }> | string | null;
   evidenceCount: number;
   mandatoryRequirementsCount: number;
   coveredRequirementsCount: number;
@@ -199,6 +212,7 @@ export interface SupervisionIndicatorItem {
   evidences: EvidenceItem[];
   hasDefect: boolean;
   defectCategory?: string | null;
+  defectCategories?: string[];
   defectReason?: string | null;
   directives?: string | null;
   supervisorFeedback?: string;
@@ -239,6 +253,9 @@ export interface SupervisionStandardItem {
 
 export interface SupervisionVaultDocument {
   id: number;
+  documentId?: number;
+  versionId?: number;
+  documentVersionId?: number;
   title: string;
   documentType: string;
   documentTypeArabic?: string;
@@ -268,6 +285,9 @@ export interface SupervisionVaultStats {
 
 export interface ExecutionEvidenceItem {
   id: number;
+  evidenceLinkId?: number;
+  versionId?: number;
+  documentVersionId?: number;
   documentTitle: string;
   fileName: string;
   fileSizeBytes: number;

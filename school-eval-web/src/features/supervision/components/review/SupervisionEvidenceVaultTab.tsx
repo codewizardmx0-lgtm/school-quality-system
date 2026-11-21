@@ -11,6 +11,8 @@ import {
   HardDrive,
   Link2,
   Layers,
+  ChevronDown,
+  ChevronLeft,
 } from 'lucide-react';
 import type {
   SupervisionVaultDocument,
@@ -63,6 +65,7 @@ export const SupervisionEvidenceVaultTab: React.FC<SupervisionEvidenceVaultTabPr
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedType, setSelectedType] = useState<string>('all');
   const [selectedFormat, setSelectedFormat] = useState<string>('all');
+  const [collapsedInventoryStandards, setCollapsedInventoryStandards] = useState<Record<number, boolean>>({});
 
   const documents = vault?.documents || [];
   const stats = vault?.stats || {
@@ -659,7 +662,7 @@ export const SupervisionEvidenceVaultTab: React.FC<SupervisionEvidenceVaultTabPr
                           <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
                             <button
                               type="button"
-                              onClick={() => supervisionApi.previewDocumentVersion(doc.id)}
+                              onClick={() => supervisionApi.previewDocumentVersion(doc.versionId || doc.documentVersionId || doc.id || doc.previewUrl || '')}
                               title="معاينة الوثيقة في نافذة جديدة"
                               style={{
                                 padding: '6px',
@@ -677,7 +680,7 @@ export const SupervisionEvidenceVaultTab: React.FC<SupervisionEvidenceVaultTabPr
                             </button>
                             <button
                               type="button"
-                              onClick={() => supervisionApi.downloadDocumentVersion(doc.id, doc.fileName)}
+                              onClick={() => supervisionApi.downloadDocumentVersion(doc.versionId || doc.documentVersionId || doc.id || doc.downloadUrl || '', doc.fileName)}
                               title="تحميل الملف الأصلي"
                               style={{
                                 padding: '6px',
@@ -745,9 +748,44 @@ export const SupervisionEvidenceVaultTab: React.FC<SupervisionEvidenceVaultTabPr
             </div>
           </div>
 
+          {/* شريط التحكم في طي وتوسيع المعايير */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+            <div style={{ fontSize: '13px', fontWeight: 800, color: '#1E293B' }}>
+              مصفوفة مطابقة الشواهد والمتطلبات الإلزامية (109 مؤشراً):
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                const allCollapsed = standards.every((s) => collapsedInventoryStandards[s.standardId]);
+                const next: Record<number, boolean> = {};
+                standards.forEach((s) => {
+                  next[s.standardId] = !allCollapsed;
+                });
+                setCollapsedInventoryStandards(next);
+              }}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '6px 12px',
+                borderRadius: '6px',
+                backgroundColor: '#F1F5F9',
+                border: '1px solid #CBD5E1',
+                fontSize: '12px',
+                fontWeight: 600,
+                color: '#334155',
+                cursor: 'pointer',
+              }}
+            >
+              <Layers size={13} />
+              {standards.every((s) => collapsedInventoryStandards[s.standardId]) ? 'توسيع كافة المعايير' : 'طي كافة المعايير'}
+            </button>
+          </div>
+
           {/* مصفوفة جرد الشواهد والمتطلبات الإلزامية حسب المعايير السبعة */}
           {standards.map((std) => {
             const allIndicators = std.subStandards.flatMap((sub) => sub.indicators);
+            const isCollapsed = !!collapsedInventoryStandards[std.standardId];
 
             return (
               <div
@@ -759,15 +797,23 @@ export const SupervisionEvidenceVaultTab: React.FC<SupervisionEvidenceVaultTabPr
                   overflow: 'hidden',
                 }}
               >
-                {/* ترويسة المعيار في الجرد */}
+                {/* ترويسة المعيار في الجرد - قابلة للطي والتوسيع */}
                 <div
+                  onClick={() =>
+                    setCollapsedInventoryStandards((prev) => ({
+                      ...prev,
+                      [std.standardId]: !prev[std.standardId],
+                    }))
+                  }
                   style={{
                     padding: '14px 18px',
-                    backgroundColor: '#F8FAFC',
-                    borderBottom: '1px solid #E2E8F0',
+                    backgroundColor: isCollapsed ? '#FFFFFF' : '#F8FAFC',
+                    borderBottom: isCollapsed ? 'none' : '1px solid #E2E8F0',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
+                    cursor: 'pointer',
+                    userSelect: 'none',
                   }}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -788,13 +834,19 @@ export const SupervisionEvidenceVaultTab: React.FC<SupervisionEvidenceVaultTabPr
                     </h4>
                   </div>
 
-                  <div style={{ fontSize: '12px', fontWeight: 700, color: '#475569' }}>
-                    تغطية المتطلبات: {std.stats.coveredRequirements} من أصل {std.stats.totalMandatoryRequirements} متطلب ({std.stats.coveragePercentage}%)
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                    <div style={{ fontSize: '12px', fontWeight: 700, color: '#475569' }}>
+                      تغطية المتطلبات: {std.stats.coveredRequirements} من أصل {std.stats.totalMandatoryRequirements} متطلب ({std.stats.coveragePercentage}%)
+                    </div>
+                    <div style={{ color: '#64748B', display: 'flex', alignItems: 'center' }}>
+                      {isCollapsed ? <ChevronLeft size={18} /> : <ChevronDown size={18} />}
+                    </div>
                   </div>
                 </div>
 
                 {/* جدول المؤشرات والشواهد والمتطلبات التفصيلية */}
-                <div style={{ overflowX: 'auto' }}>
+                {!isCollapsed && (
+                  <div style={{ overflowX: 'auto' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'right' }}>
                     <thead>
                       <tr style={{ borderBottom: '1px solid #E2E8F0', backgroundColor: '#FFFFFF' }}>
@@ -885,29 +937,56 @@ export const SupervisionEvidenceVaultTab: React.FC<SupervisionEvidenceVaultTabPr
                                 ))}
 
                                 {/* أزرار معاينة الملفات المودعة */}
-                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '4px' }}>
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '4px' }}>
                                   {ind.evidences.map((ev) => (
-                                    <button
+                                    <div
                                       key={ev.id}
-                                      type="button"
-                                      onClick={() => supervisionApi.previewDocumentVersion(ev.id)}
-                                      title={`معاينة: ${ev.fileName}`}
                                       style={{
-                                        fontSize: '11px',
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '4px',
                                         padding: '2px 8px',
                                         borderRadius: '4px',
                                         backgroundColor: '#F8FAFC',
                                         border: '1px solid #CBD5E1',
-                                        color: '#2563EB',
-                                        cursor: 'pointer',
-                                        display: 'inline-flex',
-                                        alignItems: 'center',
-                                        gap: '4px',
                                       }}
                                     >
-                                      <FileText size={11} />
-                                      {ev.fileName}
-                                    </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => supervisionApi.previewDocumentVersion(ev.versionId || ev.documentVersionId || ev.id || ev.fileUrl)}
+                                        title={`معاينة: ${ev.fileName}`}
+                                        style={{
+                                          fontSize: '11px',
+                                          background: 'none',
+                                          border: 'none',
+                                          color: '#2563EB',
+                                          cursor: 'pointer',
+                                          display: 'inline-flex',
+                                          alignItems: 'center',
+                                          gap: '4px',
+                                          padding: 0,
+                                        }}
+                                      >
+                                        <Eye size={11} />
+                                        {ev.fileName}
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => supervisionApi.downloadDocumentVersion(ev.versionId || ev.documentVersionId || ev.id || ev.fileUrl, ev.fileName)}
+                                        title={`تحميل: ${ev.fileName}`}
+                                        style={{
+                                          background: 'none',
+                                          border: 'none',
+                                          color: '#059669',
+                                          cursor: 'pointer',
+                                          display: 'inline-flex',
+                                          alignItems: 'center',
+                                          padding: '0 2px',
+                                        }}
+                                      >
+                                        <Download size={11} />
+                                      </button>
+                                    </div>
                                   ))}
                                   {ind.evidences.length === 0 && (
                                     <span style={{ fontSize: '11px', color: '#94A3B8' }}>لا توجد ملفات مرفقة</span>
@@ -921,6 +1000,7 @@ export const SupervisionEvidenceVaultTab: React.FC<SupervisionEvidenceVaultTabPr
                     </tbody>
                   </table>
                 </div>
+                )}
               </div>
             );
           })}

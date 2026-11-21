@@ -1,22 +1,26 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   ChevronDown,
   ChevronLeft,
   Search,
-  CheckCircle2,
   AlertCircle,
   AlertTriangle,
   FileText,
-  ExternalLink,
   Layers,
   Save,
   Check,
   X,
   FileCheck,
+  Eye,
+  Download,
+  MessageSquare,
 } from 'lucide-react';
 import type {
   SupervisionStandardItem,
   SupervisionIndicatorItem,
+} from '../../api/supervisionTypes';
+import {
+  DEFICIENCY_CATEGORIES,
 } from '../../api/supervisionTypes';
 import { supervisionApi } from '../../api/supervisionApi';
 
@@ -26,6 +30,7 @@ interface SupervisionStandardsTreeTabProps {
   submissionId: number;
   isReadOnly?: boolean;
   onDeficiencyUpdated?: () => void;
+  targetIndicatorId?: number | null;
 }
 
 export const SupervisionStandardsTreeTab: React.FC<SupervisionStandardsTreeTabProps> = ({
@@ -34,6 +39,7 @@ export const SupervisionStandardsTreeTab: React.FC<SupervisionStandardsTreeTabPr
   submissionId,
   isReadOnly = false,
   onDeficiencyUpdated,
+  targetIndicatorId,
 }) => {
   // حالات البحث والفلترة
   const [searchQuery, setSearchQuery] = useState('');
@@ -56,11 +62,41 @@ export const SupervisionStandardsTreeTab: React.FC<SupervisionStandardsTreeTabPr
 
   // حالة لوحة رصد النقص للمؤشرات: indicatorId -> boolean
   const [flaggingOpen, setFlaggingOpen] = useState<Record<number, boolean>>({});
-  const [flagCategory, setFlagCategory] = useState<Record<number, string>>({});
+  const [flagCategories, setFlagCategories] = useState<Record<number, string[]>>({});
   const [flagNote, setFlagNote] = useState<Record<number, string>>({});
   const [flagDirectives, setFlagDirectives] = useState<Record<number, string>>({});
   const [savingDeficiency, setSavingDeficiency] = useState<Record<number, boolean>>({});
   const [saveSuccess, setSaveSuccess] = useState<Record<number, boolean>>({});
+
+  // الانتقال والتمرير التلقائي لمؤشر مستهدف من مصفوفة الفجوات بالتبويب الثالث
+  useEffect(() => {
+    if (!targetIndicatorId || !standards) return;
+
+    for (const std of standards) {
+      for (const sub of std.subStandards) {
+        const found = sub.indicators.some((ind) => ind.indicatorId === targetIndicatorId);
+        if (found) {
+          setExpandedStandards((prev) => ({ ...prev, [std.standardId]: true }));
+          setExpandedSubStandards((prev) => ({ ...prev, [sub.subStandardId]: true }));
+          setExpandedIndicators((prev) => ({ ...prev, [targetIndicatorId]: true }));
+
+          setTimeout(() => {
+            const el = document.getElementById(`indicator-${targetIndicatorId}`);
+            if (el) {
+              el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              el.style.outline = '2px solid #2563EB';
+              el.style.boxShadow = '0 0 12px rgba(37, 99, 235, 0.35)';
+              setTimeout(() => {
+                el.style.outline = 'none';
+                el.style.boxShadow = 'none';
+              }, 3500);
+            }
+          }, 250);
+          return;
+        }
+      }
+    }
+  }, [targetIndicatorId, standards]);
 
   // طي الكل / توسيع الكل
   const isAllExpanded = useMemo(() => {
@@ -140,7 +176,12 @@ export const SupervisionStandardsTreeTab: React.FC<SupervisionStandardsTreeTabPr
   // حفظ رصد النقص للمؤشر
   const handleSaveDeficiency = async (indicator: SupervisionIndicatorItem) => {
     const indId = indicator.indicatorId;
-    const cat = flagCategory[indId] || indicator.defectCategory || 'نقص الشواهد الإلزامية المطلوبة في أداة التحقق';
+    const cats = flagCategories[indId] && flagCategories[indId].length > 0
+      ? flagCategories[indId]
+      : (indicator.defectCategories && indicator.defectCategories.length > 0
+          ? indicator.defectCategories
+          : (indicator.defectCategory ? [indicator.defectCategory] : [DEFICIENCY_CATEGORIES[0]]));
+    const cat = cats.join('، ');
     const note = flagNote[indId] ?? indicator.defectReason ?? '';
     const dir = flagDirectives[indId] ?? indicator.directives ?? '';
 
@@ -153,9 +194,10 @@ export const SupervisionStandardsTreeTab: React.FC<SupervisionStandardsTreeTabPr
     try {
       await supervisionApi.saveDeficiencyNote(submissionId || evaluationId, {
         indicatorId: indId,
+        deficiencyCategories: cats,
         deficiencyCategory: cat,
-        supervisorNote: note,
-        directives: dir,
+        supervisorNote: note.trim(),
+        directives: dir.trim() || undefined,
       });
 
       setSaveSuccess((prev) => ({ ...prev, [indId]: true }));
@@ -629,7 +671,11 @@ export const SupervisionStandardsTreeTab: React.FC<SupervisionStandardsTreeTabPr
                               {sub.indicators.map((ind) => {
                                 const isIndOpen = !!expandedIndicators[ind.indicatorId];
                                 const isFlagOpen = !!flaggingOpen[ind.indicatorId];
-                                const currentCat = flagCategory[ind.indicatorId] || ind.defectCategory || 'نقص الشواهد الإلزامية المطلوبة في أداة التحقق';
+                                const currentCategories = flagCategories[ind.indicatorId] !== undefined
+                                  ? flagCategories[ind.indicatorId]
+                                  : (ind.defectCategories && ind.defectCategories.length > 0
+                                      ? ind.defectCategories
+                                      : (ind.defectCategory ? [ind.defectCategory] : [DEFICIENCY_CATEGORIES[0]]));
                                 const currentNote = flagNote[ind.indicatorId] ?? ind.defectReason ?? '';
                                 const currentDir = flagDirectives[ind.indicatorId] ?? ind.directives ?? '';
                                 const isSaving = !!savingDeficiency[ind.indicatorId];
@@ -650,6 +696,7 @@ export const SupervisionStandardsTreeTab: React.FC<SupervisionStandardsTreeTabPr
                                 return (
                                   <div
                                     key={ind.indicatorId}
+                                    id={`indicator-${ind.indicatorId}`}
                                     style={{
                                       borderRadius: '8px',
                                       border: ind.hasDefect ? '1px solid #FCA5A5' : '1px solid #E2E8F0',
@@ -851,15 +898,21 @@ export const SupervisionStandardsTreeTab: React.FC<SupervisionStandardsTreeTabPr
                                         </div>
 
                                         {/* 2. تبرير مقيّم المدرسة وملاحظات المراجعة الداخلية */}
-                                        <div
-                                          style={{
-                                            display: 'grid',
-                                            gridTemplateColumns: ind.internalReviewNotes ? '1fr 1fr' : '1fr',
-                                            gap: '12px',
-                                          }}
-                                        >
-                                          {/* تبرير المقيم */}
-                                          <div
+                                        {(() => {
+                                          const hasInternal = Array.isArray(ind.internalReviewNotes)
+                                            ? ind.internalReviewNotes.length > 0
+                                            : Boolean(ind.internalReviewNotes);
+
+                                          return (
+                                            <div
+                                              style={{
+                                                display: 'grid',
+                                                gridTemplateColumns: hasInternal ? '1fr 1fr' : '1fr',
+                                                gap: '12px',
+                                              }}
+                                            >
+                                              {/* تبرير المقيم */}
+                                              <div
                                             style={{
                                               padding: '12px',
                                               borderRadius: '8px',
@@ -889,18 +942,23 @@ export const SupervisionStandardsTreeTab: React.FC<SupervisionStandardsTreeTabPr
                                                 color: '#1E293B',
                                               }}
                                             >
-                                              {ind.evaluatorJustification || 'لا يوجد تبرير مدخل من المدرسة.'}
+                                              {ind.evaluatorJustification && ind.evaluatorJustification !== 'لا يوجد تبرير مدخل من المدرسة'
+                                                ? ind.evaluatorJustification
+                                                : 'لا يوجد تبرير مدخل من المدرسة.'}
                                             </p>
                                           </div>
 
-                                          {/* ملاحظات المراجعة الداخلية لمدير المدرسة */}
-                                          {ind.internalReviewNotes && (
+                                          {/* توجيهات وملاحظات المراجعة الداخلية (المدير والمقيم) */}
+                                          {hasInternal && (
                                             <div
                                               style={{
                                                 padding: '12px',
                                                 borderRadius: '8px',
                                                 backgroundColor: '#F0FDF4',
                                                 border: '1px solid #BBF7D0',
+                                                display: 'flex',
+                                                flexDirection: 'column',
+                                                gap: '8px',
                                               }}
                                             >
                                               <div
@@ -908,28 +966,51 @@ export const SupervisionStandardsTreeTab: React.FC<SupervisionStandardsTreeTabPr
                                                   fontSize: '11px',
                                                   fontWeight: 700,
                                                   color: '#166534',
-                                                  marginBottom: '4px',
                                                   display: 'flex',
                                                   alignItems: 'center',
-                                                  gap: '6px',
+                                                  justifyContent: 'space-between',
                                                 }}
                                               >
-                                                <CheckCircle2 size={13} color="#16A34A" />
-                                                ملاحظات المراجعة الداخلية (مدير المدرسة):
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                  <MessageSquare size={13} color="#16A34A" />
+                                                  توجيهات وملاحظات المراجعة الداخلية:
+                                                </div>
+                                                {Array.isArray(ind.internalReviewNotes) && (
+                                                  <span style={{ fontSize: '10px', backgroundColor: '#DCFCE7', color: '#15803D', padding: '1px 6px', borderRadius: '4px', fontWeight: 700 }}>
+                                                    {ind.internalReviewNotes.length} ملاحظة
+                                                  </span>
+                                                )}
                                               </div>
-                                              <p
-                                                style={{
-                                                  margin: 0,
-                                                  fontSize: '12px',
-                                                  lineHeight: '1.6',
-                                                  color: '#14532D',
-                                                }}
-                                              >
-                                                {ind.internalReviewNotes}
-                                              </p>
+                                              {Array.isArray(ind.internalReviewNotes) ? (
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                                  {ind.internalReviewNotes.map((n) => (
+                                                    <div
+                                                      key={n.noteId}
+                                                      style={{
+                                                        padding: '8px 10px',
+                                                        borderRadius: '6px',
+                                                        backgroundColor: '#FFFFFF',
+                                                        border: '1px solid #DCFCE7',
+                                                      }}
+                                                    >
+                                                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '3px' }}>
+                                                        <span style={{ fontSize: '11px', fontWeight: 700, color: '#166534' }}>{n.authorName}</span>
+                                                        <span style={{ fontSize: '9.5px', color: '#475569' }}>{n.authorRole}</span>
+                                                      </div>
+                                                      <p style={{ margin: 0, fontSize: '11.5px', lineHeight: '1.5', color: '#14532D' }}>{n.text}</p>
+                                                    </div>
+                                                  ))}
+                                                </div>
+                                              ) : (
+                                                <p style={{ margin: 0, fontSize: '12px', lineHeight: '1.6', color: '#14532D' }}>
+                                                  {ind.internalReviewNotes}
+                                                </p>
+                                              )}
                                             </div>
                                           )}
                                         </div>
+                                      );
+                                    })()}
 
                                         {/* 3. أدوات التحقق الرسمية */}
                                         {ind.verificationTools.length > 0 && (
@@ -1060,22 +1141,40 @@ export const SupervisionStandardsTreeTab: React.FC<SupervisionStandardsTreeTabPr
                                                   <span style={{ fontSize: '10px', color: '#64748B' }}>
                                                     ({ev.fileSizeFormatted})
                                                   </span>
-                                                  <button
-                                                    type="button"
-                                                    title="معاينة الملف"
-                                                    onClick={() => supervisionApi.previewDocumentVersion(ev.id)}
-                                                    style={{
-                                                      background: 'none',
-                                                      border: 'none',
-                                                      padding: '2px',
-                                                      cursor: 'pointer',
-                                                      color: '#2563EB',
-                                                      display: 'flex',
-                                                      alignItems: 'center',
-                                                    }}
-                                                  >
-                                                    <ExternalLink size={13} />
-                                                  </button>
+                                                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', marginInlineStart: 'auto' }}>
+                                                    <button
+                                                      type="button"
+                                                      title="معاينة الملف في نافذة جديدة"
+                                                      onClick={() => supervisionApi.previewDocumentVersion(ev.versionId || ev.documentVersionId || ev.id || ev.fileUrl)}
+                                                      style={{
+                                                        background: 'none',
+                                                        border: 'none',
+                                                        padding: '4px',
+                                                        cursor: 'pointer',
+                                                        color: '#2563EB',
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                      }}
+                                                    >
+                                                      <Eye size={14} />
+                                                    </button>
+                                                    <button
+                                                      type="button"
+                                                      title="تحميل الملف الأصلي"
+                                                      onClick={() => supervisionApi.downloadDocumentVersion(ev.versionId || ev.documentVersionId || ev.id || ev.fileUrl, ev.fileName)}
+                                                      style={{
+                                                        background: 'none',
+                                                        border: 'none',
+                                                        padding: '4px',
+                                                        cursor: 'pointer',
+                                                        color: '#059669',
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                      }}
+                                                    >
+                                                      <Download size={14} />
+                                                    </button>
+                                                  </div>
                                                 </div>
                                               ))}
                                             </div>
@@ -1186,40 +1285,54 @@ export const SupervisionStandardsTreeTab: React.FC<SupervisionStandardsTreeTabPr
                                                     marginBottom: '4px',
                                                   }}
                                                 >
-                                                  تصنيف النقص أو العوار المرصود:
+                                                  تصنيف أسباب النقص / الاستكمال (يمكن اختيار أكثر من سبب):
                                                 </label>
-                                                <select
-                                                  disabled={isReadOnly}
-                                                  value={currentCat}
-                                                  onChange={(e) =>
-                                                    setFlagCategory((prev) => ({
-                                                      ...prev,
-                                                      [ind.indicatorId]: e.target.value,
-                                                    }))
-                                                  }
+                                                <div
                                                   style={{
-                                                    width: '100%',
-                                                    padding: '7px 10px',
-                                                    borderRadius: '6px',
+                                                    display: 'grid',
+                                                    gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+                                                    gap: '8px',
+                                                    padding: '10px 12px',
+                                                    borderRadius: '8px',
                                                     border: '1px solid #CBD5E1',
-                                                    fontSize: '12px',
                                                     backgroundColor: '#FFFFFF',
                                                   }}
                                                 >
-                                                  <option value="نقص الشواهد الإلزامية المطلوبة في أداة التحقق">
-                                                    نقص الشواهد الإلزامية المطلوبة في أداة التحقق
-                                                  </option>
-                                                  <option value="عدم مطابقة التبرير لواصف المستوى المرصود">
-                                                    عدم مطابقة التبرير لواصف المستوى المرصود
-                                                  </option>
-                                                  <option value="ضعف التوثيق الميداني أو غياب التوقيعات والاعتمادات">
-                                                    ضعف التوثيق الميداني أو غياب التوقيعات والاعتمادات
-                                                  </option>
-                                                  <option value="تعارض الدرجة المرصودة مع مؤشرات أخرى">
-                                                    تعارض الدرجة المرصودة مع مؤشرات أخرى
-                                                  </option>
-                                                  <option value="أخرى">أخرى</option>
-                                                </select>
+                                                  {DEFICIENCY_CATEGORIES.map((cat) => {
+                                                    const isChecked = currentCategories.includes(cat);
+                                                    return (
+                                                      <label
+                                                        key={cat}
+                                                        style={{
+                                                          display: 'flex',
+                                                          alignItems: 'center',
+                                                          gap: '8px',
+                                                          fontSize: '11.5px',
+                                                          color: isChecked ? '#991B1B' : '#334155',
+                                                          fontWeight: isChecked ? 700 : 500,
+                                                          cursor: isReadOnly ? 'not-allowed' : 'pointer',
+                                                        }}
+                                                      >
+                                                        <input
+                                                          type="checkbox"
+                                                          disabled={isReadOnly}
+                                                          checked={isChecked}
+                                                          onChange={(e) => {
+                                                            const next = e.target.checked
+                                                              ? [...currentCategories, cat]
+                                                               : currentCategories.filter((c) => c !== cat);
+                                                            setFlagCategories((prev) => ({
+                                                              ...prev,
+                                                              [ind.indicatorId]: next,
+                                                            }));
+                                                          }}
+                                                          style={{ accentColor: '#DC2626' }}
+                                                        />
+                                                        <span>{cat}</span>
+                                                      </label>
+                                                    );
+                                                  })}
+                                                </div>
                                               </div>
 
                                               {/* بيان النقص والملاحظة */}

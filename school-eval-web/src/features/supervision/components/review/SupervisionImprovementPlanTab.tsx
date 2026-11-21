@@ -12,6 +12,8 @@ import {
   Briefcase,
   GraduationCap,
   CalendarClock,
+  Download,
+  Eye,
 } from 'lucide-react';
 import type {
   SupervisionPlanDetails,
@@ -24,6 +26,7 @@ interface SupervisionImprovementPlanTabProps {
   plans?: SupervisionPlanDetails[];
   lowIndicatorsMatrix?: LowIndicatorMatrixItem[];
   indicatorsAudit?: any[];
+  onNavigateToIndicator?: (indicatorId: number) => void;
 }
 
 export const SupervisionImprovementPlanTab: React.FC<SupervisionImprovementPlanTabProps> = ({
@@ -31,6 +34,7 @@ export const SupervisionImprovementPlanTab: React.FC<SupervisionImprovementPlanT
   plans = [],
   lowIndicatorsMatrix = [],
   indicatorsAudit: _indicatorsAudit = [],
+  onNavigateToIndicator,
 }) => {
   const allPlans = useMemo(() => {
     if (plans && plans.length > 0) return plans;
@@ -380,6 +384,9 @@ export const SupervisionImprovementPlanTab: React.FC<SupervisionImprovementPlanT
                     <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: 700, color: '#475569' }}>
                       الخطة ومجال التحسين المغطي
                     </th>
+                    <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: 700, color: '#475569', textAlign: 'center' }}>
+                      إجراء المراجعة
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -491,6 +498,32 @@ export const SupervisionImprovementPlanTab: React.FC<SupervisionImprovementPlanT
                             {item.unaddressedReason || 'لم يتم إدراج هذا المؤشر في أي خطة'}
                           </span>
                         )}
+                      </td>
+
+                      <td style={{ padding: '14px 16px', textAlign: 'center' }}>
+                        <button
+                          type="button"
+                          onClick={() => onNavigateToIndicator?.(item.indicatorId)}
+                          title="عرض وتفحص هذا المؤشر في شجرة المعايير لرصد نقص أو توجيه"
+                          style={{
+                            padding: '6px 12px',
+                            borderRadius: '6px',
+                            backgroundColor: item.isCovered ? '#F1F5F9' : '#FEF2F2',
+                            border: `1px solid ${item.isCovered ? '#CBD5E1' : '#FCA5A5'}`,
+                            color: item.isCovered ? '#2563EB' : '#DC2626',
+                            fontSize: '11.5px',
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '5px',
+                            whiteSpace: 'nowrap',
+                            boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
+                          }}
+                        >
+                          <span>عرض المؤشر في الشجرة</span>
+                          <ExternalLink size={12} />
+                        </button>
                       </td>
                     </tr>
                   ))}
@@ -647,10 +680,15 @@ export const SupervisionImprovementPlanTab: React.FC<SupervisionImprovementPlanT
             {/* القسم الأول: مجالات التحسين ذات الأولوية والفجوة المعيارية */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 800, color: '#1E293B', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <Target size={18} color="#2563EB" />
-                  مجالات التحسين المستهدفة وتحليل الفجوة المعيارية ({areas.length})
-                </h3>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 800, color: '#1E293B', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Target size={18} color="#2563EB" />
+                    مجالات التحسين المستهدفة وتحليل الفجوة المعيارية ({areas.length})
+                  </h3>
+                  <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: '#64748B' }}>
+                    يمثل كل مجال تحسين مؤشراً ذا فجوة تقييمية (المستويات 0 إلى 2)، وتندرج تحته الإجراءات التنفيذية الميدانية لمعالجة تلك الفجوة.
+                  </p>
+                </div>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <span style={{ fontSize: '12px', color: '#64748B', fontWeight: 600 }}>أولوية المجال:</span>
@@ -765,8 +803,18 @@ export const SupervisionImprovementPlanTab: React.FC<SupervisionImprovementPlanT
                         </p>
                       )}
 
-                      <div style={{ fontSize: '11px', color: '#64748B', fontWeight: 600 }}>
-                        الإجراءات المرتبطة بهذا المجال (1:N): {area.actionsCount} إجراء
+                      <div
+                        style={{
+                          fontSize: '11px',
+                          color: '#1E40AF',
+                          fontWeight: 700,
+                          backgroundColor: '#EFF6FF',
+                          padding: '6px 10px',
+                          borderRadius: '6px',
+                          border: '1px solid #BFDBFE',
+                        }}
+                      >
+                        الإجراءات التنفيذية لمعالجة هذا المجال (عدد {area.actionsCount} إجراء)
                       </div>
                     </div>
                   ))}
@@ -906,11 +954,8 @@ export const SupervisionImprovementPlanTab: React.FC<SupervisionImprovementPlanT
                             {act.evidenceLinks && act.evidenceLinks.length > 0 ? (
                               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
                                 {act.evidenceLinks.map((ev) => (
-                                  <button
+                                  <div
                                     key={ev.id}
-                                    type="button"
-                                    onClick={() => supervisionApi.previewDocumentVersion(ev.id)}
-                                    title={`معاينة شاهد التنفيذ: ${ev.fileName}`}
                                     style={{
                                       padding: '3px 8px',
                                       borderRadius: '4px',
@@ -922,13 +967,43 @@ export const SupervisionImprovementPlanTab: React.FC<SupervisionImprovementPlanT
                                       display: 'inline-flex',
                                       alignItems: 'center',
                                       gap: '4px',
-                                      cursor: 'pointer',
                                     }}
                                   >
                                     <FileCheck size={12} />
                                     <span>{ev.documentTitle || ev.fileName}</span>
-                                    <ExternalLink size={10} />
-                                  </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => supervisionApi.previewDocumentVersion(ev.versionId || ev.documentVersionId || ev.id || ev.downloadUrl || '')}
+                                      title={`معاينة شاهد التنفيذ: ${ev.fileName}`}
+                                      style={{
+                                        background: 'none',
+                                        border: 'none',
+                                        padding: '2px',
+                                        cursor: 'pointer',
+                                        color: '#059669',
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                      }}
+                                    >
+                                      <Eye size={12} />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => supervisionApi.downloadDocumentVersion(ev.versionId || ev.documentVersionId || ev.id || ev.downloadUrl || '', ev.fileName)}
+                                      title={`تنزيل شاهد التنفيذ: ${ev.fileName}`}
+                                      style={{
+                                        background: 'none',
+                                        border: 'none',
+                                        padding: '2px',
+                                        cursor: 'pointer',
+                                        color: '#047857',
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                      }}
+                                    >
+                                      <Download size={12} />
+                                    </button>
+                                  </div>
                                 ))}
                               </div>
                             ) : (

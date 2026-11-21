@@ -21,9 +21,18 @@ class SupervisionDeficiencyNote extends Model
         'submission_id',
         'indicator_id',
         'deficiency_category',
+        'deficiency_categories',
         'supervisor_note',
         'directives',
         'created_by',
+    ];
+
+    protected $casts = [
+        'deficiency_categories' => 'array',
+        'evaluation_id' => 'integer',
+        'submission_id' => 'integer',
+        'indicator_id' => 'integer',
+        'created_by' => 'integer',
     ];
 
     public function evaluation(): BelongsTo

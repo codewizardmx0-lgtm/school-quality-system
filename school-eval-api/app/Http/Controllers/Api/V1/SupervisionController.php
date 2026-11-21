@@ -394,7 +394,7 @@ class SupervisionController extends Controller
 
         // جلب نتائج التقييم الفعلية للمدرسة والشواهد المودعة
         $results = EvaluationResult::where('evaluation_id', $evaluation->evaluation_id)
-            ->with(['scoreDescriptor', 'evidenceLinks.documentVersion.document'])
+            ->with(['scoreDescriptor', 'notes.author', 'evidenceLinks.documentVersion.document'])
             ->get()
             ->keyBy('indicator_id');
 
@@ -443,7 +443,7 @@ class SupervisionController extends Controller
                 'items' => $openCompletionRequest->items->map(fn($item) => [
                     'indicatorId' => $item->indicator_id,
                     'code' => $item->indicator?->code ?? '',
-                    'title' => $item->indicator?->title ?? '',
+                    'title' => $item->indicator?->name ?? $item->indicator?->title ?? 'مؤشر تقييمي',
                     'missingDescription' => $item->missing_description,
                 ])->toArray(),
             ];
@@ -524,6 +524,10 @@ class SupervisionController extends Controller
 
                             $evidenceFiles[] = [
                                 'id' => $link->id,
+                                'evidenceLinkId' => $link->id,
+                                'versionId' => (int) $docVersion->id,
+                                'documentVersionId' => (int) $docVersion->id,
+                                'documentId' => $doc?->id,
                                 'fileName' => $doc?->title ?? $docVersion->file_name ?? "وثيقة شاهد {$link->id}",
                                 'fileUrl' => url("/api/v1/document-versions/{$docVersion->id}/download"),
                                 'fileSizeBytes' => $sizeBytes,
@@ -538,6 +542,8 @@ class SupervisionController extends Controller
                     $openItem = $openItems->get($ind->indicator_id);
                     $hasDefect = ($savedDefect !== null) || ($openItem !== null);
                     $defectCategory = $savedDefect?->deficiency_category ?? ($openItem ? 'نقص الشواهد الإلزامية المطلوبة في أداة التحقق' : null);
+                    $defectCategories = $savedDefect?->deficiency_categories
+                        ?: ($savedDefect?->deficiency_category ? [$savedDefect->deficiency_category] : ($openItem ? ['نقص الشواهد الإلزامية المطلوبة في أداة التحقق'] : []));
                     $defectReason = $savedDefect?->supervisor_note ?? $openItem?->missing_description;
                     $directives = $savedDefect?->directives ?? $openItem?->missing_description;
 
@@ -577,9 +583,21 @@ class SupervisionController extends Controller
                         'subStandardName' => $sub->name,
                         'schoolScore' => $scoreVal,
                         'scoreLevelName' => $levelName,
-                        'scoreDescription' => $res?->scoreDescriptor?->description ?? $res?->justification ?? 'لا يوجد تبرير مدخل من المدرسة',
-                        'evaluatorJustification' => $res?->justification ?? 'لا يوجد تبرير مدخل من المدرسة',
-                        'internalReviewNotes' => $res?->internal_review_notes,
+                        'scoreDescription' => $res?->scoreDescriptor?->description ?? $res?->textual_result ?? 'لا يوجد تبرير مدخل من المدرسة',
+                        'evaluatorJustification' => !empty($res?->textual_result)
+                            ? $res->textual_result
+                            : ($res?->notes->firstWhere('author_user_id', $res?->evaluator_user_id)?->text
+                                ?? $res?->notes->first()?->text
+                                ?? 'لا يوجد تبرير مدخل من المدرسة'),
+                        'internalReviewNotes' => ($res && $res->relationLoaded('notes'))
+                            ? $res->notes->unique(fn($n) => trim((string)$n->text))->values()->map(fn($n) => [
+                                'noteId' => $n->note_id,
+                                'authorName' => $n->author?->full_name ?? $n->author?->name ?? 'المراجع الداخلي',
+                                'authorRole' => ($n->author?->hasRole('school_principal') || $n->author?->user_type === 'school') ? 'مدير المدرسة' : 'مقيم المدرسة',
+                                'text' => $n->text,
+                                'createdAt' => $n->created_at?->toIso8601String(),
+                            ])->toArray()
+                            : [],
                         'evidenceCount' => $evCount,
                         'mandatoryRequirementsCount' => $mandatoryCnt,
                         'coveredRequirementsCount' => $coveredCnt,
@@ -616,6 +634,7 @@ class SupervisionController extends Controller
                         'evidences' => $evidenceFiles,
                         'hasDefect' => $hasDefect,
                         'defectCategory' => $defectCategory,
+                        'defectCategories' => $defectCategories,
                         'defectReason' => $defectReason,
                         'directives' => $directives,
                         'supervisorFeedback' => $savedDefect?->supervisor_note,
@@ -697,6 +716,9 @@ class SupervisionController extends Controller
 
             return [
                 'id' => $doc->id,
+                'documentId' => $doc->id,
+                'versionId' => $ver?->id,
+                'documentVersionId' => $ver?->id,
                 'title' => $doc->title,
                 'documentType' => $doc->document_type ?? 'أخرى',
                 'documentTypeArabic' => $docTypeArabic,
@@ -785,6 +807,9 @@ class SupervisionController extends Controller
                     $sizeFormatted = $sizeMb > 0 ? "{$sizeMb} MB" : round($sizeBytes / 1024, 1) . ' KB';
                     return [
                         'id' => $el->id,
+                        'evidenceLinkId' => $el->id,
+                        'versionId' => (int) ($el->document_version_id ?: $ver?->id),
+                        'documentVersionId' => (int) ($el->document_version_id ?: $ver?->id),
                         'documentTitle' => $doc?->title ?? $ver?->file_name ?? "شاهد تنفيذ {$el->id}",
                         'fileName' => $ver?->file_name ?? $doc?->title ?? "شاهد_{$el->id}.pdf",
                         'fileSizeBytes' => $sizeBytes,
@@ -918,13 +943,36 @@ class SupervisionController extends Controller
         // قائمة النواقص المرصودة
         $deficienciesList = $savedDeficiencies->map(function ($def) use ($allFlatIndicators) {
             $ind = collect($allFlatIndicators)->firstWhere('indicatorId', $def->indicator_id);
+            if (!$ind) {
+                // البحث في جدول المؤشرات في حال اختلاف معرف الإصدار أو التعيين المباشر
+                $dbInd = Indicator::with('subStandard.standard')->find($def->indicator_id);
+                if ($dbInd) {
+                    $matchingCurrent = collect($allFlatIndicators)->firstWhere('code', $dbInd->code);
+                    $indId = $matchingCurrent['indicatorId'] ?? $dbInd->indicator_id;
+                    $code = $dbInd->code;
+                    $title = $dbInd->name ?? $dbInd->title ?? 'مؤشر تقييمي';
+                    $stdName = $matchingCurrent['standardName'] ?? $dbInd->subStandard?->standard?->name ?? 'معيار عام';
+                } else {
+                    $indId = $def->indicator_id;
+                    $code = "IND-{$def->indicator_id}";
+                    $title = 'مؤشر تقييمي';
+                    $stdName = 'معيار عام';
+                }
+            } else {
+                $indId = $ind['indicatorId'] ?? $def->indicator_id;
+                $code = $ind['code'] ?? "IND-{$def->indicator_id}";
+                $title = $ind['title'] ?? $ind['name'] ?? 'مؤشر تقييمي';
+                $stdName = $ind['standardName'] ?? 'معيار عام';
+            }
+
             return [
                 'id' => $def->id,
-                'indicatorId' => $def->indicator_id,
-                'indicatorCode' => $ind['code'] ?? "IND-{$def->indicator_id}",
-                'indicatorTitle' => $ind['title'] ?? 'مؤشر تقييمي',
-                'standardName' => $ind['standardName'] ?? 'معيار عام',
+                'indicatorId' => $indId,
+                'indicatorCode' => $code,
+                'indicatorTitle' => $title,
+                'standardName' => $stdName,
                 'category' => $def->deficiency_category,
+                'categories' => $def->deficiency_categories ?: ($def->deficiency_category ? [$def->deficiency_category] : []),
                 'note' => $def->supervisor_note,
                 'directives' => $def->directives,
                 'createdAt' => $def->created_at?->toIso8601String(),
@@ -1131,10 +1179,18 @@ class SupervisionController extends Controller
 
         $validated = $request->validate([
             'indicator_id' => 'required|integer|exists:indicators,indicator_id',
-            'deficiency_category' => 'required|string|max:150',
+            'deficiency_category' => 'nullable|string|max:255',
+            'deficiency_categories' => 'nullable|array',
+            'deficiency_categories.*' => 'string|max:150',
             'supervisor_note' => 'nullable|string|max:2000',
             'directives' => 'nullable|string|max:2000',
         ]);
+
+        $categories = $validated['deficiency_categories'] ?? [];
+        if (empty($categories) && !empty($validated['deficiency_category'])) {
+            $categories = [$validated['deficiency_category']];
+        }
+        $primaryCategory = !empty($categories) ? $categories[0] : ($validated['deficiency_category'] ?? 'أسباب أخرى');
 
         $latestSubmission = $submission ?? EvaluationSubmission::whereHas('report', fn($q) => $q->where('evaluation_id', $evaluation->evaluation_id))
             ->latest('submission_id')
@@ -1147,7 +1203,8 @@ class SupervisionController extends Controller
             ],
             [
                 'submission_id' => $latestSubmission?->submission_id,
-                'deficiency_category' => $validated['deficiency_category'],
+                'deficiency_category' => $primaryCategory,
+                'deficiency_categories' => $categories,
                 'supervisor_note' => $validated['supervisor_note'] ?? null,
                 'directives' => $validated['directives'] ?? null,
                 'created_by' => $user->user_id,
@@ -1159,6 +1216,7 @@ class SupervisionController extends Controller
             'evaluationId' => $deficiency->evaluation_id,
             'indicatorId' => $deficiency->indicator_id,
             'deficiencyCategory' => $deficiency->deficiency_category,
+            'deficiencyCategories' => $deficiency->deficiency_categories ?: [$deficiency->deficiency_category],
             'supervisorNote' => $deficiency->supervisor_note,
             'directives' => $deficiency->directives,
         ], 'تم حفظ رصد النقص وتوجيه المشرف للمؤشر بنجاح.');

@@ -197,14 +197,17 @@ export const supervisionApi = {
     id: number,
     payload: {
       indicatorId: number;
-      deficiencyCategory: string;
+      deficiencyCategory?: string;
+      deficiencyCategories?: string[];
       supervisorNote?: string;
       directives?: string;
     }
   ): Promise<any> {
+    const cats = payload.deficiencyCategories || (payload.deficiencyCategory ? [payload.deficiencyCategory] : []);
     const response = await post<any>(`/evaluation-submissions/${id}/deficiency-notes`, {
       indicator_id: payload.indicatorId,
-      deficiency_category: payload.deficiencyCategory,
+      deficiency_category: payload.deficiencyCategory || cats.join('، ') || 'نقص الشواهد الإلزامية المطلوبة في أداة التحقق',
+      deficiency_categories: cats,
       supervisor_note: payload.supervisorNote,
       directives: payload.directives,
     });
@@ -438,15 +441,25 @@ export const supervisionApi = {
   /**
    * 15. تحميل ملف نسخة المستند أو الشاهد عبر Token مصادق
    */
-  async downloadDocumentVersion(versionId: number, fileName?: string): Promise<void> {
-    const response = await apiClient.get(`/document-versions/${versionId}/download`, {
+  async downloadDocumentVersion(versionIdOrUrl: number | string, fileName?: string): Promise<void> {
+    let endpoint = typeof versionIdOrUrl === 'number'
+      ? `/document-versions/${versionIdOrUrl}/download`
+      : versionIdOrUrl;
+    if (typeof versionIdOrUrl === 'string' && versionIdOrUrl.includes('/document-versions/')) {
+      const match = versionIdOrUrl.match(/\/document-versions\/(\d+)\/download/);
+      if (match) {
+        endpoint = `/document-versions/${match[1]}/download`;
+      }
+    }
+    const response: any = await apiClient.get(endpoint, {
       responseType: 'blob',
     });
-    const blob = new Blob([response as unknown as BlobPart]);
+    const rawData = response?.data instanceof Blob ? response.data : response;
+    const blob = rawData instanceof Blob ? rawData : new Blob([rawData]);
     const url = window.URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = fileName || `وثيقة_${versionId}.pdf`;
+    link.download = fileName || 'شاهد_توثيقي.pdf';
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -456,11 +469,23 @@ export const supervisionApi = {
   /**
    * 16. معاينة ملف نسخة المستند أو الشاهد في نافذة متصفح جديدة عبر Token مصادق
    */
-  async previewDocumentVersion(versionId: number): Promise<void> {
-    const response = await apiClient.get(`/document-versions/${versionId}/download`, {
+  async previewDocumentVersion(versionIdOrUrl: number | string): Promise<void> {
+    let endpoint = typeof versionIdOrUrl === 'number'
+      ? `/document-versions/${versionIdOrUrl}/download`
+      : versionIdOrUrl;
+    if (typeof versionIdOrUrl === 'string' && versionIdOrUrl.includes('/document-versions/')) {
+      const match = versionIdOrUrl.match(/\/document-versions\/(\d+)\/download/);
+      if (match) {
+        endpoint = `/document-versions/${match[1]}/download`;
+      }
+    }
+    const response: any = await apiClient.get(endpoint, {
       responseType: 'blob',
     });
-    const blob = new Blob([response as unknown as BlobPart], { type: 'application/pdf' });
+    const rawData = response?.data instanceof Blob ? response.data : response;
+    const blob = rawData instanceof Blob
+      ? new Blob([rawData], { type: rawData.type || 'application/pdf' })
+      : new Blob([rawData], { type: 'application/pdf' });
     const url = window.URL.createObjectURL(blob);
     window.open(url, '_blank');
   },

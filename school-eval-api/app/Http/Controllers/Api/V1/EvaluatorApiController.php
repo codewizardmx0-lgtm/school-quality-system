@@ -663,6 +663,8 @@ class EvaluatorApiController extends Controller
             ->with('author')
             ->orderBy('note_id', 'asc')
             ->get()
+            ->unique(fn($n) => trim((string)$n->text))
+            ->values()
             ->map(fn($n) => [
                 'noteId' => $n->note_id,
                 'authorName' => $n->author?->full_name ?? $n->author?->name ?? 'المراجع',
@@ -753,13 +755,21 @@ class EvaluatorApiController extends Controller
             ]
         );
 
-        // حفظ الملاحظة التبريرية إن وجدت
+        // حفظ الملاحظة التبريرية إن وجدت دون تكرار
         if ($request->filled('justification')) {
-            Note::create([
-                'result_id' => $result->result_id,
-                'author_user_id' => $user?->user_id ?? 1,
-                'text' => $request->input('justification'),
-            ]);
+            $justText = trim((string) $request->input('justification'));
+            if ($justText !== '') {
+                $existingNote = Note::where('result_id', $result->result_id)
+                    ->where('text', $justText)
+                    ->first();
+                if (!$existingNote) {
+                    Note::create([
+                        'result_id' => $result->result_id,
+                        'author_user_id' => $user?->user_id ?? 1,
+                        'text' => $justText,
+                    ]);
+                }
+            }
         }
 
         // تحديث أساليب التحقق
@@ -816,6 +826,8 @@ class EvaluatorApiController extends Controller
             ->with('author')
             ->orderBy('note_id', 'asc')
             ->get()
+            ->unique(fn($n) => trim((string)$n->text))
+            ->values()
             ->map(fn($n) => [
                 'noteId' => $n->note_id,
                 'authorName' => $n->author?->full_name ?? $n->author?->name ?? 'المراجع',
