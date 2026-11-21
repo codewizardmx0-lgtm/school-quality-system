@@ -12,7 +12,7 @@ import type {
   ReviewableSubmissionItem,
 } from '../api/supervisionTypes';
 
-export type ReviewTabType = 'indicators' | 'evidences' | 'improvement-plan';
+export type ReviewTabType = 'standards' | 'indicators' | 'evidences' | 'improvement-plan' | 'decision';
 export type DecisionModeType = 'completion' | 'close';
 export type QuickFilterType = 'all' | 'defective' | 'missing-evidence' | 'low-score';
 

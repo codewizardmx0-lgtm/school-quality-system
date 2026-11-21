@@ -1257,12 +1257,14 @@ class EvaluationController extends Controller
             return ApiResponse::notFound('ملف التقييم المطلوب غير موجود.');
         }
 
-        // 3. فحص الصلاحيات العامة
+        // 3. فحص الصلاحيات العامة (بما في ذلك المشرف الوزاري)
         $hasAccess = $user->hasRole('admin')
             || $user->user_type === 'admin'
             || $user->user_type === 'system'
             || $user->hasPermission('reports.view')
-            || $user->hasPermission('evaluations.view');
+            || $user->hasPermission('evaluations.view')
+            || $user->hasRole('ministry_supervisor')
+            || $user->hasPermission('supervision.review');
 
         if (!$hasAccess) {
             return ApiResponse::forbidden('غير مصرح لك بتصدير أو استعراض هذا التقرير.');

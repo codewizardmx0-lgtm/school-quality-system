@@ -117,6 +117,10 @@ export const SupervisionLayout: React.FC<SupervisionLayoutProps> = ({
           <ReviewSubmissionPage
             submissionId={selectedSubmissionId}
             schoolId={selectedSchoolId}
+            onSelectSchool={(schoolId, schoolName) => {
+              setSelectedSchoolId(schoolId);
+              setSelectedSchoolName(schoolName);
+            }}
             onNavigate={(screen, params) => navigateToScreen(screen, params)}
           />
         );

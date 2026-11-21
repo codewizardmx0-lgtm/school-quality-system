@@ -74,6 +74,38 @@ class EvaluatorApiController extends Controller
             }
         }
 
+        $school = School::find($schoolId);
+
+        // البحث أولاً عن دورة تقييمية نشطة تتبع لها المدرسة
+        $activeCycle = EvaluationCycle::where('status', 'Active')
+            ->where(function ($q) use ($school) {
+                $q->whereNull('scope_governorate');
+                if ($school && $school->governorate) {
+                    $q->orWhere('scope_governorate', $school->governorate);
+                }
+            })
+            ->latest('cycle_id')
+            ->first();
+
+        if ($activeCycle) {
+            $evaluationInActiveCycle = Evaluation::where('school_id', $schoolId)
+                ->where('cycle_id', $activeCycle->cycle_id)
+                ->latest('evaluation_id')
+                ->first();
+
+            if ($evaluationInActiveCycle) {
+                return $evaluationInActiveCycle;
+            }
+
+            // إنشاء ملف تقييم تلقائي للمدرسة ضمن الدورة النشطة
+            return Evaluation::create([
+                'school_id' => $schoolId,
+                'cycle_id' => $activeCycle->cycle_id,
+                'created_by_user_id' => $user?->user_id ?? 1,
+                'status' => 'InProgress',
+            ]);
+        }
+
         $evaluation = Evaluation::where('school_id', $schoolId)
             ->orderBy('evaluation_id', 'desc')
             ->first();

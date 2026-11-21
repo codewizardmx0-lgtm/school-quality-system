@@ -15,12 +15,15 @@ use App\Models\EvidenceLink;
 use App\Models\ImprovementPlan;
 use App\Models\Indicator;
 use App\Models\School;
+use App\Models\SchoolDocument;
+use App\Models\DocumentVersion;
 use App\Models\Standard;
 use App\Models\StandardVersion;
 use App\Models\SupervisorNote;
 use App\Models\SupervisionDeficiencyNote;
 use App\Models\User;
 use App\Services\EvaluationTrendService;
+use App\Services\EvidenceSufficiencyService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -389,21 +392,17 @@ class SupervisionController extends Controller
             ?? StandardVersion::where('status', 'Approved')->first()
             ?? StandardVersion::first();
 
-        // جلب المؤشرات الـ 109 الحقيقية من قاعدة البيانات مع الواصفات وأدوات التحقق (FR-SUP-03)
-        $indicators = Indicator::with(['subStandard.standard', 'scoreDescriptors', 'verificationTools'])
-            ->whereHas('subStandard.standard', function ($q) use ($version) {
-                if ($version) {
-                    $q->where('version_id', $version->version_id);
-                }
-            })
-            ->orderBy('code')
-            ->get();
-
         // جلب نتائج التقييم الفعلية للمدرسة والشواهد المودعة
         $results = EvaluationResult::where('evaluation_id', $evaluation->evaluation_id)
             ->with(['scoreDescriptor', 'evidenceLinks.documentVersion.document'])
             ->get()
             ->keyBy('indicator_id');
+
+        // روابط الشواهد مجمعة بالمؤشر
+        $linksByIndicator = EvidenceLink::where('evaluation_id', $evaluation->evaluation_id)
+            ->with(['documentVersion.document'])
+            ->get()
+            ->groupBy('indicator_id');
 
         // جلب بنود الاستكمال المفتوحة لهذه المحاولة إن وجدت
         $openItems = CompletionRequestItem::whereHas('request', function ($q) use ($submission) {
@@ -450,100 +449,489 @@ class SupervisionController extends Controller
             ];
         }
 
-        // جلب الملاحظات الإشرافية السابقة
-        $notes = SupervisorNote::where('submission_id', $submission?->submission_id)
-            ->orWhere('school_id', $school?->school_id)
+        // جلب المعايير الوطنية السبعة وشجرتها الهيكلية الكاملة (Standards -> SubStandards -> Indicators)
+        $standardsData = Standard::where('version_id', $version->version_id)
+            ->with([
+                'subStandards.indicators.scoreDescriptors.scoreLevel',
+                'subStandards.indicators.evidenceRequirements',
+                'subStandards.indicators.verificationTools',
+            ])
+            ->orderBy('code')
             ->get();
 
-        $indicatorsAudit = [];
+        $allFlatIndicators = [];
         $totalScored = 0;
         $totalWithEvidence = 0;
 
-        foreach ($indicators as $ind) {
-            $res = $results->get($ind->indicator_id);
-            $hasScore = $res && $res->score !== null;
-            if ($hasScore) {
-                $totalScored++;
-            }
+        $standardsTree = $standardsData->map(function ($std) use ($results, $linksByIndicator, $savedDeficiencies, $openItems, &$allFlatIndicators, &$totalScored, &$totalWithEvidence) {
+            $allStdIndicators = $std->subStandards->flatMap(fn($sub) => $sub->indicators);
+            $indIds = $allStdIndicators->pluck('indicator_id');
+            $stdResults = $results->whereIn('indicator_id', $indIds);
+            $totalInds = max(1, $indIds->count());
+            $scoredCount = $stdResults->whereNotNull('score')->count();
+            $unenteredCount = max(0, $totalInds - $scoredCount);
+            $l3 = $stdResults->where('score', 3)->count();
+            $l2 = $stdResults->where('score', 2)->count();
+            $l1 = $stdResults->where('score', 1)->count();
+            $l0 = $stdResults->where('score', 0)->count();
 
-            $score = $res?->score ?? 0;
-            $levelName = match ($score) {
-                3 => 'متحقق بدرجة عالية',
-                2 => 'متحقق بدرجة كافية',
-                1 => 'متحقق جزئياً',
-                default => 'غير متحقق',
+            $stdTotalEvidences = 0;
+            $stdTotalMandatory = 0;
+            $stdTotalCovered = 0;
+
+            $subStandardsList = $std->subStandards->map(function ($sub) use ($results, $linksByIndicator, $savedDeficiencies, $openItems, $std, &$stdTotalEvidences, &$stdTotalMandatory, &$stdTotalCovered, &$allFlatIndicators, &$totalScored, &$totalWithEvidence) {
+                $indicatorsList = $sub->indicators->map(function ($ind) use ($results, $linksByIndicator, $savedDeficiencies, $openItems, $std, $sub, &$stdTotalEvidences, &$stdTotalMandatory, &$stdTotalCovered, &$allFlatIndicators, &$totalScored, &$totalWithEvidence) {
+                    $res = $results->get($ind->indicator_id);
+                    $hasScore = $res && $res->score !== null;
+                    if ($hasScore) {
+                        $totalScored++;
+                    }
+
+                    $indLinks = $linksByIndicator->get($ind->indicator_id, collect());
+                    $evCount = $indLinks->count();
+                    $stdTotalEvidences += $evCount;
+                    if ($evCount > 0) {
+                        $totalWithEvidence++;
+                    }
+
+                    $mandatoryReqs = $ind->evidenceRequirements->where('required', true);
+                    $mandatoryCnt = $mandatoryReqs->count();
+                    $stdTotalMandatory += $mandatoryCnt;
+
+                    $explicitIds = [];
+                    $legacyCnt = 0;
+                    foreach ($indLinks as $lnk) {
+                        $cov = $lnk->covered_requirements;
+                        if (is_array($cov)) {
+                            foreach ($cov as $rid) {
+                                $explicitIds[(int)$rid] = true;
+                            }
+                        } elseif ($cov === null) {
+                            $legacyCnt++;
+                        }
+                    }
+                    $coveredCnt = $mandatoryCnt > 0 ? min($mandatoryCnt, count($explicitIds) + $legacyCnt) : $evCount;
+                    $stdTotalCovered += $coveredCnt;
+
+                    $evidenceFiles = [];
+                    foreach ($indLinks as $link) {
+                        $docVersion = $link->documentVersion;
+                        $doc = $docVersion?->document;
+                        if ($docVersion) {
+                            $sizeBytes = $docVersion->file_size_bytes ?? $docVersion->file_size ?? 1024;
+                            $sizeMb = round($sizeBytes / 1048576, 2);
+                            $formattedSize = $sizeMb > 0 ? "{$sizeMb} MB" : round($sizeBytes / 1024, 1) . ' KB';
+
+                            $evidenceFiles[] = [
+                                'id' => $link->id,
+                                'fileName' => $doc?->title ?? $docVersion->file_name ?? "وثيقة شاهد {$link->id}",
+                                'fileUrl' => url("/api/v1/document-versions/{$docVersion->id}/download"),
+                                'fileSizeBytes' => $sizeBytes,
+                                'fileSizeFormatted' => $formattedSize,
+                                'mimeType' => $docVersion->mime_type ?? 'application/pdf',
+                                'uploadedAt' => $link->created_at?->toIso8601String() ?? now()->toIso8601String(),
+                            ];
+                        }
+                    }
+
+                    $savedDefect = $savedDeficiencies->get($ind->indicator_id);
+                    $openItem = $openItems->get($ind->indicator_id);
+                    $hasDefect = ($savedDefect !== null) || ($openItem !== null);
+                    $defectCategory = $savedDefect?->deficiency_category ?? ($openItem ? 'نقص الشواهد الإلزامية المطلوبة في أداة التحقق' : null);
+                    $defectReason = $savedDefect?->supervisor_note ?? $openItem?->missing_description;
+                    $directives = $savedDefect?->directives ?? $openItem?->missing_description;
+
+                    $scoreVal = $res?->score;
+                    $levelName = match ($scoreVal) {
+                        3 => 'متحقق (3)',
+                        2 => 'متوسط (2)',
+                        1 => 'ضعيف (1)',
+                        0 => 'غير متوفر (0)',
+                        default => 'غير مقيّم',
+                    };
+
+                    $descriptors = $ind->scoreDescriptors->sortBy('score_level_id')->map(function ($d) use ($scoreVal) {
+                        $sVal = (int) ($d->scoreLevel?->score_value ?? $d->scoreLevel?->score ?? $d->score_level_id);
+                        return [
+                            'descriptorId' => $d->descriptor_id ?? $d->id,
+                            'score' => $sVal,
+                            'level' => $sVal,
+                            'label' => $d->label ?? ($d->scoreLevel?->name ?? "المستوى {$sVal}"),
+                            'title' => $d->label ?? ($d->scoreLevel?->name ?? "المستوى {$sVal}"),
+                            'description' => $d->description,
+                            'isSelected' => ($scoreVal !== null && (int)$scoreVal === $sVal),
+                        ];
+                    })->values()->toArray();
+
+                    $indicatorData = [
+                        'indicatorId' => $ind->indicator_id,
+                        'code' => $ind->code,
+                        'indicatorNumber' => $ind->indicator_number ?? 1,
+                        'title' => $ind->name ?? $ind->title,
+                        'name' => $ind->name ?? $ind->title,
+                        'description' => $ind->description ?? '',
+                        'weight' => (float)($ind->weight ?? 1),
+                        'standardId' => $std->standard_id,
+                        'standardName' => $std->name,
+                        'subStandardId' => $sub->sub_standard_id,
+                        'subStandardName' => $sub->name,
+                        'schoolScore' => $scoreVal,
+                        'scoreLevelName' => $levelName,
+                        'scoreDescription' => $res?->scoreDescriptor?->description ?? $res?->justification ?? 'لا يوجد تبرير مدخل من المدرسة',
+                        'evaluatorJustification' => $res?->justification ?? 'لا يوجد تبرير مدخل من المدرسة',
+                        'internalReviewNotes' => $res?->internal_review_notes,
+                        'evidenceCount' => $evCount,
+                        'mandatoryRequirementsCount' => $mandatoryCnt,
+                        'coveredRequirementsCount' => $coveredCnt,
+                        'descriptors' => $descriptors,
+                        'verificationTools' => $ind->verificationTools->map(fn($vt) => [
+                            'id' => $vt->tool_id,
+                            'name' => $vt->name,
+                            'toolType' => $vt->tool_type ?? 'documentary',
+                            'description' => $vt->description ?? '',
+                        ])->toArray(),
+                        'evidenceRequirements' => $ind->evidenceRequirements->map(function ($er) use ($indLinks, $explicitIds) {
+                            $coveringDocs = [];
+                            foreach ($indLinks as $lnk) {
+                                $cov = $lnk->covered_requirements;
+                                if ((is_array($cov) && in_array((int)$er->requirement_id, $cov)) || ($cov === null)) {
+                                    $docTitle = $lnk->documentVersion?->document?->title ?? $lnk->documentVersion?->file_name ?? "وثيقة {$lnk->id}";
+                                    $coveringDocs[] = $docTitle;
+                                }
+                            }
+                            $uniqueDocs = array_values(array_unique($coveringDocs));
+
+                            return [
+                                'id' => $er->requirement_id,
+                                'requirementId' => $er->requirement_id,
+                                'title' => $er->title,
+                                'description' => $er->description ?? '',
+                                'required' => (bool)$er->required,
+                                'isMandatory' => (bool)$er->required,
+                                'isCovered' => isset($explicitIds[(int)$er->requirement_id]),
+                                'coveringDocuments' => $uniqueDocs,
+                                'coveringDocumentsSummary' => count($uniqueDocs) > 0 ? implode('، ', $uniqueDocs) : 'لا يوجد شاهد مرتبط بهذا المتطلب بعد',
+                            ];
+                        })->toArray(),
+                        'evidences' => $evidenceFiles,
+                        'hasDefect' => $hasDefect,
+                        'defectCategory' => $defectCategory,
+                        'defectReason' => $defectReason,
+                        'directives' => $directives,
+                        'supervisorFeedback' => $savedDefect?->supervisor_note,
+                    ];
+
+                    $allFlatIndicators[] = $indicatorData;
+
+                    return $indicatorData;
+                });
+
+                return [
+                    'subStandardId' => $sub->sub_standard_id,
+                    'code' => $sub->code,
+                    'title' => $sub->name,
+                    'description' => $sub->description ?? '',
+                    'weight' => (float)($sub->weight ?? 0.0),
+                    'guidance' => $sub->guidance ?? '',
+                    'indicators' => $indicatorsList,
+                ];
+            });
+
+            return [
+                'standardId' => $std->standard_id,
+                'code' => $std->code,
+                'title' => $std->name,
+                'name' => $std->name,
+                'description' => $std->description ?? '',
+                'weight' => (float)($std->weight ?? 15),
+                'stats' => [
+                    'totalIndicators' => $totalInds,
+                    'scoredIndicators' => $scoredCount,
+                    'unenteredIndicators' => $unenteredCount,
+                    'level3Count' => $l3,
+                    'level2Count' => $l2,
+                    'level1Count' => $l1,
+                    'level0Count' => $l0,
+                    'totalEvidences' => $stdTotalEvidences,
+                    'totalMandatoryRequirements' => $stdTotalMandatory,
+                    'coveredRequirements' => $stdTotalCovered,
+                    'coveragePercentage' => $stdTotalMandatory > 0 ? round(($stdTotalCovered / $stdTotalMandatory) * 100) : 100,
+                ],
+                'subStandards' => $subStandardsList,
+            ];
+        });
+
+        // خزانة الوثائق المودعة للمدرسة (وثائق فريدة وليست مكررة بعدد المؤشرات)
+        $schoolDocs = SchoolDocument::where('school_id', $school?->school_id)
+            ->with([
+                'currentVersion',
+                'creator:user_id,full_name,email',
+                'evidenceLinks.indicator',
+            ])
+            ->get();
+
+        $vaultDocuments = $schoolDocs->map(function ($doc) {
+            $ver = $doc->currentVersion;
+            $linkedInds = $doc->evidenceLinks->map(fn($el) => [
+                'indicatorId' => $el->indicator_id,
+                'code' => $el->indicator?->code ?? "IND-{$el->indicator_id}",
+                'title' => $el->indicator?->title ?? $el->indicator?->name ?? 'مؤشر',
+            ])->unique('indicatorId')->values()->toArray();
+
+            $sizeBytes = $ver?->file_size_bytes ?? $ver?->file_size ?? 1024;
+            $sizeMb = round($sizeBytes / 1048576, 2);
+            $sizeFormatted = $sizeMb > 0 ? "{$sizeMb} MB" : round($sizeBytes / 1024, 1) . ' KB';
+
+            $docTypeArabic = match(strtolower($doc->document_type ?? '')) {
+                'plan' => 'خطة تشغيلية / إجرائية',
+                'minutes' => 'محضر اجتماع',
+                'report' => 'تقرير دوري / ختامي',
+                'circular' => 'تعميم / قرار إداري',
+                'schedule' => 'جدول دراسي / حصص',
+                'list' => 'كشف / بيان مدرسي',
+                'policy' => 'سياسة / لائحة',
+                'survey' => 'استبيان / استطلاع',
+                'certificate' => 'شهادة / إفادة',
+                default => $doc->document_type ?: 'وثيقة عامة',
             };
 
-            // شواهد المؤشر عند الطلب الصريح (FR-SUP-07)
-            $evidenceItems = [];
-            if ($res && $res->evidenceLinks->isNotEmpty()) {
-                $totalWithEvidence++;
-                foreach ($res->evidenceLinks as $link) {
-                    $docVersion = $link->documentVersion;
-                    $doc = $docVersion?->document;
-                    if ($docVersion) {
-                        $sizeBytes = $docVersion->file_size_bytes ?? 1024;
-                        $sizeMb = round($sizeBytes / 1048576, 2);
-                        $formattedSize = $sizeMb > 0 ? "{$sizeMb} MB" : round($sizeBytes / 1024, 1) . ' KB';
-
-                        $evidenceItems[] = [
-                            'id' => $link->id,
-                            'fileName' => $doc?->title ?? $docVersion->file_name ?? "وثيقة شاهد {$link->id}",
-                            'fileUrl' => "/api/v1/document-versions/{$docVersion->version_id}/download",
-                            'fileSizeBytes' => $sizeBytes,
-                            'fileSizeFormatted' => $formattedSize,
-                            'mimeType' => $docVersion->mime_type ?? 'application/pdf',
-                            'uploadedAt' => $link->created_at?->toIso8601String() ?? now()->toIso8601String(),
-                        ];
-                    }
-                }
-            }
-
-            $savedDefect = $savedDeficiencies->get($ind->indicator_id);
-            $openItem = $openItems->get($ind->indicator_id);
-            $hasDefect = ($savedDefect !== null) || ($openItem !== null);
-
-            $defectCategory = $savedDefect?->deficiency_category ?? ($openItem ? 'نقص الشواهد الإلزامية المطلوبة في أداة التحقق' : null);
-            $defectReason = $savedDefect?->supervisor_note ?? $openItem?->missing_description;
-            $directives = $savedDefect?->directives ?? $openItem?->missing_description;
-
-            $indicatorsAudit[] = [
-                'indicatorId' => $ind->indicator_id,
-                'code' => $ind->code,
-                'standardId' => $ind->subStandard?->standard?->standard_id ?? 1,
-                'standardName' => $ind->subStandard?->standard?->name ?? 'معيار عام',
-                'subStandardName' => $ind->subStandard?->name ?? 'معيار فرعي',
-                'title' => $ind->title,
-                'schoolScore' => $score,
-                'scoreLevelName' => $levelName,
-                'scoreDescription' => $res?->scoreDescriptor?->description ?? $res?->justification ?? 'لا يوجد تبرير مدخل من المدرسة',
-                'descriptors' => $ind->scoreDescriptors->sortBy('score')->map(fn($d) => [
-                    'score' => $d->score,
-                    'description' => $d->description,
-                ])->values()->toArray(),
-                'verificationTools' => $ind->verificationTools->pluck('name')->toArray(),
-                'evidences' => $evidenceItems,
-                'hasDefect' => $hasDefect,
-                'defectCategory' => $defectCategory,
-                'defectReason' => $defectReason,
-                'directives' => $directives,
-                'supervisorFeedback' => $savedDefect?->supervisor_note,
+            return [
+                'id' => $doc->id,
+                'title' => $doc->title,
+                'documentType' => $doc->document_type ?? 'أخرى',
+                'documentTypeArabic' => $docTypeArabic,
+                'description' => $doc->description ?? '',
+                'versionNumber' => $ver?->version_number ?? 1,
+                'createdAt' => $doc->created_at?->toIso8601String(),
+                'linksCount' => count($linkedInds),
+                'linkedIndicators' => $linkedInds,
+                'fileName' => $ver?->file_name ?? $doc->title,
+                'fileSize' => $sizeBytes,
+                'fileSizeFormatted' => $sizeFormatted,
+                'mimeType' => $ver?->mime_type ?? 'application/pdf',
+                'downloadUrl' => $ver ? url("/api/v1/document-versions/{$ver->id}/download") : null,
+                'previewUrl' => $ver ? url("/api/v1/document-versions/{$ver->id}/preview") : null,
             ];
+        });
+
+        $vaultStats = [
+            'totalDocuments' => $vaultDocuments->count(),
+            'totalLinks' => $vaultDocuments->sum('linksCount'),
+            'totalSizeBytes' => $vaultDocuments->sum('fileSize'),
+            'documentTypesCount' => $vaultDocuments->pluck('documentType')->unique()->count(),
+        ];
+
+        // جرد الشواهد الميدانية ومدى كفايتها وفق خدمة الكفاية المعتمدة
+        $evidenceSufficiency = null;
+        try {
+            /** @var EvidenceSufficiencyService $sufficiencyService */
+            $sufficiencyService = app(EvidenceSufficiencyService::class);
+            $evidenceSufficiency = $sufficiencyService->evaluateEvaluation($evaluation);
+        } catch (\Throwable $e) {
+            $evidenceSufficiency = null;
         }
 
-        // خطة التحسين المدرسية الفعلية
-        $plan = ImprovementPlan::with('actions')
-            ->where('school_id', $school?->school_id)
-            ->when($cycle?->cycle_id, fn($q, $cid) => $q->where('cycle_id', $cid))
-            ->latest('plan_id')
-            ->first();
+        // خطط التحسين والتطوير المدرسية الثلاث (QualityImprovement, StaffProfessionalDevelopment, AnnualOperational)
+        $schoolPlans = ImprovementPlan::with([
+            'areas.indicator',
+            'actions.area',
+            'actions.evidenceLinks.documentVersion.document',
+        ])
+        ->where('school_id', $school?->school_id)
+        ->orderBy('plan_id', 'asc')
+        ->get();
 
-        $planPriorities = [];
-        if ($plan) {
-            $planPriorities = $plan->actions->pluck('title')->take(4)->toArray();
-        }
+        $matchingPlans = $cycle?->cycle_id ? $schoolPlans->where('cycle_id', $cycle->cycle_id) : collect();
+        $plansToUse = $matchingPlans->isNotEmpty() ? $matchingPlans : $schoolPlans;
 
-        $allIndicatorsCount = $indicators->count() ?: 109;
+        $formatPlan = function ($p) use ($results) {
+            if (!$p) return null;
+
+            $areas = $p->areas->map(function ($a) use ($p, $results) {
+                $areaActions = $p->actions->where('area_id', $a->area_id);
+                $avgProg = $areaActions->count() > 0 ? round($areaActions->avg('completion_percentage'), 1) : 0;
+                $currScore = $results->get($a->indicator_id)?->score ?? 0;
+                $targetScore = $a->target_score ?? 3;
+                $gap = max(0, $targetScore - $currScore);
+
+                return [
+                    'areaId' => $a->area_id,
+                    'indicatorId' => $a->indicator_id,
+                    'indicatorCode' => $a->indicator?->code ?? '',
+                    'indicatorTitle' => $a->indicator?->title ?? $a->indicator?->name ?? $a->name,
+                    'name' => $a->name,
+                    'description' => $a->description,
+                    'priority' => $a->priority ?? 'medium',
+                    'priorityLabel' => match($a->priority) {
+                        'high' => 'أولوية قصوى',
+                        'medium' => 'أولوية متوسطة',
+                        default => 'أولوية اعتيادية',
+                    },
+                    'currentScore' => $currScore,
+                    'targetScore' => $targetScore,
+                    'gap' => $gap,
+                    'status' => $a->status,
+                    'actionsCount' => $areaActions->count(),
+                    'averageProgress' => $avgProg,
+                ];
+            })->values()->toArray();
+
+            $actions = $p->actions->map(function ($act) {
+                $actEvidences = $act->evidenceLinks->map(function ($el) {
+                    $ver = $el->documentVersion;
+                    $doc = $ver?->document;
+                    $sizeBytes = $ver?->file_size_bytes ?? $ver?->file_size ?? 1024;
+                    $sizeMb = round($sizeBytes / 1048576, 2);
+                    $sizeFormatted = $sizeMb > 0 ? "{$sizeMb} MB" : round($sizeBytes / 1024, 1) . ' KB';
+                    return [
+                        'id' => $el->id,
+                        'documentTitle' => $doc?->title ?? $ver?->file_name ?? "شاهد تنفيذ {$el->id}",
+                        'fileName' => $ver?->file_name ?? $doc?->title ?? "شاهد_{$el->id}.pdf",
+                        'fileSizeBytes' => $sizeBytes,
+                        'fileSizeFormatted' => $sizeFormatted,
+                        'mimeType' => $ver?->mime_type ?? 'application/pdf',
+                        'downloadUrl' => $ver ? url("/api/v1/document-versions/{$ver->id}/download") : null,
+                        'previewUrl' => $ver ? url("/api/v1/document-versions/{$ver->id}/preview") : null,
+                        'uploadedAt' => $el->created_at?->toIso8601String(),
+                    ];
+                })->values()->toArray();
+
+                return [
+                    'actionId' => $act->action_id,
+                    'areaId' => $act->area_id,
+                    'areaTitle' => $act->area?->name ?? 'مجال تحسين',
+                    'title' => $act->title,
+                    'responsible' => $act->responsible_person_description ?? 'فريق التطوير المدرسي',
+                    'startDate' => $act->start_date?->toDateString(),
+                    'dueDate' => $act->due_date?->toDateString(),
+                    'completionPercentage' => (int) $act->completion_percentage,
+                    'progressDescription' => $act->progress_description,
+                    'status' => $act->status,
+                    'statusArabic' => match(strtolower($act->status)) {
+                        'completed', 'done' => 'مكتمل',
+                        'in_progress', 'inprogress' => 'قيد التنفيذ',
+                        'cancelled' => 'ملغي',
+                        default => 'معلق / لم يبدأ',
+                    },
+                    'baselineScore' => $act->baseline_score,
+                    'targetScore' => $act->baseline_target_score ?? 3,
+                    'gap' => $act->baseline_gap ?? 1,
+                    'evidenceCount' => count($actEvidences),
+                    'evidenceLinks' => $actEvidences,
+                ];
+            })->values()->toArray();
+
+            $planTypeLabel = match($p->plan_type) {
+                'QualityImprovement' => 'خطة تحسين الجودة المدرسية الشاملة',
+                'StaffProfessionalDevelopment' => 'خطة التطوير المهني والتربوي للكوادر',
+                'AnnualOperational' => 'الخطة التشغيلية السنوية',
+                default => 'خطة تحسين وتطوير الأداء',
+            };
+
+            return [
+                'planId' => $p->plan_id,
+                'title' => $p->title,
+                'status' => $p->status,
+                'statusArabic' => match($p->status) {
+                    'Completed' => 'مكتملة التنفيذ',
+                    'Approved' => 'معتمدة ومرفقة',
+                    'InProgress', 'Active' => 'قيد التنفيذ',
+                    default => 'مسودة مرفقة',
+                },
+                'planType' => $p->plan_type ?? 'QualityImprovement',
+                'planTypeLabel' => $planTypeLabel,
+                'versionNumber' => $p->version_number ?? 1,
+                'academicYear' => $p->academic_year ?? '2026/2027',
+                'startDate' => $p->start_date?->toDateString(),
+                'endDate' => $p->end_date?->toDateString(),
+                'areas' => $areas,
+                'actions' => $actions,
+                'stats' => [
+                    'totalAreas' => count($areas),
+                    'totalActions' => count($actions),
+                    'completedActions' => collect($actions)->whereIn('status', ['completed', 'Done', 'done'])->count(),
+                    'inProgressActions' => collect($actions)->whereIn('status', ['in_progress', 'InProgress'])->count(),
+                    'averageProgress' => count($actions) > 0 ? round(collect($actions)->avg('completionPercentage'), 1) : 0,
+                ],
+            ];
+        };
+
+        $allFormattedPlans = $plansToUse->map($formatPlan)->values()->toArray();
+
+        // الخطة الافتراضية الأولية للعرض المباشر (خطة الجودة الشاملة أو أول خطة متوفرة)
+        $primaryPlan = $plansToUse->firstWhere('plan_type', 'QualityImprovement')
+            ?? $plansToUse->firstWhere('plan_type', 'AnnualOperational')
+            ?? $plansToUse->first();
+        $planData = $formatPlan($primaryPlan);
+
+        // بناء مصفوفة تغطية المؤشرات المنخفضة (0، 1، 2) عبر كافة خطط التحسين المدرسية
+        $lowScoringIndicators = collect($allFlatIndicators)->filter(fn($i) => $i['schoolScore'] !== null && (int)$i['schoolScore'] <= 2);
+
+        $allPlanAreas = $plansToUse->flatMap(fn($p) => $p->areas->map(fn($a) => [
+            'planId' => $p->plan_id,
+            'planType' => $p->plan_type,
+            'planTitle' => $p->title,
+            'area' => $a,
+            'actions' => $p->actions->where('area_id', $a->area_id),
+        ]));
+
+        $lowIndicatorsMatrix = $lowScoringIndicators->map(function ($ind) use ($allPlanAreas) {
+            $matchingAreas = $allPlanAreas->where('area.indicator_id', $ind['indicatorId']);
+            $isCovered = $matchingAreas->isNotEmpty();
+
+            $coveringPlans = $matchingAreas->map(function ($match) {
+                $actions = $match['actions'];
+                $avgProg = $actions->count() > 0 ? round($actions->avg('completion_percentage'), 1) : 0;
+                return [
+                    'planId' => $match['planId'],
+                    'planType' => $match['planType'],
+                    'planTitle' => $match['planTitle'],
+                    'areaId' => $match['area']->area_id,
+                    'areaTitle' => $match['area']->name,
+                    'actionsCount' => $actions->count(),
+                    'averageProgress' => $avgProg,
+                ];
+            })->values()->toArray();
+
+            return [
+                'indicatorId' => $ind['indicatorId'],
+                'code' => $ind['code'],
+                'title' => $ind['title'],
+                'standardName' => $ind['standardName'],
+                'subStandardName' => $ind['subStandardName'],
+                'schoolScore' => $ind['schoolScore'],
+                'scoreLevelName' => match ($ind['schoolScore']) {
+                    2 => 'متوسط (2)',
+                    1 => 'ضعيف (1)',
+                    0 => 'غير متوفر (0)',
+                    default => 'غير مقيّم',
+                },
+                'isCovered' => $isCovered,
+                'isAddressed' => $isCovered,
+                'coveringPlans' => $coveringPlans,
+                'unaddressedReason' => $isCovered ? null : 'فجوة معيارية لم تُدرج في أي خطة تحسين بعد',
+            ];
+        })->values()->toArray();
+
+        $unaddressedLowCount = collect($lowIndicatorsMatrix)->where('isCovered', false)->count();
+
+        // قائمة النواقص المرصودة
+        $deficienciesList = $savedDeficiencies->map(function ($def) use ($allFlatIndicators) {
+            $ind = collect($allFlatIndicators)->firstWhere('indicatorId', $def->indicator_id);
+            return [
+                'id' => $def->id,
+                'indicatorId' => $def->indicator_id,
+                'indicatorCode' => $ind['code'] ?? "IND-{$def->indicator_id}",
+                'indicatorTitle' => $ind['title'] ?? 'مؤشر تقييمي',
+                'standardName' => $ind['standardName'] ?? 'معيار عام',
+                'category' => $def->deficiency_category,
+                'note' => $def->supervisor_note,
+                'directives' => $def->directives,
+                'createdAt' => $def->created_at?->toIso8601String(),
+            ];
+        })->values()->toArray();
+
+        $allIndicatorsCount = count($allFlatIndicators) ?: 109;
         $isCompleteRubric = $totalScored >= $allIndicatorsCount;
         $compliancePct = $allIndicatorsCount > 0 ? round(($totalScored / $allIndicatorsCount) * 100, 1) : 0;
 
@@ -556,7 +944,7 @@ class SupervisionController extends Controller
         $schoolData = [
             'schoolId' => $school?->school_id ?? 1,
             'schoolCode' => $school?->school_code ?? "SCH-{$school?->school_id}",
-            'schoolName' => $school?->name ?? $school?->school_name ?? 'مدرسة التقييم',
+            'schoolName' => $school?->school_name ?? $school?->name ?? 'مدرسة التقييم',
             'educationalStage' => $school?->educational_stage ?? 'أساسي / ثانوي',
             'directorate' => $school?->educational_district ?? 'غير محدد',
             'governorate' => $school?->governorate ?? 'غير محدد',
@@ -567,7 +955,7 @@ class SupervisionController extends Controller
         $schoolInfoData = [
             'id' => $school?->school_id ?? 1,
             'code' => $school?->school_code ?? "SCH-{$school?->school_id}",
-            'name' => $school?->name ?? $school?->school_name ?? 'مدرسة التقييم',
+            'name' => $school?->school_name ?? $school?->name ?? 'مدرسة التقييم',
             'stage' => $school?->educational_stage ?? 'أساسي / ثانوي',
             'directorate' => $school?->educational_district ?? 'غير محدد',
             'governorate' => $school?->governorate ?? 'غير محدد',
@@ -582,7 +970,7 @@ class SupervisionController extends Controller
             'scoredIndicators' => $totalScored,
             'evidencesAttachedCount' => $totalWithEvidence,
             'attachedEvidencesCount' => $totalWithEvidence,
-            'actionsCount' => $plan ? $plan->actions->count() : 0,
+            'actionsCount' => $primaryPlan ? $primaryPlan->actions->count() : 0,
             'compliancePercentage' => $compliancePct,
         ];
 
@@ -590,6 +978,23 @@ class SupervisionController extends Controller
         $isReReview = $attemptNo > 1;
 
         $deficienciesCount = $savedDeficiencies->count() > 0 ? $savedDeficiencies->count() : $openItems->count();
+        $avgScore = $totalScored > 0 ? round(collect($allFlatIndicators)->whereNotNull('schoolScore')->avg('schoolScore'), 2) : 0;
+
+        $automatedChecks = [
+            'rubricCompleteness' => $isCompleteRubric,
+            'allEvidencesAttached' => $totalWithEvidence > 0,
+            'minEvidenceMet' => $evidenceSufficiency ? (bool)($evidenceSufficiency['overall']['is_sufficient'] ?? true) : ($totalWithEvidence > 0),
+            'flagsCount' => $deficienciesCount,
+            'totalIndicators' => $allIndicatorsCount,
+            'scoredIndicators' => $totalScored,
+            'missingIndicatorsCount' => max(0, $allIndicatorsCount - $totalScored),
+            'missingMandatoryEvidenceCount' => $evidenceSufficiency ? (int)($evidenceSufficiency['overall']['mandatory_missing_count'] ?? 0) : 0,
+            'unaddressedLowIndicatorsCount' => $unaddressedLowCount,
+            'averageScore' => $avgScore,
+            'notes' => $isCompleteRubric
+                ? "تم فحص الرصد لـ {$allIndicatorsCount} مؤشراً كاملاً بنجاح."
+                : "تنبيه فحص آلي: رصدت المدرسة {$totalScored} من أصل {$allIndicatorsCount} مؤشراً.",
+        ];
 
         return ApiResponse::success([
             'submissionId' => $submission?->submission_id ?? $evaluation->evaluation_id,
@@ -611,28 +1016,31 @@ class SupervisionController extends Controller
             'school' => $schoolData,
             'schoolInfo' => $schoolInfoData,
             'summary' => $summaryData,
-            'automatedChecks' => [
-                'rubricCompleteness' => $isCompleteRubric,
-                'allEvidencesAttached' => $totalWithEvidence > 0,
-                'minEvidenceMet' => true,
-                'flagsCount' => $deficienciesCount,
-                'notes' => $isCompleteRubric
-                    ? "تم فحص الرصد لـ {$allIndicatorsCount} مؤشراً كاملاً بنجاح."
-                    : "تنبيه فحص آلي: رصدت المدرسة {$totalScored} من أصل {$allIndicatorsCount} مؤشراً.",
+            'standards' => $standardsTree,
+            'vault' => [
+                'documents' => $vaultDocuments,
+                'stats' => $vaultStats,
             ],
+            'evidenceInventory' => $evidenceSufficiency,
+            'planDetails' => $planData,
+            'plans' => $allFormattedPlans,
+            'allPlans' => $allFormattedPlans,
+            'lowIndicatorsMatrix' => $lowIndicatorsMatrix,
+            'deficienciesList' => $deficienciesList,
+            'automatedChecks' => $automatedChecks,
             'improvementPlan' => [
-                'planId' => $plan?->plan_id,
-                'status' => $plan ? match($plan->status) {
+                'planId' => $primaryPlan?->plan_id,
+                'status' => $primaryPlan ? match($primaryPlan->status) {
                     'Completed' => 'مكتملة التنفيذ',
                     'Approved' => 'معتمدة ومرفقة',
-                    'InProgress' => 'قيد التنفيذ',
+                    'InProgress', 'Active' => 'قيد التنفيذ',
                     default => 'مسودة مرفقة',
                 } : 'غير منشأة بعد',
-                'title' => $plan?->title ?? 'خطة التحسين والتطوير المدرسي',
-                'actionsCount' => $plan?->actions->count() ?? 0,
-                'priorities' => !empty($planPriorities) ? $planPriorities : [],
+                'title' => $primaryPlan?->title ?? 'خطة التحسين والتطوير المدرسي',
+                'actionsCount' => $primaryPlan ? $primaryPlan->actions->count() : 0,
+                'priorities' => $primaryPlan ? $primaryPlan->actions->pluck('title')->take(4)->toArray() : [],
             ],
-            'indicators' => $indicatorsAudit,
+            'indicators' => $allFlatIndicators,
             'openCompletionRequest' => $openCompletionRequestData,
             'deficienciesCount' => $deficienciesCount,
             'exportPdfUrl' => "/api/v1/evaluations/{$evaluation->evaluation_id}/export-pdf",
@@ -653,6 +1061,7 @@ class SupervisionController extends Controller
         $activeCycle = EvaluationCycle::where('status', 'Active')->latest('cycle_id')->first();
 
         $query = Evaluation::with(['school', 'cycle', 'reports.submissions' => fn($q) => $q->orderBy('attempt_no', 'desc')])
+            ->whereIn('status', ['Submitted', 'UnderReview', 'NeedsCompletion', 'Completed'])
             ->when($activeCycle, fn($q) => $q->where('cycle_id', $activeCycle->cycle_id))
             ->when($supervisorGov, fn($q) => $q->whereHas('school', fn($sq) => $sq->where('governorate', $supervisorGov)));
 
@@ -660,11 +1069,15 @@ class SupervisionController extends Controller
             $submission = $evaluation->reports->flatMap->submissions->sortByDesc('attempt_no')->first();
             $status = $submission?->status ?? $evaluation->status;
 
+            if (in_array($status, ['Draft', 'Drafting'])) {
+                return null;
+            }
+
             return [
                 'evaluationId' => $evaluation->evaluation_id,
                 'submissionId' => $submission?->submission_id ?? $evaluation->evaluation_id,
                 'schoolId' => $evaluation->school_id,
-                'schoolName' => $evaluation->school?->name ?? 'مدرسة التقييم',
+                'schoolName' => $evaluation->school?->school_name ?? $evaluation->school?->name ?? 'مدرسة التقييم',
                 'schoolCode' => $evaluation->school?->school_code ?? "SCH-{$evaluation->school_id}",
                 'governorate' => $evaluation->school?->governorate ?? 'غير محدد',
                 'status' => $status,
@@ -678,7 +1091,7 @@ class SupervisionController extends Controller
                 'submittedAt' => $submission?->submitted_at?->toIso8601String() ?? $evaluation->updated_at->toIso8601String(),
                 'attemptNo' => $submission?->attempt_no ?? 1,
             ];
-        })->sortBy(function ($item) {
+        })->filter()->sortBy(function ($item) {
             return match ($item['status']) {
                 'Submitted' => 1,
                 'UnderReview' => 2,

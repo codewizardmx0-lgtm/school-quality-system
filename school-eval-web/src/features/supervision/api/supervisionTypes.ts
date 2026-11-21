@@ -144,6 +144,232 @@ export interface IndicatorDescriptorItem {
   description: string;
 }
 
+export interface SupervisionDescriptorItem {
+  descriptorId: number;
+  score: number;
+  level: number;
+  label: string;
+  title: string;
+  description: string;
+  isSelected: boolean;
+}
+
+export interface SupervisionEvidenceReqItem {
+  id: number;
+  requirementId: number;
+  title: string;
+  description: string;
+  required: boolean;
+  isMandatory: boolean;
+  isCovered: boolean;
+  coveringDocuments?: string[];
+  coveringDocumentsSummary?: string;
+}
+
+export interface SupervisionVerificationToolItem {
+  id: number;
+  name: string;
+  toolType: string;
+  description: string;
+}
+
+export interface SupervisionIndicatorItem {
+  indicatorId: number;
+  code: string;
+  indicatorNumber: number;
+  title: string;
+  name: string;
+  description: string;
+  weight: number;
+  standardId: number;
+  standardName: string;
+  subStandardId: number;
+  subStandardName: string;
+  schoolScore: number | null;
+  scoreLevelName: string;
+  scoreDescription?: string;
+  evaluatorJustification?: string;
+  internalReviewNotes?: string | null;
+  evidenceCount: number;
+  mandatoryRequirementsCount: number;
+  coveredRequirementsCount: number;
+  descriptors: SupervisionDescriptorItem[];
+  verificationTools: SupervisionVerificationToolItem[];
+  evidenceRequirements: SupervisionEvidenceReqItem[];
+  evidences: EvidenceItem[];
+  hasDefect: boolean;
+  defectCategory?: string | null;
+  defectReason?: string | null;
+  directives?: string | null;
+  supervisorFeedback?: string;
+}
+
+export interface SupervisionSubStandardItem {
+  subStandardId: number;
+  code: string;
+  title: string;
+  description: string;
+  weight: number;
+  guidance?: string;
+  indicators: SupervisionIndicatorItem[];
+}
+
+export interface SupervisionStandardItem {
+  standardId: number;
+  code: string;
+  title: string;
+  name: string;
+  description: string;
+  weight: number;
+  stats: {
+    totalIndicators: number;
+    scoredIndicators: number;
+    unenteredIndicators: number;
+    level3Count: number;
+    level2Count: number;
+    level1Count: number;
+    level0Count: number;
+    totalEvidences: number;
+    totalMandatoryRequirements: number;
+    coveredRequirements: number;
+    coveragePercentage: number;
+  };
+  subStandards: SupervisionSubStandardItem[];
+}
+
+export interface SupervisionVaultDocument {
+  id: number;
+  title: string;
+  documentType: string;
+  documentTypeArabic?: string;
+  description: string;
+  versionNumber?: number;
+  createdAt: string;
+  linksCount: number;
+  linkedIndicators: Array<{
+    indicatorId: number;
+    code: string;
+    title: string;
+  }>;
+  fileName: string;
+  fileSize: number;
+  fileSizeFormatted: string;
+  mimeType: string;
+  downloadUrl: string | null;
+  previewUrl: string | null;
+}
+
+export interface SupervisionVaultStats {
+  totalDocuments: number;
+  totalLinks: number;
+  totalSizeBytes: number;
+  documentTypesCount: number;
+}
+
+export interface ExecutionEvidenceItem {
+  id: number;
+  documentTitle: string;
+  fileName: string;
+  fileSizeBytes: number;
+  fileSizeFormatted: string;
+  mimeType: string;
+  downloadUrl: string | null;
+  previewUrl: string | null;
+  uploadedAt?: string;
+}
+
+export interface SupervisionPlanAreaItem {
+  areaId: number;
+  indicatorId: number;
+  indicatorCode: string;
+  indicatorTitle: string;
+  name: string;
+  description: string;
+  priority: string;
+  priorityLabel: string;
+  currentScore: number;
+  targetScore: number;
+  gap: number;
+  status: string;
+  actionsCount: number;
+  averageProgress?: number;
+}
+
+export interface SupervisionPlanActionItem {
+  actionId: number;
+  areaId: number;
+  areaTitle: string;
+  title: string;
+  responsible: string;
+  startDate?: string | null;
+  dueDate?: string | null;
+  completionPercentage: number;
+  progressDescription?: string | null;
+  status: string;
+  statusArabic: string;
+  baselineScore?: number | null;
+  targetScore: number;
+  gap: number;
+  evidenceCount?: number;
+  evidenceLinks?: ExecutionEvidenceItem[];
+}
+
+export interface LowIndicatorMatrixItem {
+  indicatorId: number;
+  code: string;
+  title: string;
+  standardName: string;
+  subStandardName: string;
+  schoolScore: number;
+  scoreLevelName: string;
+  isCovered: boolean;
+  isAddressed: boolean;
+  coveringPlans: Array<{
+    planId: number;
+    planType: string;
+    planTitle: string;
+    areaId: number;
+    areaTitle: string;
+    actionsCount: number;
+    averageProgress: number;
+  }>;
+  unaddressedReason?: string | null;
+}
+
+export interface SupervisionPlanDetails {
+  planId: number;
+  title: string;
+  status: string;
+  statusArabic: string;
+  planType: string;
+  planTypeLabel: string;
+  versionNumber: number;
+  academicYear: string;
+  startDate?: string | null;
+  endDate?: string | null;
+  areas: SupervisionPlanAreaItem[];
+  actions: SupervisionPlanActionItem[];
+  stats: {
+    totalAreas: number;
+    totalActions: number;
+    completedActions: number;
+    inProgressActions: number;
+    averageProgress: number;
+  };
+}
+
+export interface SupervisionDeficiencyItem {
+  id: number;
+  indicatorId: number;
+  indicatorCode: string;
+  indicatorTitle: string;
+  standardName: string;
+  category: string;
+  note: string;
+  directives?: string | null;
+  createdAt: string;
+}
+
 export interface IndicatorAuditItem {
   indicatorId: number;
   code: string;
@@ -238,6 +464,17 @@ export interface SubmissionReviewData {
     priorities: string[];
   };
   indicators: IndicatorAuditItem[];
+  standards?: SupervisionStandardItem[];
+  vault?: {
+    documents: SupervisionVaultDocument[];
+    stats: SupervisionVaultStats;
+  };
+  evidenceInventory?: any;
+  planDetails?: SupervisionPlanDetails | null;
+  plans?: SupervisionPlanDetails[];
+  allPlans?: SupervisionPlanDetails[];
+  lowIndicatorsMatrix?: LowIndicatorMatrixItem[];
+  deficienciesList?: SupervisionDeficiencyItem[];
   openCompletionRequest?: OpenCompletionRequestData | null;
   deficienciesCount?: number;
   exportPdfUrl?: string;

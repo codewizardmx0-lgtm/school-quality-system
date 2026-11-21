@@ -1102,22 +1102,24 @@ export const CyclesListPage: React.FC<CyclesListPageProps> = ({
                                 </button>
                               )}
 
-                              {/* استنساخ دورة جديدة */}
-                              <button
-                                type="button"
-                                onClick={() => handleOpenCloneCycle(cycle)}
-                                title="تهيئة واستنساخ دورة جديدة من هذه الدورة للعام القادم"
-                                style={{
-                                  padding: '6px 8px',
-                                  borderRadius: '6px',
-                                  backgroundColor: '#FFFFFF',
-                                  border: '1px solid #CBD5E1',
-                                  color: '#64748B',
-                                  cursor: 'pointer',
-                                }}
-                              >
-                                <Copy size={14} />
-                              </button>
+                              {/* استنساخ دورة جديدة (متاح حصراً للدورات الوطنية العامة) */}
+                              {!cycle.scopeGovernorate && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenCloneCycle(cycle)}
+                                  title="تهيئة واستنساخ دورة جديدة من هذه الدورة للعام القادم"
+                                  style={{
+                                    padding: '6px 8px',
+                                    borderRadius: '6px',
+                                    backgroundColor: '#FFFFFF',
+                                    border: '1px solid #CBD5E1',
+                                    color: '#64748B',
+                                    cursor: 'pointer',
+                                  }}
+                                >
+                                  <Copy size={14} />
+                                </button>
+                              )}
                             </div>
                           </td>
                         </tr>

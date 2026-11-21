@@ -115,6 +115,15 @@ export const CycleFormTab: React.FC<CycleFormTabProps> = ({
     'الالتزام الصارم بالوثيقة الوطنية للمعايير المعتمدة ورفع الشواهد الميدانية مع خطة تحسين تشغيلية قابلة للقياس.'
   );
   const [targetGovernorate, setTargetGovernorate] = useState<string>('كافة المحافظات');
+
+  // التحقق من تعارض النطاق الجغرافي المختار مع الدورات النشطة
+  const isScopeConflict = useMemo(() => {
+    if (mode === 'edit') return false;
+    if (targetGovernorate === 'كافة المحافظات') {
+      return activeCycles.length > 0;
+    }
+    return !!generalActiveCycle || occupiedGovernorates.includes(targetGovernorate);
+  }, [mode, targetGovernorate, activeCycles.length, generalActiveCycle, occupiedGovernorates]);
   const [selectedStages, setSelectedStages] = useState<string[]>([
     'المرحلة الأساسية (1-9)',
     'المرحلة الثانوية (10-12)',
@@ -1449,7 +1458,14 @@ export const CycleFormTab: React.FC<CycleFormTabProps> = ({
 
           <button
             type="submit"
-            disabled={isSubmitting || !isCentralSupervisor || (mode !== 'edit' && !!activeCycle)}
+            disabled={isSubmitting || !isCentralSupervisor || isScopeConflict}
+            title={
+              !isCentralSupervisor
+                ? 'مخصص للمشرف العام فقط'
+                : isScopeConflict
+                ? 'النطاق الجغرافي المختار مشغول بدورة نشطة حالياً'
+                : undefined
+            }
             style={{
               display: 'inline-flex',
               alignItems: 'center',
@@ -1460,18 +1476,18 @@ export const CycleFormTab: React.FC<CycleFormTabProps> = ({
               fontWeight: 700,
               color: '#FFFFFF',
               backgroundColor:
-                isSubmitting || !isCentralSupervisor || (mode !== 'edit' && !!activeCycle)
+                isSubmitting || !isCentralSupervisor || isScopeConflict
                   ? '#94A3B8'
                   : mode === 'edit'
                   ? '#0D9488'
                   : '#2563EB',
               border: 'none',
               cursor:
-                isSubmitting || !isCentralSupervisor || (mode !== 'edit' && !!activeCycle)
+                isSubmitting || !isCentralSupervisor || isScopeConflict
                   ? 'not-allowed'
                   : 'pointer',
               boxShadow:
-                isSubmitting || !isCentralSupervisor || (mode !== 'edit' && !!activeCycle)
+                isSubmitting || !isCentralSupervisor || isScopeConflict
                   ? 'none'
                   : '0 2px 8px rgba(37, 99, 235, 0.25)',
             }}

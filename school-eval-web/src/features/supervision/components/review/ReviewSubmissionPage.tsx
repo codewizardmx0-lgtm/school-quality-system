@@ -3,41 +3,44 @@
  * الشاشة 4: مركز استلام ومراجعة وتدقيق مخرجات التقييم المدرسي
  * منصة ارتقاء للتقييم الذاتي والتحسين المدرسي
  * 
- * متوافقة مع FR-SUP-03..11, UC-SUP-03, BR-MIN-02, BR-MIN-03, BR-SCH-03
- * - تصفح ديناميكي لكافة المخرجات المتاحة في النطاق الجغرافي
- * - استئصال تام للفظ الاعتماد والقيم الوهمية الثابتة
- * - فلترة متقدمة للمعايير الوطنية السبعة وفلاتر سريعة للمؤشرات الـ 109
- * - طي افتراضي للشواهد وأدوات التحقق (FR-SUP-07)
- * - حوكمة الحالات الثلاث (NeedsCompletion, Re-review, Completed Lock Mode)
- * - تصدير رسمي للتقارير بصيغة PDF و Excel وروابط حقيقية للشواهد
+ * متوافقة 100% مع:
+ * - FR-SUP-03..11, UC-SUP-03, BR-MIN-02, BR-MIN-03, BR-SCH-03
+ * - عرض كامل 100% (Full-Width Layout) بدون العمود الجانبي الضيق
+ * - شريط علوي مدمج لاختيار المدارس المستلم مخرجاتها مع مزامنة القائمة الجانبية تلقائياً
+ * - 4 تبويبات رئيسية عريضة وشاملة:
+ *   1. شجرة المعايير والتقييم الذاتي (109 مؤشرات مع واصفات الروبك الرباعية ورصد النواقص)
+ *   2. مستودع وجرد الشواهد الميدانية (إحصائيات الوثائق الفريدة الحقيقية، خزانة الوثائق، وجرد الشواهد)
+ *   3. خطة تحسين الأداء المدرسية (مجالات التحسين، الفجوة المعيارية، جدول الإجراءات التنفيذية)
+ *   4. نتائج الفحص الآلي والقرار الإشرافي (الفحص الآلي، سجل النواقص، ضوابط الحوكمة، خيارات القرار)
  */
 
-import React, { useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
-  ArrowRight,
-  Download,
-  Lock,
-  FileText,
-  Target,
-  Layers,
-  AlertTriangle,
-  RefreshCw,
-  CheckCircle2,
-  Search,
-  Filter,
-  FileSpreadsheet,
   Building2,
   ChevronRight,
+  RefreshCw,
+  FileText,
+  FileSpreadsheet,
+  AlertTriangle,
+  Layers,
+  FolderGit2,
+  TrendingUp,
+  ShieldCheck,
+  Loader2,
 } from 'lucide-react';
-import { useSubmissionsReview, type ReviewTabType, type QuickFilterType } from '../../hooks/useSubmissionsReview';
-import { IndicatorAuditRow } from './IndicatorAuditRow';
-import { SupervisorDecisionPanel } from './SupervisorDecisionPanel';
+import { supervisionApi } from '../../api/supervisionApi';
+import { useSubmissionsReview } from '../../hooks/useSubmissionsReview';
+import { SupervisionStandardsTreeTab } from './SupervisionStandardsTreeTab';
+import { SupervisionEvidenceVaultTab } from './SupervisionEvidenceVaultTab';
+import { SupervisionImprovementPlanTab } from './SupervisionImprovementPlanTab';
+import { SupervisionDecisionTab } from './SupervisionDecisionTab';
 import { EmptySupervisionState } from '../common/EmptySupervisionState';
 import type { SupervisionScreenKey } from '../../api/supervisionTypes';
 
 interface ReviewSubmissionPageProps {
   submissionId?: number;
   schoolId?: number;
+  onSelectSchool?: (schoolId: number, schoolName: string) => void;
   onNavigate: (
     screen: SupervisionScreenKey,
     params?: { submissionId?: number; schoolId?: number; preloadedItems?: any[] }
@@ -47,6 +50,7 @@ interface ReviewSubmissionPageProps {
 export const ReviewSubmissionPage: React.FC<ReviewSubmissionPageProps> = ({
   submissionId,
   schoolId: _schoolId,
+  onSelectSchool,
   onNavigate,
 }) => {
   const {
@@ -58,895 +62,612 @@ export const ReviewSubmissionPage: React.FC<ReviewSubmissionPageProps> = ({
     availableSubmissions,
     isLoadingAvailable,
     selectSubmission,
-    activeTab,
-    setActiveTab,
-    decisionMode,
-    setDecisionMode,
-    supervisorNotes,
-    setSupervisorNotes,
-    defectiveItems,
-    defectiveCount,
-    saveDeficiency,
-    removeDeficiency,
-    toggleIndicatorDefect,
-    handleCloseReview,
-    isActionLoading,
-    actionSuccessMessage,
-    actionErrorMessage,
-    selectedStandardId,
-    setSelectedStandardId,
-    quickFilter,
-    setQuickFilter,
-    searchQuery,
-    setSearchQuery,
-    filteredIndicators,
-    standardsList,
   } = useSubmissionsReview(submissionId);
 
-  // إحصائيات سريعة للفلترة
-  const filterCounts = useMemo(() => {
-    if (!reviewData?.indicators) {
-      return { total: 0, defective: 0, missingEvidence: 0, lowScore: 0 };
-    }
-    const total = reviewData.indicators.length;
-    const defective = reviewData.indicators.filter(
-      (i) => i.hasDefect || defectiveItems.has(i.indicatorId)
-    ).length;
-    const missingEvidence = reviewData.indicators.filter(
-      (i) => i.schoolScore > 0 && i.evidences.length === 0
-    ).length;
-    const lowScore = reviewData.indicators.filter((i) => i.schoolScore <= 1).length;
+  // التبويب النشط (افتراضياً: شجرة المعايير)
+  const [activeTab, setActiveTab] = useState<'standards' | 'vault' | 'plan' | 'decision'>('standards');
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
+  const [isExportingExcel, setIsExportingExcel] = useState(false);
 
-    return { total, defective, missingEvidence, lowScore };
-  }, [reviewData?.indicators, defectiveItems]);
-
-  // التحويل لشاشة إصدار طلب الاستكمال مع تمرير البنود المحددة
-  const handleProceedToCompletion = () => {
+  // تصدير PDF مصادق
+  const handleExportPdf = async () => {
     if (!reviewData) return;
-
-    const preloaded: any[] = [];
-    reviewData.indicators.forEach((ind) => {
-      if (defectiveItems.has(ind.indicatorId)) {
-        const itemInfo = defectiveItems.get(ind.indicatorId)!;
-        preloaded.push({
-          indicatorId: ind.indicatorId,
-          code: ind.code,
-          title: ind.title,
-          defectReason: itemInfo.defectReason,
-          grantedPermission: 'استبدال / تحديث مرفق الشاهد',
-          directives: itemInfo.directives,
-          evidenceLinkId: ind.evidences[0]?.id ?? null,
-        });
-      }
-    });
-
-    onNavigate('completion-requests', {
-      submissionId: activeSubmissionId,
-      schoolId: reviewData?.school?.schoolId ?? _schoolId,
-      preloadedItems: preloaded,
-    });
+    setIsExportingPdf(true);
+    try {
+      await supervisionApi.exportEvaluationPdf(reviewData.evaluationId, reviewData.school?.schoolName);
+    } catch (e: any) {
+      alert(e?.message || 'تعذر تصدير تقرير التقييم PDF.');
+    } finally {
+      setIsExportingPdf(false);
+    }
   };
 
-  // حالة عدم وجود مخرجات في النطاق الإشرافي
-  if (!isLoading && !reviewData && availableSubmissions.length === 0) {
+  // تصدير Excel مصادق
+  const handleExportExcel = async () => {
+    if (!reviewData) return;
+    setIsExportingExcel(true);
+    try {
+      await supervisionApi.exportEvaluationExcel(reviewData.evaluationId, reviewData.school?.schoolName);
+    } catch (e: any) {
+      alert(e?.message || 'تعذر تصدير سجل التقييم Excel.');
+    } finally {
+      setIsExportingExcel(false);
+    }
+  };
+
+  // مزامنة المدرسة المختارة مع الشريط الجانبي والـ Layout
+  useEffect(() => {
+    if (reviewData?.school && onSelectSchool) {
+      onSelectSchool(
+        reviewData.school.schoolId,
+        reviewData.school.schoolName || 'مدرسة التقييم'
+      );
+    }
+  }, [reviewData?.school?.schoolId, reviewData?.school?.schoolName, onSelectSchool]);
+
+  // حالة عدم وجود أي مخرجات متاحة للمراجعة
+  if (!isLoadingAvailable && availableSubmissions.length === 0 && !reviewData && !isLoading) {
     return (
-      <div style={{ padding: '32px' }}>
+      <div style={{ padding: '32px', maxWidth: '1440px', margin: '0 auto' }}>
         <EmptySupervisionState
-          title="لا توجد مخرجات تقييم بانتظار المراجعة"
-          description="كافة مدارس نطاقك الإشرافي إما لم ترفع مخرجاتها بعد أو تم إغلاق مراجعتها بالكامل بنجاح."
-          actionText="العودة إلى لوحة المتابعة المركزية"
+          title="لا توجد مخرجات تقييم مرفوعة حالياً للمراجعة"
+          description="لم تقم أي مدرسة برفع مخرج تقييمها الذاتي في نطاقك الجغرافي حتى الآن، أو أن كافة المدارس ما زالت في مرحلة المسودة والإعداد الميداني."
+          actionText="العودة للوحة المتابعة المركزية"
           onAction={() => onNavigate('dashboard')}
         />
       </div>
     );
   }
 
-  return (
-    <div style={{ padding: '24px 32px', maxWidth: '1440px', margin: '0 auto' }}>
-      <style>{`
-        @media (max-width: 1024px) {
-          .supervision-review-grid {
-            grid-template-columns: 1fr !important;
-          }
-        }
-      `}</style>
+  // حالة التحميل الأولي
+  if (isLoading && !reviewData) {
+    return (
+      <div style={{ padding: '32px', maxWidth: '1440px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+        <div style={{ height: '70px', borderRadius: '12px', backgroundColor: '#E2E8F0' }} className="animate-pulse" />
+        <div style={{ height: '54px', borderRadius: '10px', backgroundColor: '#E2E8F0' }} className="animate-pulse" />
+        <div style={{ height: '360px', borderRadius: '12px', backgroundColor: '#E2E8F0' }} className="animate-pulse" />
+      </div>
+    );
+  }
 
-      {/* 1. الترويسة العلوية، زر الرجوع، وشريط اختيار المخرج النشط */}
-      <div style={{ marginBottom: '20px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+  // حالة حدوث خطأ
+  if (error && !reviewData) {
+    return (
+      <div style={{ padding: '32px', maxWidth: '1440px', margin: '0 auto' }}>
+        <div
+          style={{
+            padding: '24px',
+            borderRadius: '12px',
+            backgroundColor: '#FEF2F2',
+            border: '1px solid #FECACA',
+            color: '#DC2626',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '12px',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 700 }}>
+            <AlertTriangle size={18} />
+            <span>تعذر تحميل مخرج التقييم المطلوب</span>
+          </div>
+          <p style={{ margin: 0, fontSize: '13px' }}>{error}</p>
+          <button
+            type="button"
+            onClick={refetch}
+            style={{
+              alignSelf: 'flex-start',
+              padding: '8px 16px',
+              borderRadius: '6px',
+              backgroundColor: '#DC2626',
+              color: '#FFFFFF',
+              border: 'none',
+              cursor: 'pointer',
+              fontWeight: 600,
+              fontSize: '12px',
+            }}
+          >
+            إعادة المحاولة
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!reviewData) return null;
+
+  const school = reviewData.school;
+  const status = reviewData.status;
+  const isReReview = reviewData.isReReview || reviewData.attemptNo > 1;
+  const attemptNo = reviewData.attemptNo || 1;
+  const deficienciesCount = reviewData.deficienciesCount || 0;
+
+  // شارة حالة المخرج
+  const statusConfig = {
+    Completed: { label: 'مكتمل المراجعة', bg: '#DCFCE7', text: '#15803D', border: '#86EFAC' },
+    NeedsCompletion: { label: 'يحتاج استكمال', bg: '#FEF3C7', text: '#B45309', border: '#FCD34D' },
+    Submitted: { label: 'مرفوع جديد', bg: '#EFF6FF', text: '#1D4ED8', border: '#93C5FD' },
+    UnderReview: { label: 'قيد التدقيق الإشرافي', bg: '#F5F3FF', text: '#6D28D9', border: '#C4B5FD' },
+    Draft: { label: 'مسودة', bg: '#F1F5F9', text: '#475569', border: '#CBD5E1' },
+  }[status] || { label: status, bg: '#F1F5F9', text: '#475569', border: '#CBD5E1' };
+
+  return (
+    <div style={{ padding: '24px 32px', maxWidth: '1440px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+      {/* 1. مسار التصفح (Breadcrumb) وأدوات التصدير */}
+      <div
+        style={{
+          display: 'flex',
+          flexWrap: 'wrap',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '12px',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: '#64748B' }}>
           <button
             type="button"
             onClick={() => onNavigate('dashboard')}
             style={{
+              background: 'none',
+              border: 'none',
+              padding: 0,
+              color: '#2563EB',
+              cursor: 'pointer',
+              fontWeight: 600,
+            }}
+          >
+            لوحة المتابعة المركزية
+          </button>
+          <ChevronRight size={14} />
+          <span style={{ color: '#1E293B', fontWeight: 700 }}>
+            مركز استلام ومراجعة المخرجات
+          </span>
+        </div>
+
+        {/* أزرار التصدير وتحديث البيانات */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <button
+            type="button"
+            onClick={refetch}
+            title="تحديث بيانات المخرج"
+            style={{
+              padding: '7px 12px',
+              borderRadius: '8px',
+              backgroundColor: '#FFFFFF',
+              border: '1px solid #CBD5E1',
+              color: '#475569',
+              cursor: 'pointer',
               display: 'inline-flex',
               alignItems: 'center',
               gap: '6px',
-              fontSize: '13px',
+              fontSize: '12px',
               fontWeight: 600,
-              color: '#64748B',
-              backgroundColor: 'transparent',
-              border: 'none',
-              cursor: 'pointer',
             }}
           >
-            <ArrowRight size={16} />
-            <span>العودة إلى لوحة المتابعة المركزية</span>
+            <RefreshCw size={13} />
+            تحديث
           </button>
 
-          {/* محدد التبديل بين المدارس المتاحة للمراجعة */}
-          {availableSubmissions.length > 0 && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Building2 size={16} color="#64748B" />
-              <label style={{ fontSize: '12px', fontWeight: 700, color: '#475569' }}>
-                المدرسة قيد التدقيق:
+          <button
+            type="button"
+            onClick={handleExportPdf}
+            disabled={isExportingPdf}
+            style={{
+              padding: '7px 14px',
+              borderRadius: '8px',
+              backgroundColor: '#FFFFFF',
+              border: '1px solid #CBD5E1',
+              color: '#1E293B',
+              cursor: isExportingPdf ? 'not-allowed' : 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              fontSize: '12px',
+              fontWeight: 600,
+              opacity: isExportingPdf ? 0.7 : 1,
+            }}
+          >
+            {isExportingPdf ? (
+              <Loader2 size={14} className="animate-spin" color="#DC2626" />
+            ) : (
+              <FileText size={14} color="#DC2626" />
+            )}
+            {isExportingPdf ? 'جارِ التصدير...' : 'تصدير تقرير الجودة (PDF)'}
+          </button>
+
+          <button
+            type="button"
+            onClick={handleExportExcel}
+            disabled={isExportingExcel}
+            style={{
+              padding: '7px 14px',
+              borderRadius: '8px',
+              backgroundColor: '#FFFFFF',
+              border: '1px solid #CBD5E1',
+              color: '#1E293B',
+              cursor: isExportingExcel ? 'not-allowed' : 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              fontSize: '12px',
+              fontWeight: 600,
+              opacity: isExportingExcel ? 0.7 : 1,
+            }}
+          >
+            {isExportingExcel ? (
+              <Loader2 size={14} className="animate-spin" color="#16A34A" />
+            ) : (
+              <FileSpreadsheet size={14} color="#16A34A" />
+            )}
+            {isExportingExcel ? 'جارِ التصدير...' : 'تصدير سجل المراجعة (Excel)'}
+          </button>
+        </div>
+      </div>
+
+      {/* 2. الشريط العلوي المدمج: اختيار المدرسة والبيانات التعريفية والشارات */}
+      <div
+        style={{
+          padding: '18px 24px',
+          borderRadius: '14px',
+          backgroundColor: '#FFFFFF',
+          border: '1px solid #E2E8F0',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+          display: 'flex',
+          flexWrap: 'wrap',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '16px',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flex: 1, minWidth: '320px' }}>
+          {/* القائمة المنسدلة لاختيار المدرسة من المخرجات المتاحة */}
+          {availableSubmissions.length > 1 ? (
+            <div style={{ position: 'relative', minWidth: '280px' }}>
+              <label
+                style={{
+                  display: 'block',
+                  fontSize: '10px',
+                  fontWeight: 800,
+                  color: '#64748B',
+                  marginBottom: '3px',
+                }}
+              >
+                المدرسة المعروضة حالياً للمراجعة:
               </label>
               <select
                 value={activeSubmissionId ?? ''}
-                onChange={(e) => selectSubmission(Number(e.target.value))}
-                disabled={isLoadingAvailable}
+                onChange={(e) => {
+                  const val = Number(e.target.value);
+                  if (val) {
+                    selectSubmission(val);
+                    const found = availableSubmissions.find((s) => s.submissionId === val);
+                    if (found && onSelectSchool) {
+                      onSelectSchool(found.schoolId, found.schoolName);
+                    }
+                  }
+                }}
                 style={{
-                  padding: '6px 12px',
-                  borderRadius: '6px',
-                  border: '1px solid #CBD5E1',
-                  backgroundColor: '#FFFFFF',
-                  fontSize: '12px',
+                  width: '100%',
+                  padding: '8px 12px',
+                  borderRadius: '8px',
+                  border: '1.5px solid #2563EB',
+                  fontSize: '13px',
                   fontWeight: 700,
                   color: '#0F172A',
-                  outline: 'none',
+                  backgroundColor: '#EFF6FF',
                   cursor: 'pointer',
-                  maxWidth: '320px',
+                  outline: 'none',
                 }}
               >
                 {availableSubmissions.map((sub) => (
                   <option key={sub.submissionId} value={sub.submissionId}>
-                    {sub.schoolName} ({sub.schoolCode}) — {sub.statusArabic}{' '}
-                    {sub.attemptNo > 1 ? `[محاولة ${sub.attemptNo}]` : ''}
+                    {sub.schoolName} ({sub.schoolCode}) — [{sub.statusArabic}]
                   </option>
                 ))}
               </select>
             </div>
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div
+                style={{
+                  width: '44px',
+                  height: '44px',
+                  borderRadius: '10px',
+                  backgroundColor: '#EFF6FF',
+                  color: '#2563EB',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Building2 size={24} />
+              </div>
+              <div>
+                <h1 style={{ margin: 0, fontSize: '18px', fontWeight: 800, color: '#0F172A' }}>
+                  {school.schoolName}
+                </h1>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '3px', fontSize: '12px', color: '#64748B' }}>
+                  <span>رمز المدرسة: <strong>{school.schoolCode}</strong></span>
+                  <span>المرحلة: <strong>{school.educationalStage}</strong></span>
+                  <span>المحافظة: <strong>{school.governorate}</strong></span>
+                  <span>المديرية: <strong>{school.directorate}</strong></span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* تفاصيل المدرسة إن كانت القائمة المنسدلة ظاهرة */}
+          {availableSubmissions.length > 1 && (
+            <div style={{ borderRight: '1px solid #E2E8F0', paddingRight: '16px' }}>
+              <div style={{ fontSize: '14px', fontWeight: 800, color: '#1E293B' }}>
+                {school.schoolName}
+              </div>
+              <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px' }}>
+                {school.educationalStage} · {school.directorate} ({school.governorate}) · المدير: {school.principalName}
+              </div>
+            </div>
           )}
         </div>
 
-        {/* كرت سياق المدرسة والمخرج التقييمي */}
-        <div
-          style={{
-            display: 'flex',
-            flexWrap: 'wrap',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: '16px',
-            padding: '16px 20px',
-            backgroundColor: '#FFFFFF',
-            borderRadius: '12px',
-            border: '1px solid #E2E8F0',
-            boxShadow: '0 1px 3px rgba(0, 0, 0, 0.04)',
-          }}
-        >
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-              <span
-                style={{
-                  fontSize: '12px',
-                  fontWeight: 700,
-                  color: '#2563EB',
-                  backgroundColor: '#EFF6FF',
-                  padding: '2px 8px',
-                  borderRadius: '4px',
-                }}
-              >
-                {reviewData?.school?.schoolCode ?? '—'}
-              </span>
-              <span
-                style={{
-                  fontSize: '12px',
-                  fontWeight: 700,
-                  color:
-                    reviewData?.status === 'Completed'
-                      ? '#065F46'
-                      : reviewData?.status === 'NeedsCompletion'
-                      ? '#92400E'
-                      : '#1D4ED8',
-                  backgroundColor:
-                    reviewData?.status === 'Completed'
-                      ? '#ECFDF5'
-                      : reviewData?.status === 'NeedsCompletion'
-                      ? '#FEF3C7'
-                      : '#EFF6FF',
-                  border: `1px solid ${
-                    reviewData?.status === 'Completed'
-                      ? '#A7F3D0'
-                      : reviewData?.status === 'NeedsCompletion'
-                      ? '#FDE68A'
-                      : '#BFDBFE'
-                  }`,
-                  padding: '2px 10px',
-                  borderRadius: '999px',
-                }}
-              >
-                {reviewData?.statusArabic ?? 'قيد المراجعة'}
-              </span>
+        {/* الشارات والحالة */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          {/* شارة إعادة المراجعة إن كانت المحاولة > 1 */}
+          {isReReview && (
+            <span
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px',
+                padding: '5px 12px',
+                borderRadius: '8px',
+                fontSize: '12px',
+                fontWeight: 800,
+                backgroundColor: '#EFF6FF',
+                color: '#1D4ED8',
+                border: '1.5px solid #93C5FD',
+              }}
+            >
+              <RefreshCw size={13} />
+              إعادة مراجعة (المحاولة {attemptNo})
+            </span>
+          )}
 
-              {reviewData?.isReReview && (
-                <span
-                  style={{
-                    fontSize: '11px',
-                    fontWeight: 700,
-                    color: '#7C3AED',
-                    backgroundColor: '#F5F3FF',
-                    border: '1px solid #DDD6FE',
-                    padding: '2px 8px',
-                    borderRadius: '999px',
-                  }}
-                >
-                  إعادة مراجعة (محاولة {reviewData.attemptNo})
-                </span>
-              )}
-            </div>
-
-            <h1 style={{ fontSize: '20px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
-              {reviewData?.school?.schoolName ?? 'مدرسة التقييم'}
-            </h1>
-            <div style={{ fontSize: '12px', color: '#64748B', marginTop: '4px' }}>
-              المرحلة: {reviewData?.school?.educationalStage ?? '—'} • المحافظة:{' '}
-              {reviewData?.school?.governorate ?? '—'} • مدير المدرسة:{' '}
-              {reviewData?.school?.principalName ?? 'إدارة المدرسة'} • تاريخ الرفع:{' '}
-              {reviewData?.submittedAt
-                ? new Date(reviewData.submittedAt).toLocaleDateString('ar-YE', {
-                    year: 'numeric',
-                    month: 'long',
-                    day: 'numeric',
-                  })
-                : '—'}
-            </div>
-          </div>
-
-          {/* أزرار تصدير التقارير الرسمية وحزم المخرجات */}
-          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '8px' }}>
-            {reviewData?.exportPdfUrl ? (
-              <a
-                href={reviewData.exportPdfUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                download
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  padding: '8px 12px',
-                  backgroundColor: '#FFFFFF',
-                  color: '#DC2626',
-                  border: '1px solid #FCA5A5',
-                  borderRadius: '8px',
-                  fontSize: '12px',
-                  fontWeight: 700,
-                  textDecoration: 'none',
-                }}
-              >
-                <Download size={14} />
-                <span>تقرير PDF</span>
-              </a>
-            ) : (
-              <button
-                type="button"
-                onClick={() =>
-                  reviewData?.evaluationId &&
-                  window.open(`/api/v1/evaluations/${reviewData.evaluationId}/export-pdf`, '_blank')
-                }
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  padding: '8px 12px',
-                  backgroundColor: '#FFFFFF',
-                  color: '#DC2626',
-                  border: '1px solid #FCA5A5',
-                  borderRadius: '8px',
-                  fontSize: '12px',
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                }}
-              >
-                <Download size={14} />
-                <span>تقرير PDF</span>
-              </button>
-            )}
-
-            {reviewData?.exportExcelUrl ? (
-              <a
-                href={reviewData.exportExcelUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                download
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  padding: '8px 12px',
-                  backgroundColor: '#FFFFFF',
-                  color: '#059669',
-                  border: '1px solid #A7F3D0',
-                  borderRadius: '8px',
-                  fontSize: '12px',
-                  fontWeight: 700,
-                  textDecoration: 'none',
-                }}
-              >
-                <FileSpreadsheet size={14} />
-                <span>تصدير Excel</span>
-              </a>
-            ) : (
-              <button
-                type="button"
-                onClick={() =>
-                  reviewData?.evaluationId &&
-                  window.open(`/api/v1/evaluations/${reviewData.evaluationId}/export-excel`, '_blank')
-                }
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  padding: '8px 12px',
-                  backgroundColor: '#FFFFFF',
-                  color: '#059669',
-                  border: '1px solid #A7F3D0',
-                  borderRadius: '8px',
-                  fontSize: '12px',
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                }}
-              >
-                <FileSpreadsheet size={14} />
-                <span>تصدير Excel</span>
-              </button>
-            )}
-          </div>
+          {/* شارة الحالة الرسمية للمخرج */}
+          <span
+            style={{
+              padding: '6px 14px',
+              borderRadius: '8px',
+              fontSize: '13px',
+              fontWeight: 800,
+              backgroundColor: statusConfig.bg,
+              color: statusConfig.text,
+              border: `1px solid ${statusConfig.border}`,
+            }}
+          >
+            {statusConfig.label}
+          </span>
         </div>
       </div>
 
-      {/* 2. بانرات الحوكمة الميدانية للحالات الثلاث */}
-
-      {/* أ. بانر حالة NeedsCompletion (طلب استكمال مفتوح) */}
-      {reviewData?.status === 'NeedsCompletion' && reviewData.openCompletionRequest && (
-        <div
+      {/* 3. شريط التبويبات الأربعة الرئيسية (عرض 100%) */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(4, 1fr)',
+          backgroundColor: '#F1F5F9',
+          padding: '4px',
+          borderRadius: '12px',
+          gap: '4px',
+        }}
+      >
+        {/* التبويب 1 */}
+        <button
+          type="button"
+          onClick={() => setActiveTab('standards')}
           style={{
-            marginBottom: '16px',
-            padding: '14px 18px',
-            borderRadius: '10px',
-            backgroundColor: '#FFFBEB',
-            border: '1.5px solid #F59E0B',
             display: 'flex',
-            flexWrap: 'wrap',
             alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: '12px',
+            justifyContent: 'center',
+            gap: '8px',
+            padding: '12px 16px',
+            borderRadius: '9px',
+            fontSize: '13px',
+            fontWeight: 700,
+            color: activeTab === 'standards' ? '#1D4ED8' : '#475569',
+            backgroundColor: activeTab === 'standards' ? '#FFFFFF' : 'transparent',
+            boxShadow: activeTab === 'standards' ? '0 1px 3px rgba(0,0,0,0.06)' : 'none',
+            border: 'none',
+            cursor: 'pointer',
+            transition: 'all 0.15s ease',
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <AlertTriangle size={20} color="#D97706" />
-            <div>
-              <div style={{ fontSize: '13px', fontWeight: 800, color: '#92400E' }}>
-                طلب استكمال رسمي مفتوح (طلب #{reviewData.openCompletionRequest.requestId})
-              </div>
-              <div style={{ fontSize: '12px', color: '#B45309', marginTop: '2px' }}>
-                المدرسة بصدد معالجة {reviewData.openCompletionRequest.itemsCount} بنود محددة • المهلة النظامية:{' '}
-                {reviewData.openCompletionRequest.deadline
-                  ? new Date(reviewData.openCompletionRequest.deadline).toLocaleDateString('ar-YE')
-                  : '14 يوماً'}{' '}
-                (متبقي {reviewData.openCompletionRequest.daysRemaining} يوماً)
-              </div>
-            </div>
-          </div>
-
-          <button
-            type="button"
-            onClick={() =>
-              onNavigate('completion-requests', {
-                submissionId: activeSubmissionId,
-                schoolId: reviewData.school.schoolId,
-              })
-            }
+          <Layers size={16} color={activeTab === 'standards' ? '#2563EB' : '#64748B'} />
+          <span>شجرة المعايير والتقييم الذاتي</span>
+          <span
             style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '7px 14px',
-              borderRadius: '6px',
-              backgroundColor: '#D97706',
-              color: '#FFFFFF',
-              border: 'none',
-              fontSize: '12px',
+              fontSize: '11px',
+              padding: '2px 6px',
+              borderRadius: '10px',
+              backgroundColor: activeTab === 'standards' ? '#DBEAFE' : '#E2E8F0',
+              color: activeTab === 'standards' ? '#1E40AF' : '#64748B',
               fontWeight: 700,
-              cursor: 'pointer',
             }}
           >
-            <span>متابعة سجل طلب الاستكمال</span>
-            <ChevronRight size={14} />
-          </button>
-        </div>
-      )}
+            109
+          </span>
+        </button>
 
-      {/* ب. بانر حالة إعادة المراجعة بعد استكمال المدرسة (Re-Review Mode) */}
-      {reviewData?.isReReview && reviewData?.status !== 'Completed' && (
-        <div
+        {/* التبويب 2 */}
+        <button
+          type="button"
+          onClick={() => setActiveTab('vault')}
           style={{
-            marginBottom: '16px',
-            padding: '12px 16px',
-            borderRadius: '8px',
-            backgroundColor: '#F5F3FF',
-            border: '1px solid #DDD6FE',
             display: 'flex',
             alignItems: 'center',
-            gap: '10px',
-            fontSize: '12px',
-            color: '#5B21B6',
+            justifyContent: 'center',
+            gap: '8px',
+            padding: '12px 16px',
+            borderRadius: '9px',
+            fontSize: '13px',
+            fontWeight: 700,
+            color: activeTab === 'vault' ? '#1D4ED8' : '#475569',
+            backgroundColor: activeTab === 'vault' ? '#FFFFFF' : 'transparent',
+            boxShadow: activeTab === 'vault' ? '0 1px 3px rgba(0,0,0,0.06)' : 'none',
+            border: 'none',
+            cursor: 'pointer',
+            transition: 'all 0.15s ease',
           }}
         >
-          <RefreshCw size={16} color="#7C3AED" />
-          <span>
-            <strong>إعادة مراجعة نشطة:</strong> رفعت المدرسة الشواهد المحدثة استجابة لطلب الاستكمال السابق (محاولة تسليم رقم{' '}
-            {reviewData.attemptNo}). يرجى تدقيق البنود المستوفاة وتحديد ما إذا كان الملف مؤهلاً للإغلاق.
-          </span>
-        </div>
-      )}
+          <FolderGit2 size={16} color={activeTab === 'vault' ? '#2563EB' : '#64748B'} />
+          <span>مستودع وجرد الشواهد الميدانية</span>
+          {reviewData.vault?.stats?.totalDocuments !== undefined && (
+            <span
+              style={{
+                fontSize: '11px',
+                padding: '2px 6px',
+                borderRadius: '10px',
+                backgroundColor: activeTab === 'vault' ? '#DBEAFE' : '#E2E8F0',
+                color: activeTab === 'vault' ? '#1E40AF' : '#64748B',
+                fontWeight: 700,
+              }}
+            >
+              {reviewData.vault.stats.totalDocuments}
+            </span>
+          )}
+        </button>
 
-      {/* ج. بانر حالة الملف المكتمل (Completed Lock Mode) */}
-      {reviewData?.status === 'Completed' && (
-        <div
+        {/* التبويب 3 */}
+        <button
+          type="button"
+          onClick={() => setActiveTab('plan')}
           style={{
-            marginBottom: '16px',
-            padding: '12px 16px',
-            borderRadius: '8px',
-            backgroundColor: '#ECFDF5',
-            border: '1px solid #A7F3D0',
             display: 'flex',
             alignItems: 'center',
-            gap: '10px',
-            fontSize: '12px',
-            color: '#065F46',
+            justifyContent: 'center',
+            gap: '8px',
+            padding: '12px 16px',
+            borderRadius: '9px',
+            fontSize: '13px',
+            fontWeight: 700,
+            color: activeTab === 'plan' ? '#1D4ED8' : '#475569',
+            backgroundColor: activeTab === 'plan' ? '#FFFFFF' : 'transparent',
+            boxShadow: activeTab === 'plan' ? '0 1px 3px rgba(0,0,0,0.06)' : 'none',
+            border: 'none',
+            cursor: 'pointer',
+            transition: 'all 0.15s ease',
           }}
         >
-          <CheckCircle2 size={16} color="#059669" />
-          <span>
-            <strong>ملف تقييم مكتمل:</strong> تم إغلاق المراجعة الإشرافية لهذا المخرج ونقل حالته إلى مكتمل (Completed) وفق قاعدة العمل BR-MIN-03. الملف مقفل بصيغة التوثيق والقراءة فقط.
-          </span>
-        </div>
-      )}
+          <TrendingUp size={16} color={activeTab === 'plan' ? '#2563EB' : '#64748B'} />
+          <span>خطة تحسين الأداء المدرسية</span>
+          {(reviewData.planDetails?.stats?.totalActions ?? reviewData.improvementPlan?.actionsCount) !== undefined && (
+            <span
+              style={{
+                fontSize: '11px',
+                padding: '2px 6px',
+                borderRadius: '10px',
+                backgroundColor: activeTab === 'plan' ? '#DBEAFE' : '#E2E8F0',
+                color: activeTab === 'plan' ? '#1E40AF' : '#64748B',
+                fontWeight: 700,
+              }}
+            >
+              {reviewData.planDetails?.stats?.totalActions ?? reviewData.improvementPlan?.actionsCount}
+            </span>
+          )}
+        </button>
 
-      {error ? (
-        <EmptySupervisionState
-          isError={true}
-          title="تعذر تحميل مخرج التقييم"
-          description={error}
-          actionText="إعادة المحاولة"
-          onAction={refetch}
-        />
-      ) : (
-        /* 3. تخطيط المراجعة بعمودين */
-        <div
-          className="supervision-review-grid"
+        {/* التبويب 4 */}
+        <button
+          type="button"
+          onClick={() => setActiveTab('decision')}
           style={{
-            display: 'grid',
-            gridTemplateColumns: 'minmax(0, 1.8fr) minmax(0, 1fr)',
-            gap: '24px',
-            alignItems: 'start',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '8px',
+            padding: '12px 16px',
+            borderRadius: '9px',
+            fontSize: '13px',
+            fontWeight: 700,
+            color: activeTab === 'decision' ? '#1D4ED8' : '#475569',
+            backgroundColor: activeTab === 'decision' ? '#FFFFFF' : 'transparent',
+            boxShadow: activeTab === 'decision' ? '0 1px 3px rgba(0,0,0,0.06)' : 'none',
+            border: 'none',
+            cursor: 'pointer',
+            transition: 'all 0.15s ease',
           }}
         >
-          {/* العمود الأيمن: التبويبات، الفلاتر، المؤشرات الـ 109 */}
-          <div>
-            {/* التبويبات الثلاثة */}
-            <div
+          <ShieldCheck size={16} color={activeTab === 'decision' ? '#2563EB' : '#64748B'} />
+          <span>نتائج الفحص والقرار الإشرافي</span>
+          {deficienciesCount > 0 && (
+            <span
               style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                marginBottom: '16px',
-                borderBottom: '1px solid #E2E8F0',
-                paddingBottom: '8px',
+                fontSize: '11px',
+                padding: '2px 6px',
+                borderRadius: '10px',
+                backgroundColor: '#FEE2E2',
+                color: '#DC2626',
+                fontWeight: 800,
               }}
             >
-              {[
-                {
-                  key: 'indicators',
-                  label: 'عناصر التقييم والتقديرات',
-                  count: reviewData?.summary?.totalElements ?? 109,
-                  icon: Layers,
-                },
-                {
-                  key: 'evidences',
-                  label: 'ملفات الشواهد المرفقة',
-                  count: reviewData?.summary?.attachedEvidencesCount ?? 0,
-                  icon: FileText,
-                },
-                {
-                  key: 'improvement-plan',
-                  label: 'خطة تحسين الأداء',
-                  count: reviewData?.improvementPlan?.actionsCount ?? 0,
-                  icon: Target,
-                },
-              ].map((tab) => {
-                const isActive = activeTab === tab.key;
-                const Icon = tab.icon;
-                return (
-                  <button
-                    key={tab.key}
-                    type="button"
-                    onClick={() => setActiveTab(tab.key as ReviewTabType)}
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                      padding: '8px 14px',
-                      borderRadius: '8px',
-                      fontSize: '13px',
-                      fontWeight: isActive ? 800 : 600,
-                      color: isActive ? '#2563EB' : '#64748B',
-                      backgroundColor: isActive ? '#EFF6FF' : 'transparent',
-                      border: isActive ? '1px solid #BFDBFE' : '1px solid transparent',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    <Icon size={16} color={isActive ? '#2563EB' : '#64748B'} />
-                    <span>{tab.label}</span>
-                    <span
-                      style={{
-                        fontSize: '11px',
-                        fontWeight: 700,
-                        backgroundColor: isActive ? '#2563EB' : '#E2E8F0',
-                        color: isActive ? '#FFFFFF' : '#475569',
-                        padding: '1px 6px',
-                        borderRadius: '999px',
-                      }}
-                    >
-                      {tab.count}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
+              {deficienciesCount} نقص
+            </span>
+          )}
+        </button>
+      </div>
 
-            {/* إشعار فرض صيغة القراءة فقط للمشرف (Read-Only Enforcement) */}
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                padding: '10px 14px',
-                backgroundColor: '#F8FAFC',
-                border: '1px solid #E2E8F0',
-                borderRadius: '8px',
-                fontSize: '12px',
-                color: '#64748B',
-                marginBottom: '16px',
-              }}
-            >
-              <Lock size={14} color="#64748B" />
-              <span>
-                <strong>وضع التدقيق الميداني:</strong> التقديرات والشواهد معروضة بصيغة القراءة فقط
-                وفق قاعدة العمل BR-MIN-03. لتوجيه تعديل للمدرسة، يرجى رصد النواقص وتفعيل خيار الاستكمال.
-              </span>
-            </div>
-
-            {/* محتوى تبويب المؤشرات والتقديرات */}
-            {activeTab === 'indicators' && (
-              <div>
-                {/* أ. شريط التصفية بالمعايير الوطنية السبعة */}
-                {standardsList.length > 0 && (
-                  <div
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '6px',
-                      overflowX: 'auto',
-                      paddingBottom: '8px',
-                      marginBottom: '12px',
-                    }}
-                  >
-                    <button
-                      type="button"
-                      onClick={() => setSelectedStandardId('all')}
-                      style={{
-                        padding: '5px 10px',
-                        borderRadius: '6px',
-                        fontSize: '12px',
-                        fontWeight: selectedStandardId === 'all' ? 800 : 600,
-                        backgroundColor: selectedStandardId === 'all' ? '#2563EB' : '#F1F5F9',
-                        color: selectedStandardId === 'all' ? '#FFFFFF' : '#475569',
-                        border: 'none',
-                        cursor: 'pointer',
-                        whiteSpace: 'nowrap',
-                      }}
-                    >
-                      كافة المعايير ({filterCounts.total})
-                    </button>
-                    {standardsList.map((std) => {
-                      const isSelected = selectedStandardId === std.id;
-                      return (
-                        <button
-                          key={std.id}
-                          type="button"
-                          onClick={() => setSelectedStandardId(std.id)}
-                          style={{
-                            padding: '5px 10px',
-                            borderRadius: '6px',
-                            fontSize: '12px',
-                            fontWeight: isSelected ? 800 : 600,
-                            backgroundColor: isSelected ? '#2563EB' : '#F1F5F9',
-                            color: isSelected ? '#FFFFFF' : '#475569',
-                            border: 'none',
-                            cursor: 'pointer',
-                            whiteSpace: 'nowrap',
-                          }}
-                        >
-                          {std.name}
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-
-                {/* ب. الفلاتر السريعة وشريط البحث النصي */}
-                <div
-                  style={{
-                    display: 'flex',
-                    flexWrap: 'wrap',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    gap: '10px',
-                    marginBottom: '14px',
-                    backgroundColor: '#FFFFFF',
-                    padding: '10px 14px',
-                    borderRadius: '8px',
-                    border: '1px solid #E2E8F0',
-                  }}
-                >
-                  {/* الفلاتر السريعة */}
-                  <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '6px' }}>
-                    <Filter size={14} color="#64748B" />
-                    {(
-                      [
-                        { key: 'all', label: 'الكل', count: filterCounts.total },
-                        { key: 'defective', label: 'نواقص مرصودة', count: filterCounts.defective, highlight: true },
-                        { key: 'missing-evidence', label: 'تقدير > 0 بدون شاهد', count: filterCounts.missingEvidence },
-                        { key: 'low-score', label: 'مؤشرات متدنية (0-1)', count: filterCounts.lowScore },
-                      ] as Array<{ key: QuickFilterType; label: string; count: number; highlight?: boolean }>
-                    ).map((f) => {
-                      const isSelected = quickFilter === f.key;
-                      return (
-                        <button
-                          key={f.key}
-                          type="button"
-                          onClick={() => setQuickFilter(f.key)}
-                          style={{
-                            padding: '4px 8px',
-                            borderRadius: '6px',
-                            fontSize: '11px',
-                            fontWeight: 700,
-                            cursor: 'pointer',
-                            border: isSelected
-                              ? '1px solid #2563EB'
-                              : f.highlight && f.count > 0
-                              ? '1px solid #FCD34D'
-                              : '1px solid #CBD5E1',
-                            backgroundColor: isSelected
-                              ? '#EFF6FF'
-                              : f.highlight && f.count > 0
-                              ? '#FFFBEB'
-                              : '#FFFFFF',
-                            color: isSelected
-                              ? '#1D4ED8'
-                              : f.highlight && f.count > 0
-                              ? '#92400E'
-                              : '#475569',
-                          }}
-                        >
-                          {f.label} ({f.count})
-                        </button>
-                      );
-                    })}
-                  </div>
-
-                  {/* حقل البحث بالرمز أو العنوان */}
-                  <div style={{ position: 'relative', minWidth: '180px' }}>
-                    <Search
-                      size={14}
-                      color="#94A3B8"
-                      style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)' }}
-                    />
-                    <input
-                      type="text"
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      placeholder="بحث بالرمز أو العنوان..."
-                      style={{
-                        width: '100%',
-                        padding: '5px 28px 5px 8px',
-                        borderRadius: '6px',
-                        border: '1px solid #CBD5E1',
-                        fontSize: '11px',
-                        color: '#0F172A',
-                        outline: 'none',
-                        boxSizing: 'border-box',
-                      }}
-                    />
-                  </div>
-                </div>
-
-                {/* ج. قائمة المؤشرات المفلترة */}
-                {filteredIndicators.length > 0 ? (
-                  filteredIndicators.map((ind) => (
-                    <IndicatorAuditRow
-                      key={ind.indicatorId}
-                      indicator={ind}
-                      isDefective={defectiveItems.has(ind.indicatorId)}
-                      onSaveDeficiency={(category, reason, directives) =>
-                        saveDeficiency(ind, category, reason, directives)
-                      }
-                      onDeleteDeficiency={() => removeDeficiency(ind.indicatorId)}
-                      onToggleDefect={() =>
-                        toggleIndicatorDefect(
-                          ind,
-                          ind.defectReason || 'نقص وثيقة الشاهد الميداني ومحضر المعالجة',
-                          ind.directives || 'يرجى استيفاء الشاهد المطلوب.'
-                        )
-                      }
-                      isReadOnly={
-                        reviewData?.status === 'Completed' ||
-                        reviewData?.status === 'NeedsCompletion'
-                      }
-                    />
-                  ))
-                ) : (
-                  <div
-                    style={{
-                      padding: '30px',
-                      textAlign: 'center',
-                      backgroundColor: '#FFFFFF',
-                      borderRadius: '8px',
-                      border: '1px solid #E2E8F0',
-                      color: '#64748B',
-                      fontSize: '13px',
-                    }}
-                  >
-                    لا توجد مؤشرات تطابق معايير الفلترة أو البحث الحالية.
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* محتوى تبويب الشواهد */}
-            {activeTab === 'evidences' && (
-              <div
-                style={{
-                  backgroundColor: '#FFFFFF',
-                  borderRadius: '10px',
-                  border: '1px solid #E2E8F0',
-                  padding: '20px',
-                }}
-              >
-                <h3 style={{ fontSize: '15px', fontWeight: 800, color: '#0F172A', marginBottom: '14px' }}>
-                  فهرس الشواهد الميدانية المرفقة ({reviewData?.summary?.attachedEvidencesCount ?? 0} وثيقة)
-                </h3>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {reviewData?.indicators.flatMap((ind) =>
-                    ind.evidences.map((ev) => (
-                      <div
-                        key={ev.id}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          padding: '10px 14px',
-                          backgroundColor: '#F8FAFC',
-                          borderRadius: '8px',
-                          border: '1px solid #E2E8F0',
-                        }}
-                      >
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                          <FileText size={18} color="#2563EB" />
-                          <div>
-                            <span style={{ fontSize: '13px', fontWeight: 700, color: '#0F172A', display: 'block' }}>
-                              {ev.fileName}
-                            </span>
-                            <span style={{ fontSize: '11px', color: '#64748B' }}>
-                              المؤشر: {ind.code} ({ind.standardName}) • الحجم: {ev.fileSizeFormatted}
-                            </span>
-                          </div>
-                        </div>
-
-                        {ev.fileUrl ? (
-                          <a
-                            href={ev.fileUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            download
-                            style={{
-                              padding: '6px 12px',
-                              backgroundColor: '#FFFFFF',
-                              border: '1px solid #CBD5E1',
-                              borderRadius: '6px',
-                              fontSize: '12px',
-                              fontWeight: 600,
-                              color: '#2563EB',
-                              textDecoration: 'none',
-                            }}
-                          >
-                            معاينة / تنزيل
-                          </a>
-                        ) : (
-                          <span style={{ fontSize: '11px', color: '#94A3B8' }}>غير متوفر</span>
-                        )}
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* محتوى تبويب خطة التحسين */}
-            {activeTab === 'improvement-plan' && (
-              <div
-                style={{
-                  backgroundColor: '#FFFFFF',
-                  borderRadius: '10px',
-                  border: '1px solid #E2E8F0',
-                  padding: '20px',
-                }}
-              >
-                <h3 style={{ fontSize: '15px', fontWeight: 800, color: '#0F172A', marginBottom: '14px' }}>
-                  {reviewData?.improvementPlan?.title ?? 'خطة التحسين والتطوير المدرسي'}
-                </h3>
-                <p style={{ fontSize: '13px', color: '#64748B', marginBottom: '16px' }}>
-                  تتضمن الخطة {reviewData?.improvementPlan?.actionsCount ?? 0} أولويات لمعالجة فجوات الأداء:
-                </p>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {(reviewData?.improvementPlan?.priorities ?? []).map((item, idx) => (
-                    <div
-                      key={idx}
-                      style={{
-                        padding: '12px 14px',
-                        backgroundColor: '#F8FAFC',
-                        borderRadius: '8px',
-                        border: '1px solid #E2E8F0',
-                        fontSize: '13px',
-                        fontWeight: 600,
-                        color: '#0F172A',
-                      }}
-                    >
-                      {idx + 1}. {item}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* العمود الأيسر: لوحة القرار الإشرافي */}
-          <SupervisorDecisionPanel
-            automatedChecks={
-              reviewData?.automatedChecks ?? {
-                rubricCompleteness: true,
-                allEvidencesAttached: false,
-                minEvidenceMet: true,
-                flagsCount: 0,
-              }
-            }
-            summary={reviewData?.summary}
-            outputStatus={reviewData?.status}
-            closedAt={reviewData?.closedAt}
-            decisionMode={decisionMode}
-            onSelectDecisionMode={setDecisionMode}
-            supervisorNotes={supervisorNotes}
-            onChangeNotes={setSupervisorNotes}
-            defectiveCount={defectiveCount}
-            onProceedToCompletion={handleProceedToCompletion}
-            onCloseReview={handleCloseReview}
-            isActionLoading={isActionLoading}
-            actionSuccessMessage={actionSuccessMessage}
-            actionErrorMessage={actionErrorMessage}
+      {/* 4. محتوى التبويب المختار */}
+      <div>
+        {activeTab === 'standards' && (
+          <SupervisionStandardsTreeTab
+            standards={reviewData.standards || []}
+            evaluationId={reviewData.evaluationId}
+            submissionId={reviewData.submissionId}
+            isReadOnly={status === 'Completed'}
+            onDeficiencyUpdated={refetch}
           />
-        </div>
-      )}
+        )}
+
+        {activeTab === 'vault' && (
+          <SupervisionEvidenceVaultTab
+            vault={reviewData.vault}
+            evidenceInventory={reviewData.evidenceInventory}
+            standards={reviewData.standards || []}
+          />
+        )}
+
+        {activeTab === 'plan' && (
+          <SupervisionImprovementPlanTab
+            planDetails={reviewData.planDetails}
+            plans={reviewData.plans || reviewData.allPlans || (reviewData.planDetails ? [reviewData.planDetails] : [])}
+            lowIndicatorsMatrix={reviewData.lowIndicatorsMatrix}
+            indicatorsAudit={reviewData.indicators}
+          />
+        )}
+
+        {activeTab === 'decision' && (
+          <SupervisionDecisionTab
+            data={reviewData}
+            evaluationId={reviewData.evaluationId}
+            submissionId={reviewData.submissionId}
+            onDecisionSuccess={() => {
+              refetch();
+            }}
+            onNavigateToCompletionRequest={() => {
+              onNavigate('completion-requests', {
+                submissionId: reviewData.submissionId,
+                schoolId: reviewData.school.schoolId,
+                preloadedItems: reviewData.deficienciesList?.map((d) => ({
+                  indicatorId: d.indicatorId,
+                  code: d.indicatorCode,
+                  title: d.indicatorTitle,
+                  defectReason: d.note,
+                  grantedPermission: 'UploadEvidence',
+                  directives: d.directives || 'استيفاء الوثائق والشواهد اللازمة وفق أداة التحقق المقررة.',
+                })),
+              });
+            }}
+          />
+        )}
+      </div>
     </div>
   );
 };

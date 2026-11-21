@@ -5,7 +5,7 @@
  * أي خطأ في الاتصال يُمرر مباشرة للمكونات لعرض رسائل الخطأ النظامية أو EmptyState
  */
 
-import { get, post, patch, del } from '../../../api/apiClient';
+import { get, post, patch, del, apiClient } from '../../../api/apiClient';
 import type {
   SupervisionDashboardData,
   ActiveStandardVersion,
@@ -246,6 +246,10 @@ export const supervisionApi = {
     return this.closeSubmissionReview(evaluationId, notes);
   },
 
+  async closeEvaluation(evaluationId: number, notes?: string): Promise<{ evaluationId: number; status: string }> {
+    return this.closeSubmissionReview(evaluationId, notes);
+  },
+
   /**
    * اسم بديل متوافق مع المكونات السابقة (Deprecated alias complying with BR-MIN-03)
    */
@@ -387,5 +391,77 @@ export const supervisionApi = {
   async exportHistoricalComparisonPdf(schoolId: number): Promise<any> {
     const response = await get<any>(`/schools/${schoolId}/historical-comparison/pdf`);
     return response?.data ?? response;
+  },
+
+  /**
+   * 13. تصدير بطاقة تقويم المدرسة الرسمية (PDF) بطلب مصادق عبر Token
+   */
+  async exportEvaluationPdf(evaluationId: number, schoolName?: string): Promise<void> {
+    const response = await apiClient.get(`/evaluations/${evaluationId}/export-pdf`, {
+      responseType: 'blob',
+    });
+    const blob = new Blob([response as unknown as BlobPart], { type: 'application/pdf' });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    const cleanSchoolName = schoolName ? schoolName.replace(/\s+/g, '_') : `مدرسة_${evaluationId}`;
+    const dateStr = new Date().toISOString().split('T')[0];
+    link.download = `تقرير_تقويم_${cleanSchoolName}_${dateStr}.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+  },
+
+  /**
+   * 14. تصدير سجل التقويم والخطط الشامل (Excel) بطلب مصادق عبر Token
+   */
+  async exportEvaluationExcel(evaluationId: number, schoolName?: string): Promise<void> {
+    const response = await apiClient.get(`/evaluations/${evaluationId}/export-excel`, {
+      responseType: 'blob',
+    });
+    const blob = new Blob([response as unknown as BlobPart], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    const cleanSchoolName = schoolName ? schoolName.replace(/\s+/g, '_') : `مدرسة_${evaluationId}`;
+    const dateStr = new Date().toISOString().split('T')[0];
+    link.download = `سجل_تقويم_${cleanSchoolName}_${dateStr}.xlsx`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+  },
+
+  /**
+   * 15. تحميل ملف نسخة المستند أو الشاهد عبر Token مصادق
+   */
+  async downloadDocumentVersion(versionId: number, fileName?: string): Promise<void> {
+    const response = await apiClient.get(`/document-versions/${versionId}/download`, {
+      responseType: 'blob',
+    });
+    const blob = new Blob([response as unknown as BlobPart]);
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = fileName || `وثيقة_${versionId}.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+  },
+
+  /**
+   * 16. معاينة ملف نسخة المستند أو الشاهد في نافذة متصفح جديدة عبر Token مصادق
+   */
+  async previewDocumentVersion(versionId: number): Promise<void> {
+    const response = await apiClient.get(`/document-versions/${versionId}/download`, {
+      responseType: 'blob',
+    });
+    const blob = new Blob([response as unknown as BlobPart], { type: 'application/pdf' });
+    const url = window.URL.createObjectURL(blob);
+    window.open(url, '_blank');
   },
 };
