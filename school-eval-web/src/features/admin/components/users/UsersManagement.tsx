@@ -108,7 +108,17 @@ export const UsersManagement: React.FC<UsersManagementProps> = ({ onNavigate, ad
       u.email,
       u.userType === 'school' ? 'مدرسة' : u.userType === 'ministry' ? 'مشرف وزاري' : 'إدارة النظام',
       u.roleNameAr || formatRoleNameAr(u.roleName),
-      u.schoolName ? `${u.schoolName} (${u.schoolCode})` : u.directorate || 'المركز الرئيسي',
+      u.schoolName
+        ? `${u.schoolName} (${u.schoolCode})`
+        : u.governorate && u.directorate
+        ? `${u.governorate} - ${u.directorate}`
+        : u.governorate
+        ? `${u.governorate} (شامل للمحافظة)`
+        : u.directorate
+        ? u.directorate
+        : u.userType === 'ministry'
+        ? 'إشراف مركزي عام (شامل للنظام)'
+        : 'المركز الرئيسي',
       u.status === 'Active' ? 'نشط' : 'معطل',
       formatRelativeArabic(u.lastActivity),
     ]);
@@ -559,16 +569,29 @@ export const UsersManagement: React.FC<UsersManagementProps> = ({ onNavigate, ad
                             {user.schoolName}
                           </div>
                           <div style={{ fontSize: theme.typography.fontSizes.xs, color: theme.colors.neutral[400] }}>
-                            {user.directorate} • كود: {user.schoolCode}
+                            {[user.directorate, user.governorate].filter(Boolean).join(' • ') || 'مدرسة معتمدة'} {user.schoolCode ? `• كود: ${user.schoolCode}` : ''}
                           </div>
                         </div>
-                      ) : user.directorate ? (
+                      ) : user.governorate || user.directorate ? (
                         <div>
-                          <div style={{ fontSize: theme.typography.fontSizes.sm, color: theme.colors.neutral[800], fontWeight: 500 }}>
-                            الإشراف الميداني
+                          <div style={{ fontSize: theme.typography.fontSizes.sm, color: theme.colors.neutral[800], fontWeight: 600 }}>
+                            {user.directorate ? `إشراف: ${user.directorate}` : `إشراف: ${user.governorate} (شامل)`}
+                          </div>
+                          <div style={{ fontSize: theme.typography.fontSizes.xs, color: theme.colors.neutral[500] }}>
+                            {user.directorate && user.governorate
+                              ? `${user.governorate} • ${user.directorate}`
+                              : user.governorate
+                              ? `${user.governorate} • كافة المديريات`
+                              : user.directorate}
+                          </div>
+                        </div>
+                      ) : user.userType === 'ministry' ? (
+                        <div>
+                          <div style={{ fontSize: theme.typography.fontSizes.sm, color: '#4338CA', fontWeight: 600 }}>
+                            إشراف مركزي عام
                           </div>
                           <div style={{ fontSize: theme.typography.fontSizes.xs, color: theme.colors.neutral[400] }}>
-                            {user.directorate} • أمانة العاصمة
+                            ديوان الوزارة • شامل للنظام ككل
                           </div>
                         </div>
                       ) : (

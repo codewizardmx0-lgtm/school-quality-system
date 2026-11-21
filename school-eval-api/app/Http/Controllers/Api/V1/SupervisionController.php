@@ -18,6 +18,7 @@ use App\Models\School;
 use App\Models\Standard;
 use App\Models\StandardVersion;
 use App\Models\SupervisorNote;
+use App\Models\SupervisionDeficiencyNote;
 use App\Models\User;
 use App\Services\EvaluationTrendService;
 use Carbon\Carbon;
@@ -388,8 +389,8 @@ class SupervisionController extends Controller
             ?? StandardVersion::where('status', 'Approved')->first()
             ?? StandardVersion::first();
 
-        // جلب المؤشرات الـ 109 الحقيقية من قاعدة البيانات
-        $indicators = Indicator::with(['subStandard.standard'])
+        // جلب المؤشرات الـ 109 الحقيقية من قاعدة البيانات مع الواصفات وأدوات التحقق (FR-SUP-03)
+        $indicators = Indicator::with(['subStandard.standard', 'scoreDescriptors', 'verificationTools'])
             ->whereHas('subStandard.standard', function ($q) use ($version) {
                 if ($version) {
                     $q->where('version_id', $version->version_id);
@@ -410,6 +411,44 @@ class SupervisionController extends Controller
                 $q->where('submission_id', $submission->submission_id)->where('status', 'Open');
             }
         })->get()->keyBy('indicator_id');
+
+        // جلب النواقص الإشرافية المحفوظة للمؤشرات في قاعدة البيانات (FR-SUP-04)
+        $savedDeficiencies = SupervisionDeficiencyNote::where('evaluation_id', $evaluation->evaluation_id)
+            ->get()
+            ->keyBy('indicator_id');
+
+        // جلب طلب الاستكمال المفتوح إن وجد
+        $openCompletionRequest = CompletionRequest::with('items.indicator')
+            ->where(function ($q) use ($submission, $evaluation) {
+                if ($submission) {
+                    $q->where('submission_id', $submission->submission_id);
+                } else {
+                    $q->whereHas('submission.report', fn($sq) => $sq->where('evaluation_id', $evaluation->evaluation_id));
+                }
+            })
+            ->where('status', 'Open')
+            ->latest('request_id')
+            ->first();
+
+        $openCompletionRequestData = null;
+        if ($openCompletionRequest) {
+            $deadline = $openCompletionRequest->completion_deadline;
+            $daysRemaining = $deadline ? max(0, (int) now()->diffInDays(Carbon::parse($deadline), false)) : 0;
+            $openCompletionRequestData = [
+                'requestId' => $openCompletionRequest->request_id,
+                'notes' => $openCompletionRequest->notes,
+                'issuedAt' => $openCompletionRequest->created_at->toIso8601String(),
+                'deadline' => $deadline ? Carbon::parse($deadline)->toDateString() : null,
+                'daysRemaining' => $daysRemaining,
+                'itemsCount' => $openCompletionRequest->items->count(),
+                'items' => $openCompletionRequest->items->map(fn($item) => [
+                    'indicatorId' => $item->indicator_id,
+                    'code' => $item->indicator?->code ?? '',
+                    'title' => $item->indicator?->title ?? '',
+                    'missingDescription' => $item->missing_description,
+                ])->toArray(),
+            ];
+        }
 
         // جلب الملاحظات الإشرافية السابقة
         $notes = SupervisorNote::where('submission_id', $submission?->submission_id)
@@ -460,23 +499,35 @@ class SupervisionController extends Controller
                 }
             }
 
+            $savedDefect = $savedDeficiencies->get($ind->indicator_id);
             $openItem = $openItems->get($ind->indicator_id);
-            $hasDefect = $openItem !== null;
+            $hasDefect = ($savedDefect !== null) || ($openItem !== null);
+
+            $defectCategory = $savedDefect?->deficiency_category ?? ($openItem ? 'نقص الشواهد الإلزامية المطلوبة في أداة التحقق' : null);
+            $defectReason = $savedDefect?->supervisor_note ?? $openItem?->missing_description;
+            $directives = $savedDefect?->directives ?? $openItem?->missing_description;
 
             $indicatorsAudit[] = [
                 'indicatorId' => $ind->indicator_id,
                 'code' => $ind->code,
+                'standardId' => $ind->subStandard?->standard?->standard_id ?? 1,
                 'standardName' => $ind->subStandard?->standard?->name ?? 'معيار عام',
                 'subStandardName' => $ind->subStandard?->name ?? 'معيار فرعي',
                 'title' => $ind->title,
                 'schoolScore' => $score,
                 'scoreLevelName' => $levelName,
                 'scoreDescription' => $res?->scoreDescriptor?->description ?? $res?->justification ?? 'لا يوجد تبرير مدخل من المدرسة',
+                'descriptors' => $ind->scoreDescriptors->sortBy('score')->map(fn($d) => [
+                    'score' => $d->score,
+                    'description' => $d->description,
+                ])->values()->toArray(),
+                'verificationTools' => $ind->verificationTools->pluck('name')->toArray(),
                 'evidences' => $evidenceItems,
                 'hasDefect' => $hasDefect,
-                'defectReason' => $openItem?->missing_description,
-                'directives' => $openItem?->missing_description,
-                'supervisorFeedback' => null,
+                'defectCategory' => $defectCategory,
+                'defectReason' => $defectReason,
+                'directives' => $directives,
+                'supervisorFeedback' => $savedDefect?->supervisor_note,
             ];
         }
 
@@ -535,12 +586,18 @@ class SupervisionController extends Controller
             'compliancePercentage' => $compliancePct,
         ];
 
+        $attemptNo = $submission?->attempt_no ?? 1;
+        $isReReview = $attemptNo > 1;
+
+        $deficienciesCount = $savedDeficiencies->count() > 0 ? $savedDeficiencies->count() : $openItems->count();
+
         return ApiResponse::success([
             'submissionId' => $submission?->submission_id ?? $evaluation->evaluation_id,
             'evaluationId' => $evaluation->evaluation_id,
             'reportId' => $submission?->report_id ?? 1,
-            'attemptNumber' => $submission?->attempt_no ?? 1,
-            'attemptNo' => $submission?->attempt_no ?? 1,
+            'attemptNumber' => $attemptNo,
+            'attemptNo' => $attemptNo,
+            'isReReview' => $isReReview,
             'status' => $submission?->status ?? $evaluation->status,
             'statusArabic' => match ($submission?->status ?? $evaluation->status) {
                 'NeedsCompletion' => 'يحتاج استكمال',
@@ -550,6 +607,7 @@ class SupervisionController extends Controller
                 default => 'مسودة',
             },
             'submittedAt' => $submission?->submitted_at?->toIso8601String() ?? $evaluation->updated_at->toIso8601String(),
+            'closedAt' => ($evaluation->status === 'Completed') ? $evaluation->updated_at->toIso8601String() : null,
             'school' => $schoolData,
             'schoolInfo' => $schoolInfoData,
             'summary' => $summaryData,
@@ -557,7 +615,7 @@ class SupervisionController extends Controller
                 'rubricCompleteness' => $isCompleteRubric,
                 'allEvidencesAttached' => $totalWithEvidence > 0,
                 'minEvidenceMet' => true,
-                'flagsCount' => $openItems->count(),
+                'flagsCount' => $deficienciesCount,
                 'notes' => $isCompleteRubric
                     ? "تم فحص الرصد لـ {$allIndicatorsCount} مؤشراً كاملاً بنجاح."
                     : "تنبيه فحص آلي: رصدت المدرسة {$totalScored} من أصل {$allIndicatorsCount} مؤشراً.",
@@ -575,8 +633,152 @@ class SupervisionController extends Controller
                 'priorities' => !empty($planPriorities) ? $planPriorities : [],
             ],
             'indicators' => $indicatorsAudit,
+            'openCompletionRequest' => $openCompletionRequestData,
+            'deficienciesCount' => $deficienciesCount,
+            'exportPdfUrl' => "/api/v1/evaluations/{$evaluation->evaluation_id}/export-pdf",
+            'exportExcelUrl' => "/api/v1/evaluations/{$evaluation->evaluation_id}/export-excel",
             'packageDownloadUrl' => "/api/v1/evaluations/{$evaluation->evaluation_id}/export-pdf",
         ], 'تم تحميل حزمة مراجعة المخرج بنجاح.');
+    }
+
+    /**
+     * 3.1. قائمة المخرجات المتاحة للمراجعة الإشرافية في النطاق الجغرافي (الدخول المباشر)
+     * GET /api/v1/evaluation-submissions/available-for-review
+     */
+    public function reviewableSubmissions(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        $supervisorGov = ($user && $user->hasRole('ministry_supervisor')) ? $user->governorate : null;
+
+        $activeCycle = EvaluationCycle::where('status', 'Active')->latest('cycle_id')->first();
+
+        $query = Evaluation::with(['school', 'cycle', 'reports.submissions' => fn($q) => $q->orderBy('attempt_no', 'desc')])
+            ->when($activeCycle, fn($q) => $q->where('cycle_id', $activeCycle->cycle_id))
+            ->when($supervisorGov, fn($q) => $q->whereHas('school', fn($sq) => $sq->where('governorate', $supervisorGov)));
+
+        $items = $query->get()->map(function ($evaluation) {
+            $submission = $evaluation->reports->flatMap->submissions->sortByDesc('attempt_no')->first();
+            $status = $submission?->status ?? $evaluation->status;
+
+            return [
+                'evaluationId' => $evaluation->evaluation_id,
+                'submissionId' => $submission?->submission_id ?? $evaluation->evaluation_id,
+                'schoolId' => $evaluation->school_id,
+                'schoolName' => $evaluation->school?->name ?? 'مدرسة التقييم',
+                'schoolCode' => $evaluation->school?->school_code ?? "SCH-{$evaluation->school_id}",
+                'governorate' => $evaluation->school?->governorate ?? 'غير محدد',
+                'status' => $status,
+                'statusArabic' => match ($status) {
+                    'NeedsCompletion' => 'يحتاج استكمال',
+                    'Submitted' => 'مرفوع جديد',
+                    'UnderReview' => 'قيد التدقيق الإشرافي',
+                    'Completed' => 'مكتمل المراجعة',
+                    default => 'مسودة',
+                },
+                'submittedAt' => $submission?->submitted_at?->toIso8601String() ?? $evaluation->updated_at->toIso8601String(),
+                'attemptNo' => $submission?->attempt_no ?? 1,
+            ];
+        })->sortBy(function ($item) {
+            return match ($item['status']) {
+                'Submitted' => 1,
+                'UnderReview' => 2,
+                'NeedsCompletion' => 3,
+                'Completed' => 4,
+                default => 5,
+            };
+        })->values();
+
+        return ApiResponse::success($items, 'تم تحميل قائمة المخرجات المتاحة للمراجعة بنجاح.');
+    }
+
+    /**
+     * 3.2. حفظ أو تحديث رصد نقص في مؤشر تقييم محدد (FR-SUP-04, BR-MIN-02)
+     * POST /api/v1/evaluation-submissions/{id}/deficiency-notes
+     * POST /api/v1/evaluations/{id}/deficiency-notes
+     */
+    public function saveDeficiencyNote(Request $request, int $id): JsonResponse
+    {
+        $user = $request->user();
+
+        // دعم تمرير submission_id أو evaluation_id
+        $submission = EvaluationSubmission::with('report.evaluation.school')->find($id);
+        $evaluation = $submission?->report?->evaluation ?? Evaluation::with('school')->find($id);
+
+        if (!$evaluation) {
+            return ApiResponse::notFound('ملف التقييم أو مخرج المراجعة المطلوب غير موجود.');
+        }
+
+        // حوكمة النطاق الجغرافي للمشرف الوزاري
+        if ($user && $user->hasRole('ministry_supervisor') && !empty($user->governorate)) {
+            $schoolGov = $evaluation->school?->governorate;
+            if ($schoolGov && $schoolGov !== $user->governorate) {
+                return ApiResponse::forbidden('غير مصرح: المدرسة تقع خارج النطاق الجغرافي المسند إليك (' . $user->governorate . ').');
+            }
+        }
+
+        $validated = $request->validate([
+            'indicator_id' => 'required|integer|exists:indicators,indicator_id',
+            'deficiency_category' => 'required|string|max:150',
+            'supervisor_note' => 'nullable|string|max:2000',
+            'directives' => 'nullable|string|max:2000',
+        ]);
+
+        $latestSubmission = $submission ?? EvaluationSubmission::whereHas('report', fn($q) => $q->where('evaluation_id', $evaluation->evaluation_id))
+            ->latest('submission_id')
+            ->first();
+
+        $deficiency = SupervisionDeficiencyNote::updateOrCreate(
+            [
+                'evaluation_id' => $evaluation->evaluation_id,
+                'indicator_id' => $validated['indicator_id'],
+            ],
+            [
+                'submission_id' => $latestSubmission?->submission_id,
+                'deficiency_category' => $validated['deficiency_category'],
+                'supervisor_note' => $validated['supervisor_note'] ?? null,
+                'directives' => $validated['directives'] ?? null,
+                'created_by' => $user->user_id,
+            ]
+        );
+
+        return ApiResponse::success([
+            'id' => $deficiency->id,
+            'evaluationId' => $deficiency->evaluation_id,
+            'indicatorId' => $deficiency->indicator_id,
+            'deficiencyCategory' => $deficiency->deficiency_category,
+            'supervisorNote' => $deficiency->supervisor_note,
+            'directives' => $deficiency->directives,
+        ], 'تم حفظ رصد النقص وتوجيه المشرف للمؤشر بنجاح.');
+    }
+
+    /**
+     * 3.3. إلغاء رصد النقص عن مؤشر محدد
+     * DELETE /api/v1/evaluation-submissions/{id}/deficiency-notes/{indicatorId}
+     * DELETE /api/v1/evaluations/{id}/deficiency-notes/{indicatorId}
+     */
+    public function deleteDeficiencyNote(Request $request, int $id, int $indicatorId): JsonResponse
+    {
+        $user = $request->user();
+
+        $submission = EvaluationSubmission::with('report.evaluation.school')->find($id);
+        $evaluation = $submission?->report?->evaluation ?? Evaluation::with('school')->find($id);
+
+        if (!$evaluation) {
+            return ApiResponse::notFound('ملف التقييم غير موجود.');
+        }
+
+        if ($user && $user->hasRole('ministry_supervisor') && !empty($user->governorate)) {
+            $schoolGov = $evaluation->school?->governorate;
+            if ($schoolGov && $schoolGov !== $user->governorate) {
+                return ApiResponse::forbidden('غير مصرح: المدرسة تقع خارج النطاق الجغرافي المسند إليك.');
+            }
+        }
+
+        SupervisionDeficiencyNote::where('evaluation_id', $evaluation->evaluation_id)
+            ->where('indicator_id', $indicatorId)
+            ->delete();
+
+        return ApiResponse::success(null, 'تم إلغاء رصد النقص عن المؤشر بنجاح.');
     }
 
     /**

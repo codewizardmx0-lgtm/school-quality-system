@@ -6,7 +6,7 @@
 
 import { get, post, put, patch } from '../../../api/apiClient';
 import type { ApiResponse } from '../../../api/apiTypes';
-import type { User, Role, CreateUserDto, EditUserDto } from '../types/admin.types';
+import type { User, Role, CreateUserDto, EditUserDto, Governorate, Directorate } from '../types/admin.types';
 
 export interface UsersQueryParams {
   page?: number;
@@ -125,12 +125,16 @@ export const usersApi = {
     roles: Role[];
     schools: Array<{ schoolId: number; schoolName: string; schoolCode: string; educationalDistrict?: string }>;
     ministries: any[];
+    governorates?: Governorate[];
+    directorates?: Directorate[];
   }>> {
     try {
       const res = await get<{
         roles: any[];
         schools: any[];
         ministries: any[];
+        governorates?: any[];
+        directorates?: any[];
       }>('/users/meta');
 
       if (res && res.data) {
@@ -151,13 +155,28 @@ export const usersApi = {
               educationalDistrict: s.educationalDistrict ?? s.educational_district ?? '',
             })),
             ministries: res.data.ministries || [],
+            governorates: (res.data.governorates || []).map((g: any) => ({
+              governorateId: g.governorateId ?? g.governorate_id,
+              nameAr: g.nameAr ?? g.name_ar,
+              nameEn: g.nameEn ?? g.name_en ?? '',
+              code: g.code ?? '',
+            })),
+            directorates: (res.data.directorates || []).map((d: any) => ({
+              directorateId: d.directorateId ?? d.directorate_id,
+              directorateName: d.directorateName ?? d.directorate_name ?? d.name_ar,
+              governorateId: d.governorateId ?? d.governorate_id,
+              governorate: d.governorate ?? d.governorate_name ?? '',
+              schoolCount: d.schoolCount ?? 0,
+              isActive: d.isActive ?? true,
+              createdAt: d.createdAt ?? '',
+            })),
           },
         };
       }
-      return { data: { roles: [], schools: [], ministries: [] }, message: null, errors: null, meta: null };
+      return { data: { roles: [], schools: [], ministries: [], governorates: [], directorates: [] }, message: null, errors: null, meta: null };
     } catch (error) {
       console.warn('Backend /users/meta failed:', error);
-      return { data: { roles: [], schools: [], ministries: [] }, message: null, errors: null, meta: null };
+      return { data: { roles: [], schools: [], ministries: [], governorates: [], directorates: [] }, message: null, errors: null, meta: null };
     }
   },
 

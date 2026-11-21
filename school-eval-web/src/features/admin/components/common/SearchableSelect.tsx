@@ -58,6 +58,7 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
 
   // Selected Option
   const selectedOption = useMemo(() => {
+    if (value === null || value === undefined || value === '') return null;
     return options.find((opt) => String(opt.value) === String(value)) || null;
   }, [options, value]);
 
@@ -66,10 +67,10 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
     if (!searchTerm.trim()) return options;
     const term = searchTerm.toLowerCase().trim();
     return options.filter((opt) => {
-      const matchLabel = opt.label.toLowerCase().includes(term);
-      const matchCode = opt.code ? opt.code.toLowerCase().includes(term) : false;
-      const matchSub = opt.sublabel ? opt.sublabel.toLowerCase().includes(term) : false;
-      const matchVal = String(opt.value).includes(term);
+      const matchLabel = opt.label ? String(opt.label).toLowerCase().includes(term) : false;
+      const matchCode = opt.code ? String(opt.code).toLowerCase().includes(term) : false;
+      const matchSub = opt.sublabel ? String(opt.sublabel).toLowerCase().includes(term) : false;
+      const matchVal = String(opt.value || '').includes(term);
       return matchLabel || matchCode || matchSub || matchVal;
     });
   }, [options, searchTerm]);

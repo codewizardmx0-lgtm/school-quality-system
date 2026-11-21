@@ -373,6 +373,12 @@ class AdminController extends Controller
         $govId = $request->query('governorateId') ?? $request->query('governorate_id');
         if ($govId && !empty($govId)) {
             $query->where('governorate_id', (int) $govId);
+        } elseif ($request->filled('governorate')) {
+            $govName = $request->query('governorate');
+            $query->whereHas('governorate', function ($q) use ($govName) {
+                $q->where('name_ar', $govName)
+                  ->orWhere('name_ar', 'like', "%{$govName}%");
+            });
         }
 
         $directorates = $query->orderBy('governorate_id', 'asc')
@@ -577,10 +583,18 @@ class AdminController extends Controller
             ->orWhere('educational_district', $shortName)
             ->count();
 
+        $linkedUsersCount = User::where('directorate_id', $dir->directorate_id)->count();
+
         if ($linkedSchoolsCount > 0) {
             return ApiResponse::validationError([
                 'directorate' => ['لا يمكن حذف المديرية لأنها مرتبطة بمدارس.'],
             ], 'لا يمكن حذف المديرية لأنها مرتبطة بمدارس');
+        }
+
+        if ($linkedUsersCount > 0) {
+            return ApiResponse::validationError([
+                'directorate' => ['لا يمكن حذف المديرية لأنها مرتبطة بمشرفين مسجلين.'],
+            ], 'لا يمكن حذف المديرية لأنها مرتبطة بمشرفين مسجلين في النظام.');
         }
 
         $dir->delete();

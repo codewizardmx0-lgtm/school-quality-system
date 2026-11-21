@@ -169,8 +169,11 @@ Route::prefix('v1')->group(function () {
         Route::get('/standard-versions/active', [\App\Http\Controllers\Api\V1\SupervisionController::class, 'activeStandardVersion'])->name('api.v1.standard-versions.active');
 
         Route::prefix('evaluation-submissions')->group(function () {
+            Route::get('/available-for-review', [\App\Http\Controllers\Api\V1\SupervisionController::class, 'reviewableSubmissions'])->name('api.v1.evaluation-submissions.available-for-review');
             Route::get('/{id}/review', [\App\Http\Controllers\Api\V1\SupervisionController::class, 'reviewSubmission'])->name('api.v1.evaluation-submissions.review');
             Route::post('/{id}/completion-requests', [\App\Http\Controllers\Api\V1\SupervisionController::class, 'createCompletionRequest'])->name('api.v1.evaluation-submissions.completion-requests');
+            Route::post('/{id}/deficiency-notes', [\App\Http\Controllers\Api\V1\SupervisionController::class, 'saveDeficiencyNote'])->name('api.v1.evaluation-submissions.deficiency-notes.store');
+            Route::delete('/{id}/deficiency-notes/{indicatorId}', [\App\Http\Controllers\Api\V1\SupervisionController::class, 'deleteDeficiencyNote'])->name('api.v1.evaluation-submissions.deficiency-notes.delete');
         });
 
         Route::prefix('schools/{id}')->group(function () {
@@ -302,6 +305,8 @@ Route::prefix('v1')->group(function () {
             Route::get('/{id}/export-excel', [\App\Http\Controllers\Api\V1\EvaluationController::class, 'exportExcel'])->name('api.v1.evaluations.export-excel');
             Route::get('/{id}/trend', [\App\Http\Controllers\Api\V1\EvaluationController::class, 'trend'])->name('api.v1.evaluations.trend');
             Route::get('/{id}/action-recommendations', [\App\Http\Controllers\Api\V1\EvaluationController::class, 'actionRecommendations'])->name('api.v1.evaluations.action-recommendations');
+            Route::post('/{id}/deficiency-notes', [\App\Http\Controllers\Api\V1\SupervisionController::class, 'saveDeficiencyNote'])->name('api.v1.evaluations.deficiency-notes.store');
+            Route::delete('/{id}/deficiency-notes/{indicatorId}', [\App\Http\Controllers\Api\V1\SupervisionController::class, 'deleteDeficiencyNote'])->name('api.v1.evaluations.deficiency-notes.delete');
         });
 
         // نتائج التقييم: الملاحظات (Evaluation Results)

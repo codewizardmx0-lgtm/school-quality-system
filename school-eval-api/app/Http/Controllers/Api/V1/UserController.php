@@ -7,6 +7,8 @@ use App\Http\Requests\Admin\StoreUserRequest;
 use App\Http\Requests\Admin\UpdateUserRequest;
 use App\Http\Resources\UserResource;
 use App\Http\Responses\ApiResponse;
+use App\Models\Directorate;
+use App\Models\Governorate;
 use App\Models\Ministry;
 use App\Models\Role;
 use App\Models\School;
@@ -39,7 +41,7 @@ class UserController extends Controller
             return ApiResponse::forbidden('غير مصرح');
         }
 
-        $query = User::with(['school', 'ministry', 'roles']);
+        $query = User::with(['school', 'ministry', 'roles', 'directorate']);
 
         // فلترة بالنوع
         if ($request->has('userType')) {
@@ -84,7 +86,7 @@ class UserController extends Controller
             return ApiResponse::forbidden('غير مصرح');
         }
 
-        $targetUser = User::with(['school', 'ministry', 'roles'])->find($id);
+        $targetUser = User::with(['school', 'ministry', 'roles', 'directorate'])->find($id);
 
         if (!$targetUser) {
             return ApiResponse::notFound('المستخدم المطلوب غير موجود.');
@@ -104,16 +106,22 @@ class UserController extends Controller
         $data = $request->validated();
 
         $newUser = DB::transaction(function () use ($data) {
+            $ministryId = null;
+            if ($data['userType'] === 'ministry') {
+                $ministryId = $data['ministryId'] ?? Ministry::first()?->ministry_id ?? 1;
+            }
+
             $user = User::create([
-                'username'      => $data['username'],
-                'password_hash' => Hash::make($data['password']),
-                'full_name'     => $data['fullName'],
-                'email'         => $data['email'],
-                'user_type'     => $data['userType'],
-                'governorate'   => $data['userType'] === 'ministry' ? ($data['governorate'] ?? null) : null,
-                'school_id'     => $data['userType'] === 'school' ? ($data['schoolId'] ?? null) : null,
-                'ministry_id'   => $data['userType'] === 'ministry' ? ($data['ministryId'] ?? null) : null,
-                'status'        => $data['status'],
+                'username'       => $data['username'],
+                'password_hash'  => Hash::make($data['password']),
+                'full_name'      => $data['fullName'],
+                'email'          => $data['email'],
+                'user_type'      => $data['userType'],
+                'governorate'    => $data['userType'] === 'ministry' ? ($data['governorate'] ?? null) : null,
+                'directorate_id' => $data['userType'] === 'ministry' ? ($data['directorateId'] ?? null) : null,
+                'school_id'      => $data['userType'] === 'school' ? ($data['schoolId'] ?? null) : null,
+                'ministry_id'    => $ministryId,
+                'status'         => $data['status'],
             ]);
 
             // إسناد الدور الوظيفي
@@ -130,7 +138,7 @@ class UserController extends Controller
             return $user;
         });
 
-        $newUser->load(['school', 'ministry', 'roles']);
+        $newUser->load(['school', 'ministry', 'roles', 'directorate']);
 
         $roleName = $newUser->roles->first()?->description ?? $newUser->roles->first()?->role_name ?? 'مستخدم';
         (new AuditLoggerService())->log(
@@ -183,34 +191,53 @@ class UserController extends Controller
             if (isset($data['userType'])) {
                 $fields['user_type'] = $data['userType'];
                 $fields['school_id'] = $data['userType'] === 'school' ? ($data['schoolId'] ?? null) : null;
-                $fields['ministry_id'] = $data['userType'] === 'ministry' ? ($data['ministryId'] ?? null) : null;
+                $fields['ministry_id'] = $data['userType'] === 'ministry' ? ($data['ministryId'] ?? Ministry::first()?->ministry_id ?? 1) : null;
                 $fields['governorate'] = $data['userType'] === 'ministry' ? ($data['governorate'] ?? null) : null;
-            } elseif (array_key_exists('schoolId', $data) || array_key_exists('ministryId', $data) || array_key_exists('governorate', $data)) {
+                $fields['directorate_id'] = $data['userType'] === 'ministry' ? ($data['directorateId'] ?? null) : null;
+            } elseif (array_key_exists('schoolId', $data) || array_key_exists('ministryId', $data) || array_key_exists('governorate', $data) || array_key_exists('directorateId', $data)) {
                 if (array_key_exists('schoolId', $data)) $fields['school_id'] = $data['schoolId'];
                 if (array_key_exists('ministryId', $data)) $fields['ministry_id'] = $data['ministryId'];
                 if (array_key_exists('governorate', $data)) $fields['governorate'] = $data['governorate'];
+                if (array_key_exists('directorateId', $data)) $fields['directorate_id'] = $data['directorateId'];
             }
 
             $targetUser->update($fields);
 
             // تحديث الدور إن تم تمريره
             if (!empty($data['roleId'])) {
-                // إلغاء الأدوار السابقة
+                $newRoleId = (int) $data['roleId'];
+
+                // إلغاء تفعيل أي أدوار سابقة أخرى للمستخدم
                 UserRole::where('user_id', $targetUser->user_id)
+                    ->where('role_id', '!=', $newRoleId)
                     ->update(['active' => false, 'revoked_at' => now()]);
 
-                // إسناد الدور الجديد
-                UserRole::create([
-                    'user_id'     => $targetUser->user_id,
-                    'role_id'     => $data['roleId'],
-                    'assigned_at' => now(),
-                    'revoked_at'  => null,
-                    'active'      => true,
-                ]);
+                // تفعيل الدور المطلوب أو إضافته إن لم يكن موجوداً مسبقاً لمنع خطأ المفتاح المكرر Duplicate Entry
+                $existingRole = UserRole::where('user_id', $targetUser->user_id)
+                    ->where('role_id', $newRoleId)
+                    ->first();
+
+                if ($existingRole) {
+                    UserRole::where('user_id', $targetUser->user_id)
+                        ->where('role_id', $newRoleId)
+                        ->update([
+                            'assigned_at' => now(),
+                            'revoked_at'  => null,
+                            'active'      => true,
+                        ]);
+                } else {
+                    UserRole::create([
+                        'user_id'     => $targetUser->user_id,
+                        'role_id'     => $newRoleId,
+                        'assigned_at' => now(),
+                        'revoked_at'  => null,
+                        'active'      => true,
+                    ]);
+                }
             }
         });
 
-        $targetUser->load(['school', 'ministry', 'roles']);
+        $targetUser->load(['school', 'ministry', 'roles', 'directorate']);
 
         (new AuditLoggerService())->log(
             action: 'user.updated',
@@ -323,11 +350,35 @@ class UserController extends Controller
             ];
         });
 
+        $governorates = Governorate::orderBy('governorate_id')->get()->map(function ($g) {
+            return [
+                'governorateId' => $g->governorate_id,
+                'nameAr'        => $g->name_ar,
+                'nameEn'        => $g->name_en,
+                'code'          => $g->code,
+            ];
+        });
+
+        $directorates = Directorate::with('governorate')->where('is_active', true)
+            ->orderBy('governorate_id', 'asc')
+            ->orderBy('directorate_id', 'asc')
+            ->get()
+            ->map(function ($dir) {
+                return [
+                    'directorateId'   => $dir->directorate_id,
+                    'directorateName' => $dir->name_ar,
+                    'governorateId'   => $dir->governorate_id,
+                    'governorate'     => $dir->governorate?->name_ar ?? 'أمانة العاصمة',
+                ];
+            });
+
         return ApiResponse::success(
             data: [
-                'roles'      => $roles,
-                'schools'    => $schools,
-                'ministries' => $ministries,
+                'roles'        => $roles,
+                'schools'      => $schools,
+                'ministries'   => $ministries,
+                'governorates' => $governorates,
+                'directorates' => $directorates,
             ],
             message: null
         );

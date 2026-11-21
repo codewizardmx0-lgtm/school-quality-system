@@ -35,10 +35,10 @@ export const SupervisionLayout: React.FC<SupervisionLayoutProps> = ({
   const { user } = useAuth();
   const [activeScreen, setActiveScreen] = useState<SupervisionScreenKey>(initialScreen);
 
-  // سياق الانتقال بين الشاشات
-  const [selectedSubmissionId, setSelectedSubmissionId] = useState<number>(101);
-  const [selectedSchoolId, setSelectedSchoolId] = useState<number>(104);
-  const [selectedSchoolName, setSelectedSchoolName] = useState<string>('مدرسة الفاروق النموذجية');
+  // سياق الانتقال بين الشاشات (بدون معرفات وهمية ثابتة)
+  const [selectedSubmissionId, setSelectedSubmissionId] = useState<number | undefined>(undefined);
+  const [selectedSchoolId, setSelectedSchoolId] = useState<number | undefined>(undefined);
+  const [selectedSchoolName, setSelectedSchoolName] = useState<string | undefined>(undefined);
   const [selectedCycleId, setSelectedCycleId] = useState<number | undefined>(undefined);
   const [prefillCycleLaunch, setPrefillCycleLaunch] = useState<any | undefined>(undefined);
   const [preloadedItems, setPreloadedItems] = useState<PreloadedCompletionItem[] | undefined>(

@@ -49,5 +49,18 @@ class CycleParticipationSeeder extends Seeder
                 ]
             );
         }
+
+        // ضمان مشاركة المدرستين المرجعيتين لاختبارات التكامل والتناظر
+        $benchmarkSchools = School::whereIn('identification_data', [
+            'SCH-AMANA-2026-001',
+            'SCH-TAIZ-2026-001',
+        ])->get();
+
+        foreach ($benchmarkSchools as $bSchool) {
+            CycleParticipation::firstOrCreate([
+                'cycle_id'  => $cycle->cycle_id,
+                'school_id' => $bSchool->school_id,
+            ]);
+        }
     }
 }

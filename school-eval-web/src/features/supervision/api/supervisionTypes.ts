@@ -130,20 +130,66 @@ export interface EvidenceItem {
   uploadedAt: string;
 }
 
+export const DEFICIENCY_CATEGORIES = [
+  'تضخيم الدرجة الممنوحة دون شاهد كافٍ',
+  'نقص الشواهد الإلزامية المطلوبة في أداة التحقق',
+  'غموض أو عدم كفاية التبرير الميداني',
+  'عدم إدراج المؤشر المنخفض في خطة التحسين',
+] as const;
+
+export type DeficiencyCategory = (typeof DEFICIENCY_CATEGORIES)[number];
+
+export interface IndicatorDescriptorItem {
+  score: number;
+  description: string;
+}
+
 export interface IndicatorAuditItem {
   indicatorId: number;
   code: string;
+  standardId?: number;
   standardName: string;
   subStandardName: string;
   title: string;
   schoolScore: number; // 0-3
   scoreLevelName: string;
   scoreDescription?: string;
+  descriptors?: IndicatorDescriptorItem[];
+  verificationTools?: string[];
   evidences: EvidenceItem[];
   hasDefect: boolean;
+  defectCategory?: string | null;
   defectReason?: string | null;
   directives?: string | null;
   supervisorFeedback?: string;
+}
+
+export interface OpenCompletionRequestData {
+  requestId: number;
+  notes?: string;
+  issuedAt: string;
+  deadline?: string | null;
+  daysRemaining: number;
+  itemsCount: number;
+  items: Array<{
+    indicatorId: number;
+    code: string;
+    title: string;
+    missingDescription?: string;
+  }>;
+}
+
+export interface ReviewableSubmissionItem {
+  evaluationId: number;
+  submissionId: number;
+  schoolId: number;
+  schoolName: string;
+  schoolCode: string;
+  governorate: string;
+  status: OutputStatusType;
+  statusArabic: string;
+  submittedAt: string;
+  attemptNo: number;
 }
 
 export interface SubmissionReviewData {
@@ -151,9 +197,11 @@ export interface SubmissionReviewData {
   reportId: number;
   evaluationId: number;
   attemptNo: number;
+  isReReview?: boolean;
   status: OutputStatusType;
   statusArabic: string;
   submittedAt: string;
+  closedAt?: string | null;
   school: {
     schoolId: number;
     schoolCode: string;
@@ -172,6 +220,8 @@ export interface SubmissionReviewData {
     overallScore: number;
     scoreScaleMax: number;
     compliancePercentage: number;
+    scoredIndicators?: number;
+    totalIndicators?: number;
   };
   automatedChecks: {
     rubricCompleteness: boolean;
@@ -188,6 +238,10 @@ export interface SubmissionReviewData {
     priorities: string[];
   };
   indicators: IndicatorAuditItem[];
+  openCompletionRequest?: OpenCompletionRequestData | null;
+  deficienciesCount?: number;
+  exportPdfUrl?: string;
+  exportExcelUrl?: string;
   packageDownloadUrl?: string;
 }
 

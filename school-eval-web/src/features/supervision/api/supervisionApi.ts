@@ -5,12 +5,13 @@
  * أي خطأ في الاتصال يُمرر مباشرة للمكونات لعرض رسائل الخطأ النظامية أو EmptyState
  */
 
-import { get, post, patch } from '../../../api/apiClient';
+import { get, post, patch, del } from '../../../api/apiClient';
 import type {
   SupervisionDashboardData,
   ActiveStandardVersion,
   CycleLaunchPayload,
   SubmissionReviewData,
+  ReviewableSubmissionItem,
   CreateCompletionRequestPayload,
   CompletionRequestResponse,
   SchoolTrackingLogData,
@@ -180,6 +181,50 @@ export const supervisionApi = {
   },
 
   /**
+   * 4.1. قائمة المخرجات المتاحة للمراجعة الإشرافية في النطاق الجغرافي
+   * GET /api/v1/evaluation-submissions/available-for-review
+   */
+  async getReviewableSubmissions(): Promise<ReviewableSubmissionItem[]> {
+    const response = await get<ReviewableSubmissionItem[]>('/evaluation-submissions/available-for-review');
+    return response?.data ?? [];
+  },
+
+  /**
+   * 4.2. حفظ أو تحديث رصد نقص لمؤشر تقييم محدد في قاعدة البيانات (FR-SUP-04)
+   * POST /api/v1/evaluation-submissions/{id}/deficiency-notes
+   */
+  async saveDeficiencyNote(
+    id: number,
+    payload: {
+      indicatorId: number;
+      deficiencyCategory: string;
+      supervisorNote?: string;
+      directives?: string;
+    }
+  ): Promise<any> {
+    const response = await post<any>(`/evaluation-submissions/${id}/deficiency-notes`, {
+      indicator_id: payload.indicatorId,
+      deficiency_category: payload.deficiencyCategory,
+      supervisor_note: payload.supervisorNote,
+      directives: payload.directives,
+    });
+    if (!response?.data && response?.errors) {
+      const firstError = Object.values(response.errors)[0]?.[0];
+      throw new Error(firstError || response.message || 'تعذر حفظ رصد النقص.');
+    }
+    return response?.data ?? response;
+  },
+
+  /**
+   * 4.3. إلغاء رصد النقص عن مؤشر محدد
+   * DELETE /api/v1/evaluation-submissions/{id}/deficiency-notes/{indicatorId}
+   */
+  async deleteDeficiencyNote(id: number, indicatorId: number): Promise<any> {
+    const response = await del<any>(`/evaluation-submissions/${id}/deficiency-notes/${indicatorId}`);
+    return response?.data ?? response;
+  },
+
+  /**
    * 5. إغلاق المراجعة الإشرافية بنجاح ونقل التقييم إلى مكتمل (BR-MIN-03)
    * POST /api/v1/evaluations/{id}/close
    */
@@ -195,7 +240,14 @@ export const supervisionApi = {
   },
 
   /**
-   * اسم بديل متوافق مع المكونات الحالية (Deprecated alias complying with BR-MIN-03)
+   * اسم رسمي معتمد مطابق لقواعد الحوكمة (BR-MIN-03)
+   */
+  async closeReview(evaluationId: number, notes?: string): Promise<{ evaluationId: number; status: string }> {
+    return this.closeSubmissionReview(evaluationId, notes);
+  },
+
+  /**
+   * اسم بديل متوافق مع المكونات السابقة (Deprecated alias complying with BR-MIN-03)
    */
   async approveSubmission(submissionId: number, notes?: string): Promise<{ submissionId: number; status: string }> {
     const result = await this.closeSubmissionReview(submissionId, notes);
