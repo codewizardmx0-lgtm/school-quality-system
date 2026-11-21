@@ -143,6 +143,7 @@ export const CyclesListPage: React.FC<CyclesListPageProps> = ({
         status: (c.status === 'Active' ? 'Active' : 'Closed') as 'Active' | 'Closed',
         participationsCount: c.participationsCount ?? c.participations_count ?? 0,
         evaluationsCount: c.evaluationsCount ?? c.evaluations_count ?? 0,
+        maxCompletionDays: c.maxCompletionDays ?? c.max_completion_days ?? 14,
         version: c.version
           ? {
               versionId: c.version.versionId ?? c.version.version_id,
@@ -895,6 +896,7 @@ export const CyclesListPage: React.FC<CyclesListPageProps> = ({
                       <th style={{ padding: '14px 16px', fontWeight: 800 }}>الدورة التقييمية والعام الدراسي</th>
                       <th style={{ padding: '14px 16px', fontWeight: 800 }}>الإصدار المعياري المعتمد</th>
                       <th style={{ padding: '14px 16px', fontWeight: 800 }}>الجدول الزمني والمدة</th>
+                      <th style={{ padding: '14px 16px', fontWeight: 800 }}>الحد الأقصى لمهلة الاستكمال</th>
                       <th style={{ padding: '14px 16px', fontWeight: 800 }}>النطاق الجغرافي</th>
                       <th style={{ padding: '14px 16px', fontWeight: 800 }}>المدارس المشاركة</th>
                       <th style={{ padding: '14px 16px', fontWeight: 800 }}>الحالة النظامية</th>
@@ -954,7 +956,29 @@ export const CyclesListPage: React.FC<CyclesListPageProps> = ({
                             </div>
                           </td>
 
-                          {/* 4. النطاق الجغرافي */}
+                          {/* 4. الحد الأقصى لمهلة الاستكمال */}
+                          <td style={{ padding: '14px 16px', whiteSpace: 'nowrap' }}>
+                            <span
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '5px',
+                                fontSize: '12px',
+                                fontWeight: 700,
+                                color: '#92400E',
+                                backgroundColor: '#FEF3C7',
+                                border: '1px solid #FDE68A',
+                                padding: '3px 8px',
+                                borderRadius: '6px',
+                              }}
+                              title="المهلة القصوى المسموحة لطلبات الاستكمال الموجهة للمدارس في هذه الدورة"
+                            >
+                              <Clock size={12} color="#D97706" />
+                              <span>{cycle.maxCompletionDays ?? 14} يوماً</span>
+                            </span>
+                          </td>
+
+                          {/* 5. النطاق الجغرافي */}
                           <td style={{ padding: '14px 16px' }}>
                             <span
                               style={{

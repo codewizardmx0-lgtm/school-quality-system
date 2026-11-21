@@ -26,7 +26,7 @@ interface SchoolTrackingLogPageProps {
 }
 
 export const SchoolTrackingLogPage: React.FC<SchoolTrackingLogPageProps> = ({
-  schoolId = 104,
+  schoolId,
   onNavigate,
 }) => {
   const {

@@ -331,6 +331,49 @@ class SupervisionController extends Controller
     }
 
     /**
+     * شجرة المعايير الوطنية السبعة ومؤشراتها الـ 109 لاختيار بنود الاستكمال
+     * GET /api/v1/supervision/standards-tree
+     */
+    public function nationalStandardsTree(): JsonResponse
+    {
+        $version = StandardVersion::with(['standards.subStandards.indicators'])
+            ->where('status', 'Active')
+            ->first()
+            ?? StandardVersion::where('status', 'Approved')->first()
+            ?? StandardVersion::first();
+
+        if (!$version) {
+            return ApiResponse::notFound('لا يوجد إصدار معياري نشط حالياً.');
+        }
+
+        $tree = $version->standards->map(function ($std) {
+            return [
+                'standardId' => $std->standard_id,
+                'name' => $std->name,
+                'code' => $std->code ?? "STD-{$std->standard_id}",
+                'weight' => (float)$std->weight,
+                'subStandards' => $std->subStandards->map(function ($sub) {
+                    return [
+                        'subStandardId' => $sub->sub_standard_id,
+                        'name' => $sub->name,
+                        'code' => $sub->code ?? "SUB-{$sub->sub_standard_id}",
+                        'indicators' => $sub->indicators->map(function ($ind) {
+                            return [
+                                'indicatorId' => $ind->indicator_id,
+                                'code' => $ind->code ?? "IND-{$ind->indicator_id}",
+                                'title' => $ind->name ?? $ind->title ?? 'مؤشر تقييمي',
+                                'weight' => (float)$ind->weight,
+                            ];
+                        })->values()->toArray(),
+                    ];
+                })->values()->toArray(),
+            ];
+        })->values()->toArray();
+
+        return ApiResponse::success($tree, 'تم جلب شجرة المعايير الوطنية بنجاح.');
+    }
+
+    /**
      * 3. فحص وتدقيق مخرج التقييم المدرسي والـ 109 مؤشرات الحقيقية (Zero-Mock)
      * GET /api/v1/evaluation-submissions/{id}/review
      */
@@ -975,6 +1018,7 @@ class SupervisionController extends Controller
                 'categories' => $def->deficiency_categories ?: ($def->deficiency_category ? [$def->deficiency_category] : []),
                 'note' => $def->supervisor_note,
                 'directives' => $def->directives,
+                'allowedActions' => $def->allowed_actions ?: ['upload_replace_evidence'],
                 'createdAt' => $def->created_at?->toIso8601String(),
             ];
         })->values()->toArray();
@@ -1094,6 +1138,8 @@ class SupervisionController extends Controller
             'exportPdfUrl' => "/api/v1/evaluations/{$evaluation->evaluation_id}/export-pdf",
             'exportExcelUrl' => "/api/v1/evaluations/{$evaluation->evaluation_id}/export-excel",
             'packageDownloadUrl' => "/api/v1/evaluations/{$evaluation->evaluation_id}/export-pdf",
+            'cycleEndDate' => $cycle?->end_date ? Carbon::parse($cycle->end_date)->toDateString() : null,
+            'cycleMaxCompletionDays' => (int) ($cycle?->max_completion_days ?? 14),
         ], 'تم تحميل حزمة مراجعة المخرج بنجاح.');
     }
 
@@ -1104,7 +1150,9 @@ class SupervisionController extends Controller
     public function reviewableSubmissions(Request $request): JsonResponse
     {
         $user = $request->user();
-        $supervisorGov = ($user && $user->hasRole('ministry_supervisor')) ? $user->governorate : null;
+        $supervisorGov = ($user && ($user->hasRole('ministry_supervisor') || $user->roles()->where('roles.role_name', 'ministry_supervisor')->where('user_roles.active', true)->exists()) && !empty($user->governorate))
+            ? $user->governorate
+            : null;
 
         $activeCycle = EvaluationCycle::where('status', 'Active')->latest('cycle_id')->first();
 
@@ -1128,6 +1176,8 @@ class SupervisionController extends Controller
                 'schoolName' => $evaluation->school?->school_name ?? $evaluation->school?->name ?? 'مدرسة التقييم',
                 'schoolCode' => $evaluation->school?->school_code ?? "SCH-{$evaluation->school_id}",
                 'governorate' => $evaluation->school?->governorate ?? 'غير محدد',
+                'directorate' => $evaluation->school?->educational_district ?? $evaluation->school?->directorate ?? 'مركز المديرية',
+                'educationalStage' => $evaluation->school?->educational_stage ?? 'التعليم العام',
                 'status' => $status,
                 'statusArabic' => match ($status) {
                     'NeedsCompletion' => 'يحتاج استكمال',
@@ -1184,6 +1234,8 @@ class SupervisionController extends Controller
             'deficiency_categories.*' => 'string|max:150',
             'supervisor_note' => 'nullable|string|max:2000',
             'directives' => 'nullable|string|max:2000',
+            'allowed_actions' => 'nullable|array',
+            'allowed_actions.*' => 'string|max:100',
         ]);
 
         $categories = $validated['deficiency_categories'] ?? [];
@@ -1207,6 +1259,7 @@ class SupervisionController extends Controller
                 'deficiency_categories' => $categories,
                 'supervisor_note' => $validated['supervisor_note'] ?? null,
                 'directives' => $validated['directives'] ?? null,
+                'allowed_actions' => $validated['allowed_actions'] ?? null,
                 'created_by' => $user->user_id,
             ]
         );
@@ -1250,6 +1303,133 @@ class SupervisionController extends Controller
             ->delete();
 
         return ApiResponse::success(null, 'تم إلغاء رصد النقص عن المؤشر بنجاح.');
+    }
+
+    /**
+     * 3.2. سجل ومتابعة طلبات الاستكمال في النطاق الجغرافي للمشرف (Screen 5 Tracker)
+     * GET /api/v1/supervision/completion-requests
+     */
+    public function completionRequestsTracker(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        $supervisorGov = ($user && ($user->hasRole('ministry_supervisor') || $user->roles()->where('roles.role_name', 'ministry_supervisor')->where('user_roles.active', true)->exists()) && !empty($user->governorate))
+            ? $user->governorate
+            : null;
+
+        $cycleId = $request->query('cycle_id');
+        $activeCycle = $cycleId
+            ? EvaluationCycle::find($cycleId)
+            : EvaluationCycle::where('status', 'Active')->latest('cycle_id')->first();
+
+        $query = CompletionRequest::with([
+            'submission.report.evaluation.school',
+            'submission.report.evaluation.cycle',
+            'items.indicator.subStandard.standard',
+            'issuedBy',
+        ])
+        ->when($activeCycle, function ($q) use ($activeCycle) {
+            $q->whereHas('submission.report.evaluation', fn($sq) => $sq->where('cycle_id', $activeCycle->cycle_id));
+        })
+        ->when($supervisorGov, function ($q) use ($supervisorGov) {
+            $q->whereHas('submission.report.evaluation.school', fn($sq) => $sq->where('governorate', $supervisorGov));
+        })
+        ->orderBy('request_id', 'desc');
+
+        $allRequests = $query->get();
+
+        $totalCount = $allRequests->count();
+        $openCount = 0;
+        $resubmittedCount = 0;
+        $overdueCount = 0;
+
+        $items = $allRequests->map(function ($cr) use (&$openCount, &$resubmittedCount, &$overdueCount) {
+            $submission = $cr->submission;
+            $evaluation = $submission?->report?->evaluation;
+            $school = $evaluation?->school;
+            $cycle = $evaluation?->cycle;
+
+            $status = $cr->status; // 'Open', 'UnderReview', 'Resolved', 'Closed'
+            $subStatus = $submission?->status ?? 'NeedsCompletion';
+            $attemptNo = (int) ($submission?->attempt_no ?? 1);
+
+            $deadline = $cr->completion_deadline ? Carbon::parse($cr->completion_deadline) : null;
+            $isOverdue = $status === 'Open' && $deadline && now()->gt($deadline);
+            $isResubmitted = ($attemptNo > 1 && ($subStatus === 'Submitted' || $subStatus === 'UnderReview' || $status === 'UnderReview'));
+
+            if ($status === 'Open') {
+                $openCount++;
+                if ($isOverdue) {
+                    $overdueCount++;
+                }
+            }
+            if ($isResubmitted) {
+                $resubmittedCount++;
+            }
+
+            $daysRemaining = $deadline ? (int) now()->diffInDays($deadline, false) : 0;
+
+            // تسمية العرض البصرية المتطابقة مع الحالات النظامية الخمس
+            $statusDisplay = match (true) {
+                $isResubmitted => 'أُعيد رفعها للمراجعة',
+                $isOverdue => 'متأخر عن المهلة',
+                $status === 'Open' => 'قيد الاستيفاء بالمدرسة',
+                $status === 'Resolved' || $status === 'Closed' => 'مكتمل الاستيفاء',
+                default => $status,
+            };
+
+            $formattedItems = $cr->items->map(function ($item) {
+                return [
+                    'id' => $item->request_item_id,
+                    'indicatorId' => $item->indicator_id,
+                    'code' => $item->indicator?->code ?? "IND-{$item->indicator_id}",
+                    'title' => $item->indicator?->name ?? $item->indicator?->title ?? 'مؤشر تقييمي',
+                    'standardName' => $item->indicator?->subStandard?->standard?->name ?? 'معيار عام',
+                    'missingDescription' => $item->missing_description,
+                    'allowedActions' => $item->allowed_actions ?: ['upload_replace_evidence'],
+                    'status' => $item->status,
+                ];
+            })->values()->toArray();
+
+            return [
+                'requestId' => $cr->request_id,
+                'evaluationId' => $evaluation?->evaluation_id,
+                'submissionId' => $submission?->submission_id,
+                'schoolId' => $school?->school_id,
+                'schoolName' => $school?->school_name ?? $school?->name ?? 'مدرسة التقييم',
+                'schoolCode' => $school?->school_code ?? "SCH-{$school?->school_id}",
+                'governorate' => $school?->governorate ?? 'غير محدد',
+                'directorate' => $school?->educational_district ?? 'غير محدد',
+                'attemptNo' => $attemptNo,
+                'status' => $status,
+                'submissionStatus' => $subStatus,
+                'statusDisplay' => $statusDisplay,
+                'isOverdue' => $isOverdue,
+                'isResubmitted' => $isResubmitted,
+                'issuedAt' => $cr->created_at?->toIso8601String(),
+                'deadline' => $deadline?->toDateString(),
+                'deadlineFormatted' => $deadline?->format('Y-m-d'),
+                'deadlineExtendedAt' => $cr->deadline_extended_at?->toIso8601String(),
+                'extensionsCount' => (int) $cr->deadline_extensions_count,
+                'daysRemaining' => $daysRemaining,
+                'itemsCount' => $cr->items->count(),
+                'items' => $formattedItems,
+                'notes' => $cr->notes ?? '',
+                'cycleEndDate' => $cycle?->end_date ? Carbon::parse($cycle->end_date)->toDateString() : null,
+                'cycleMaxCompletionDays' => (int) ($cycle?->max_completion_days ?? 14),
+                'cycleName' => $cycle?->name ?? 'الدورة الحالية',
+                'issuedByName' => $cr->issuedBy?->full_name ?? $cr->issuedBy?->name ?? 'المشرف الوزاري',
+            ];
+        })->values()->toArray();
+
+        return ApiResponse::success([
+            'summary' => [
+                'totalRequests' => $totalCount,
+                'openRequests' => $openCount,
+                'resubmittedRequests' => $resubmittedCount,
+                'overdueRequests' => $overdueCount,
+            ],
+            'requests' => $items,
+        ], 'تم استرجاع سجل طلبات الاستكمال بنجاح.');
     }
 
     /**

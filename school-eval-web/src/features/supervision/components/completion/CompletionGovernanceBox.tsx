@@ -8,15 +8,18 @@ import { Lock, Unlock, ShieldAlert, Clock } from 'lucide-react';
 
 interface CompletionGovernanceBoxProps {
   unlockedCount: number;
-  lockedCount: number;
+  lockedCount?: number;
+  totalIndicators?: number;
   deadlineDays: number;
 }
 
 export const CompletionGovernanceBox: React.FC<CompletionGovernanceBoxProps> = ({
-  unlockedCount = 2,
-  lockedCount = 54,
+  unlockedCount = 0,
+  totalIndicators = 109,
+  lockedCount,
   deadlineDays = 14,
 }) => {
+  const effectiveLockedCount = lockedCount !== undefined ? lockedCount : Math.max(0, totalIndicators - unlockedCount);
   return (
     <div
       style={{
@@ -80,7 +83,7 @@ export const CompletionGovernanceBox: React.FC<CompletionGovernanceBoxProps> = (
               المؤشرات المقفلة المحمية
             </span>
             <span style={{ fontSize: '16px', fontWeight: 800, color: '#0F172A' }}>
-              {lockedCount} مؤشراً مقفلاً
+              {effectiveLockedCount} مؤشراً مقفلاً
             </span>
           </div>
         </div>

@@ -1,9 +1,10 @@
 /**
  * useCompletionManagement.ts
  * خطاف إدارة وصياغة طلبات الاستكمال الموجهة والفك الجزئي للمؤشرات
+ * منصة ارتقاء للتقييم والتحسين المدرسي
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { supervisionApi } from '../api/supervisionApi';
 import type {
   CompletionItemPayload,
@@ -12,13 +13,26 @@ import type {
 } from '../api/supervisionTypes';
 
 export function useCompletionManagement(
-  submissionId: number = 101,
+  initialSubmissionId?: number,
   initialItems?: PreloadedCompletionItem[],
   onSuccess?: () => void
 ) {
+  const [submissionId, setSubmissionId] = useState<number | undefined>(initialSubmissionId);
   const [items, setItems] = useState<PreloadedCompletionItem[]>(
     initialItems && initialItems.length > 0 ? initialItems : []
   );
+
+  useEffect(() => {
+    if (initialSubmissionId) {
+      setSubmissionId(initialSubmissionId);
+    }
+  }, [initialSubmissionId]);
+
+  useEffect(() => {
+    if (initialItems && initialItems.length > 0) {
+      setItems(initialItems);
+    }
+  }, [initialItems]);
 
   const [notes, setNotes] = useState<string>(
     'يرجى استيفاء الشواهد المطلوبة والمحاضر المعتمدة في موعد أقصاه 14 يوماً من تاريخ هذا الإشعار ليتسنى استكمال مراجعة المخرج.'
@@ -30,17 +44,33 @@ export function useCompletionManagement(
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   // حساب تاريخ الانتهاء بناءً على مهلة الـ 14 يوماً
-  const calculateDeadlineDate = (): string => {
+  const calculateDeadlineDate = (days: number): string => {
     const date = new Date();
-    date.setDate(date.getDate() + deadlineDays);
+    date.setDate(date.getDate() + days);
     return date.toISOString().split('T')[0];
   };
 
-  const [deadlineDate, setDeadlineDate] = useState<string>(calculateDeadlineDate());
+  const [deadlineDate, setDeadlineDate] = useState<string>(() => calculateDeadlineDate(14));
+
+  const updateDeadlineDays = (days: number) => {
+    setDeadlineDays(days);
+    setDeadlineDate(calculateDeadlineDate(days));
+  };
 
   // إضافة بند جديد
   const addItem = (item: PreloadedCompletionItem) => {
-    setItems((prev) => [...prev, item]);
+    setItems((prev) => {
+      // تفادي التكرار
+      if (prev.some((i) => i.indicatorId === item.indicatorId)) {
+        return prev;
+      }
+      return [...prev, item];
+    });
+  };
+
+  // تعيين بنود مسبقة كاملة
+  const setItemsList = (newItems: PreloadedCompletionItem[]) => {
+    setItems(newItems);
   };
 
   // حذف بند
@@ -56,9 +86,23 @@ export function useCompletionManagement(
   };
 
   // إرسال طلب الاستكمال للمدرسة
-  const handleSendRequest = async () => {
+  const handleSendRequest = async (overrideSubmissionId?: number) => {
+    const targetSubmissionId = overrideSubmissionId || submissionId;
+
+    if (!targetSubmissionId) {
+      setErrorMessage('يرجى اختيار مدرسة أو مخرج مؤهل أولاً لإصدار طلب الاستكمال.');
+      return;
+    }
+
     if (items.length === 0) {
-      setErrorMessage('يجب تضمين بند استكمال واحد على الأقل لإصدار الطلب.');
+      setErrorMessage('يجب تضمين مؤشر استكمال واحد على الأقل لإصدار الطلب.');
+      return;
+    }
+
+    // التحقق من تعبئة أسباب الخلل
+    const emptyDefect = items.find((i) => !i.defectReason || !i.defectReason.trim());
+    if (emptyDefect) {
+      setErrorMessage(`يرجى كتابة سبب الخلل أو النقص للمؤشر (${emptyDefect.code || emptyDefect.title}).`);
       return;
     }
 
@@ -74,6 +118,8 @@ export function useCompletionManagement(
         defectReason: i.defectReason,
         directives: i.directives,
         grantedPermission: i.grantedPermission,
+        allowedActions: i.allowedActions && i.allowedActions.length > 0 ? i.allowedActions : ['upload_replace_evidence'],
+        categories: i.categories,
       }));
 
       const payload: CreateCompletionRequestPayload = {
@@ -82,7 +128,7 @@ export function useCompletionManagement(
         items: payloadItems,
       };
 
-      await supervisionApi.createCompletionRequest(submissionId, payload);
+      await supervisionApi.createCompletionRequest(targetSubmissionId, payload);
       setSuccessMessage('تم إصدار طلب الاستكمال الرسمي وتوجيهه للمدرسة بنجاح.');
       if (onSuccess) {
         onSuccess();
@@ -95,12 +141,15 @@ export function useCompletionManagement(
   };
 
   return {
+    submissionId,
+    setSubmissionId,
     items,
+    setItemsList,
     itemsCount: items.length,
     notes,
     setNotes,
     deadlineDays,
-    setDeadlineDays,
+    updateDeadlineDays,
     deadlineDate,
     setDeadlineDate,
     addItem,
@@ -109,6 +158,7 @@ export function useCompletionManagement(
     handleSendRequest,
     isSubmitting,
     errorMessage,
+    setErrorMessage,
     successMessage,
   };
 }

@@ -83,8 +83,8 @@ export function useCycleLaunch(onSuccess?: () => void, prefillData?: any) {
     if (startDate && endDate && new Date(endDate) <= new Date(startDate)) {
       errors.endDate = 'يجب أن يكون تاريخ قفل المخرجات لاحقاً لتاريخ بداية الدورة.';
     }
-    if (completionDeadlineDays < 7) {
-      errors.completionDeadlineDays = 'مهلة الاستكمال لا يمكن أن تقل عن 7 أيام نظامياً.';
+    if (completionDeadlineDays < 1 || completionDeadlineDays > 60) {
+      errors.completionDeadlineDays = 'مهلة الاستكمال يجب أن تكون بين 1 و 60 يوماً.';
     }
     if (selectedStages.length === 0) {
       errors.selectedStages = 'يرجى اختيار مرحلة دراسية واحدة على الأقل.';

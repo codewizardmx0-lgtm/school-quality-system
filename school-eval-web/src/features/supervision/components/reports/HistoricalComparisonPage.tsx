@@ -26,7 +26,7 @@ interface HistoricalComparisonPageProps {
 }
 
 export const HistoricalComparisonPage: React.FC<HistoricalComparisonPageProps> = ({
-  schoolId = 104,
+  schoolId,
   onNavigate,
 }) => {
   const {

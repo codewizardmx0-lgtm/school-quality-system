@@ -40,16 +40,18 @@ import type { SupervisionScreenKey } from '../../api/supervisionTypes';
 interface ReviewSubmissionPageProps {
   submissionId?: number;
   schoolId?: number;
+  initialTab?: 'standards' | 'vault' | 'plan' | 'decision';
   onSelectSchool?: (schoolId: number, schoolName: string) => void;
   onNavigate: (
     screen: SupervisionScreenKey,
-    params?: { submissionId?: number; schoolId?: number; preloadedItems?: any[] }
+    params?: { submissionId?: number; schoolId?: number; preloadedItems?: any[]; targetTab?: string }
   ) => void;
 }
 
 export const ReviewSubmissionPage: React.FC<ReviewSubmissionPageProps> = ({
   submissionId,
   schoolId: _schoolId,
+  initialTab = 'standards',
   onSelectSchool,
   onNavigate,
 }) => {
@@ -65,7 +67,13 @@ export const ReviewSubmissionPage: React.FC<ReviewSubmissionPageProps> = ({
   } = useSubmissionsReview(submissionId);
 
   // التبويب النشط (افتراضياً: شجرة المعايير)
-  const [activeTab, setActiveTab] = useState<'standards' | 'vault' | 'plan' | 'decision'>('standards');
+  const [activeTab, setActiveTab] = useState<'standards' | 'vault' | 'plan' | 'decision'>(initialTab);
+
+  useEffect(() => {
+    if (initialTab) {
+      setActiveTab(initialTab);
+    }
+  }, [initialTab]);
   const [targetIndicatorId, setTargetIndicatorId] = useState<number | null>(null);
   const [isExportingPdf, setIsExportingPdf] = useState(false);
   const [isExportingExcel, setIsExportingExcel] = useState(false);

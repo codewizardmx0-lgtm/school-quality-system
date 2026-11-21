@@ -46,6 +46,7 @@ class EvaluationCycle extends Model
         'scope_governorate',
         'start_date',
         'end_date',
+        'max_completion_days',
         'status',
     ];
 
@@ -60,6 +61,7 @@ class EvaluationCycle extends Model
             'version_id' => 'integer',
             'start_date' => 'date',
             'end_date' => 'date',
+            'max_completion_days' => 'integer',
             'created_at' => 'datetime',
             'updated_at' => 'datetime',
         ];

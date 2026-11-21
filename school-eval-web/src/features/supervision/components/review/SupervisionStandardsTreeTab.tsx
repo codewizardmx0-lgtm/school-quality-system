@@ -23,6 +23,7 @@ import {
   DEFICIENCY_CATEGORIES,
 } from '../../api/supervisionTypes';
 import { supervisionApi } from '../../api/supervisionApi';
+import { SharedDeficiencyFormFields } from '../common/SharedDeficiencyFormFields';
 
 interface SupervisionStandardsTreeTabProps {
   standards: SupervisionStandardItem[];
@@ -65,6 +66,7 @@ export const SupervisionStandardsTreeTab: React.FC<SupervisionStandardsTreeTabPr
   const [flagCategories, setFlagCategories] = useState<Record<number, string[]>>({});
   const [flagNote, setFlagNote] = useState<Record<number, string>>({});
   const [flagDirectives, setFlagDirectives] = useState<Record<number, string>>({});
+  const [flagAllowedActions, setFlagAllowedActions] = useState<Record<number, string[]>>({});
   const [savingDeficiency, setSavingDeficiency] = useState<Record<number, boolean>>({});
   const [saveSuccess, setSaveSuccess] = useState<Record<number, boolean>>({});
 
@@ -184,6 +186,11 @@ export const SupervisionStandardsTreeTab: React.FC<SupervisionStandardsTreeTabPr
     const cat = cats.join('، ');
     const note = flagNote[indId] ?? indicator.defectReason ?? '';
     const dir = flagDirectives[indId] ?? indicator.directives ?? '';
+    const actions = flagAllowedActions[indId] && flagAllowedActions[indId].length > 0
+      ? flagAllowedActions[indId]
+      : (indicator.allowedActions && indicator.allowedActions.length > 0
+          ? indicator.allowedActions
+          : ['upload_replace_evidence']);
 
     if (!note.trim()) {
       alert('يرجى تدوين الملاحظة الإشرافية حول النقص المرصود قبل الحفظ.');
@@ -198,12 +205,13 @@ export const SupervisionStandardsTreeTab: React.FC<SupervisionStandardsTreeTabPr
         deficiencyCategory: cat,
         supervisorNote: note.trim(),
         directives: dir.trim() || undefined,
+        allowedActions: actions,
       });
 
       setSaveSuccess((prev) => ({ ...prev, [indId]: true }));
       setTimeout(() => {
         setSaveSuccess((prev) => ({ ...prev, [indId]: false }));
-      }, 2500);
+      }, 2505);
 
       onDeficiencyUpdated?.();
     } catch (e: any) {
@@ -678,6 +686,11 @@ export const SupervisionStandardsTreeTab: React.FC<SupervisionStandardsTreeTabPr
                                       : (ind.defectCategory ? [ind.defectCategory] : [DEFICIENCY_CATEGORIES[0]]));
                                 const currentNote = flagNote[ind.indicatorId] ?? ind.defectReason ?? '';
                                 const currentDir = flagDirectives[ind.indicatorId] ?? ind.directives ?? '';
+                                const currentActions = flagAllowedActions[ind.indicatorId] !== undefined
+                                  ? flagAllowedActions[ind.indicatorId]
+                                  : (ind.allowedActions && ind.allowedActions.length > 0
+                                      ? ind.allowedActions
+                                      : ['upload_replace_evidence']);
                                 const isSaving = !!savingDeficiency[ind.indicatorId];
                                 const isSaved = !!saveSuccess[ind.indicatorId];
 
@@ -1274,140 +1287,42 @@ export const SupervisionStandardsTreeTab: React.FC<SupervisionStandardsTreeTabPr
                                                 )}
                                               </div>
 
-                                              {/* تصنيف النقص */}
-                                              <div>
-                                                <label
-                                                  style={{
-                                                    display: 'block',
-                                                    fontSize: '11px',
-                                                    fontWeight: 700,
-                                                    color: '#7C2D12',
-                                                    marginBottom: '4px',
-                                                  }}
-                                                >
-                                                  تصنيف أسباب النقص / الاستكمال (يمكن اختيار أكثر من سبب):
-                                                </label>
-                                                <div
-                                                  style={{
-                                                    display: 'grid',
-                                                    gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
-                                                    gap: '8px',
-                                                    padding: '10px 12px',
-                                                    borderRadius: '8px',
-                                                    border: '1px solid #CBD5E1',
-                                                    backgroundColor: '#FFFFFF',
-                                                  }}
-                                                >
-                                                  {DEFICIENCY_CATEGORIES.map((cat) => {
-                                                    const isChecked = currentCategories.includes(cat);
-                                                    return (
-                                                      <label
-                                                        key={cat}
-                                                        style={{
-                                                          display: 'flex',
-                                                          alignItems: 'center',
-                                                          gap: '8px',
-                                                          fontSize: '11.5px',
-                                                          color: isChecked ? '#991B1B' : '#334155',
-                                                          fontWeight: isChecked ? 700 : 500,
-                                                          cursor: isReadOnly ? 'not-allowed' : 'pointer',
-                                                        }}
-                                                      >
-                                                        <input
-                                                          type="checkbox"
-                                                          disabled={isReadOnly}
-                                                          checked={isChecked}
-                                                          onChange={(e) => {
-                                                            const next = e.target.checked
-                                                              ? [...currentCategories, cat]
-                                                               : currentCategories.filter((c) => c !== cat);
-                                                            setFlagCategories((prev) => ({
-                                                              ...prev,
-                                                              [ind.indicatorId]: next,
-                                                            }));
-                                                          }}
-                                                          style={{ accentColor: '#DC2626' }}
-                                                        />
-                                                        <span>{cat}</span>
-                                                      </label>
-                                                    );
-                                                  })}
-                                                </div>
-                                              </div>
+                                              {/* حقول رصد النقص المشتركة الموحدة */}
+                                              <SharedDeficiencyFormFields
+                                                categories={currentCategories}
+                                                onChangeCategories={(cats) => {
+                                                  setFlagCategories((prev) => ({
+                                                    ...prev,
+                                                    [ind.indicatorId]: cats,
+                                                  }));
+                                                }}
+                                                note={currentNote}
+                                                onChangeNote={(val) => {
+                                                  setFlagNote((prev) => ({
+                                                    ...prev,
+                                                    [ind.indicatorId]: val,
+                                                  }));
+                                                }}
+                                                directives={currentDir}
+                                                onChangeDirectives={(val) => {
+                                                  setFlagDirectives((prev) => ({
+                                                    ...prev,
+                                                    [ind.indicatorId]: val,
+                                                  }));
+                                                }}
+                                                allowedActions={currentActions}
+                                                onChangeAllowedActions={(acts) => {
+                                                  setFlagAllowedActions((prev) => ({
+                                                    ...prev,
+                                                    [ind.indicatorId]: acts,
+                                                  }));
+                                                }}
+                                                isReadOnly={isReadOnly}
+                                              />
 
-                                              {/* بيان النقص والملاحظة */}
-                                              <div>
-                                                <label
-                                                  style={{
-                                                    display: 'block',
-                                                    fontSize: '11px',
-                                                    fontWeight: 700,
-                                                    color: '#7C2D12',
-                                                    marginBottom: '4px',
-                                                  }}
-                                                >
-                                                  الملاحظة الإشرافية الدقيقة (المبرر الفني للنقص):
-                                                </label>
-                                                <textarea
-                                                  disabled={isReadOnly}
-                                                  rows={2}
-                                                  value={currentNote}
-                                                  onChange={(e) =>
-                                                    setFlagNote((prev) => ({
-                                                      ...prev,
-                                                      [ind.indicatorId]: e.target.value,
-                                                    }))
-                                                  }
-                                                  placeholder="اكتب ملاحظتك التقييمية حول سبب اعتبار هذا المؤشر ناقصاً..."
-                                                  style={{
-                                                    width: '100%',
-                                                    padding: '8px 10px',
-                                                    borderRadius: '6px',
-                                                    border: '1px solid #CBD5E1',
-                                                    fontSize: '12px',
-                                                    boxSizing: 'border-box',
-                                                  }}
-                                                />
-                                              </div>
-
-                                              {/* التوجيهات المطلوبة من المدرسة */}
-                                              <div>
-                                                <label
-                                                  style={{
-                                                    display: 'block',
-                                                    fontSize: '11px',
-                                                    fontWeight: 700,
-                                                    color: '#7C2D12',
-                                                    marginBottom: '4px',
-                                                  }}
-                                                >
-                                                  التوجيهات والإجراءات الإلزامية المطلوب استيفاؤها من المدرسة:
-                                                </label>
-                                                <textarea
-                                                  disabled={isReadOnly}
-                                                  rows={2}
-                                                  value={currentDir}
-                                                  onChange={(e) =>
-                                                    setFlagDirectives((prev) => ({
-                                                      ...prev,
-                                                      [ind.indicatorId]: e.target.value,
-                                                    }))
-                                                  }
-                                                  placeholder="حدد للمدرسة بالضبط ما الوثيقة أو الإجراء المطلوب استكماله..."
-                                                  style={{
-                                                    width: '100%',
-                                                    padding: '8px 10px',
-                                                    borderRadius: '6px',
-                                                    border: '1px solid #CBD5E1',
-                                                    fontSize: '12px',
-                                                    boxSizing: 'border-box',
-                                                  }}
-                                                />
-                                              </div>
-
-                                              {/* زر الحفظ */}
+                                              {/* أزرار الإجراءات: حفظ / إلغاء رصد النقص */}
                                               {!isReadOnly && (
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '6px' }}>
                                                   <button
                                                     type="button"
                                                     disabled={isSaving}
@@ -1429,6 +1344,37 @@ export const SupervisionStandardsTreeTab: React.FC<SupervisionStandardsTreeTabPr
                                                     <Save size={13} />
                                                     {isSaving ? 'جارٍ الحفظ...' : 'حفظ الرصد الإشرافي'}
                                                   </button>
+
+                                                  {ind.hasDefect && (
+                                                    <button
+                                                      type="button"
+                                                      disabled={isSaving}
+                                                      onClick={async () => {
+                                                        if (!confirm('هل أنت متأكد من إلغاء رصد النقص عن هذا المؤشر؟')) return;
+                                                        setSavingDeficiency((prev) => ({ ...prev, [ind.indicatorId]: true }));
+                                                        try {
+                                                          await supervisionApi.deleteDeficiencyNote(submissionId || evaluationId, ind.indicatorId);
+                                                          onDeficiencyUpdated?.();
+                                                        } catch (e: any) {
+                                                          alert(e?.message || 'تعذر إلغاء رصد النقص.');
+                                                        } finally {
+                                                          setSavingDeficiency((prev) => ({ ...prev, [ind.indicatorId]: false }));
+                                                        }
+                                                      }}
+                                                      style={{
+                                                        padding: '7px 14px',
+                                                        borderRadius: '6px',
+                                                        fontSize: '12px',
+                                                        fontWeight: 700,
+                                                        backgroundColor: '#FEF2F2',
+                                                        color: '#DC2626',
+                                                        border: '1px solid #FECACA',
+                                                        cursor: isSaving ? 'not-allowed' : 'pointer',
+                                                      }}
+                                                    >
+                                                      إلغاء رصد النقص
+                                                    </button>
+                                                  )}
 
                                                   {isSaved && (
                                                     <span

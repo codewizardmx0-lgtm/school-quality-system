@@ -36,6 +36,7 @@ class EvaluationCycleResource extends JsonResource
             'versionId'           => $this->version_id,
             'startDate'           => $this->start_date?->format('Y-m-d'),
             'endDate'             => $this->end_date?->format('Y-m-d'),
+            'maxCompletionDays'   => (int) ($this->max_completion_days ?? 14),
             'status'              => $this->status,
             'createdAt'           => $this->created_at?->toIso8601ZuluString(),
             'updatedAt'           => $this->updated_at?->toIso8601ZuluString(),

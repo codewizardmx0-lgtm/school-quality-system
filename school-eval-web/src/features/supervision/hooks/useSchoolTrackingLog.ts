@@ -7,7 +7,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { supervisionApi } from '../api/supervisionApi';
 import type { SchoolTrackingLogData, MilestoneEvent } from '../api/supervisionTypes';
 
-export function useSchoolTrackingLog(schoolId: number = 104) {
+export function useSchoolTrackingLog(schoolId?: number) {
   const [data, setData] = useState<SchoolTrackingLogData | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -18,6 +18,10 @@ export function useSchoolTrackingLog(schoolId: number = 104) {
   const [memoSuccess, setMemoSuccess] = useState<boolean>(false);
 
   const fetchLog = useCallback(async () => {
+    if (!schoolId) {
+      setIsLoading(false);
+      return;
+    }
     setIsLoading(true);
     setError(null);
     try {
@@ -41,6 +45,10 @@ export function useSchoolTrackingLog(schoolId: number = 104) {
     details: string;
     isVisibleToSchool: boolean;
   }) => {
+    if (!schoolId) {
+      setMemoError('يرجى تحديد مدرسة أولاً لإضافة المذكرة.');
+      return false;
+    }
     setIsAddingMemo(true);
     setMemoError(null);
     setMemoSuccess(false);
@@ -96,6 +104,7 @@ export function useSchoolTrackingLog(schoolId: number = 104) {
 
   // تصدير سجل المتابعة الرسمي PDF
   const handleExportPdf = async () => {
+    if (!schoolId) return;
     try {
       await supervisionApi.exportTrackingLogPdf(schoolId);
     } catch (err) {

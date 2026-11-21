@@ -162,6 +162,8 @@ Route::prefix('v1')->group(function () {
         // --------------------------------------------------------------------------
         Route::prefix('supervision')->group(function () {
             Route::get('/dashboard', [\App\Http\Controllers\Api\V1\SupervisionController::class, 'dashboard'])->name('api.v1.supervision.dashboard');
+            Route::get('/completion-requests', [\App\Http\Controllers\Api\V1\SupervisionController::class, 'completionRequestsTracker'])->name('api.v1.supervision.completion-requests.index');
+            Route::get('/standards-tree', [\App\Http\Controllers\Api\V1\SupervisionController::class, 'nationalStandardsTree'])->name('api.v1.supervision.standards-tree');
             Route::get('/reports/analytics', [\App\Http\Controllers\Api\V1\SupervisionController::class, 'centralAnalytics'])->name('api.v1.supervision.reports.analytics');
             Route::get('/reports/analytics/pdf', [\App\Http\Controllers\Api\V1\SupervisionController::class, 'exportAnalyticsPdf'])->name('api.v1.supervision.reports.analytics.pdf');
         });

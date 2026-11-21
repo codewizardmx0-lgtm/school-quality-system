@@ -24,11 +24,13 @@ class SupervisionDeficiencyNote extends Model
         'deficiency_categories',
         'supervisor_note',
         'directives',
+        'allowed_actions',
         'created_by',
     ];
 
     protected $casts = [
         'deficiency_categories' => 'array',
+        'allowed_actions' => 'array',
         'evaluation_id' => 'integer',
         'submission_id' => 'integer',
         'indicator_id' => 'integer',

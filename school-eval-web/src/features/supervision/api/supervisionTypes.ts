@@ -215,6 +215,7 @@ export interface SupervisionIndicatorItem {
   defectCategories?: string[];
   defectReason?: string | null;
   directives?: string | null;
+  allowedActions?: string[];
   supervisorFeedback?: string;
 }
 
@@ -385,8 +386,10 @@ export interface SupervisionDeficiencyItem {
   indicatorTitle: string;
   standardName: string;
   category: string;
+  categories?: string[];
   note: string;
   directives?: string | null;
+  allowedActions?: string[];
   createdAt: string;
 }
 
@@ -407,6 +410,7 @@ export interface IndicatorAuditItem {
   defectCategory?: string | null;
   defectReason?: string | null;
   directives?: string | null;
+  allowedActions?: string[];
   supervisorFeedback?: string;
 }
 
@@ -432,6 +436,8 @@ export interface ReviewableSubmissionItem {
   schoolName: string;
   schoolCode: string;
   governorate: string;
+  directorate?: string;
+  educationalStage?: string;
   status: OutputStatusType;
   statusArabic: string;
   submittedAt: string;
@@ -507,7 +513,9 @@ export interface PreloadedCompletionItem {
   code: string;
   title: string;
   defectReason: string;
-  grantedPermission: string;
+  categories?: string[];
+  grantedPermission?: string;
+  allowedActions?: string[];
   directives: string;
   evidenceLinkId?: number | null;
 }
@@ -517,8 +525,10 @@ export interface CompletionItemPayload {
   missingDescription: string;
   evidenceLinkId?: number | null;
   defectReason?: string;
+  categories?: string[];
   directives?: string;
   grantedPermission?: string;
+  allowedActions?: string[];
 }
 
 export interface CreateCompletionRequestPayload {
@@ -537,6 +547,82 @@ export interface CompletionRequestResponse {
   complianceCountdownDays: number;
   itemsCount: number;
   governanceNotice?: string;
+}
+
+export interface CompletionTrackerIndicatorItem {
+  id: number;
+  indicatorId: number;
+  code: string;
+  title: string;
+  standardName: string;
+  missingDescription: string;
+  directives?: string;
+  allowedActions?: string[];
+  status: string;
+}
+
+export interface CompletionTrackerItem {
+  requestId: number;
+  evaluationId?: number;
+  submissionId: number;
+  schoolId: number;
+  schoolName: string;
+  schoolCode: string;
+  governorate: string;
+  directorate: string;
+  attemptNo: number;
+  status: string;
+  submissionStatus: string;
+  statusDisplay: string;
+  isOverdue: boolean;
+  isResubmitted: boolean;
+  issuedAt: string;
+  deadline?: string | null;
+  deadlineFormatted?: string;
+  deadlineExtendedAt?: string | null;
+  extensionsCount: number;
+  daysRemaining: number;
+  itemsCount: number;
+  items: CompletionTrackerIndicatorItem[];
+  notes?: string;
+  cycleEndDate?: string | null;
+  cycleMaxCompletionDays?: number;
+  cycleName?: string;
+  issuedByName?: string;
+}
+
+export interface CompletionTrackerSummary {
+  totalRequests: number;
+  openRequests: number;
+  resubmittedRequests: number;
+  overdueRequests: number;
+}
+
+export interface CompletionTrackerResponse {
+  summary: CompletionTrackerSummary;
+  requests: CompletionTrackerItem[];
+}
+
+export interface NationalStandardTreeIndicator {
+  indicatorId: number;
+  code: string;
+  title: string;
+  weight: number;
+}
+
+export interface NationalStandardTreeSubStandard {
+  subStandardId: number;
+  name: string;
+  code: string;
+  indicators: NationalStandardTreeIndicator[];
+}
+
+export interface NationalStandardTreeStandard {
+  standardId: number;
+  name: string;
+  code: string;
+  weight: number;
+  subStandards: NationalStandardTreeSubStandard[];
 }
 
 export interface MilestoneEvent {
@@ -677,6 +763,7 @@ export interface EvaluationCycleItem {
   startDate?: string;
   endDate?: string;
   status: 'Active' | 'Closed';
+  maxCompletionDays?: number;
   participationsCount?: number;
   evaluationsCount?: number;
   version?: {

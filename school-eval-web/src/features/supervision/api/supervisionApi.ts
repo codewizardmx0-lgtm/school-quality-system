@@ -14,6 +14,8 @@ import type {
   ReviewableSubmissionItem,
   CreateCompletionRequestPayload,
   CompletionRequestResponse,
+  CompletionTrackerResponse,
+  NationalStandardTreeStandard,
   SchoolTrackingLogData,
   SupervisorMemo,
   CentralReportsData,
@@ -138,6 +140,7 @@ export const supervisionApi = {
       endDate?: string;
       scopeGovernorate?: string | null;
       status?: 'Active' | 'Closed';
+      maxCompletionDays?: number;
     }
   ): Promise<any> {
     const body: Record<string, any> = {};
@@ -151,6 +154,7 @@ export const supervisionApi = {
           : null;
     }
     if (payload.status !== undefined) body.status = payload.status;
+    if (payload.maxCompletionDays !== undefined) body.max_completion_days = payload.maxCompletionDays;
 
     const response = await patch<any>(`/evaluation-cycles/${cycleId}`, body);
     if (!response?.data && response?.errors) {
@@ -201,6 +205,7 @@ export const supervisionApi = {
       deficiencyCategories?: string[];
       supervisorNote?: string;
       directives?: string;
+      allowedActions?: string[];
     }
   ): Promise<any> {
     const cats = payload.deficiencyCategories || (payload.deficiencyCategory ? [payload.deficiencyCategory] : []);
@@ -210,6 +215,7 @@ export const supervisionApi = {
       deficiency_categories: cats,
       supervisor_note: payload.supervisorNote,
       directives: payload.directives,
+      allowed_actions: payload.allowedActions,
     });
     if (!response?.data && response?.errors) {
       const firstError = Object.values(response.errors)[0]?.[0];
@@ -262,6 +268,31 @@ export const supervisionApi = {
   },
 
   /**
+   * 5.1. سجل ومتابعة طلبات الاستكمال في النطاق الجغرافي للمشرف (Screen 5 Tracker)
+   * GET /api/v1/supervision/completion-requests
+   */
+  async getCompletionRequestsTracker(cycleId?: number): Promise<CompletionTrackerResponse> {
+    const url = cycleId ? `/supervision/completion-requests?cycle_id=${cycleId}` : '/supervision/completion-requests';
+    const response = await get<CompletionTrackerResponse>(url);
+    if (!response?.data) {
+      throw new Error(response?.message || 'تعذر استرجاع سجل طلبات الاستكمال.');
+    }
+    return response.data;
+  },
+
+  /**
+   * 5.2. شجرة المعايير الوطنية السبعة ومؤشراتها الـ 109 لاختيار بنود الاستكمال
+   * GET /api/v1/supervision/standards-tree
+   */
+  async getNationalStandardsTree(): Promise<NationalStandardTreeStandard[]> {
+    const response = await get<NationalStandardTreeStandard[]>('/supervision/standards-tree');
+    if (!response?.data) {
+      throw new Error(response?.message || 'تعذر استرجاع شجرة المعايير الوطنية.');
+    }
+    return response.data;
+  },
+
+  /**
    * تمديد مهلة طلب الاستكمال وتوثيق المبرر (FR-SUP-11)
    * PATCH /api/v1/completion-requests/{id}/deadline
    */
@@ -293,6 +324,9 @@ export const supervisionApi = {
         evidence_link_id: item.evidenceLinkId ?? null,
         defect_reason: item.defectReason,
         directives: item.directives,
+        allowed_actions: item.allowedActions && item.allowedActions.length > 0
+          ? item.allowedActions
+          : ['upload_replace_evidence'],
       })),
     };
 

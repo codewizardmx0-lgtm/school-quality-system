@@ -11,7 +11,7 @@ import {
   exportHistoricalComparisonToExcel,
 } from '../utils/supervisionExportUtils';
 
-export function useCentralReports(schoolId: number = 104) {
+export function useCentralReports(schoolId?: number) {
   // 1. بيانات التحليلات المركزية (Screen 6)
   const [analyticsData, setAnalyticsData] = useState<CentralReportsData | null>(null);
   const [isLoadingAnalytics, setIsLoadingAnalytics] = useState<boolean>(true);
@@ -66,6 +66,10 @@ export function useCentralReports(schoolId: number = 104) {
 
   // جلب المقارنة التاريخية لمدرسة
   const fetchHistorical = useCallback(async () => {
+    if (!schoolId) {
+      setIsLoadingHistorical(false);
+      return;
+    }
     setIsLoadingHistorical(true);
     setHistoricalError(null);
     try {
@@ -125,6 +129,7 @@ export function useCentralReports(schoolId: number = 104) {
 
   // تصدير المقارنة التاريخية إلى PDF
   const handleExportHistoricalPdf = async () => {
+    if (!schoolId) return;
     try {
       await supervisionApi.exportHistoricalComparisonPdf(schoolId);
     } catch (err) {

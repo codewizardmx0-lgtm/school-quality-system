@@ -5,13 +5,15 @@
  * 
  * - الشريط الجانبي ثابت تماماً (Fixed Sidebar #0B0F19 بعرض 260px)
  * - الشريط العلوي ثابت تماماً (Fixed TopBar 68px)
+ * - شريط سياق المدرسة الموحد الثابت (Fixed School Context Bar) للشاشات (4، 5، 6، 8)
  * - التمرير حصري لمنطقة المحتوى الداخلية
  * - ثيم الأزرق الملكي (#2563EB / #1D4ED8)
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { SupervisionSidebar } from './SupervisionSidebar';
 import { SupervisionTopBar } from './SupervisionTopBar';
+import { SchoolContextBar } from './SchoolContextBar';
 import { SupervisionDashboardPage } from '../dashboard/SupervisionDashboardPage';
 import { CyclesListPage } from '../cycles/CyclesListPage';
 import { ReviewSubmissionPage } from '../review/ReviewSubmissionPage';
@@ -21,7 +23,12 @@ import { CentralReportsPage } from '../reports/CentralReportsPage';
 import { HistoricalComparisonPage } from '../reports/HistoricalComparisonPage';
 import { SupervisionErrorBoundary } from '../common/SupervisionErrorBoundary';
 import { useAuth } from '../../../../features/auth/AuthContext';
-import type { SupervisionScreenKey, PreloadedCompletionItem } from '../../api/supervisionTypes';
+import { supervisionApi } from '../../api/supervisionApi';
+import type {
+  SupervisionScreenKey,
+  PreloadedCompletionItem,
+  ReviewableSubmissionItem,
+} from '../../api/supervisionTypes';
 
 interface SupervisionLayoutProps {
   initialScreen?: SupervisionScreenKey;
@@ -35,15 +42,47 @@ export const SupervisionLayout: React.FC<SupervisionLayoutProps> = ({
   const { user } = useAuth();
   const [activeScreen, setActiveScreen] = useState<SupervisionScreenKey>(initialScreen);
 
-  // سياق الانتقال بين الشاشات (بدون معرفات وهمية ثابتة)
+  // سياق الانتقال بين الشاشات
   const [selectedSubmissionId, setSelectedSubmissionId] = useState<number | undefined>(undefined);
   const [selectedSchoolId, setSelectedSchoolId] = useState<number | undefined>(undefined);
   const [selectedSchoolName, setSelectedSchoolName] = useState<string | undefined>(undefined);
   const [selectedCycleId, setSelectedCycleId] = useState<number | undefined>(undefined);
   const [prefillCycleLaunch, setPrefillCycleLaunch] = useState<any | undefined>(undefined);
+  const [selectedTargetTab, setSelectedTargetTab] = useState<string | undefined>(undefined);
   const [preloadedItems, setPreloadedItems] = useState<PreloadedCompletionItem[] | undefined>(
     undefined
   );
+
+  // قائمة المدارس والمخرجات المتاحة في النطاق الجغرافي للمشرف
+  const [availableSubmissions, setAvailableSubmissions] = useState<ReviewableSubmissionItem[]>([]);
+  const [isLoadingAvailable, setIsLoadingAvailable] = useState<boolean>(false);
+
+  useEffect(() => {
+    let isMounted = true;
+    (async () => {
+      setIsLoadingAvailable(true);
+      try {
+        const list = await supervisionApi.getReviewableSubmissions();
+        if (isMounted) {
+          setAvailableSubmissions(list || []);
+          if (list && list.length > 0 && !selectedSchoolId) {
+            const firstEligible =
+              list.find((s) => s.status === 'Submitted' || s.status === 'UnderReview') || list[0];
+            setSelectedSchoolId(firstEligible.schoolId);
+            setSelectedSubmissionId(firstEligible.submissionId);
+            setSelectedSchoolName(firstEligible.schoolName);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to load available submissions for context bar:', err);
+      } finally {
+        if (isMounted) setIsLoadingAvailable(false);
+      }
+    })();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const navigateToScreen = (
     screen: SupervisionScreenKey,
@@ -54,6 +93,7 @@ export const SupervisionLayout: React.FC<SupervisionLayoutProps> = ({
       schoolName?: string;
       preloadedItems?: PreloadedCompletionItem[];
       prefillCycleLaunch?: any;
+      targetTab?: string;
     }
   ) => {
     if (params?.cycleId !== undefined) {
@@ -74,6 +114,9 @@ export const SupervisionLayout: React.FC<SupervisionLayoutProps> = ({
     if (params?.preloadedItems) {
       setPreloadedItems(params.preloadedItems);
     }
+    if (params?.targetTab !== undefined) {
+      setSelectedTargetTab(params.targetTab);
+    }
 
     setActiveScreen(screen);
 
@@ -83,6 +126,13 @@ export const SupervisionLayout: React.FC<SupervisionLayoutProps> = ({
       scrollContainer.scrollTo({ top: 0, behavior: 'smooth' });
     }
   };
+
+  const isSchoolTrackingScreen = [
+    'submissions',
+    'completion-requests',
+    'tracking-log',
+    'historical',
+  ].includes(activeScreen);
 
   const renderCurrentScreen = () => {
     switch (activeScreen) {
@@ -117,6 +167,7 @@ export const SupervisionLayout: React.FC<SupervisionLayoutProps> = ({
           <ReviewSubmissionPage
             submissionId={selectedSubmissionId}
             schoolId={selectedSchoolId}
+            initialTab={selectedTargetTab === 'standards-tree' ? 'standards' : (selectedTargetTab as any)}
             onSelectSchool={(schoolId, schoolName) => {
               setSelectedSchoolId(schoolId);
               setSelectedSchoolName(schoolName);
@@ -190,7 +241,7 @@ export const SupervisionLayout: React.FC<SupervisionLayoutProps> = ({
         selectedSchoolName={selectedSchoolName}
       />
 
-      {/* 2. منطقة العمل الرئيسية: الشريط العلوي + المحتوى الداخلي القابل للتمرير */}
+      {/* 2. منطقة العمل الرئيسية: الشريط العلوي + شريط سياق المدرسة + المحتوى الداخلي */}
       <div
         style={{
           flex: 1,
@@ -210,6 +261,21 @@ export const SupervisionLayout: React.FC<SupervisionLayoutProps> = ({
           userName={user?.fullName || user?.username || 'المشرف الوزاري'}
           userRole="المشرف الوزاري"
         />
+
+        {/* شريط سياق المدرسة الموحد الثابت للواجهات الأربع (4، 5، 6، 8) */}
+        {isSchoolTrackingScreen && (
+          <SchoolContextBar
+            schools={availableSubmissions}
+            selectedSchoolId={selectedSchoolId}
+            selectedSubmissionId={selectedSubmissionId}
+            isLoading={isLoadingAvailable}
+            onSelectSchool={(school) => {
+              setSelectedSchoolId(school.schoolId);
+              setSelectedSubmissionId(school.submissionId);
+              setSelectedSchoolName(school.schoolName);
+            }}
+          />
+        )}
 
         {/* منطقة المحتوى القابلة للتمرير حصرياً مع جدار حماية من الأخطاء */}
         <main

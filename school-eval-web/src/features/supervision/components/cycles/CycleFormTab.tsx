@@ -226,6 +226,7 @@ export const CycleFormTab: React.FC<CycleFormTabProps> = ({
         if (target.startDate) setStartDate(target.startDate.split('T')[0]);
         if (target.endDate) setEndDate(target.endDate.split('T')[0]);
         setTargetGovernorate(target.scopeGovernorate || 'كافة المحافظات');
+        if (target.maxCompletionDays) setCompletionDeadlineDays(target.maxCompletionDays);
       }
     }
   }, [mode, currentEditCycleId, cycles, activeCycle]);
@@ -327,8 +328,8 @@ export const CycleFormTab: React.FC<CycleFormTabProps> = ({
       }
     }
 
-    if (completionDeadlineDays < 7) {
-      errs.completionDeadlineDays = 'مهلة الاستكمال لا تقل عن 7 أيام نظامياً.';
+    if (completionDeadlineDays < 1 || completionDeadlineDays > 60) {
+      errs.completionDeadlineDays = 'الحد الأقصى لمهلة الاستكمال يجب أن يكون بين 1 و 60 يوماً.';
     }
 
     if (mode !== 'edit' && !enrollAllSchools && selectedSchoolIds.length === 0) {
@@ -363,6 +364,7 @@ export const CycleFormTab: React.FC<CycleFormTabProps> = ({
           startDate,
           endDate,
           scopeGovernorate: targetGovernorate === 'كافة المحافظات' ? null : targetGovernorate,
+          maxCompletionDays: completionDeadlineDays,
         });
 
         setSubmitSuccess('تم تحديث بيانات الدورة التقييمية بنجاح وتسجيل العملية في سجل التدقيق.');
@@ -942,16 +944,16 @@ export const CycleFormTab: React.FC<CycleFormTabProps> = ({
                 </div>
               </div>
 
-              {/* المهلة الافتراضية لطلبات الاستكمال */}
+              {/* الحد الأقصى لمهلة طلبات الاستكمال */}
               <div>
                 <label style={{ display: 'block', fontSize: '13px', fontWeight: 700, color: '#334155', marginBottom: '6px' }}>
-                  المهلة الافتراضية لطلبات الاستكمال (بالأيام)
+                  الحد الأقصى لمهلة الاستكمال (بالأيام)
                 </label>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                   <input
                     type="number"
-                    min={7}
-                    max={30}
+                    min={1}
+                    max={60}
                     value={completionDeadlineDays}
                     onChange={(e) => setCompletionDeadlineDays(Number(e.target.value))}
                     style={{
@@ -970,7 +972,7 @@ export const CycleFormTab: React.FC<CycleFormTabProps> = ({
                   </span>
                 </div>
                 <p style={{ fontSize: '12px', color: '#64748B', margin: '6px 0 0 0', lineHeight: 1.5 }}>
-                  عدد الأيام الممنوحة للمدرسة لاستيفاء النواقص وإعادة رفع التقييم عند إصدار طلب استكمال لها خلال هذه الدورة (تُحتسب من تاريخ إصدار الطلب، ويجب ألا تتجاوز تاريخ إغلاق الدورة)
+                  الحد الأقصى لعدد الأيام المسموح للمشرف بمنحه للمدرسة لاستيفاء النواقص عند إصدار طلب استكمال لها خلال هذه الدورة (القيمة الافتراضية 14 يوماً وفق الحوكمة، المدى من 1 إلى 60 يوماً).
                 </p>
                 {validationErrors.completionDeadlineDays && (
                   <span style={{ fontSize: '11px', color: '#EF4444', display: 'block', marginTop: '4px' }}>

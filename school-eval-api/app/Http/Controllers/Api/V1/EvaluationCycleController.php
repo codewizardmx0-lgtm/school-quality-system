@@ -112,6 +112,7 @@ class EvaluationCycleController extends Controller
             'school_ids'         => ['nullable', 'array'],
             'school_ids.*'       => ['integer', 'exists:schools,school_id'],
             'enroll_all_schools' => ['nullable', 'boolean'],
+            'max_completion_days'=> ['nullable', 'integer', 'min:1', 'max:60'],
         ], [
             'academic_year.required' => 'العام الدراسي مطلوب.',
             'start_date.required'    => 'تاريخ بداية الدورة مطلوب.',
@@ -206,6 +207,7 @@ class EvaluationCycleController extends Controller
                 'scope_governorate' => $scopeGovernorate,
                 'start_date'        => $request->start_date,
                 'end_date'          => $request->end_date,
+                'max_completion_days' => $request->filled('max_completion_days') ? (int) $request->max_completion_days : 14,
                 'status'            => $request->status ?? 'Active',
             ]);
 
@@ -397,6 +399,9 @@ class EvaluationCycleController extends Controller
         if ($request->has('status')) {
             $cycle->status = $request->status;
         }
+        if ($request->has('max_completion_days')) {
+            $cycle->max_completion_days = (int) $request->max_completion_days;
+        }
 
         $cycle->save();
         $cycle->load(['version', 'schools']);
@@ -461,6 +466,7 @@ class EvaluationCycleController extends Controller
             'school_ids'         => ['nullable', 'array'],
             'school_ids.*'       => ['integer', 'exists:schools,school_id'],
             'enroll_all_schools' => ['nullable', 'boolean'],
+            'max_completion_days'=> ['nullable', 'integer', 'min:1', 'max:60'],
         ]);
 
         if ($validator->fails()) {
