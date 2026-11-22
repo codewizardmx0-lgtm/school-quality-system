@@ -17,11 +17,13 @@ import {
   User as UserIcon,
   KeyRound,
   LogOut,
+  Bell,
 } from 'lucide-react';
 import type { StandardsScreenKey } from './StandardsSidebar';
 import { useAuth } from '../../../../hooks/useAuth';
 import { ProfileModal } from '../../../auth/ProfileModal';
 import { ChangePasswordModal } from '../../../auth/ChangePasswordModal';
+import { get } from '../../../../api/apiClient';
 
 interface StandardsTopBarProps {
   activeScreen: StandardsScreenKey;
@@ -44,6 +46,7 @@ export const StandardsTopBar: React.FC<StandardsTopBarProps> = ({
   onNavigateHome,
 }) => {
   const { user, logout } = useAuth();
+  const [unreadCount, setUnreadCount] = useState<number>(0);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
@@ -58,6 +61,21 @@ export const StandardsTopBar: React.FC<StandardsTopBarProps> = ({
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Fetch unread notifications count
+  useEffect(() => {
+    let isMounted = true;
+    get<{ unreadCount: number }>('/notifications/unread-count')
+      .then((res) => {
+        if (isMounted && res?.data?.unreadCount !== undefined) {
+          setUnreadCount(res.data.unreadCount);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   const handleLogout = async () => {
@@ -148,6 +166,68 @@ export const StandardsTopBar: React.FC<StandardsTopBarProps> = ({
             <ShieldCheck size={15} color="#059669" />
             <span>إصدار رسمي مُقرّ ونافذ ({activeVersionNo})</span>
           </div>
+
+          {/* Notification Bell Button */}
+          <button
+            type="button"
+            onClick={() => {
+              if (unreadCount > 0) {
+                alert(`لديك ${unreadCount} إشعار غير مقروء في سجل التنبيهات.`);
+              } else {
+                alert('لا توجد إشعارات جديدة غير مقروءة.');
+              }
+            }}
+            style={{
+              position: 'relative',
+              width: '38px',
+              height: '38px',
+              borderRadius: '10px',
+              backgroundColor: '#F8FAFC',
+              border: '1px solid #E2E8F0',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              color: '#64748B',
+              transition: 'all 0.15s ease',
+            }}
+            title={unreadCount > 0 ? `لديك ${unreadCount} إشعار غير مقروء` : 'مركز التنبيهات'}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = '#EFF6FF';
+              e.currentTarget.style.color = '#2563EB';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = '#F8FAFC';
+              e.currentTarget.style.color = '#64748B';
+            }}
+          >
+            <Bell size={18} />
+            {unreadCount > 0 && (
+              <span
+                style={{
+                  position: 'absolute',
+                  top: '-3px',
+                  right: '-3px',
+                  minWidth: '18px',
+                  height: '18px',
+                  padding: '0 4px',
+                  borderRadius: '999px',
+                  backgroundColor: '#EF4444',
+                  color: '#FFFFFF',
+                  fontSize: '10.5px',
+                  fontWeight: 800,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  boxShadow: '0 2px 4px rgba(239, 68, 68, 0.4)',
+                  border: '2px solid #FFFFFF',
+                  boxSizing: 'border-box',
+                }}
+              >
+                {unreadCount > 99 ? '99+' : unreadCount}
+              </span>
+            )}
+          </button>
 
           {/* User Capsule with Interactive Dropdown Menu */}
           <div ref={menuRef} style={{ position: 'relative' }}>

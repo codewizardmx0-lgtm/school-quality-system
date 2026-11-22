@@ -1455,7 +1455,7 @@ class SupervisionController extends Controller
             'evaluations.reports.submissions.completionRequests.items',
         ])->findOrFail($id);
 
-        // حوكمة النطاق الجغرافي للمشرف الوزاري (FR-SUP-02)
+        // حوكمة النطاق الجغرافي للمشرف الوزاري (FR-SUP-02 & NFR-SEC-03)
         $user = $request->user();
         if ($user && $user->hasRole('ministry_supervisor') && !empty($user->governorate)) {
             if ($school->governorate && $school->governorate !== $user->governorate) {
@@ -1469,11 +1469,15 @@ class SupervisionController extends Controller
 
         // 1. استخراج أحداث التسليم وطلبات الاستكمال من محاولات الإرسال
         foreach ($evaluations as $eval) {
+            $cycle = $eval->cycle;
             $reports = $eval->reports ?? collect();
             foreach ($reports as $rep) {
                 $submissions = $rep->submissions ?? collect();
                 foreach ($submissions as $sub) {
                     $submissionIds[] = $sub->submission_id;
+
+                    $prevStatus = $sub->attempt_no > 1 ? 'يحتاج استكمال' : 'مسودة قيد الإعداد';
+                    $newStatus = $sub->attempt_no > 1 ? "مرفوع بعد الاستكمال (المحاولة {$sub->attempt_no})" : "مرفوع جديد (المحاولة {$sub->attempt_no})";
 
                     // حدث تسليم المخرج من مقيم المدرسة المعتمد (BR-SCH-01)
                     $milestones[] = [
@@ -1483,24 +1487,42 @@ class SupervisionController extends Controller
                         'description' => "قام مقيم المدرسة المعتمد بختم وتسليم التقرير الذاتي والمرفقات الشاهدية للمراجعة الوزارية.",
                         'actorName' => 'مقيم المدرسة المعتمد',
                         'actorRole' => 'مقيم المدرسة',
+                        'actorType' => 'school',
                         'timestamp' => $sub->submitted_at?->toIso8601String() ?? $sub->created_at->toIso8601String(),
                         'statusBadge' => 'مسلّم للمراجعة',
                         'badgeColor' => 'blue',
+                        'cycleId' => $cycle?->cycle_id,
+                        'cycleName' => $cycle?->name,
+                        'submissionId' => $sub->submission_id,
+                        'stateTransition' => [
+                            'from' => $prevStatus,
+                            'to' => $newStatus,
+                        ],
                     ];
 
                     // أحداث طلبات الاستكمال الصادرة على هذه المحاولة
                     foreach ($sub->completionRequests as $cr) {
                         $itemsCount = $cr->items->count();
+                        $deadlineStr = $cr->completion_deadline ? Carbon::parse($cr->completion_deadline)->format('Y/m/d') : 'غير محددة';
                         $milestones[] = [
                             'id' => "cr-{$cr->request_id}",
                             'eventType' => 'completion_request',
                             'title' => "إصدار طلب استكمال بمهلة زمنية (المحاولة {$sub->attempt_no})",
-                            'description' => "أصدر المشرف الوزاري طلب استكمال لـ {$itemsCount} بنود مع مهلة استكمال حتى " . ($cr->completion_deadline ? Carbon::parse($cr->completion_deadline)->format('Y/m/d') : 'غير محددة') . '.',
+                            'description' => "أصدر المشرف الوزاري طلب استكمال لـ {$itemsCount} بنود مع مهلة استكمال حتى {$deadlineStr}.",
                             'actorName' => 'المشرف الوزاري',
                             'actorRole' => 'المشرف الوزاري',
+                            'actorType' => 'supervisor',
                             'timestamp' => $cr->created_at->toIso8601String(),
                             'statusBadge' => $cr->status === 'Open' ? 'يحتاج استكمال' : 'معالج ومغلق',
                             'badgeColor' => 'amber',
+                            'cycleId' => $cycle?->cycle_id,
+                            'cycleName' => $cycle?->name,
+                            'submissionId' => $sub->submission_id,
+                            'completionRequestId' => $cr->request_id,
+                            'stateTransition' => [
+                                'from' => "مرفوع للمراجعة (المحاولة {$sub->attempt_no})",
+                                'to' => "يحتاج استكمال ({$itemsCount} بنود)",
+                            ],
                         ];
                     }
                 }
@@ -1521,9 +1543,16 @@ class SupervisionController extends Controller
                 'description' => 'تم استيفاء المتطلبات وإغلاق المراجعة الإشرافية للملف ونقل الحالة إلى مكتمل (Completed).',
                 'actorName' => $decision->user?->name ?? 'المشرف الوزاري',
                 'actorRole' => 'المشرف الوزاري',
+                'actorType' => 'supervisor',
                 'timestamp' => $decision->created_at->toIso8601String(),
                 'statusBadge' => 'مكتمل ومغلق',
                 'badgeColor' => 'emerald',
+                'cycleId' => null,
+                'cycleName' => null,
+                'stateTransition' => [
+                    'from' => 'قيد التدقيق الإشرافي',
+                    'to' => 'مكتمل المراجعة ومغلق نهائياً',
+                ],
             ];
         }
 
@@ -1542,23 +1571,38 @@ class SupervisionController extends Controller
             $badgeColor = match ($note->memo_type) {
                 'field_visit', 'زيارة ميدانية' => 'purple',
                 'phone_call', 'اتصال هاتفي' => 'teal',
+                'corrective_memo', 'مذكرة تصحيحية / تعقيبية' => 'amber',
                 default => 'indigo',
             };
 
             $milestones[] = [
                 'id' => "memo-{$note->note_id}",
-                'eventType' => $note->memo_type ?? 'supervisor_memo',
+                'eventType' => match ($note->memo_type) {
+                    'field_visit', 'زيارة ميدانية' => 'field_visit',
+                    'phone_call', 'اتصال هاتفي' => 'phone_call',
+                    'corrective_memo', 'مذكرة تصحيحية / تعقيبية' => 'corrective_memo',
+                    default => 'supervisor_memo',
+                },
                 'title' => $note->subject ?? 'مذكرة إشرافية وتوجيه ميداني',
                 'description' => $note->text,
                 'actorName' => $note->author?->name ?? 'المشرف الوزاري',
                 'actorRole' => 'المشرف الوزاري',
+                'actorType' => 'supervisor',
                 'timestamp' => $note->created_at->toIso8601String(),
                 'statusBadge' => match ($note->memo_type) {
                     'field_visit', 'زيارة ميدانية' => 'زيارة ميدانية',
                     'phone_call', 'اتصال هاتفي' => 'اتصال هاتفي',
+                    'corrective_memo', 'مذكرة تصحيحية / تعقيبية' => 'مذكرة تصحيحية / تعقيبية',
                     default => 'مذكرة إشرافية',
                 },
                 'badgeColor' => $badgeColor,
+                'cycleId' => $note->cycle_id,
+                'submissionId' => $note->submission_id,
+                'completionRequestId' => $note->completion_request_id,
+                'stateTransition' => [
+                    'from' => 'إجراء متابعة ميداني',
+                    'to' => $note->is_visible_to_school ? 'موثق ومعلن للمدرسة' : 'موثق للمتابعة الداخلية',
+                ],
             ];
         }
 
@@ -1574,6 +1618,7 @@ class SupervisionController extends Controller
                 'memoType' => match ($n->memo_type) {
                     'field_visit', 'زيارة ميدانية' => 'زيارة ميدانية',
                     'phone_call', 'اتصال هاتفي' => 'اتصال هاتفي',
+                    'corrective_memo', 'مذكرة تصحيحية / تعقيبية' => 'مذكرة تصحيحية / تعقيبية',
                     default => 'مذكرة إشرافية',
                 },
                 'subject' => $n->subject ?? 'مذكرة إشرافية',
@@ -1581,6 +1626,9 @@ class SupervisionController extends Controller
                 'isVisibleToSchool' => (bool)$n->is_visible_to_school,
                 'authorName' => $n->author?->name ?? 'المشرف الوزاري',
                 'createdAt' => $n->created_at->toIso8601String(),
+                'cycleId' => $n->cycle_id,
+                'submissionId' => $n->submission_id,
+                'completionRequestId' => $n->completion_request_id,
             ];
         })->values()->toArray();
 
@@ -1595,6 +1643,36 @@ class SupervisionController extends Controller
             'Completed' => 'مكتمل المراجعة',
             default => 'مسودة قيد الإعداد',
         };
+
+        // بطاقات المؤشرات الإحصائية KPIs
+        $kpis = [
+            'totalMilestones' => count($milestones),
+            'submissionAttempts' => count(array_filter($milestones, fn($m) => $m['eventType'] === 'submission')),
+            'completionRequests' => count(array_filter($milestones, fn($m) => $m['eventType'] === 'completion_request')),
+            'memosAndVisits' => count(array_filter($milestones, fn($m) => in_array($m['eventType'], ['supervisor_memo', 'field_visit', 'phone_call', 'corrective_memo', 'زيارة ميدانية', 'اتصال هاتفي', 'مذكرة إشرافية', 'مذكرة تصحيحية / تعقيبية']))),
+            'currentDecision' => $outputStatusArabic,
+        ];
+
+        // مخرجات وطلبات استكمال ودورات المدرسة المتاحة للربط
+        $availableSubmissions = $evaluations->flatMap->reports->flatMap->submissions->map(fn($s) => [
+            'submissionId' => $s->submission_id,
+            'attemptNo' => $s->attempt_no,
+            'label' => "محاولة التسليم {$s->attempt_no} (" . ($s->submitted_at ? Carbon::parse($s->submitted_at)->format('Y/m/d') : 'تاريخ غير محدد') . ")",
+        ])->unique('submissionId')->values()->toArray();
+
+        $availableCompletionRequests = $evaluations->flatMap->reports->flatMap->submissions->flatMap->completionRequests->map(fn($cr) => [
+            'requestId' => $cr->request_id,
+            'status' => $cr->status === 'Open' ? 'مفتوح قيد الاستكمال' : 'معالج ومغلق',
+            'deadline' => $cr->completion_deadline ? Carbon::parse($cr->completion_deadline)->format('Y/m/d') : 'غير محددة',
+            'label' => "طلب استكمال #{$cr->request_id} (مهلة: " . ($cr->completion_deadline ? Carbon::parse($cr->completion_deadline)->format('Y/m/d') : 'غير محددة') . ")",
+        ])->unique('requestId')->values()->toArray();
+
+        $availableCycles = $evaluations->map(fn($e) => [
+            'cycleId' => $e->cycle?->cycle_id,
+            'name' => $e->cycle?->name,
+            'academicYear' => $e->cycle?->academic_year,
+            'label' => $e->cycle?->name ?? "الدورة للعام {$e->cycle?->academic_year}",
+        ])->filter(fn($c) => !empty($c['cycleId']))->unique('cycleId')->values()->toArray();
 
         return ApiResponse::success([
             'school' => [
@@ -1615,8 +1693,12 @@ class SupervisionController extends Controller
             'directorate' => $school->educational_district ?? 'غير محدد',
             'governorate' => $school->governorate ?? 'غير محدد',
             'activeCycle' => $school->evaluations->first()?->cycle?->academic_year ?? '2026/2027',
+            'kpis' => $kpis,
             'milestones' => $milestones,
             'memos' => $memosList,
+            'availableSubmissions' => $availableSubmissions,
+            'availableCompletionRequests' => $availableCompletionRequests,
+            'availableCycles' => $availableCycles,
         ], 'تم تحميل سجل متابعة المدرسة بنجاح.');
     }
 
@@ -1629,8 +1711,15 @@ class SupervisionController extends Controller
         $school = School::findOrFail($id);
         $user = $request->user();
 
+        // حوكمة النطاق الجغرافي للمشرف الوزاري (FR-SUP-02 & NFR-SEC-03)
+        if ($user && $user->hasRole('ministry_supervisor') && !empty($user->governorate)) {
+            if ($school->governorate && $school->governorate !== $user->governorate) {
+                return ApiResponse::forbidden('غير مصرح: المدرسة تقع خارج النطاق الجغرافي المسند إليك (' . $user->governorate . ').');
+            }
+        }
+
         $validator = Validator::make($request->all(), [
-            'memoType' => 'required|string|in:مذكرة إشرافية,زيارة ميدانية,اتصال هاتفي,supervisor_memo,field_visit,phone_call',
+            'memoType' => 'required|string|in:مذكرة إشرافية,زيارة ميدانية,اتصال هاتفي,مذكرة تصحيحية / تعقيبية,supervisor_memo,field_visit,phone_call,corrective_memo',
             'subject' => 'required|string|max:255',
             'details' => 'required|string|max:2000',
             'cycle_id' => 'nullable|integer|exists:evaluation_cycles,cycle_id',
@@ -1659,6 +1748,7 @@ class SupervisionController extends Controller
         $memoType = match ($request->input('memoType')) {
             'field_visit', 'زيارة ميدانية' => 'زيارة ميدانية',
             'phone_call', 'اتصال هاتفي' => 'اتصال هاتفي',
+            'corrective_memo', 'مذكرة تصحيحية / تعقيبية' => 'مذكرة تصحيحية / تعقيبية',
             default => 'مذكرة إشرافية',
         };
 
@@ -1672,6 +1762,19 @@ class SupervisionController extends Controller
             'subject' => $request->input('subject'),
             'text' => $request->input('details'),
             'is_visible_to_school' => (bool)$request->input('isVisibleToSchool', true),
+        ]);
+
+        // توثيق العملية في سجل التدقيق الأمني (NFR-INT-02)
+        AuditLog::create([
+            'school_id' => $school->school_id,
+            'user_id' => $user?->user_id ?? 1,
+            'action' => 'supervisor_note.created',
+            'target_type' => SupervisorNote::class,
+            'target_id' => $note->note_id,
+            'description_ar' => "تم تسجيل إجراء متابعة إشرافي ({$memoType}) بعنوان: {$note->subject}",
+            'ip_address' => $request->ip(),
+            'user_agent' => $request->userAgent(),
+            'created_at' => now(),
         ]);
 
         return ApiResponse::success([
@@ -2188,10 +2291,19 @@ class SupervisionController extends Controller
      * 10. تصدير سجل متابعة المدرسة PDF
      * GET /api/v1/schools/{id}/tracking-log/pdf
      */
-    public function exportTrackingLogPdf(int $id): JsonResponse
+    public function exportTrackingLogPdf(Request $request, int $id): JsonResponse
     {
-        $school = School::find($id);
-        $schoolName = $school?->name ?? 'مدرسة التقييم';
+        $school = School::findOrFail($id);
+        $user = $request->user();
+
+        // حوكمة النطاق الجغرافي للمشرف الوزاري (FR-SUP-02 & NFR-SEC-03)
+        if ($user && $user->hasRole('ministry_supervisor') && !empty($user->governorate)) {
+            if ($school->governorate && $school->governorate !== $user->governorate) {
+                return ApiResponse::forbidden('غير مصرح: المدرسة تقع خارج النطاق الجغرافي المسند إليك (' . $user->governorate . ').');
+            }
+        }
+
+        $schoolName = $school->name ?? $school->school_name ?? 'مدرسة التقييم';
 
         return ApiResponse::success([
             'reportTitle' => "سجل إجراءات المتابعة والزيارات الإشرافية - {$schoolName}",
@@ -2202,6 +2314,35 @@ class SupervisionController extends Controller
             'generatedAt' => now()->toIso8601String(),
             'downloadUrl' => "/api/v1/schools/{$id}/tracking-log/pdf/download",
         ], 'تم توليد سجل المتابعة الرسمي بصيغة PDF بنجاح.');
+    }
+
+    /**
+     * 10.b تصدير سجل متابعة المدرسة Excel (.xlsx)
+     * GET /api/v1/schools/{id}/tracking-log/excel
+     */
+    public function exportTrackingLogExcel(Request $request, int $id): JsonResponse
+    {
+        $school = School::findOrFail($id);
+        $user = $request->user();
+
+        // حوكمة النطاق الجغرافي للمشرف الوزاري (FR-SUP-02 & NFR-SEC-03)
+        if ($user && $user->hasRole('ministry_supervisor') && !empty($user->governorate)) {
+            if ($school->governorate && $school->governorate !== $user->governorate) {
+                return ApiResponse::forbidden('غير مصرح: المدرسة تقع خارج النطاق الجغرافي المسند إليك (' . $user->governorate . ').');
+            }
+        }
+
+        $schoolName = $school->name ?? $school->school_name ?? 'مدرسة التقييم';
+
+        return ApiResponse::success([
+            'reportTitle' => "سجل إجراءات المتابعة والزيارات الإشرافية - {$schoolName}",
+            'systemFullName' => 'منصة ارتقاء للتقييم الذاتي والتحسين المدرسي',
+            'authority' => 'الإدارة العامة لضمان الجودة والاعتماد المدرسي',
+            'schoolId' => $id,
+            'schoolName' => $schoolName,
+            'generatedAt' => now()->toIso8601String(),
+            'downloadUrl' => "/api/v1/schools/{$id}/tracking-log/excel/download",
+        ], 'تم توليد سجل المتابعة الرسمي بصيغة Excel بنجاح.');
     }
 
     /**

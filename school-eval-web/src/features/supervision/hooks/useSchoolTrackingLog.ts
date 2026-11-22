@@ -5,7 +5,11 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { supervisionApi } from '../api/supervisionApi';
-import type { SchoolTrackingLogData, MilestoneEvent } from '../api/supervisionTypes';
+import { exportTrackingLogToExcel } from '../utils/supervisionExportUtils';
+import type {
+  SchoolTrackingLogData,
+  MilestoneEvent,
+} from '../api/supervisionTypes';
 
 export function useSchoolTrackingLog(schoolId?: number) {
   const [data, setData] = useState<SchoolTrackingLogData | null>(null);
@@ -40,10 +44,13 @@ export function useSchoolTrackingLog(schoolId?: number) {
 
   // حفظ مذكرة إشرافية جديدة
   const addMemo = async (memoData: {
-    memoType: 'مذكرة إشرافية' | 'زيارة ميدانية' | 'اتصال هاتفي';
+    memoType: 'مذكرة إشرافية' | 'زيارة ميدانية' | 'اتصال هاتفي' | 'مذكرة تصحيحية / تعقيبية';
     subject: string;
     details: string;
     isVisibleToSchool: boolean;
+    cycle_id?: number;
+    submission_id?: number;
+    completion_request_id?: number;
   }) => {
     if (!schoolId) {
       setMemoError('يرجى تحديد مدرسة أولاً لإضافة المذكرة.');
@@ -60,32 +67,48 @@ export function useSchoolTrackingLog(schoolId?: number) {
       setData((prev) => {
         if (!prev) return prev;
         const newMilestone: MilestoneEvent = {
-          id: Date.now(),
+          id: `memo-${Date.now()}`,
           eventType:
             memoData.memoType === 'زيارة ميدانية'
               ? 'field_visit'
               : memoData.memoType === 'اتصال هاتفي'
               ? 'phone_call'
+              : memoData.memoType === 'مذكرة تصحيحية / تعقيبية'
+              ? 'corrective_memo'
               : 'supervisor_memo',
           title: `${memoData.memoType}: ${memoData.subject}`,
           description: memoData.details,
           actorName: 'المشرف الوزاري المكلف',
           actorRole: 'المشرف الوزاري',
+          actorType: 'supervisor',
           timestamp: new Date().toISOString(),
           statusBadge: memoData.memoType,
+          cycleId: memoData.cycle_id,
+          submissionId: memoData.submission_id,
+          completionRequestId: memoData.completion_request_id,
           badgeColor:
             memoData.memoType === 'زيارة ميدانية'
               ? 'purple'
               : memoData.memoType === 'اتصال هاتفي'
               ? 'amber'
+              : memoData.memoType === 'مذكرة تصحيحية / تعقيبية'
+              ? 'crimson'
               : 'indigo',
         };
+
+        const updatedMemosCount = (prev.kpis?.memosAndVisits ?? prev.memos.length) + 1;
+        const updatedTotalMilestones = (prev.kpis?.totalMilestones ?? prev.milestones.length) + 1;
 
         return {
           ...prev,
           school: {
             ...prev.school,
-            totalMilestones: prev.school.totalMilestones + 1,
+            totalMilestones: updatedTotalMilestones,
+          },
+          kpis: {
+            ...prev.kpis,
+            totalMilestones: updatedTotalMilestones,
+            memosAndVisits: updatedMemosCount,
           },
           milestones: [newMilestone, ...prev.milestones],
           memos: [createdMemo, ...prev.memos],
@@ -108,13 +131,35 @@ export function useSchoolTrackingLog(schoolId?: number) {
     try {
       await supervisionApi.exportTrackingLogPdf(schoolId);
     } catch (err) {
-      console.error(err);
+      console.error('PDF export request error:', err);
+    }
+  };
+
+  // تصدير سجل المتابعة بصيغة Excel
+  const handleExportExcel = async () => {
+    if (!schoolId || !data) return;
+    try {
+      // تفضيل التحقق عبر خادم الـ API ثم التوليد الفوري للملف بـ SheetJS
+      supervisionApi.exportTrackingLogExcel(schoolId).catch(() => {});
+      exportTrackingLogToExcel({
+        schoolName: data.school?.schoolName || 'مدرسة التقييم',
+        schoolCode: data.school?.schoolCode || `SCH-${schoolId}`,
+        governorate: data.school?.governorate,
+        milestones: data.milestones || [],
+        memos: data.memos || [],
+      });
+    } catch (err) {
+      console.error('Excel export error:', err);
     }
   };
 
   return {
     logData: data,
     school: data?.school,
+    kpis: data?.kpis,
+    availableSubmissions: data?.availableSubmissions ?? [],
+    availableCompletionRequests: data?.availableCompletionRequests ?? [],
+    availableCycles: data?.availableCycles ?? [],
     milestones: data?.milestones ?? [],
     memos: data?.memos ?? [],
     isLoading,
@@ -125,5 +170,6 @@ export function useSchoolTrackingLog(schoolId?: number) {
     memoSuccess,
     addMemo,
     handleExportPdf,
+    handleExportExcel,
   };
 }

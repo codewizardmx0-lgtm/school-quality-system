@@ -13,6 +13,8 @@ import type {
   StandardMeanItem,
   HistoricalStandardDelta,
   ParticipatingSchoolItem,
+  MilestoneEvent,
+  SupervisorMemo,
 } from '../api/supervisionTypes';
 
 /**
@@ -201,5 +203,93 @@ export function exportCycleParticipatingSchoolsToExcel(
 
   const safeYear = academicYear.replace(/[\\/:*?"<>|]/g, '_');
   const fileName = `cycle_schools_${safeYear}_${getTimestampString()}.xlsx`;
+  XLSX.writeFile(workbook, fileName);
+}
+
+/**
+ * 5. تصدير سجل المتابعة الميدانية والخط الزمني والمذكرات (School Tracking Log)
+ */
+export function exportTrackingLogToExcel(params: {
+  schoolName: string;
+  schoolCode: string;
+  governorate?: string;
+  milestones: MilestoneEvent[];
+  memos: SupervisorMemo[];
+}): void {
+  const { schoolName, schoolCode, governorate, milestones, memos } = params;
+
+  // ورقة 1: سجل المحطات والتدخلات الميدانية
+  const milestoneRows = milestones.map((item, index) => ({
+    'م': index + 1,
+    'نوع المحطة': item.statusBadge || item.eventType,
+    'العنوان': item.title,
+    'تفاصيل الإجراء والملاحظات': item.description,
+    'القائم بالإجراء': item.actorName,
+    'الدور الوظيفي': item.actorRole,
+    'التصنيف': item.actorType === 'school' ? 'المدرسة' : item.actorType === 'system' ? 'النظام الآلي' : 'المشرف الوزاري',
+    'انتقال الحالة': item.stateTransition ? `${item.stateTransition.from} ← ${item.stateTransition.to}` : 'غير محدد',
+    'الدورة التقييمية': item.cycleName || 'الدورة النشطة',
+    'التاريخ والوقت': new Date(item.timestamp).toLocaleString('ar-YE', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    }),
+  }));
+
+  const wsMilestones = XLSX.utils.json_to_sheet(milestoneRows);
+  wsMilestones['!dir'] = 'rtl';
+  wsMilestones['!cols'] = [
+    { wch: 5 },  // م
+    { wch: 18 }, // نوع المحطة
+    { wch: 35 }, // العنوان
+    { wch: 45 }, // التفاصيل
+    { wch: 22 }, // القائم بالإجراء
+    { wch: 18 }, // الدور الوظيفي
+    { wch: 15 }, // التصنيف
+    { wch: 35 }, // انتقال الحالة
+    { wch: 25 }, // الدورة
+    { wch: 24 }, // التاريخ
+  ];
+
+  // ورقة 2: المذكرات والزيارات الرسمية
+  const memoRows = memos.map((memo, index) => ({
+    'م': index + 1,
+    'نوع الإجراء': memo.memoType,
+    'موضوع المذكرة': memo.subject,
+    'نص وتفاصيل المذكرة / التقرير': memo.details,
+    'المشرف الوزاري': memo.authorName,
+    'الظهور للمدرسة': memo.isVisibleToSchool ? 'نعم (ظاهرة للمدرسة)' : 'لا (داخلية)',
+    'تاريخ التوثيق': new Date(memo.createdAt).toLocaleString('ar-YE', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    }),
+  }));
+
+  const wsMemos = XLSX.utils.json_to_sheet(memoRows);
+  wsMemos['!dir'] = 'rtl';
+  wsMemos['!cols'] = [
+    { wch: 5 },  // م
+    { wch: 20 }, // نوع الإجراء
+    { wch: 30 }, // الموضوع
+    { wch: 50 }, // التفاصيل
+    { wch: 22 }, // المشرف
+    { wch: 20 }, // الظهور للمدرسة
+    { wch: 24 }, // التاريخ
+  ];
+
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, wsMilestones, 'سجل المحطات والتدخلات');
+  XLSX.utils.book_append_sheet(workbook, wsMemos, 'المذكرات والزيارات الميدانية');
+
+  const safeName = (schoolName ? `${schoolName}_${schoolCode}` : schoolCode || 'SCH')
+    .replace(/[\\/:*?"<>|]/g, '_')
+    .replace(/\s+/g, '_');
+  const govSuffix = governorate ? `_${governorate.replace(/\s+/g, '_')}` : '';
+  const fileName = `tracking_log_${safeName}${govSuffix}_${getTimestampString()}.xlsx`;
   XLSX.writeFile(workbook, fileName);
 }

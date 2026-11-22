@@ -626,7 +626,7 @@ export interface NationalStandardTreeStandard {
 }
 
 export interface MilestoneEvent {
-  id: number;
+  id: string | number;
   eventType:
     | 'submission'
     | 'automated_check'
@@ -634,11 +634,19 @@ export interface MilestoneEvent {
     | 'completion_resolved'
     | 'field_visit'
     | 'supervisor_memo'
-    | 'phone_call';
+    | 'phone_call'
+    | 'corrective_memo'
+    | 'decision';
   title: string;
   description: string;
   actorName: string;
   actorRole: string;
+  actorType?: 'school' | 'supervisor' | 'system';
+  stateTransition?: { from: string; to: string } | null;
+  cycleId?: number;
+  cycleName?: string;
+  submissionId?: number;
+  completionRequestId?: number;
   timestamp: string;
   statusBadge: string;
   badgeColor?: 'blue' | 'emerald' | 'amber' | 'purple' | 'indigo' | 'crimson';
@@ -646,12 +654,28 @@ export interface MilestoneEvent {
 
 export interface SupervisorMemo {
   id: number;
-  memoType: 'مذكرة إشرافية' | 'زيارة ميدانية' | 'اتصال هاتفي';
+  memoType: 'مذكرة إشرافية' | 'زيارة ميدانية' | 'اتصال هاتفي' | 'مذكرة تصحيحية / تعقيبية';
   subject: string;
   details: string;
   isVisibleToSchool: boolean;
   authorName: string;
   createdAt: string;
+  cycleId?: number;
+  submissionId?: number;
+  completionRequestId?: number;
+}
+
+export interface SchoolTrackingKPIs {
+  totalMilestones: number;
+  submissionAttempts: number;
+  completionRequests: number;
+  memosAndVisits: number;
+  currentDecision: string;
+}
+
+export interface TrackingSelectorItem {
+  id: number;
+  label: string;
 }
 
 export interface SchoolTrackingLogData {
@@ -662,10 +686,28 @@ export interface SchoolTrackingLogData {
     outputStatus: OutputStatusType;
     outputStatusArabic: string;
     governorate: string;
+    directorate?: string;
+    educationalStage?: string;
+    principalName?: string;
+    evaluatorName?: string;
     totalMilestones: number;
   };
+  kpis: SchoolTrackingKPIs;
   milestones: MilestoneEvent[];
   memos: SupervisorMemo[];
+  availableSubmissions: TrackingSelectorItem[];
+  availableCompletionRequests: TrackingSelectorItem[];
+  availableCycles: TrackingSelectorItem[];
+}
+
+export interface AddSupervisorMemoPayload {
+  memoType: string;
+  subject: string;
+  details: string;
+  isVisibleToSchool?: boolean;
+  cycle_id?: number;
+  submission_id?: number;
+  completion_request_id?: number;
 }
 
 export interface StandardMeanItem {

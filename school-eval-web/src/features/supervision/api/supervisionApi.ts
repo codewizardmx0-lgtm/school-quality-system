@@ -425,6 +425,11 @@ export const supervisionApi = {
     return response?.data ?? response;
   },
 
+  async exportTrackingLogExcel(schoolId: number): Promise<any> {
+    const response = await get<any>(`/schools/${schoolId}/tracking-log/excel`);
+    return response?.data ?? response;
+  },
+
   async exportHistoricalComparisonPdf(schoolId: number): Promise<any> {
     const response = await get<any>(`/schools/${schoolId}/historical-comparison/pdf`);
     return response?.data ?? response;

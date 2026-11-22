@@ -183,6 +183,7 @@ Route::prefix('v1')->group(function () {
             Route::post('/supervisor-notes', [\App\Http\Controllers\Api\V1\SupervisionController::class, 'addSupervisorMemo'])->name('api.v1.schools.supervisor-notes');
             Route::get('/historical-comparison', [\App\Http\Controllers\Api\V1\SupervisionController::class, 'historicalComparison'])->name('api.v1.schools.historical-comparison');
             Route::get('/tracking-log/pdf', [\App\Http\Controllers\Api\V1\SupervisionController::class, 'exportTrackingLogPdf'])->name('api.v1.schools.tracking-log.pdf');
+            Route::get('/tracking-log/excel', [\App\Http\Controllers\Api\V1\SupervisionController::class, 'exportTrackingLogExcel'])->name('api.v1.schools.tracking-log.excel');
             Route::get('/historical-comparison/pdf', [\App\Http\Controllers\Api\V1\SupervisionController::class, 'exportHistoricalComparisonPdf'])->name('api.v1.schools.historical-comparison.pdf');
         });
 
