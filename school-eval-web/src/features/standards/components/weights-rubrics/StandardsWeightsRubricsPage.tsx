@@ -40,13 +40,16 @@ export const StandardsWeightsRubricsPage: React.FC<StandardsWeightsRubricsPagePr
     isBalanced,
     isMainBalanced,
     isAllSubStandardsBalanced,
+    isAllIndicatorsBalanced,
     subStandardsBalanceMap,
+    indicatorsBalanceMap,
     isSaving,
     saveSuccess,
     isDirty,
     error,
     handleWeightChange,
     handleSubStandardWeightChange,
+    handleIndicatorWeightChange,
     resetToEqualWeights,
     saveWeights,
   } = useWeightsRubrics(versionId);
@@ -237,15 +240,16 @@ export const StandardsWeightsRubricsPage: React.FC<StandardsWeightsRubricsPagePr
         </div>
       )}
 
-      {/* 1. Live Mathematical Balance Banner (100.0% validation) */}
+      {/* 1. Live Mathematical Balance Banner (100.0% validation across 3 tiers) */}
       <WeightsBalanceBanner
         totalWeight={totalWeight}
         isBalanced={isBalanced}
         isMainBalanced={isMainBalanced}
         isAllSubStandardsBalanced={isAllSubStandardsBalanced}
+        isAllIndicatorsBalanced={isAllIndicatorsBalanced}
       />
 
-      {/* 2. Standards Weights Distribution Table */}
+      {/* 2. Standards Weights Distribution Table (3 Levels) */}
       <div className="std-table-card">
         <WeightsDistributionTable
           weights={weights}
@@ -253,8 +257,10 @@ export const StandardsWeightsRubricsPage: React.FC<StandardsWeightsRubricsPagePr
           isBalanced={isBalanced}
           isDraft={isDraft}
           subStandardsBalanceMap={subStandardsBalanceMap}
+          indicatorsBalanceMap={indicatorsBalanceMap}
           onWeightChange={handleWeightChange}
           onSubStandardWeightChange={handleSubStandardWeightChange}
+          onIndicatorWeightChange={handleIndicatorWeightChange}
           onResetEqual={resetToEqualWeights}
         />
       </div>
@@ -313,7 +319,7 @@ export const StandardsWeightsRubricsPage: React.FC<StandardsWeightsRubricsPagePr
             onClick={() => confirmNavigation(() => onNavigateToLock(versionId))}
             className="std-btn-primary"
           >
-            <span>الانتقال لتدقيق القفل والاعتماد</span>
+            <span>الانتقال لتدقيق القفل والإقرار الرسمي</span>
             <ArrowLeft size={14} />
           </button>
         </div>

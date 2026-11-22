@@ -295,17 +295,24 @@ class StandardManagementService
         }
 
         // 2. فحص المستوى 2: إن تم تمرير أوزان المعايير الفرعية، يجب أن يتطابق مجموعها لكل معيار مع وزن المعيار الرئيسي الحاوي لها
-        if (!empty($subStandardsWeights)) {
-            $subStandardsList = SubStandard::whereHas('standard', fn($q) => $q->where('version_id', $version->version_id))
-                ->get()
-                ->keyBy('sub_standard_id');
+        $subStandardsList = SubStandard::whereHas('standard', fn($q) => $q->where('version_id', $version->version_id))
+            ->get()
+            ->keyBy('sub_standard_id');
 
+        $effectiveSubWeights = [];
+        foreach ($subStandardsList as $subId => $subModel) {
+            $effectiveSubWeights[$subId] = (float) $subModel->weight;
+        }
+
+        if (!empty($subStandardsWeights)) {
             $groupedSubWeights = [];
             foreach ($subStandardsWeights as $subItem) {
                 $subId = (int) ($subItem['sub_standard_id'] ?? $subItem['id']);
                 if (isset($subStandardsList[$subId])) {
                     $stdId = $subStandardsList[$subId]->standard_id;
-                    $groupedSubWeights[$stdId][$subId] = (float) $subItem['weight'];
+                    $w = (float) $subItem['weight'];
+                    $groupedSubWeights[$stdId][$subId] = $w;
+                    $effectiveSubWeights[$subId] = $w;
                 }
             }
 
@@ -322,7 +329,40 @@ class StandardManagementService
             }
         }
 
-        DB::transaction(function () use ($version, $standardsWeights, $indicatorsWeights, $subStandardsWeights) {
+        // 3. فحص المستوى 3: إن تم تمرير أوزان المؤشرات، يجب أن يتطابق مجموع أوزان مؤشرات كل معيار فرعي مع وزن المعيار الفرعي الحاوي لها
+        $indicatorsList = Indicator::whereHas('subStandard.standard', fn($q) => $q->where('version_id', $version->version_id))
+            ->get();
+
+        if (!empty($indicatorsWeights)) {
+            $groupedIndWeights = [];
+            foreach ($indicatorsList as $ind) {
+                $groupedIndWeights[$ind->sub_standard_id][$ind->indicator_id] = (float) $ind->weight;
+            }
+
+            foreach ($indicatorsWeights as $indItem) {
+                $iid = (int) ($indItem['indicator_id'] ?? $indItem['id']);
+                $indModel = $indicatorsList->firstWhere('indicator_id', $iid);
+                if ($indModel) {
+                    $subId = $indModel->sub_standard_id;
+                    $groupedIndWeights[$subId][$iid] = (float) $indItem['weight'];
+                }
+            }
+
+            foreach ($groupedIndWeights as $subId => $indMap) {
+                if (empty($indMap)) continue;
+                $expectedSubWeight = $effectiveSubWeights[$subId] ?? 0.0;
+                $actualIndSum = round(array_sum($indMap), 2);
+                if (abs($actualIndSum - $expectedSubWeight) > 0.01) {
+                    $subModel = $subStandardsList[$subId] ?? SubStandard::find($subId);
+                    $subName = $subModel ? "{$subModel->name} ({$subModel->code})" : "المعيار الفرعي رقم {$subId}";
+                    throw ValidationException::withMessages([
+                        'indicators_weights' => ["مجموع أوزان المؤشرات للمعيار الفرعي ({$subName}) هو ({$actualIndSum}%) ويجب أن يساوي تماماً وزن المعيار الفرعي ({$expectedSubWeight}%)."],
+                    ]);
+                }
+            }
+        }
+
+        DB::transaction(function () use ($version, $standardsWeights, $indicatorsWeights, $subStandardsWeights, $effectiveSubWeights) {
             // تحديث أوزان المعايير الرئيسية
             foreach ($standardsWeights as $item) {
                 $sid = (int) ($item['standard_id'] ?? $item['id']);
@@ -351,15 +391,19 @@ class StandardManagementService
                     }
                 }
             } elseif (!empty($subStandardsWeights)) {
-                // التوزيع التلقائي بالتساوي: إذا لم تُرسل أوزان مخصصة للمؤشرات، توزع أوزان المعيار الفرعي بالتساوي على مؤشراته
+                // التوزيع التلقائي الدقيق: إذا لم تُرسل أوزان مخصصة للمؤشرات، توزع أوزان المعيار الفرعي بالتساوي وبدقة على مؤشراته
                 foreach ($subStandardsWeights as $subItem) {
                     $subId = (int) ($subItem['sub_standard_id'] ?? $subItem['id']);
                     $subWeight = (float) $subItem['weight'];
-                    $indicators = Indicator::where('sub_standard_id', $subId)->get();
+                    $indicators = Indicator::where('sub_standard_id', $subId)->orderBy('indicator_id', 'asc')->get();
                     $indCount = $indicators->count();
                     if ($indCount > 0) {
-                        $equalWeight = round($subWeight / $indCount, 2);
-                        Indicator::where('sub_standard_id', $subId)->update(['weight' => $equalWeight]);
+                        $baseWeight = floor(($subWeight / $indCount) * 100) / 100;
+                        $remainder = round($subWeight - ($baseWeight * $indCount), 2);
+                        foreach ($indicators as $idx => $ind) {
+                            $assignedWeight = ($idx === $indCount - 1) ? round($baseWeight + $remainder, 2) : $baseWeight;
+                            $ind->update(['weight' => $assignedWeight]);
+                        }
                     }
                 }
             }

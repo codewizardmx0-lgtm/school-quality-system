@@ -507,19 +507,32 @@ class StandardManagementController extends Controller
      */
     public function getWeights(int $id): JsonResponse
     {
-        $version = StandardVersion::with(['standards.subStandards' => fn($q) => $q->withCount('indicators')->orderBy('sub_standard_id', 'asc')])->find($id);
+        $version = StandardVersion::with([
+            'standards.subStandards' => fn($q) => $q->withCount('indicators')->orderBy('sub_standard_id', 'asc'),
+            'standards.subStandards.indicators' => fn($q) => $q->orderBy('indicator_id', 'asc'),
+        ])->find($id);
         if (!$version) {
             return ApiResponse::notFound('الإصدار المعياري غير موجود.');
         }
 
         $standards = $version->standards->map(function ($std) {
             $subStandards = $std->subStandards->map(function ($sub) {
+                $indicators = $sub->indicators->map(function ($ind) {
+                    return [
+                        'indicatorId' => $ind->indicator_id,
+                        'code' => $ind->code,
+                        'name' => $ind->title ?? $ind->name,
+                        'weight' => (float) $ind->weight,
+                    ];
+                });
+
                 return [
                     'subStandardId' => $sub->sub_standard_id,
                     'code' => $sub->code,
                     'name' => $sub->name,
                     'weight' => (float) $sub->weight,
                     'indicatorsCount' => $sub->indicators_count,
+                    'indicators' => $indicators,
                 ];
             });
 
