@@ -710,16 +710,58 @@ export interface AddSupervisorMemoPayload {
   completion_request_id?: number;
 }
 
+export interface IndicatorMeanItem {
+  indicatorId: number;
+  code: string;
+  name: string;
+  standardId: number;
+  standardName: string;
+  subStandardName: string;
+  meanScore: number;
+  maxScore: number;
+  percentageAttainment: number;
+  benchmarkLevel: 'متميز' | 'متوسط' | 'بحاجة لدعم';
+  status: 'advanced' | 'proficient' | 'needs_support';
+  evaluatedCount: number;
+}
+
 export interface StandardMeanItem {
   standardId: number;
   code: string;
   name: string;
+  weight?: number;
   meanScore: number; // 0-3 scale
   maxScore: number;
   percentageAttainment: number;
   benchmarkLevel: 'متميز' | 'متوسط' | 'بحاجة لدعم';
   status: 'advanced' | 'proficient' | 'needs_support';
   indicatorsCount: number;
+  indicators?: IndicatorMeanItem[];
+}
+
+export interface CentralSchoolsReportItem {
+  schoolId: number;
+  schoolCode: string;
+  schoolName: string;
+  stage: string;
+  directorate: string;
+  governorate: string;
+  status: 'Completed' | 'NeedsCompletion' | 'UnderReview' | 'Submitted' | 'Draft' | 'Overdue' | 'NotStarted';
+  statusLabel: string;
+  isDelayed: boolean;
+  evaluatedIndicatorsCount: number;
+  totalIndicatorsCount: number;
+  completionPercentage: number;
+  averageScore: number | null;
+  completionRequestsCount: number;
+  pendingRequestsCount: number;
+  latestSubmissionId: number | null;
+}
+
+export interface CentralAnalyticsParams {
+  cycle_id?: number | string;
+  stage?: string;
+  school_ids?: number[];
 }
 
 export interface CentralReportsData {
@@ -727,24 +769,67 @@ export interface CentralReportsData {
     governorate: string;
     totalSchools: number;
     evaluatedSchools: number;
+    completedReviewCount?: number;
+    overdueSchoolsCount?: number;
+    activeRequestsCount?: number;
     averageScore: number;
     maxScore: number;
     overallPercentage: number;
     highestStandard: string;
     lowestStandard: string;
     policySynthesisNote: string;
+    cycleDurationDays?: number;
+    cycleDaysElapsed?: number;
+    isCycle80PercentElapsed?: boolean;
   };
   distribution: {
     advancedPercentage: number;
     proficientPercentage: number;
     needsSupportPercentage: number;
+    advancedCount?: number;
+    proficientCount?: number;
+    needsSupportCount?: number;
   };
   standardsMeans: StandardMeanItem[];
+  allIndicatorsMeans?: IndicatorMeanItem[];
   stageBreakdown: Array<{
     stage: string;
     averageScore: number;
     schoolsCount: number;
   }>;
+  centralSchoolsReport?: CentralSchoolsReportItem[];
+  topStrengths?: IndicatorMeanItem[];
+  bottomGaps?: IndicatorMeanItem[];
+  policySynthesisSummary?: {
+    topStrengths: IndicatorMeanItem[];
+    topGaps: IndicatorMeanItem[];
+    policyNote: string;
+  };
+  availableCycles?: Array<{
+    cycleId: number;
+    name: string;
+    academicYear: string;
+    status: string;
+    startDate?: string | null;
+    endDate?: string | null;
+  }>;
+  availableSchools?: Array<{
+    schoolId: number;
+    schoolCode: string;
+    schoolName: string;
+    stage: string;
+    directorate: string;
+  }>;
+  activeCycleId?: number;
+  academicYear?: string;
+  activeVersionTitle?: string;
+  summaryStats?: {
+    totalEvaluatedSchools: number;
+    completedReviewCount: number;
+    overallCompliancePercentage: number;
+    nationalMeanScore: number;
+  };
+  governanceNotice?: string;
 }
 
 export interface HistoricalIndicatorDelta {

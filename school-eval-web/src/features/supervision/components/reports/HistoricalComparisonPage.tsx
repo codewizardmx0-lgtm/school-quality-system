@@ -402,7 +402,7 @@ export const HistoricalComparisonPage: React.FC<HistoricalComparisonPageProps> =
               التقييم التأسيسي الأول للمدرسة — لا تتوفر نتائج لدورات سابقة كافية (UC-SUP-07)
             </h3>
             <p style={{ fontSize: '13px', color: '#1E3A8A', margin: 0, marginBottom: '14px', lineHeight: 1.6 }}>
-              المدرسة مسجلة حالياً بدورة تقييم ذاتي واحدة فقط ({historicalData?.baseCycle?.name || baseCycle}). وفقاً لاشتراطات حالة الاستخدام (UC-SUP-07)، تتطلب المقارنة التراكمية وجود نتائج معتمدة لدورتين متعاقبتين على الأقل. يمكنك معاينة نتائج الدورة الحالية أو تصدير بطاقة التقويم الفردية.
+              المدرسة مسجلة حالياً بدورة تقييم ذاتي واحدة فقط ({historicalData?.baseCycle?.name || baseCycle}). وفقاً لاشتراطات حالة الاستخدام (UC-SUP-07)، تتطلب المقارنة التراكمية وجود نتائج مكتملة ومقرة لدورتين متعاقبتين على الأقل. يمكنك معاينة نتائج الدورة الحالية أو تصدير بطاقة التقويم الفردية.
             </p>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
               <button

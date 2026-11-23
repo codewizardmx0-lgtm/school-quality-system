@@ -19,6 +19,7 @@ import type {
   SchoolTrackingLogData,
   SupervisorMemo,
   CentralReportsData,
+  CentralAnalyticsParams,
   HistoricalComparisonData,
 } from './supervisionTypes';
 
@@ -380,11 +381,18 @@ export const supervisionApi = {
   },
 
   /**
-   * 10. التقارير والتحليلات المركزية ومؤشرات الجودة الوطنية
+   * 10. التقارير والتحليلات المركزية ومؤشرات الجودة الوطنية (Zero-Mock)
    * GET /api/v1/supervision/reports/analytics
    */
-  async getCentralAnalytics(): Promise<CentralReportsData> {
-    const response = await get<CentralReportsData>('/supervision/reports/analytics');
+  async getCentralAnalytics(params?: CentralAnalyticsParams): Promise<CentralReportsData> {
+    const q = new URLSearchParams();
+    if (params?.cycle_id) q.append('cycle_id', String(params.cycle_id));
+    if (params?.stage) q.append('stage', params.stage);
+    if (params?.school_ids && params.school_ids.length > 0) {
+      q.append('school_ids', params.school_ids.slice(0, 10).join(','));
+    }
+    const qs = q.toString() ? `?${q.toString()}` : '';
+    const response = await get<CentralReportsData>(`/supervision/reports/analytics${qs}`);
     if (!response?.data) {
       throw new Error(response?.message || 'تعذر استرجاع التحليلات المركزية.');
     }
@@ -415,9 +423,30 @@ export const supervisionApi = {
   /**
    * 12. طلب توليد وتصدير ملفات PDF الرسمية
    */
-  async exportAnalyticsPdf(): Promise<any> {
-    const response = await get<any>('/supervision/reports/analytics/pdf');
-    return response?.data ?? response;
+  async exportAnalyticsPdf(params?: CentralAnalyticsParams): Promise<void> {
+    const q = new URLSearchParams();
+    if (params?.cycle_id) q.append('cycle_id', String(params.cycle_id));
+    if (params?.stage) q.append('stage', params.stage);
+    if (params?.school_ids && params.school_ids.length > 0) {
+      q.append('school_ids', params.school_ids.slice(0, 10).join(','));
+    }
+    const qs = q.toString() ? `?${q.toString()}` : '';
+
+    const response = await apiClient.get(`/supervision/reports/analytics/pdf${qs}`, {
+      responseType: 'blob',
+    });
+    const blob = new Blob([response as unknown as BlobPart], { type: 'application/pdf' });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    const now = new Date();
+    const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const fileName = `central_analytics_report_${dateStr}.pdf`;
+    link.setAttribute('download', fileName);
+    document.body.appendChild(link);
+    link.click();
+    link.parentNode?.removeChild(link);
+    window.URL.revokeObjectURL(url);
   },
 
   async exportTrackingLogPdf(schoolId: number): Promise<any> {

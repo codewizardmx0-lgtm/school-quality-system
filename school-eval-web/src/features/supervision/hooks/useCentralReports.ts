@@ -12,12 +12,22 @@ import {
 } from '../utils/supervisionExportUtils';
 
 export function useCentralReports(schoolId?: number) {
-  // 1. بيانات التحليلات المركزية (Screen 6)
+  // 1. بيانات التحليلات المركزية (Screen 8)
   const [analyticsData, setAnalyticsData] = useState<CentralReportsData | null>(null);
   const [isLoadingAnalytics, setIsLoadingAnalytics] = useState<boolean>(true);
   const [analyticsError, setAnalyticsError] = useState<string | null>(null);
 
-  // فلاتر التحليلات
+  // شريط التصفية العلوي للتحليلات
+  const [selectedCycleId, setSelectedCycleId] = useState<number | string | undefined>(undefined);
+  const [selectedStage, setSelectedStage] = useState<string>('');
+  const [selectedSchoolIds, setSelectedSchoolIdsState] = useState<number[]>([]);
+
+  // ضبط محدد المدارس مع سقف أقصى 10 مدارس
+  const setSelectedSchoolIds = useCallback((ids: number[]) => {
+    setSelectedSchoolIdsState(ids.slice(0, 10));
+  }, []);
+
+  // فلاتر التبويبات الداخلية
   const [selectedBenchmarkFilter, setSelectedBenchmarkFilter] = useState<string>('all');
   const [selectedStageIndex, setSelectedStageIndex] = useState<number | null>(null);
 
@@ -50,19 +60,26 @@ export function useCentralReports(schoolId?: number) {
     return () => { isMounted = false; };
   }, []);
 
-  // جلب التحليلات المركزية
+  // جلب التحليلات المركزية مع تطبيق فلاتر الشريط العلوي
   const fetchAnalytics = useCallback(async () => {
     setIsLoadingAnalytics(true);
     setAnalyticsError(null);
     try {
-      const result = await supervisionApi.getCentralAnalytics();
+      const result = await supervisionApi.getCentralAnalytics({
+        cycle_id: selectedCycleId,
+        stage: selectedStage || undefined,
+        school_ids: selectedSchoolIds.length > 0 ? selectedSchoolIds : undefined,
+      });
       setAnalyticsData(result);
+      if (selectedCycleId === undefined && result.activeCycleId) {
+        setSelectedCycleId(result.activeCycleId);
+      }
     } catch (err: any) {
       setAnalyticsError(err?.message || 'تعذر استرجاع مؤشرات التحليل المركزي.');
     } finally {
       setIsLoadingAnalytics(false);
     }
-  }, []);
+  }, [selectedCycleId, selectedStage, selectedSchoolIds]);
 
   // جلب المقارنة التاريخية لمدرسة
   const fetchHistorical = useCallback(async () => {
@@ -104,19 +121,33 @@ export function useCentralReports(schoolId?: number) {
     );
   }, [analyticsData?.standardsMeans, selectedBenchmarkFilter]);
 
-  // تصدير التحليلات المركزية إلى Excel
+  // تصدير التحليلات المركزية إلى Excel (3 أوراق عمل RTL)
   const handleExportAnalyticsExcel = () => {
     if (analyticsData?.standardsMeans) {
-      exportCentralStandardsMatrixToExcel(analyticsData.standardsMeans);
+      exportCentralStandardsMatrixToExcel(
+        analyticsData.standardsMeans,
+        analyticsData.centralSchoolsReport,
+        analyticsData.allIndicatorsMeans,
+        analyticsData.stageBreakdown,
+        analyticsData.scopeSummary
+      );
     }
   };
 
-  // تصدير التحليلات المركزية إلى PDF
+  // تصدير التحليلات المركزية إلى PDF (تنزيل حقيقي عبر mPDF)
+  const [isExportingPdf, setIsExportingPdf] = useState<boolean>(false);
   const handleExportAnalyticsPdf = async () => {
+    setIsExportingPdf(true);
     try {
-      await supervisionApi.exportAnalyticsPdf();
+      await supervisionApi.exportAnalyticsPdf({
+        cycle_id: selectedCycleId,
+        stage: selectedStage || undefined,
+        school_ids: selectedSchoolIds.length > 0 ? selectedSchoolIds : undefined,
+      });
     } catch (err) {
       console.error(err);
+    } finally {
+      setIsExportingPdf(false);
     }
   };
 
@@ -155,12 +186,19 @@ export function useCentralReports(schoolId?: number) {
     isLoadingAnalytics,
     analyticsError,
     refetchAnalytics: fetchAnalytics,
+    selectedCycleId,
+    setSelectedCycleId,
+    selectedStage,
+    setSelectedStage,
+    selectedSchoolIds,
+    setSelectedSchoolIds,
     selectedBenchmarkFilter,
     setSelectedBenchmarkFilter,
     selectedStageIndex,
     setSelectedStageIndex,
     handleExportAnalyticsExcel,
     handleExportAnalyticsPdf,
+    isExportingPdf,
 
     // Historical
     historicalData,

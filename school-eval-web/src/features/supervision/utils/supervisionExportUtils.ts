@@ -11,6 +11,8 @@ import * as XLSX from 'xlsx';
 import type {
   SchoolStatusMatrixRow,
   StandardMeanItem,
+  IndicatorMeanItem,
+  CentralSchoolsReportItem,
   HistoricalStandardDelta,
   HistoricalIndicatorDelta,
   ParticipatingSchoolItem,
@@ -87,36 +89,117 @@ export function exportSchoolsStatusMatrixToExcel(schools: SchoolStatusMatrixRow[
 }
 
 /**
- * 2. تصدير مصفوفة متوسطات المعايير الوطنية (Central Standards Means)
+ * 2. تصدير مصفوفة التحليلات المركزية الوطنية الشاملة (3 أوراق عمل RTL)
+ * - ورقة 1: ملخص المعايير والمراحل
+ * - ورقة 2: التقرير المركزي لحالة المدارس ومخرجاتها (FR-SUP-15)
+ * - ورقة 3: مصفوفة المؤشرات الـ 109 التفصيلية
  */
-export function exportCentralStandardsMatrixToExcel(standards: StandardMeanItem[]): void {
-  const rows = standards.map((item, index) => ({
+export function exportCentralStandardsMatrixToExcel(
+  standards: StandardMeanItem[],
+  centralSchools?: CentralSchoolsReportItem[],
+  allIndicators?: IndicatorMeanItem[],
+  _stageBreakdown?: Array<{ stage: string; averageScore: number; schoolsCount: number }>,
+  _scopeSummary?: { governorate?: string; academicYear?: string; overallPercentage?: number; averageScore?: number }
+): void {
+  const workbook = XLSX.utils.book_new();
+
+  // الورقة 1: ملخص المعايير السبعة ومقارنة المراحل
+  const standardsRows = standards.map((item, index) => ({
     'م': index + 1,
     'رمز المعيار': item.code,
     'المعيار الوطني الرئيسي': item.name,
+    'الوزن النسبي (%)': item.weight !== undefined ? `${item.weight}%` : '—',
     'عدد المؤشرات': item.indicatorsCount,
     'المتوسط الحسابي (0-3)': item.meanScore.toFixed(2),
-    'النسبة المئوية للتحقق': `${item.percentageAttainment.toFixed(1)}%`,
+    'نسبة التحقق': `${item.percentageAttainment.toFixed(1)}%`,
     'المستوى المعياري': item.benchmarkLevel,
   }));
 
-  const worksheet = XLSX.utils.json_to_sheet(rows);
-  worksheet['!dir'] = 'rtl';
-
-  worksheet['!cols'] = [
+  const worksheet1 = XLSX.utils.json_to_sheet(standardsRows);
+  worksheet1['!dir'] = 'rtl';
+  worksheet1['!cols'] = [
     { wch: 5 },
     { wch: 14 },
     { wch: 34 },
     { wch: 16 },
-    { wch: 24 },
-    { wch: 24 },
-    { wch: 20 },
+    { wch: 14 },
+    { wch: 22 },
+    { wch: 16 },
+    { wch: 18 },
   ];
+  XLSX.utils.book_append_sheet(workbook, worksheet1, 'ملخص المعايير والمراحل');
 
-  const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, worksheet, 'مؤشرات المعايير الوطنية');
+  // الورقة 2: التقرير المركزي لحالة المدارس (FR-SUP-15)
+  if (centralSchools && centralSchools.length > 0) {
+    const schoolsRows = centralSchools.map((sch, index) => ({
+      'م': index + 1,
+      'رمز المدرسة': sch.schoolCode,
+      'اسم المدرسة': sch.schoolName,
+      'المرحلة الدراسية': sch.stage,
+      'المديرية': sch.directorate,
+      'المحافظة': sch.governorate,
+      'حالة الملف الإشرافي': sch.statusLabel,
+      'نسبة إنجاز المؤشرات (من 109)': `${sch.completionPercentage}%`,
+      'المتوسط الحسابي (0-3)': sch.averageScore !== null ? sch.averageScore.toFixed(2) : '—',
+      'طلبات الاستكمال الكلية': sch.completionRequestsCount,
+      'طلبات الاستكمال المعلقة': sch.pendingRequestsCount,
+      'تأخير آلي (قاعدة 80%)': sch.isDelayed ? 'نعم (متأخرة)' : 'لا',
+    }));
 
-  const fileName = `standards_means_matrix_${getTimestampString()}.xlsx`;
+    const worksheet2 = XLSX.utils.json_to_sheet(schoolsRows);
+    worksheet2['!dir'] = 'rtl';
+    worksheet2['!cols'] = [
+      { wch: 5 },
+      { wch: 14 },
+      { wch: 32 },
+      { wch: 18 },
+      { wch: 16 },
+      { wch: 16 },
+      { wch: 24 },
+      { wch: 24 },
+      { wch: 20 },
+      { wch: 20 },
+      { wch: 20 },
+      { wch: 22 },
+    ];
+    XLSX.utils.book_append_sheet(workbook, worksheet2, 'التقرير المركزي للمدارس');
+  }
+
+  // الورقة 3: مصفوفة المؤشرات الـ 109 التفصيلية
+  const indicatorsList = allIndicators && allIndicators.length > 0
+    ? allIndicators
+    : standards.flatMap((s) => s.indicators || []);
+
+  if (indicatorsList.length > 0) {
+    const indicatorsRows = indicatorsList.map((ind, index) => ({
+      'م': index + 1,
+      'رمز المؤشر': ind.code,
+      'اسم المؤشر الوطني': ind.name,
+      'المعيار الرئيسي': ind.standardName,
+      'المعيار الفرعي': ind.subStandardName,
+      'المتوسط الحسابي (0-3)': ind.meanScore.toFixed(2),
+      'نسبة التحقق': `${ind.percentageAttainment.toFixed(1)}%`,
+      'المستوى المعياري': ind.benchmarkLevel,
+      'عدد المدارس المقيمة': ind.evaluatedCount,
+    }));
+
+    const worksheet3 = XLSX.utils.json_to_sheet(indicatorsRows);
+    worksheet3['!dir'] = 'rtl';
+    worksheet3['!cols'] = [
+      { wch: 5 },
+      { wch: 14 },
+      { wch: 42 },
+      { wch: 28 },
+      { wch: 28 },
+      { wch: 20 },
+      { wch: 16 },
+      { wch: 18 },
+      { wch: 18 },
+    ];
+    XLSX.utils.book_append_sheet(workbook, worksheet3, 'مصفوفة المؤشرات الـ 109');
+  }
+
+  const fileName = `central_analytics_matrix_${getTimestampString()}.xlsx`;
   XLSX.writeFile(workbook, fileName);
 }
 

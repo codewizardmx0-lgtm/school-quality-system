@@ -1793,10 +1793,36 @@ class SupervisionController extends Controller
     }
 
     /**
-     * 7. التقارير المركزية والتحليل الإحصائي للمعايير السبعة الـ 109 (Zero-Mock)
+     * 7. التقارير المركزية والتحليل الإحصائي للمعايير السبعة الـ 109 ومخرجات المدارس (Zero-Mock)
      * GET /api/v1/supervision/reports/analytics
      */
     public function centralAnalytics(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        $supervisorGovernorate = ($user && $user->hasRole('ministry_supervisor')) ? $user->governorate : null;
+        $schoolIdsParam = $request->query('school_ids') ?? $request->query('schoolIds');
+
+        // فحص النطاق الجغرافي الصارم للمدارس المحددة (FR-SUP-02 & NFR-SEC-03)
+        if (!empty($schoolIdsParam) && $supervisorGovernorate) {
+            $rawIds = is_array($schoolIdsParam) ? $schoolIdsParam : explode(',', (string)$schoolIdsParam);
+            $selectedSchoolIds = array_slice(array_map('intval', array_filter($rawIds, 'is_numeric')), 0, 10);
+            $unauthorizedCount = School::whereIn('school_id', $selectedSchoolIds)
+                ->where('governorate', '!=', $supervisorGovernorate)
+                ->count();
+            if ($unauthorizedCount > 0) {
+                return ApiResponse::forbidden("غير مصرح: توجد مدارس محددة تقع خارج النطاق الجغرافي المسند إليك ({$supervisorGovernorate}).");
+            }
+        }
+
+        $data = $this->buildCentralAnalyticsData($request);
+
+        return ApiResponse::success($data, 'تم تحميل التحليلات الإحصائية المركزية بنجاح.');
+    }
+
+    /**
+     * بناء مصفوفة التحليلات المركزية الموزونة للمعايير السبعة والمؤشرات الـ 109 ومخرجات المدارس (FR-SUP-12..15)
+     */
+    private function buildCentralAnalyticsData(Request $request): array
     {
         $user = $request->user();
         $supervisorGovernorate = null;
@@ -1804,93 +1830,277 @@ class SupervisionController extends Controller
             $supervisorGovernorate = $user->governorate;
         }
 
-        $activeCycle = EvaluationCycle::where('status', 'Active')->latest('cycle_id')->first()
-            ?? EvaluationCycle::latest('cycle_id')->first();
+        $cycleId = $request->query('cycle_id') ?? $request->query('cycleId');
+        $stage = $request->query('stage');
+        $schoolIdsParam = $request->query('school_ids') ?? $request->query('schoolIds');
+
+        // سقف محدد المدارس: 10 مدارس كحد أقصى لحماية أداء الاستعلامات
+        $selectedSchoolIds = [];
+        if (!empty($schoolIdsParam)) {
+            $rawIds = is_array($schoolIdsParam) ? $schoolIdsParam : explode(',', (string)$schoolIdsParam);
+            $selectedSchoolIds = array_slice(array_map('intval', array_filter($rawIds, 'is_numeric')), 0, 10);
+        }
+
+        // 1. تحديد الدورة التقييمية
+        $activeCycle = null;
+        if ($cycleId) {
+            $activeCycle = EvaluationCycle::find($cycleId);
+        }
+        if (!$activeCycle) {
+            $activeCycle = EvaluationCycle::where('status', 'Active')->latest('cycle_id')->first()
+                ?? EvaluationCycle::latest('cycle_id')->first();
+        }
 
         $activeVersion = $activeCycle?->standardVersion
             ?? StandardVersion::where('status', 'Active')->first()
             ?? StandardVersion::where('status', 'Approved')->first()
             ?? StandardVersion::first();
 
-        // 1. استعلام المدارس في النطاق الجغرافي
+        // 2. فحص مدة الدورة واحتساب عتبة الـ 80% للتأخير التلقائي (FR-SUP-15)
+        $isCycle80PercentElapsed = false;
+        $cycleDurationDays = 0;
+        $cycleDaysElapsed = 0;
+        if ($activeCycle && $activeCycle->start_date && $activeCycle->end_date) {
+            $cStart = Carbon::parse($activeCycle->start_date)->startOfDay();
+            $cEnd = Carbon::parse($activeCycle->end_date)->endOfDay();
+            $cycleDurationDays = max(1, $cStart->diffInDays($cEnd));
+            $cycleDaysElapsed = max(0, $cStart->diffInDays(now(), false));
+            if (now()->gte($cStart) && $cycleDurationDays > 0 && ($cycleDaysElapsed / $cycleDurationDays) >= 0.8) {
+                $isCycle80PercentElapsed = true;
+            }
+        }
+
+        // 3. استعلام المدارس في النطاق الجغرافي والمرحلة المحددة
         $schoolsQuery = School::query();
         if ($supervisorGovernorate) {
             $schoolsQuery->where('governorate', $supervisorGovernorate);
         }
-        $totalSchools = $schoolsQuery->count();
-
-        // 2. استعلام التقييمات في النطاق الجغرافي والدورة النشطة
-        $evaluationsQuery = Evaluation::query();
-        if ($supervisorGovernorate) {
-            $evaluationsQuery->whereHas('school', fn($q) => $q->where('governorate', $supervisorGovernorate));
+        if ($stage && in_array($stage, ['أساسي (1-9)', 'ثانوي (10-12)', 'أساسي وثانوي (1-12)'], true)) {
+            $schoolsQuery->where('educational_stage', $stage);
         }
-        if ($activeCycle) {
-            $evaluationsQuery->where('cycle_id', $activeCycle->cycle_id);
+        if (!empty($selectedSchoolIds)) {
+            $schoolsQuery->whereIn('school_id', $selectedSchoolIds);
         }
-        $evaluatedSchoolsCount = (clone $evaluationsQuery)->whereIn('status', ['Completed', 'Submitted'])->count();
 
-        // 3. جلب المعايير السبعة الرسمية
+        $schools = $schoolsQuery->with([
+            'evaluations' => function ($q) use ($activeCycle) {
+                if ($activeCycle) {
+                    $q->where('cycle_id', $activeCycle->cycle_id);
+                }
+                $q->latest('evaluation_id');
+            },
+            'evaluations.results',
+            'evaluations.reports.submissions.completionRequests',
+        ])->orderBy('school_name')->get();
+
+        $totalSchools = $schools->count();
+
+        // مدارس النطاق الإشرافي بالكامل للمحدد متعدد الخيارات (MultiSelect)
+        $allSupervisorSchools = School::query()
+            ->when($supervisorGovernorate, fn($q) => $q->where('governorate', $supervisorGovernorate))
+            ->orderBy('school_name')
+            ->get()
+            ->map(fn($s) => [
+                'schoolId' => $s->school_id,
+                'schoolCode' => $s->school_code ?? "SCH-{$s->school_id}",
+                'schoolName' => $s->school_name ?? $s->name,
+                'stage' => $s->educational_stage,
+                'directorate' => $s->directorate,
+            ])->toArray();
+
+        // 4. تقرير حالة المدارس المركزي (FR-SUP-15)
+        $centralSchoolsReport = [];
+        $overdueSchoolsCount = 0;
+        $evaluatedSchoolsCount = 0;
+        $completedReviewCount = 0;
+        $activeRequestsCount = 0;
+        $evaluatedEvalIds = [];
+
+        foreach ($schools as $school) {
+            $eval = $school->evaluations->first();
+            $submission = $eval?->reports?->flatMap->submissions?->sortByDesc('attempt_no')->first();
+            $schoolRequests = $submission ? $submission->completionRequests : collect();
+            $pendingRequests = $schoolRequests->whereIn('status', ['Open', 'Submitted'])->count();
+            $activeRequestsCount += $pendingRequests;
+
+            $completedResultsCount = $eval ? $eval->results->whereNotNull('score')->count() : 0;
+            $evalAvg = ($eval && $completedResultsCount > 0) ? $eval->results->whereNotNull('score')->avg('score') : null;
+
+            // تحديد الحالة بدقة
+            $status = 'Draft';
+            $statusLabel = 'مسودة / قيد التقييم الذاتي';
+            $isDelayed = false;
+
+            if ($eval) {
+                if ($eval->status === 'Completed' || $submission?->status === 'Completed') {
+                    $status = 'Completed';
+                    $statusLabel = 'مكتملة المراجعة والإقرار';
+                    $completedReviewCount++;
+                    $evaluatedSchoolsCount++;
+                    $evaluatedEvalIds[] = $eval->evaluation_id;
+                } elseif ($pendingRequests > 0 || $eval->status === 'NeedsCompletion' || $submission?->status === 'NeedsCompletion') {
+                    $status = 'NeedsCompletion';
+                    $statusLabel = 'تحتاج استكمال نواقص';
+                    $evaluatedSchoolsCount++;
+                    $evaluatedEvalIds[] = $eval->evaluation_id;
+                } elseif ($eval->status === 'UnderReview' || $submission?->status === 'UnderReview') {
+                    $status = 'UnderReview';
+                    $statusLabel = 'قيد المراجعة الإشرافية';
+                    $evaluatedSchoolsCount++;
+                    $evaluatedEvalIds[] = $eval->evaluation_id;
+                } elseif ($eval->status === 'Submitted' || $submission?->status === 'Submitted') {
+                    $status = 'Submitted';
+                    $statusLabel = 'تم الإرسال (بانتظار المراجعة)';
+                    $evaluatedSchoolsCount++;
+                    $evaluatedEvalIds[] = $eval->evaluation_id;
+                } else {
+                    // مسودة
+                    if ($isCycle80PercentElapsed) {
+                        $status = 'Overdue';
+                        $statusLabel = 'متأخرة عن التسليم 🔴';
+                        $isDelayed = true;
+                        $overdueSchoolsCount++;
+                    } else {
+                        $status = 'Draft';
+                        $statusLabel = 'مسودة / قيد التقييم الذاتي';
+                    }
+                    if ($completedResultsCount > 0) {
+                        $evaluatedEvalIds[] = $eval->evaluation_id;
+                    }
+                }
+            } else {
+                if ($isCycle80PercentElapsed) {
+                    $status = 'Overdue';
+                    $statusLabel = 'متأخرة عن التسليم 🔴';
+                    $isDelayed = true;
+                    $overdueSchoolsCount++;
+                } else {
+                    $status = 'NotStarted';
+                    $statusLabel = 'لم تبدأ بعد';
+                }
+            }
+
+            $centralSchoolsReport[] = [
+                'schoolId' => $school->school_id,
+                'schoolCode' => $school->school_code ?? "SCH-{$school->school_id}",
+                'schoolName' => $school->school_name ?? $school->name,
+                'stage' => $school->educational_stage ?? 'غير محدد',
+                'directorate' => $school->directorate ?? '—',
+                'governorate' => $school->governorate ?? '—',
+                'status' => $status,
+                'statusLabel' => $statusLabel,
+                'isDelayed' => $isDelayed,
+                'evaluatedIndicatorsCount' => $completedResultsCount,
+                'totalIndicatorsCount' => 109,
+                'completionPercentage' => min(100, round(($completedResultsCount / 109) * 100, 1)),
+                'averageScore' => $evalAvg !== null ? round((float)$evalAvg, 2) : null,
+                'completionRequestsCount' => $schoolRequests->count(),
+                'pendingRequestsCount' => $pendingRequests,
+                'latestSubmissionId' => $submission?->submission_id,
+            ];
+        }
+
+        // 5. استخراج نتائج التقييم للمؤشرات الـ 109 والمعايير السبعة (Zero-Mock)
         $standards = Standard::with(['subStandards.indicators'])
             ->where('version_id', $activeVersion?->version_id ?? 1)
             ->orderBy('standard_id')
             ->get();
 
+        // إحصائيات المؤشرات من قاعدة البيانات بناءً على التقييمات في النطاق
+        $indicatorStats = collect();
+        if (!empty($evaluatedEvalIds)) {
+            $indicatorStats = EvaluationResult::whereIn('evaluation_id', $evaluatedEvalIds)
+                ->whereNotNull('score')
+                ->groupBy('indicator_id')
+                ->selectRaw('indicator_id, AVG(score) as avg_score, COUNT(*) as eval_count')
+                ->get()
+                ->keyBy('indicator_id');
+        }
+
         $standardsMeans = [];
-        $totalWeightedScore = 0;
-        $totalWeightSum = 0;
+        $allIndicatorsMeans = [];
+        $totalWeightedScore = 0.0;
+        $totalWeightSum = 0.0;
         $highestStandard = null;
         $highestScore = -1.0;
         $lowestStandard = null;
         $lowestScore = 999.0;
 
         foreach ($standards as $std) {
-            $indicatorIds = $std->subStandards->flatMap->indicators->pluck('indicator_id')->toArray();
-            $indicatorsCount = count($indicatorIds);
+            $weight = (float)$std->weight;
+            $stdIndicatorScores = [];
+            $stdIndicatorsList = [];
 
-            // احتساب متوسط الدرجة الفعلية من نتائج التقييم للمدارس المكتملة أو المسلمة في النطاق
-            $meanScore = 0.0;
-            if (!empty($indicatorIds)) {
-                $avgDb = EvaluationResult::whereIn('indicator_id', $indicatorIds)
-                    ->whereNotNull('score')
-                    ->whereHas('evaluation', function ($q) use ($activeCycle, $supervisorGovernorate) {
-                        if ($activeCycle) {
-                            $q->where('cycle_id', $activeCycle->cycle_id);
-                        }
-                        $q->whereIn('status', ['Completed', 'Submitted']);
-                        if ($supervisorGovernorate) {
-                            $q->whereHas('school', fn($sq) => $sq->where('governorate', $supervisorGovernorate));
-                        }
-                    })
-                    ->avg('score');
+            foreach ($std->subStandards as $subStd) {
+                foreach ($subStd->indicators as $ind) {
+                    $stat = $indicatorStats->get($ind->indicator_id);
+                    $hasEval = $stat !== null && $stat->eval_count > 0;
+                    $mean = $hasEval ? round((float)$stat->avg_score, 2) : 0.0;
+                    $pct = $hasEval ? round(($mean / 3.0) * 100, 1) : 0.0;
 
-                $meanScore = $avgDb !== null ? round((float)$avgDb, 2) : 2.50;
-            } else {
-                $meanScore = 2.50;
+                    $benchmark = match (true) {
+                        $pct >= 80 => 'متميز',
+                        $pct >= 60 => 'متوسط',
+                        default => 'بحاجة لدعم',
+                    };
+
+                    $statusStyle = match (true) {
+                        $pct >= 80 => 'advanced',
+                        $pct >= 60 => 'proficient',
+                        default => 'needs_support',
+                    };
+
+                    $indItem = [
+                        'indicatorId' => $ind->indicator_id,
+                        'code' => $ind->code ?? "IND-{$ind->indicator_id}",
+                        'name' => $ind->name,
+                        'standardId' => $std->standard_id,
+                        'standardName' => $std->name,
+                        'subStandardName' => $subStd->name,
+                        'meanScore' => $mean,
+                        'maxScore' => 3.0,
+                        'percentageAttainment' => $pct,
+                        'benchmarkLevel' => $benchmark,
+                        'status' => $statusStyle,
+                        'evaluatedCount' => (int)($stat?->eval_count ?? 0),
+                    ];
+
+                    $stdIndicatorsList[] = $indItem;
+                    $allIndicatorsMeans[] = $indItem;
+
+                    if ($hasEval) {
+                        $stdIndicatorScores[] = $mean;
+                    }
+                }
             }
 
-            $percentageAttainment = round(($meanScore / 3.0) * 100, 1);
-            $weight = (float)$std->weight;
-            $totalWeightSum += $weight;
-            $totalWeightedScore += ($percentageAttainment * ($weight / 100));
+            // احتساب متوسط المعيار من مؤشراته المقيمة، أو 0.0 إذا لم تقيم أي مؤشرات
+            $stdMeanScore = !empty($stdIndicatorScores)
+                ? round(array_sum($stdIndicatorScores) / count($stdIndicatorScores), 2)
+                : 0.0;
+            $stdPercentageAttainment = round(($stdMeanScore / 3.0) * 100, 1);
 
-            if ($meanScore > $highestScore) {
-                $highestScore = $meanScore;
+            $totalWeightSum += $weight;
+            $totalWeightedScore += ($stdPercentageAttainment * ($weight / 100));
+
+            if ($stdMeanScore > $highestScore) {
+                $highestScore = $stdMeanScore;
                 $highestStandard = $std;
             }
-            if ($meanScore < $lowestScore) {
-                $lowestScore = $meanScore;
+            if ($stdMeanScore < $lowestScore) {
+                $lowestScore = $stdMeanScore;
                 $lowestStandard = $std;
             }
 
-            $benchmarkLevel = match (true) {
-                $percentageAttainment >= 80 => 'متميز',
-                $percentageAttainment >= 60 => 'متوسط',
+            $stdBenchmark = match (true) {
+                $stdPercentageAttainment >= 80 => 'متميز',
+                $stdPercentageAttainment >= 60 => 'متوسط',
                 default => 'بحاجة لدعم',
             };
 
-            $statusStyle = match (true) {
-                $percentageAttainment >= 80 => 'advanced',
-                $percentageAttainment >= 60 => 'proficient',
+            $stdStatusStyle = match (true) {
+                $stdPercentageAttainment >= 80 => 'advanced',
+                $stdPercentageAttainment >= 60 => 'proficient',
                 default => 'needs_support',
             };
 
@@ -1899,107 +2109,137 @@ class SupervisionController extends Controller
                 'code' => "STD-0{$std->standard_id}",
                 'name' => $std->name,
                 'weight' => $weight,
-                'meanScore' => $meanScore,
+                'meanScore' => $stdMeanScore,
                 'maxScore' => 3.0,
-                'percentageAttainment' => $percentageAttainment,
-                'benchmarkLevel' => $benchmarkLevel,
-                'status' => $statusStyle,
-                'indicatorsCount' => $indicatorsCount,
+                'percentageAttainment' => $stdPercentageAttainment,
+                'benchmarkLevel' => $stdBenchmark,
+                'status' => $stdStatusStyle,
+                'indicatorsCount' => count($stdIndicatorsList),
+                'indicators' => $stdIndicatorsList,
             ];
         }
 
-        $overallCompliance = $totalWeightSum > 0 ? round(($totalWeightedScore / $totalWeightSum) * 100, 1) : 78.0;
+        $overallCompliance = $totalWeightSum > 0 ? round(($totalWeightedScore / $totalWeightSum), 1) : 0.0;
         $averageScore = round(($overallCompliance / 100) * 3.0, 2);
 
-        // 4. احتساب توزيع مستويات الكفاءة لمدارس النطاق
-        $evaluatedEvals = (clone $evaluationsQuery)->whereIn('status', ['Completed', 'Submitted'])->with('results')->get();
+        // 6. تحديد أبرز 10 نقاط قوة وأدنى 10 فجوات إشرافية (FR-SUP-13 / FR-SUP-14)
+        $evaluatedIndicators = array_filter($allIndicatorsMeans, fn($i) => $i['evaluatedCount'] > 0);
+        $poolForRanking = !empty($evaluatedIndicators) ? $evaluatedIndicators : $allIndicatorsMeans;
+
+        usort($poolForRanking, fn($a, $b) => $b['percentageAttainment'] <=> $a['percentageAttainment']);
+        $topStrengths = array_slice($poolForRanking, 0, 10);
+
+        usort($poolForRanking, fn($a, $b) => $a['percentageAttainment'] <=> $b['percentageAttainment']);
+        $bottomGaps = array_slice($poolForRanking, 0, 10);
+
+        // 7. توزيع الكفاءة للمدارس
         $advancedCount = 0;
         $proficientCount = 0;
         $needsSupportCount = 0;
 
-        foreach ($evaluatedEvals as $ev) {
-            $evAvg = $ev->results->whereNotNull('score')->avg('score') ?? 2.0;
-            $evPct = ($evAvg / 3.0) * 100;
-            if ($evPct >= 80) {
+        foreach ($centralSchoolsReport as $schItem) {
+            $sc = $schItem['averageScore'] ?? 0.0;
+            $pct = ($sc / 3.0) * 100;
+            if ($pct >= 80) {
                 $advancedCount++;
-            } elseif ($evPct >= 60) {
+            } elseif ($pct >= 60) {
                 $proficientCount++;
             } else {
                 $needsSupportCount++;
             }
         }
 
-        $evalTotalCount = max($evaluatedEvals->count(), 1);
+        $distTotal = max(1, count($centralSchoolsReport));
         $distribution = [
-            'advancedPercentage' => (int)round(($advancedCount / $evalTotalCount) * 100),
-            'proficientPercentage' => (int)round(($proficientCount / $evalTotalCount) * 100),
-            'needsSupportPercentage' => (int)round(($needsSupportCount / $evalTotalCount) * 100),
+            'advancedPercentage' => (int)round(($advancedCount / $distTotal) * 100),
+            'proficientPercentage' => (int)round(($proficientCount / $distTotal) * 100),
+            'needsSupportPercentage' => (int)round(($needsSupportCount / $distTotal) * 100),
+            'advancedCount' => $advancedCount,
+            'proficientCount' => $proficientCount,
+            'needsSupportCount' => $needsSupportCount,
         ];
 
-        // 5. مقارنة المراحل الدراسية
-        $stages = School::query()
-            ->when($supervisorGovernorate, fn($q) => $q->where('governorate', $supervisorGovernorate))
-            ->select('educational_stage')
-            ->distinct()
-            ->whereNotNull('educational_stage')
-            ->pluck('educational_stage');
-
-        if ($stages->isEmpty()) {
-            $stages = collect(['أساسي (1-9)', 'ثانوي (10-12)', 'أساسي وثانوي (1-12)']);
-        }
-
+        // 8. مقارنة المراحل الدراسية (FR-SUP-14)
+        $stages = ['أساسي (1-9)', 'ثانوي (10-12)', 'أساسي وثانوي (1-12)'];
         $stageBreakdown = [];
-        foreach ($stages as $stage) {
-            $stSchools = School::query()
-                ->when($supervisorGovernorate, fn($q) => $q->where('governorate', $supervisorGovernorate))
-                ->where('educational_stage', $stage)
-                ->pluck('school_id');
-
-            $stAvg = EvaluationResult::whereHas('evaluation', function ($q) use ($stSchools, $activeCycle) {
-                $q->whereIn('school_id', $stSchools)->whereIn('status', ['Completed', 'Submitted']);
-                if ($activeCycle) {
-                    $q->where('cycle_id', $activeCycle->cycle_id);
-                }
-            })->whereNotNull('score')->avg('score');
+        foreach ($stages as $stg) {
+            $stgSchools = array_filter($centralSchoolsReport, fn($s) => $s['stage'] === $stg);
+            $stgCount = count($stgSchools);
+            $stgScores = array_filter(array_column($stgSchools, 'averageScore'), fn($v) => $v !== null);
+            $stgAvg = !empty($stgScores) ? round(array_sum($stgScores) / count($stgScores), 2) : 0.0;
 
             $stageBreakdown[] = [
-                'stage' => $stage,
-                'averageScore' => $stAvg !== null ? round((float)$stAvg, 2) : $averageScore,
-                'schoolsCount' => $stSchools->count(),
+                'stage' => $stg,
+                'averageScore' => $stgAvg,
+                'schoolsCount' => $stgCount,
             ];
         }
 
+        // 9. ملخص النطاق والتركيب السياساتي (Synthesized Policy Note)
         $governorateLabel = $supervisorGovernorate ?: 'كافة المحافظات (إشراف مركزي عام)';
-        $highestName = $highestStandard ? "{$highestStandard->name} ({$highestScore})" : 'الإدارة المدرسية والقيادة (2.71)';
-        $lowestName = $lowestStandard ? "{$lowestStandard->name} ({$lowestScore})" : 'التعليم والتعلم والتقويم (1.82)';
+        $top3StrNames = implode('، ', array_map(fn($s) => "{$s['code']} ({$s['percentageAttainment']}%)", array_slice($topStrengths, 0, 3)));
+        $top3GapNames = implode('، ', array_map(fn($g) => "{$g['code']} ({$g['percentageAttainment']}%)", array_slice($bottomGaps, 0, 3)));
+
+        $highestName = $highestStandard ? "{$highestStandard->name} ({$highestScore})" : '—';
+        $lowestName = $lowestStandard ? "{$lowestStandard->name} ({$lowestScore})" : '—';
+
+        $policySynthesisNote = "تشير التحليلات المركزية لنطاق {$governorateLabel} إلى تميز في مؤشرات: [{$top3StrNames}]، بينما تتركز أولويات التدخل والدعم الإشرافي في مؤشرات: [{$top3GapNames}].";
 
         $scopeSummary = [
             'governorate' => $governorateLabel,
             'totalSchools' => $totalSchools,
             'evaluatedSchools' => $evaluatedSchoolsCount,
+            'completedReviewCount' => $completedReviewCount,
+            'overdueSchoolsCount' => $overdueSchoolsCount,
+            'activeRequestsCount' => $activeRequestsCount,
             'averageScore' => $averageScore,
             'maxScore' => 3.0,
             'overallPercentage' => $overallCompliance,
             'highestStandard' => $highestName,
             'lowestStandard' => $lowestName,
-            'policySynthesisNote' => "تشير مؤشرات الجودة لنطاق {$governorateLabel} إلى تميز ملحوظ في معيار ({$highestName})، مع أولوية توجيه الدعم والتطوير لمعيار ({$lowestName}).",
+            'policySynthesisNote' => $policySynthesisNote,
+            'cycleDurationDays' => $cycleDurationDays,
+            'cycleDaysElapsed' => $cycleDaysElapsed,
+            'isCycle80PercentElapsed' => $isCycle80PercentElapsed,
         ];
 
-        return ApiResponse::success([
+        // 10. الدورات التقييمية المتاحة للقائمة المنسدلة
+        $availableCycles = EvaluationCycle::orderByDesc('cycle_id')->get()->map(fn($c) => [
+            'cycleId' => $c->cycle_id,
+            'name' => $c->name,
+            'academicYear' => $c->academic_year,
+            'status' => $c->status,
+            'startDate' => $c->start_date ? Carbon::parse($c->start_date)->toDateString() : null,
+            'endDate' => $c->end_date ? Carbon::parse($c->end_date)->toDateString() : null,
+        ])->values()->toArray();
+
+        return [
             'scopeSummary' => $scopeSummary,
             'distribution' => $distribution,
             'standardsMeans' => $standardsMeans,
+            'allIndicatorsMeans' => $allIndicatorsMeans,
             'stageBreakdown' => $stageBreakdown,
+            'centralSchoolsReport' => $centralSchoolsReport,
+            'topStrengths' => $topStrengths,
+            'bottomGaps' => $bottomGaps,
+            'policySynthesisSummary' => [
+                'topStrengths' => array_slice($topStrengths, 0, 3),
+                'topGaps' => array_slice($bottomGaps, 0, 3),
+                'policyNote' => $policySynthesisNote,
+            ],
+            'availableCycles' => $availableCycles,
+            'availableSchools' => $allSupervisorSchools,
+            'activeCycleId' => $activeCycle?->cycle_id,
             'academicYear' => $activeCycle?->academic_year ?? '2026/2027',
             'activeVersionTitle' => $activeVersion?->title ?? 'المعايير الوطنية لجودة التعليم المدرسي',
             'summaryStats' => [
                 'totalEvaluatedSchools' => $totalSchools,
-                'completedAccreditationCount' => $evaluatedSchoolsCount,
+                'completedReviewCount' => $completedReviewCount,
                 'overallCompliancePercentage' => $overallCompliance,
                 'nationalMeanScore' => $averageScore,
             ],
-            'governanceNotice' => 'التحليلات مبنية على المتوسط الموزون للأوزان النسبية الرسمية للمعايير السبعة (100%) ومستبعدة من أي ترتيب تنافسي بين المدارس.',
-        ], 'تم تحميل التحليلات الإحصائية المركزية بنجاح.');
+            'governanceNotice' => 'التحليلات مبنية على المتوسط الموزون للأوزان النسبية الرسمية للمعايير السبعة (100%) ومستبعدة تماماً من أي ترتيب تنافسي بين المدارس.',
+        ];
     }
 
     /**
@@ -2330,20 +2570,85 @@ class SupervisionController extends Controller
     }
 
     /**
-     * 9. تصدير تقرير التحليلات المركزية PDF
+     * 9. تصدير تقرير التحليلات المركزية PDF الرسمي عبر محرك mPDF
      * GET /api/v1/supervision/reports/analytics/pdf
      */
-    public function exportAnalyticsPdf(): JsonResponse
+    public function exportAnalyticsPdf(Request $request)
     {
-        return ApiResponse::success([
-            'reportTitle' => 'التقرير التحليلي الشامل لمؤشرات الجودة المدرسية بأمانة العاصمة',
-            'systemFullName' => 'منصة ارتقاء للتقييم الذاتي والتحسين المدرسي',
-            'authority' => 'الإدارة العامة لضمان الجودة والاعتماد المدرسي - وزارة التربية والتعليم والبحث العلمي',
-            'generatedAt' => now()->toIso8601String(),
-            'reportCode' => 'REP-ANALYTICS-2026-01',
-            'verificationHash' => hash('sha256', 'MINISTRY_SUPERVISION_ANALYTICS_REPORT_2026'),
-            'downloadUrl' => '/api/v1/supervision/reports/analytics/pdf/download',
-        ], 'تم توليد التقرير التحليلي الرسمي بصيغة PDF بنجاح.');
+        $user = $request->user();
+        $supervisorGovernorate = ($user && $user->hasRole('ministry_supervisor')) ? $user->governorate : null;
+        $schoolIdsParam = $request->query('school_ids') ?? $request->query('schoolIds');
+
+        // فحص النطاق الجغرافي الصارم للمدارس المحددة (FR-SUP-02 & NFR-SEC-03)
+        if (!empty($schoolIdsParam) && $supervisorGovernorate) {
+            $rawIds = is_array($schoolIdsParam) ? $schoolIdsParam : explode(',', (string)$schoolIdsParam);
+            $selectedSchoolIds = array_slice(array_map('intval', array_filter($rawIds, 'is_numeric')), 0, 10);
+            $unauthorizedCount = School::whereIn('school_id', $selectedSchoolIds)
+                ->where('governorate', '!=', $supervisorGovernorate)
+                ->count();
+            if ($unauthorizedCount > 0) {
+                return ApiResponse::forbidden("غير مصرح: توجد مدارس محددة تقع خارج النطاق الجغرافي المسند إليك ({$supervisorGovernorate}).");
+            }
+        }
+
+        $data = $this->buildCentralAnalyticsData($request);
+
+        $html = View::make('reports.central_analytics_report', $data)->render();
+
+        $defaultConfig = (new ConfigVariables())->getDefaults();
+        $fontDirs = $defaultConfig['fontDir'];
+        $defaultFontConfig = (new FontVariables())->getDefaults();
+        $fontData = $defaultFontConfig['fontdata'];
+
+        $customFontsDir = resource_path('fonts');
+        $hasAmiri = file_exists($customFontsDir . '/Amiri-Regular.ttf');
+
+        $tempDir = storage_path('app/temp-mpdf');
+        if (!is_dir($tempDir)) {
+            mkdir($tempDir, 0755, true);
+        }
+
+        $mpdfConfig = [
+            'mode'             => 'utf-8',
+            'format'           => 'A4',
+            'orientation'      => 'P',
+            'margin_left'      => 10,
+            'margin_right'     => 10,
+            'margin_top'       => 12,
+            'margin_bottom'    => 12,
+            'autoScriptToLang' => true,
+            'autoArabic'       => true,
+            'autoLangToFont'   => true,
+            'default_font'     => $hasAmiri ? 'amiri' : 'dejavusans',
+            'tempDir'          => $tempDir,
+        ];
+
+        if ($hasAmiri) {
+            $mpdfConfig['fontDir'] = array_merge($fontDirs, [$customFontsDir]);
+            $mpdfConfig['fontdata'] = $fontData + [
+                'amiri' => [
+                    'R' => 'Amiri-Regular.ttf',
+                    'B' => 'Amiri-Bold.ttf',
+                ],
+            ];
+        }
+
+        $mpdf = new Mpdf($mpdfConfig);
+        $mpdf->SetDirectionality('rtl');
+        $mpdf->SetTitle('التقرير التحليلي المركزي - منصة ارتقاء');
+        $mpdf->SetAuthor('منصة ارتقاء للتقييم الذاتي والتحسين المدرسي');
+        $mpdf->WriteHTML($html);
+
+        $pdfContent = $mpdf->Output('', 'S');
+        $govSlug = $supervisorGovernorate ? preg_replace('/[\\\\\\/:*?"<>|\\s]/', '_', $supervisorGovernorate) : 'all_governorates';
+        $filename = "central_analytics_{$govSlug}_" . date('Ymd_His') . ".pdf";
+
+        return response($pdfContent, 200, [
+            'Content-Type'        => 'application/pdf',
+            'Content-Disposition' => "attachment; filename=\"{$filename}\"",
+            'Cache-Control'       => 'private, max-age=0, must-revalidate',
+            'Pragma'              => 'public',
+        ]);
     }
 
     /**
