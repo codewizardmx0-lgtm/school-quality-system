@@ -747,9 +747,26 @@ export interface CentralReportsData {
   }>;
 }
 
+export interface HistoricalIndicatorDelta {
+  indicatorId: number;
+  code: string;
+  name: string;
+  standardId: number;
+  standardName?: string;
+  subStandardId: number;
+  subStandardName?: string;
+  weight?: number;
+  previousScore: number;
+  currentScore: number;
+  delta: number;
+  trend: 'improved' | 'regressed' | 'maintained' | 'new' | 'deprecated';
+}
+
 export interface HistoricalStandardDelta {
   standardId: number;
+  code?: string;
   name: string;
+  weight?: number;
   previousScore: number;
   currentScore: number;
   delta: number;
@@ -761,15 +778,28 @@ export interface HistoricalComparisonData {
     schoolId: number;
     schoolCode: string;
     schoolName: string;
+    governorate?: string;
   };
+  hasPreviousCycle?: boolean;
+  alternateFlow?: boolean;
+  isSingleCycleOnly?: boolean;
+  notice?: string | null;
   baseCycle: {
+    cycleId?: number;
     name: string;
     academicYear: string;
+    versionNo?: string;
+    versionName?: string;
   };
   comparedCycle: {
+    cycleId?: number;
     name: string;
     academicYear: string;
+    versionNo?: string;
+    versionName?: string;
   };
+  isVersionMismatch?: boolean;
+  versionNotice?: string | null;
   trajectory: {
     growthPercentage: number;
     growthDirection: 'positive' | 'neutral' | 'negative';
@@ -777,14 +807,20 @@ export interface HistoricalComparisonData {
     previousTotalScore: number;
     currentTotalScore: number;
     netDelta: number;
+    improvedCount?: number;
+    regressedCount?: number;
+    maintainedCount?: number;
+    newlyEvaluatedCount?: number;
   };
-  impactMetrics: {
+  impactMetrics?: {
     planGapsClosedPercentage: number;
     evidenceQualityGrowthPercentage: number;
     completionRequestsReductionPercentage: number;
   };
   standardsDeltas: HistoricalStandardDelta[];
-  recommendations: string[];
+  allIndicatorsDeltas?: HistoricalIndicatorDelta[];
+  recommendations?: string[];
+  availableCycles?: any[];
 }
 
 export interface ParticipatingSchoolItem {

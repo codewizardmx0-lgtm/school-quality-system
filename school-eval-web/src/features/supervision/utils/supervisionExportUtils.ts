@@ -12,6 +12,7 @@ import type {
   SchoolStatusMatrixRow,
   StandardMeanItem,
   HistoricalStandardDelta,
+  HistoricalIndicatorDelta,
   ParticipatingSchoolItem,
   MilestoneEvent,
   SupervisorMemo,
@@ -126,31 +127,75 @@ export function exportHistoricalComparisonToExcel(
   schoolName: string,
   baseCycle: string,
   comparedCycle: string,
-  deltas: HistoricalStandardDelta[]
+  standardsDeltas: HistoricalStandardDelta[],
+  indicatorsDeltas?: HistoricalIndicatorDelta[]
 ): void {
-  const rows = deltas.map((item, index) => ({
+  // ورقة 1: ملخص المعايير السبعة
+  const standardsRows = standardsDeltas.map((item, index) => ({
     'م': index + 1,
-    'المعيار': item.name,
+    'رمز المعيار': item.code || `STD-0${index + 1}`,
+    'المعيار الوطني الرئيسي': item.name,
+    'الوزن النسبي (%)': item.weight ? `${item.weight}%` : '—',
     [`الدورة السابقة (${comparedCycle})`]: item.previousScore.toFixed(2),
     [`الدورة الحالية (${baseCycle})`]: item.currentScore.toFixed(2),
-    'الفارق (Delta)': (item.delta >= 0 ? `+${item.delta.toFixed(2)}` : item.delta.toFixed(2)),
+    'الفارق (Delta)': item.delta >= 0 ? `+${item.delta.toFixed(2)}` : item.delta.toFixed(2),
     'اتجاه الأداء': item.trend === 'up' ? 'نمو إيجابي ↑' : item.trend === 'down' ? 'تراجع ↓' : 'مستقر =',
   }));
 
-  const worksheet = XLSX.utils.json_to_sheet(rows);
-  worksheet['!dir'] = 'rtl';
-
-  worksheet['!cols'] = [
+  const stdSheet = XLSX.utils.json_to_sheet(standardsRows);
+  stdSheet['!dir'] = 'rtl';
+  stdSheet['!cols'] = [
     { wch: 5 },
-    { wch: 32 },
-    { wch: 24 },
-    { wch: 24 },
-    { wch: 18 },
-    { wch: 18 },
+    { wch: 12 },
+    { wch: 36 },
+    { wch: 14 },
+    { wch: 22 },
+    { wch: 22 },
+    { wch: 16 },
+    { wch: 16 },
   ];
 
   const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, worksheet, 'مسار النمو التاريخي');
+  XLSX.utils.book_append_sheet(workbook, stdSheet, 'ملخص المعايير السبعة');
+
+  // ورقة 2: مصفوفة المؤشرات الـ 109
+  if (indicatorsDeltas && indicatorsDeltas.length > 0) {
+    const indicatorsRows = indicatorsDeltas.map((ind, index) => ({
+      'م': index + 1,
+      'رمز المؤشر': ind.code,
+      'عنوان المؤشر التفصيلي': ind.name,
+      'المعيار الرئيسي': ind.standardName || '—',
+      'المعيار الفرعي': ind.subStandardName || '—',
+      [`درجة السابقة (${comparedCycle})`]: ind.previousScore,
+      [`درجة الحالية (${baseCycle})`]: ind.currentScore,
+      'الفارق (Delta)': ind.delta >= 0 ? `+${ind.delta}` : `${ind.delta}`,
+      'حالة الاتجاه':
+        ind.trend === 'improved'
+          ? 'تحسن ↑'
+          : ind.trend === 'regressed'
+          ? 'تراجع ↓'
+          : ind.trend === 'maintained'
+          ? 'ثبات ='
+          : ind.trend === 'new'
+          ? 'مستحدث 🆕'
+          : 'مستبعد',
+    }));
+
+    const indSheet = XLSX.utils.json_to_sheet(indicatorsRows);
+    indSheet['!dir'] = 'rtl';
+    indSheet['!cols'] = [
+      { wch: 5 },
+      { wch: 14 },
+      { wch: 45 },
+      { wch: 26 },
+      { wch: 26 },
+      { wch: 20 },
+      { wch: 20 },
+      { wch: 14 },
+      { wch: 16 },
+    ];
+    XLSX.utils.book_append_sheet(workbook, indSheet, 'مصفوفة المؤشرات الـ 109');
+  }
 
   const safeSchoolName = schoolName.replace(/[\\/:*?"<>|]/g, '_');
   const fileName = `historical_comparison_${safeSchoolName}_${getTimestampString()}.xlsx`;

@@ -27,8 +27,8 @@ export function useCentralReports(schoolId?: number) {
   const [historicalError, setHistoricalError] = useState<string | null>(null);
   const [availableCycles, setAvailableCycles] = useState<any[]>([]);
 
-  const [baseCycle, setBaseCycle] = useState<string>('2026/2027');
-  const [compareCycle, setCompareCycle] = useState<string>('2025/2026');
+  const [baseCycle, setBaseCycle] = useState<string>('2025/2026');
+  const [compareCycle, setCompareCycle] = useState<string>('2024/2025');
 
   // جلب قائمة الدورات التقييمية المسجلة
   useEffect(() => {
@@ -37,13 +37,13 @@ export function useCentralReports(schoolId?: number) {
       if (isMounted && Array.isArray(cycles)) {
         setAvailableCycles(cycles);
         if (cycles.length > 0) {
-          const sorted = [...cycles].sort((a, b) => (b.id || 0) - (a.id || 0));
-          if (sorted[0]?.academic_year) {
-            setBaseCycle(sorted[0].academic_year);
-          }
-          if (sorted[1]?.academic_year) {
-            setCompareCycle(sorted[1].academic_year);
-          }
+          const sorted = [...cycles].sort((a, b) => ((b.cycleId || b.id || 0) - (a.cycleId || a.id || 0)));
+          const c0 = sorted[0]?.academicYear || sorted[0]?.academic_year;
+          // اختيار الدورة السابقة الأحدث حصراً التي تختلف عن الدورة الحالية
+          const c1Item = sorted.find((c, idx) => idx > 0 && (c.academicYear || c.academic_year) !== c0);
+          const c1 = c1Item?.academicYear || c1Item?.academic_year;
+          if (c0) setBaseCycle(c0);
+          if (c1) setCompareCycle(c1);
         }
       }
     }).catch(() => {});
@@ -67,6 +67,11 @@ export function useCentralReports(schoolId?: number) {
   // جلب المقارنة التاريخية لمدرسة
   const fetchHistorical = useCallback(async () => {
     if (!schoolId) {
+      setIsLoadingHistorical(false);
+      return;
+    }
+    // منع إرسال طلب غير صالح للخادم عند تطابق الدورتين المحددين
+    if (baseCycle && compareCycle && baseCycle === compareCycle) {
       setIsLoadingHistorical(false);
       return;
     }
@@ -122,7 +127,8 @@ export function useCentralReports(schoolId?: number) {
         historicalData.school?.schoolName ?? 'مدرسة التقييم',
         historicalData.baseCycle?.academicYear ?? baseCycle,
         historicalData.comparedCycle?.academicYear ?? compareCycle,
-        historicalData.standardsDeltas ?? []
+        historicalData.standardsDeltas ?? [],
+        historicalData.allIndicatorsDeltas ?? []
       );
     }
   };
@@ -131,7 +137,12 @@ export function useCentralReports(schoolId?: number) {
   const handleExportHistoricalPdf = async () => {
     if (!schoolId) return;
     try {
-      await supervisionApi.exportHistoricalComparisonPdf(schoolId);
+      await supervisionApi.exportHistoricalComparisonPdf(
+        schoolId,
+        historicalData?.baseCycle?.academicYear ?? baseCycle,
+        historicalData?.comparedCycle?.academicYear ?? compareCycle,
+        historicalData?.school?.schoolName
+      );
     } catch (err) {
       console.error(err);
     }

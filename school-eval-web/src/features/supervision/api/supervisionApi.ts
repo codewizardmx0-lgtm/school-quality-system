@@ -430,9 +430,31 @@ export const supervisionApi = {
     return response?.data ?? response;
   },
 
-  async exportHistoricalComparisonPdf(schoolId: number): Promise<any> {
-    const response = await get<any>(`/schools/${schoolId}/historical-comparison/pdf`);
-    return response?.data ?? response;
+  async exportHistoricalComparisonPdf(
+    schoolId: number,
+    baseCycle?: string,
+    compareCycle?: string,
+    schoolName?: string
+  ): Promise<void> {
+    const params = new URLSearchParams();
+    if (baseCycle) params.append('base_cycle', baseCycle);
+    if (compareCycle) params.append('compare_cycle', compareCycle);
+    const qs = params.toString() ? `?${params.toString()}` : '';
+
+    const response = await apiClient.get(`/schools/${schoolId}/historical-comparison/pdf${qs}`, {
+      responseType: 'blob',
+    });
+    const blob = new Blob([response as unknown as BlobPart], { type: 'application/pdf' });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    const cleanSchoolName = schoolName ? schoolName.replace(/[\\/:*?"<>|\s]/g, '_') : `school_${schoolId}`;
+    const dateStr = new Date().toISOString().split('T')[0];
+    link.download = `تقرير_المقارنة_التاريخية_${cleanSchoolName}_${dateStr}.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
   },
 
   /**
