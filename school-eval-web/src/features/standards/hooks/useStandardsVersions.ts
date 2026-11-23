@@ -1,6 +1,6 @@
 /**
  * Hook: useStandardsVersions
- * إدارة وسجل إصدارات وثيقة المعايير والاعتماد المدرسي
+ * إدارة وسجل إصدارات وثيقة المعايير لتقويم الجودة المدرسية
  */
 
 import { useState, useEffect, useCallback } from 'react';

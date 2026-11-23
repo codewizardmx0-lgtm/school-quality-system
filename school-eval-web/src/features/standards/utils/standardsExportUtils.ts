@@ -122,7 +122,7 @@ export function exportStandardsTreeToExcel(
   const headerRows = [
     ['الجمهورية اليمنية - وزارة التربية والتعليم والبحث العلمي - قطاع المعايير والرقابة والجودة'],
     [`اسم الوثيقة: ${versionName} • رقم الإصدار: ${versionNo} • الحالة الرسمية: ${statusLabel}`],
-    [`تاريخ الإصدار: ${issueDate} • قرار الاعتماد: ${sourceNumber} • الجهة المصدرة: ${sourceOrg}`],
+    [`تاريخ الإصدار: ${issueDate} • قرار الإقرار الرسمي: ${sourceNumber} • الجهة المصدرة: ${sourceOrg}`],
     [`تاريخ وساعة التصدير المكتبي: ${exportTimestamp} • توثيق رسمي معتمد للمنظومة`],
     [], // سطر فاصل فارغ قبل بيانات الجدول
   ];
@@ -205,7 +205,7 @@ export function exportWeightsTableToExcel(
   const headerRows = [
     ['الجمهورية اليمنية - وزارة التربية والتعليم والبحث العلمي - قطاع المعايير والرقابة والجودة'],
     [`جدول توزيع ومعايرة الأوزان النسبية للمعايير الوطنية • رقم الإصدار: ${versionNo} • الحالة: ${statusLabel}`],
-    [`تاريخ الإصدار: ${issueDate} • مرجعية الاعتماد: ${sourceNumber} • الجهة: ${sourceOrg}`],
+    [`تاريخ الإصدار: ${issueDate} • قرار الإقرار الرسمي: ${sourceNumber} • الجهة: ${sourceOrg}`],
     [`تاريخ وساعة التصدير المكتبي: ${exportTimestamp} • إجمالي الوزن الموزع: ${totalWeight}% (${totalWeight === 100 ? 'متزن قانونياً ✓' : 'غير متزن ⚠'})`],
     [], // سطر فاصل فارغ قبل بيانات الجدول
   ];

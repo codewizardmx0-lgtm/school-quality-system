@@ -1318,7 +1318,7 @@ class StandardManagementController extends Controller
 
             $mpdf = new \Mpdf\Mpdf($mpdfConfig);
             $mpdf->SetDirectionality('rtl');
-            $mpdf->SetTitle("وثيقة إقرار معايير الاعتماد - {$version->version_no}");
+            $mpdf->SetTitle("وثيقة إقرار المعايير الوطنية - {$version->version_no}");
             $mpdf->WriteHTML($html);
 
             $pdfContent = $mpdf->Output('', 'S');
@@ -1335,7 +1335,7 @@ class StandardManagementController extends Controller
         return ApiResponse::success([
             'versionId'      => $version->version_id,
             'versionNo'      => $version->version_no,
-            'title'          => "وثيقة معايير الاعتماد المدرسي - {$version->version_no}",
+            'title'          => "وثيقة المعايير الوطنية لتقويم الجودة المدرسية - {$version->version_no}",
             'systemName'     => 'منصة ارتقاء للتقييم الذاتي والتحسين المدرسي',
             'authority'      => 'أمانة المعايير ومجلس الاعتماد الأكاديمي وضمان جودة التعليم',
             'generatedAt'    => now()->toIso8601String(),
@@ -1343,7 +1343,7 @@ class StandardManagementController extends Controller
             'totalWeight'    => 100.0,
             'hash'           => $hash,
             'downloadUrl'    => "/api/v1/standard-versions/{$version->version_id}/export-pdf?download=1",
-        ], 'تم توليد تقرير الاعتماد المعياري الرسمي بنجاح.');
+        ], 'تم توليد تقرير الإقرار المعياري الرسمي بنجاح.');
     }
 
     /**
