@@ -10,6 +10,7 @@ use App\Models\ScoreLevel;
 use App\Models\Standard;
 use App\Models\StandardVersion;
 use App\Models\SubStandard;
+use App\Models\VerificationTool;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -81,14 +82,29 @@ class StandardManagementService
      */
     public function createDraft(array $data): StandardVersion
     {
-        return StandardVersion::create([
-            'version_no'          => $data['version_no'],
-            'issue_date'          => $data['issue_date'] ?? now()->toDateString(),
-            'source_organization' => $data['source_organization'] ?? 'وزارة التربية والتعليم والبحث العلمي',
-            'source_number'       => $data['source_number'] ?? null,
-            'source_description'  => $data['source_description'] ?? null,
-            'status'              => StandardVersion::STATUS_DRAFT,
-        ]);
+        return DB::transaction(function () use ($data) {
+            $version = StandardVersion::create([
+                'version_no'          => $data['version_no'],
+                'issue_date'          => $data['issue_date'] ?? now()->toDateString(),
+                'source_organization' => $data['source_organization'] ?? 'وزارة التربية والتعليم والبحث العلمي',
+                'source_number'       => $data['source_number'] ?? null,
+                'source_description'  => $data['source_description'] ?? null,
+                'status'              => StandardVersion::STATUS_DRAFT,
+            ]);
+
+            // تهيئة مستويات سلم التقدير اللفظي الافتراضية للإصدار الجديد
+            $defaultLevels = [
+                ['score_value' => 0, 'label' => 'غير متوفر / غائب', 'general_description' => 'يشير إلى عدم قيام المدرسة بالأداءات المطلوبة وغياب الشواهد.', 'display_order' => 1],
+                ['score_value' => 1, 'label' => 'متحقق جزئياً / أدنى', 'general_description' => 'يعبر عن أداءات متحققة بصورة جزئية أو غير مستقرة.', 'display_order' => 2],
+                ['score_value' => 2, 'label' => 'متحقق / ملائم', 'general_description' => 'يعبر عن أداءات متحققة بفاعلية ومستوفية للشواهد المعتمدة.', 'display_order' => 3],
+                ['score_value' => 3, 'label' => 'مستوفٍ بالكامل / متميز', 'general_description' => 'المستوى الدال على وصول المؤسسة إلى التميز والنمذجة والتطوير المستمر.', 'display_order' => 4],
+            ];
+            foreach ($defaultLevels as $lvl) {
+                ScoreLevel::create(array_merge($lvl, ['standard_version_id' => $version->version_id]));
+            }
+
+            return $version;
+        });
     }
 
     /**
@@ -155,6 +171,7 @@ class StandardManagementService
                         'code'        => $sub->code,
                         'name'        => $sub->name,
                         'description' => $sub->description,
+                        'weight'      => $sub->weight,
                     ]);
 
                     foreach ($sub->indicators as $ind) {
@@ -243,19 +260,24 @@ class StandardManagementService
     }
 
     /**
-     * تحديث أوزان المعايير في المسودة مع التحقق الحتمي من أن المجموع = 100.00%.
+     * تحديث أوزان المعايير والمجالات والمؤشرات في المسودة مع التحقق الحتمي من التوازن الثلاثي (القرار 1).
      *
      * @param StandardVersion $version
      * @param array<int, array{standard_id: int, weight: float}> $standardsWeights
      * @param array<int, array{indicator_id: int, weight: float}>|null $indicatorsWeights
+     * @param array<int, array{sub_standard_id: int, weight: float}>|null $subStandardsWeights
      * @return StandardVersion
      * @throws ValidationException
      */
-    public function updateWeights(StandardVersion $version, array $standardsWeights, ?array $indicatorsWeights = null): StandardVersion
-    {
+    public function updateWeights(
+        StandardVersion $version,
+        array $standardsWeights,
+        ?array $indicatorsWeights = null,
+        ?array $subStandardsWeights = null
+    ): StandardVersion {
         $this->ensureIsDraft($version);
 
-        // جلب المعايير الحالية للإصدار للتأكد من حساب المجموع بدقة
+        // 1. فحص المستوى 1: مجموع أوزان المعايير الرئيسية = 100.00%
         $currentStandards = $version->standards()->pluck('weight', 'standard_id')->all();
 
         foreach ($standardsWeights as $item) {
@@ -272,7 +294,76 @@ class StandardManagementService
             ]);
         }
 
-        DB::transaction(function () use ($version, $standardsWeights, $indicatorsWeights) {
+        // 2. فحص المستوى 2: إن تم تمرير أوزان المعايير الفرعية، يجب أن يتطابق مجموعها لكل معيار مع وزن المعيار الرئيسي الحاوي لها
+        $subStandardsList = SubStandard::whereHas('standard', fn($q) => $q->where('version_id', $version->version_id))
+            ->get()
+            ->keyBy('sub_standard_id');
+
+        $effectiveSubWeights = [];
+        foreach ($subStandardsList as $subId => $subModel) {
+            $effectiveSubWeights[$subId] = (float) $subModel->weight;
+        }
+
+        if (!empty($subStandardsWeights)) {
+            $groupedSubWeights = [];
+            foreach ($subStandardsWeights as $subItem) {
+                $subId = (int) ($subItem['sub_standard_id'] ?? $subItem['id']);
+                if (isset($subStandardsList[$subId])) {
+                    $stdId = $subStandardsList[$subId]->standard_id;
+                    $w = (float) $subItem['weight'];
+                    $groupedSubWeights[$stdId][$subId] = $w;
+                    $effectiveSubWeights[$subId] = $w;
+                }
+            }
+
+            foreach ($groupedSubWeights as $stdId => $subsMap) {
+                $expectedWeight = $currentStandards[$stdId] ?? 0.0;
+                $actualSubSum = round(array_sum($subsMap), 2);
+                if (abs($actualSubSum - $expectedWeight) > 0.01) {
+                    $stdModel = Standard::find($stdId);
+                    $stdName = $stdModel ? $stdModel->name : "المعيار رقم {$stdId}";
+                    throw ValidationException::withMessages([
+                        'sub_standards_weights' => ["مجموع أوزان المعايير الفرعية لـ ({$stdName}) هو ({$actualSubSum}%) ويجب أن يساوي تماماً وزن المعيار الرئيسي ({$expectedWeight}%)."],
+                    ]);
+                }
+            }
+        }
+
+        // 3. فحص المستوى 3: إن تم تمرير أوزان المؤشرات، يجب أن يتطابق مجموع أوزان مؤشرات كل معيار فرعي مع وزن المعيار الفرعي الحاوي لها
+        $indicatorsList = Indicator::whereHas('subStandard.standard', fn($q) => $q->where('version_id', $version->version_id))
+            ->get();
+
+        if (!empty($indicatorsWeights)) {
+            $groupedIndWeights = [];
+            foreach ($indicatorsList as $ind) {
+                $groupedIndWeights[$ind->sub_standard_id][$ind->indicator_id] = (float) $ind->weight;
+            }
+
+            foreach ($indicatorsWeights as $indItem) {
+                $iid = (int) ($indItem['indicator_id'] ?? $indItem['id']);
+                $indModel = $indicatorsList->firstWhere('indicator_id', $iid);
+                if ($indModel) {
+                    $subId = $indModel->sub_standard_id;
+                    $groupedIndWeights[$subId][$iid] = (float) $indItem['weight'];
+                }
+            }
+
+            foreach ($groupedIndWeights as $subId => $indMap) {
+                if (empty($indMap)) continue;
+                $expectedSubWeight = $effectiveSubWeights[$subId] ?? 0.0;
+                $actualIndSum = round(array_sum($indMap), 2);
+                if (abs($actualIndSum - $expectedSubWeight) > 0.01) {
+                    $subModel = $subStandardsList[$subId] ?? SubStandard::find($subId);
+                    $subName = $subModel ? "{$subModel->name} ({$subModel->code})" : "المعيار الفرعي رقم {$subId}";
+                    throw ValidationException::withMessages([
+                        'indicators_weights' => ["مجموع أوزان المؤشرات للمعيار الفرعي ({$subName}) هو ({$actualIndSum}%) ويجب أن يساوي تماماً وزن المعيار الفرعي ({$expectedSubWeight}%)."],
+                    ]);
+                }
+            }
+        }
+
+        DB::transaction(function () use ($version, $standardsWeights, $indicatorsWeights, $subStandardsWeights, $effectiveSubWeights) {
+            // تحديث أوزان المعايير الرئيسية
             foreach ($standardsWeights as $item) {
                 $sid = (int) ($item['standard_id'] ?? $item['id']);
                 Standard::where('standard_id', $sid)
@@ -280,19 +371,45 @@ class StandardManagementService
                     ->update(['weight' => $item['weight']]);
             }
 
+            // تحديث أوزان المعايير الفرعية
+            if (!empty($subStandardsWeights)) {
+                foreach ($subStandardsWeights as $subItem) {
+                    $subId = (int) ($subItem['sub_standard_id'] ?? $subItem['id']);
+                    SubStandard::where('sub_standard_id', $subId)
+                        ->whereHas('standard', fn($q) => $q->where('version_id', $version->version_id))
+                        ->update(['weight' => $subItem['weight']]);
+                }
+            }
+
+            // تحديث أوزان المؤشرات
             if (!empty($indicatorsWeights)) {
                 foreach ($indicatorsWeights as $indItem) {
                     $iid = (int) ($indItem['indicator_id'] ?? $indItem['id']);
-                    // التحقق من أن المؤشر يتبع هذا الإصدار
                     $indicator = Indicator::find($iid);
                     if ($indicator && $indicator->subStandard?->standard?->version_id === $version->version_id) {
                         $indicator->update(['weight' => $indItem['weight']]);
                     }
                 }
+            } elseif (!empty($subStandardsWeights)) {
+                // التوزيع التلقائي الدقيق: إذا لم تُرسل أوزان مخصصة للمؤشرات، توزع أوزان المعيار الفرعي بالتساوي وبدقة على مؤشراته
+                foreach ($subStandardsWeights as $subItem) {
+                    $subId = (int) ($subItem['sub_standard_id'] ?? $subItem['id']);
+                    $subWeight = (float) $subItem['weight'];
+                    $indicators = Indicator::where('sub_standard_id', $subId)->orderBy('indicator_id', 'asc')->get();
+                    $indCount = $indicators->count();
+                    if ($indCount > 0) {
+                        $baseWeight = floor(($subWeight / $indCount) * 100) / 100;
+                        $remainder = round($subWeight - ($baseWeight * $indCount), 2);
+                        foreach ($indicators as $idx => $ind) {
+                            $assignedWeight = ($idx === $indCount - 1) ? round($baseWeight + $remainder, 2) : $baseWeight;
+                            $ind->update(['weight' => $assignedWeight]);
+                        }
+                    }
+                }
             }
         });
 
-        return $version->fresh('standards');
+        return $version->fresh(['standards.subStandards.indicators']);
     }
 
     /**
@@ -337,6 +454,17 @@ class StandardManagementService
      */
     public function activateVersion(StandardVersion $version): StandardVersion
     {
+        // فحص التوافق التشغيلي: التحقق من أن السلم التقديري مدعوم في بوابات الرصد والتقييم الحالية (سلم 0-3)
+        $versionScoreLevels = ScoreLevel::where('standard_version_id', $version->version_id)->get();
+        if ($versionScoreLevels->isNotEmpty()) {
+            $levelValues = $versionScoreLevels->pluck('score_value')->sort()->values()->all();
+            if ($levelValues !== [0, 1, 2, 3]) {
+                throw ValidationException::withMessages([
+                    'scale_compatibility' => ['مانع تفعيل تشغيلي: السلم التقديري المخصص لهذا الإصدار يتضمن مستويات غير مدعومة حالياً في استمارة رصد المقيم ومحرك احتساب الدرجات (المدعوم حالياً: سلم 0-3). يتطلب تحديث بوابات التقييم والرصد قبل إمكانية تفعيل هذا الإصدار.'],
+                ]);
+            }
+        }
+
         return DB::transaction(function () use ($version) {
             $auditLogger = app(AuditLoggerService::class);
 
@@ -468,6 +596,7 @@ class StandardManagementService
             'code'        => $data['code'],
             'name'        => $data['name'],
             'description' => $data['description'] ?? null,
+            'weight'      => $data['weight'] ?? null,
         ]);
     }
 
@@ -488,6 +617,7 @@ class StandardManagementService
             'name'        => $data['name'] ?? $subStandard->name,
             'description' => array_key_exists('description', $data) ? $data['description'] : $subStandard->description,
             'code'        => $data['code'] ?? $subStandard->code,
+            'weight'      => array_key_exists('weight', $data) ? $data['weight'] : $subStandard->weight,
         ]);
 
         return $subStandard;
@@ -604,15 +734,76 @@ class StandardManagementService
         $version = $indicator->subStandard?->standard?->version;
         $this->ensureIsDraft($version);
 
+        $desc = array_key_exists('description', $data)
+            ? $data['description']
+            : (array_key_exists('rubric_notes', $data) ? $data['rubric_notes'] : $indicator->description);
+
         $indicator->update([
             'name'        => $data['name'] ?? $indicator->name,
-            'description' => array_key_exists('description', $data) ? $data['description'] : $indicator->description,
+            'description' => $desc,
             'code'        => $data['code'] ?? $indicator->code,
             'status'      => $data['status'] ?? $indicator->status,
             'weight'      => array_key_exists('weight', $data) ? $data['weight'] : $indicator->weight,
         ]);
 
-        return $indicator;
+        // مزامنة أدوات ووسائل التحقق المعتمدة للمؤشر (مرونة 1-N أداة)
+        if (array_key_exists('verification_tool_ids', $data) && is_array($data['verification_tool_ids']) && !empty($data['verification_tool_ids'])) {
+            $toolIds = array_unique(array_filter(array_map('intval', $data['verification_tool_ids'])));
+            DB::table('indicator_verification_methods')->where('indicator_id', $indicator->indicator_id)->delete();
+            foreach ($toolIds as $toolId) {
+                if ($toolId > 0) {
+                    DB::table('indicator_verification_methods')->insert([
+                        'indicator_id'   => $indicator->indicator_id,
+                        'tool_id'        => $toolId,
+                        'required'       => true,
+                        'usage_guidance' => 'أداة تقييم معتمدة للتحقق من المؤشر',
+                        'created_at'     => now(),
+                    ]);
+                }
+            }
+        } elseif (array_key_exists('verification_tools', $data) && is_array($data['verification_tools'])) {
+            $toolNames = array_filter($data['verification_tools']);
+            $resolvedIds = [];
+            foreach ($toolNames as $rawName) {
+                $cleanName = trim((string) $rawName);
+                if (empty($cleanName)) continue;
+                
+                // البحث بالاسم الدقيق أولاً
+                $tool = VerificationTool::where('name', $cleanName)->first();
+                if (!$tool) {
+                    // البحث بالاسم الجزئي
+                    $tool = VerificationTool::where('name', 'LIKE', '%' . $cleanName . '%')
+                        ->orWhereRaw('? LIKE CONCAT("%", name, "%")', [$cleanName])
+                        ->first();
+                }
+                if (!$tool) {
+                    // إنشاء الأداة المخصصة تلقائياً لضمان عدم ضياع التعديل نهائياً
+                    $tool = VerificationTool::create([
+                        'name'        => $cleanName,
+                        'tool_type'   => 'مخصص',
+                        'description' => 'أداة تحقق مخصصة للمؤشر',
+                        'approved'    => true,
+                    ]);
+                }
+                if ($tool) {
+                    $resolvedIds[] = $tool->tool_id;
+                }
+            }
+
+            $resolvedIds = array_unique($resolvedIds);
+            DB::table('indicator_verification_methods')->where('indicator_id', $indicator->indicator_id)->delete();
+            foreach ($resolvedIds as $toolId) {
+                DB::table('indicator_verification_methods')->insert([
+                    'indicator_id'   => $indicator->indicator_id,
+                    'tool_id'        => $toolId,
+                    'required'       => true,
+                    'usage_guidance' => 'أداة تقييم معتمدة للتحقق من المؤشر',
+                    'created_at'     => now(),
+                ]);
+            }
+        }
+
+        return $indicator->load('verificationTools');
     }
 
     /**
@@ -716,5 +907,116 @@ class StandardManagementService
         $this->ensureIsDraft($version);
 
         return (bool) $requirement->delete();
+    }
+
+    /**
+     * تحديث أو إعادة تهيئة مستويات سلم التقدير اللفظي للإصدار (مسودة فقط).
+     *
+     * @param StandardVersion $version
+     * @param array<int, array{score_value: int, label: string, general_description?: string, display_order?: int}> $levels
+     * @return Collection
+     * @throws ValidationException
+     */
+    public function updateVersionScoreLevels(StandardVersion $version, array $levels): Collection
+    {
+        $this->ensureIsDraft($version);
+
+        if (empty($levels) || count($levels) < 2) {
+            throw ValidationException::withMessages([
+                'levels' => ['يجب ألا يقل سلم التقدير عن مستويين على الأقل.'],
+            ]);
+        }
+
+        return DB::transaction(function () use ($version, $levels) {
+            ScoreLevel::where('standard_version_id', $version->version_id)->delete();
+
+            $created = new Collection();
+            $order = 1;
+            foreach ($levels as $item) {
+                $created->push(ScoreLevel::create([
+                    'standard_version_id' => $version->version_id,
+                    'score_value'         => (int) $item['score_value'],
+                    'label'               => $item['label'],
+                    'general_description' => $item['general_description'] ?? null,
+                    'display_order'       => $item['display_order'] ?? $order++,
+                ]));
+            }
+
+            // تحديث واصفات المؤشرات التابعة لهذا الإصدار لضمان وجود سجل لكل مستوى
+            $indicators = Indicator::whereHas('subStandard.standard', function ($q) use ($version) {
+                $q->where('version_id', $version->version_id);
+            })->get();
+
+            foreach ($indicators as $ind) {
+                foreach ($created as $lvl) {
+                    IndicatorScoreDescriptor::firstOrCreate([
+                        'indicator_id'        => $ind->indicator_id,
+                        'score_level_id'      => $lvl->score_level_id,
+                        'standard_version_id' => $version->version_id,
+                    ], [
+                        'label'         => $lvl->label,
+                        'description'   => 'واصف مستوى ' . $lvl->label . ' للمؤشر ' . $ind->name,
+                        'display_order' => $lvl->display_order,
+                        'is_active'     => true,
+                    ]);
+                }
+            }
+
+            return $created;
+        });
+    }
+
+    /**
+     * حذف مسودة إصدار معياري وكافة البيانات التابعة لها (Cascade).
+     * مسموح فقط للإصدارات التي بحالة Draft وغير المرتبطة بدورات أو نتائج.
+     *
+     * @param StandardVersion $version
+     * @return bool
+     * @throws ValidationException
+     */
+    public function deleteVersion(StandardVersion $version): bool
+    {
+        if (!$version->isDraft()) {
+            throw ValidationException::withMessages([
+                'version' => ['لا يمكن حذف إصدار إلا إذا كان بحالة مسودة (Draft). الإصدارات المُقرّة أو النشطة محميّة نظامياً.'],
+            ]);
+        }
+
+        $isLinked = DB::table('evaluation_cycles')->where('version_id', $version->version_id)->exists()
+            || DB::table('evaluation_results')->where('standard_version_id', $version->version_id)->exists();
+
+        if ($isLinked) {
+            throw ValidationException::withMessages([
+                'version' => ['لا يمكن حذف هذا الإصدار لارتباطه بدورات تقييم أو نتائج مسجلة في النظام.'],
+            ]);
+        }
+
+        return DB::transaction(function () use ($version) {
+            $standardIds = Standard::where('version_id', $version->version_id)->pluck('standard_id')->toArray();
+            $subStandardIds = SubStandard::whereIn('standard_id', $standardIds)->pluck('sub_standard_id')->toArray();
+            $indicatorIds = Indicator::whereIn('sub_standard_id', $subStandardIds)->pluck('indicator_id')->toArray();
+
+            if (!empty($indicatorIds)) {
+                DB::table('indicator_verification_methods')->whereIn('indicator_id', $indicatorIds)->delete();
+                DB::table('indicator_evidence_requirements')->whereIn('indicator_id', $indicatorIds)->delete();
+                DB::table('indicator_score_descriptors')->whereIn('indicator_id', $indicatorIds)->delete();
+                DB::table('indicators')->whereIn('indicator_id', $indicatorIds)->delete();
+            }
+
+            DB::table('indicator_evidence_requirements')->where('standard_version_id', $version->version_id)->delete();
+            DB::table('indicator_score_descriptors')->where('standard_version_id', $version->version_id)->delete();
+
+            if (!empty($subStandardIds)) {
+                DB::table('sub_standards')->whereIn('sub_standard_id', $subStandardIds)->delete();
+            }
+
+            if (!empty($standardIds)) {
+                DB::table('standards')->whereIn('standard_id', $standardIds)->delete();
+            }
+
+            DB::table('score_levels')->where('standard_version_id', $version->version_id)->delete();
+
+            return (bool) $version->delete();
+        });
     }
 }

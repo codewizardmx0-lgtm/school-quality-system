@@ -27,10 +27,13 @@ class UserResource extends JsonResource
         $roleResource = $firstRole ? (new RoleResource($firstRole))->toArray($request) : null;
 
         return [
-            'userId'      => $this->user_id,
-            'schoolId'    => $this->school_id,
-            'ministryId'  => $this->ministry_id,
-            'username'    => $this->username,
+            'userId'        => $this->user_id,
+            'schoolId'      => $this->school_id,
+            'ministryId'    => $this->ministry_id,
+            'governorate'   => $this->governorate,
+            'directorateId' => $this->directorate_id,
+            'directorate'   => $this->directorate?->name_ar,
+            'username'      => $this->username,
             'fullName'    => $this->full_name,
             'email'       => $this->email,
             'userType'    => $this->user_type,

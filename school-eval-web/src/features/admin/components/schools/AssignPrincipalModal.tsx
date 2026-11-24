@@ -217,7 +217,7 @@ export const AssignPrincipalModal: React.FC<AssignPrincipalModalProps> = ({
                 {currentPrincipal ? 'المدير المسند حالياً:' : 'تنبيه: المدرسة لا تحتوي على مدير حالياً'}
               </span>
               <span style={{ fontSize: '0.9rem', fontWeight: 700, color: currentPrincipal ? '#15803D' : '#B45309' }}>
-                {currentPrincipal ? currentPrincipal.fullName : 'لم يتم تعيين مدير معتمد بعد'}
+                {currentPrincipal ? currentPrincipal.fullName : 'لم يتم تعيين مدير رسمي بعد'}
               </span>
             </div>
             {currentPrincipal && (

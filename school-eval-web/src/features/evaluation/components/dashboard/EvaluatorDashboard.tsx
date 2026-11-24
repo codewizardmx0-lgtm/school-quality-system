@@ -20,6 +20,7 @@ import {
   Download,
   RefreshCw,
   FileSpreadsheet,
+  BookOpen,
 } from 'lucide-react';
 import { evaluatorApi } from '../../api/evaluatorApi';
 import { useAuth } from '../../../auth/AuthContext';
@@ -276,9 +277,27 @@ export const EvaluatorDashboard: React.FC<EvaluatorDashboardProps> = ({
                 المقيّم المسؤول: {school?.currentEvaluator || 'قيد التعيين'}
               </span>
               <span>•</span>
-              <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }} title="الدورة التقييمية الحالية المنفصلة">
                 <Calendar size={15} />
-                العام الدراسي {school?.academicYear || 'الدورة الحالية'}
+                الدورة التقييمية: {school?.evaluationCycle?.academicYear || school?.academicYear || '2025/2026'}
+              </span>
+              <span>•</span>
+              <span
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  backgroundColor: 'rgba(255, 255, 255, 0.18)',
+                  padding: '2px 8px',
+                  borderRadius: '6px',
+                  border: '1px solid rgba(255, 255, 255, 0.3)',
+                  fontWeight: 700,
+                  fontSize: '12px',
+                }}
+                title={`المرجعية المعيارية المعتمدة: ${school?.standardVersion?.title || 'المعايير الوطنية لتقويم الأداء المدرسي'} (${school?.standardVersion?.status || 'Active'})`}
+              >
+                <BookOpen size={14} />
+                وثيقة المعايير: {school?.standardVersion?.versionNumber || 'v2026.1'}
               </span>
             </div>
           </div>
@@ -414,6 +433,49 @@ export const EvaluatorDashboard: React.FC<EvaluatorDashboardProps> = ({
           >
             فتح طلب الاستكمال
           </button>
+        </div>
+      )}
+
+      {/* 2.1. Supervisor Memos Visible to School */}
+      {dashboardData?.supervisorNotes && dashboardData.supervisorNotes.length > 0 && (
+        <div
+          style={{
+            backgroundColor: '#F8FAFC',
+            borderRadius: '12px',
+            border: '1px solid #CBD5E1',
+            padding: '16px 20px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '10px',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', fontWeight: 800, color: '#1E293B' }}>
+            <Info size={18} color="#2563EB" />
+            <span>المذكرات والتوجيهات الإشرافية الميدانية الموجهة للمدرسة ({dashboardData.supervisorNotes.length})</span>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '10px' }}>
+            {dashboardData.supervisorNotes.map((note) => (
+              <div
+                key={note.noteId}
+                style={{
+                  backgroundColor: '#FFFFFF',
+                  padding: '10px 14px',
+                  borderRadius: '8px',
+                  border: '1px solid #E2E8F0',
+                  fontSize: '12px',
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                  <span style={{ fontWeight: 800, color: '#0F172A' }}>{note.subject}</span>
+                  <span style={{ fontSize: '10px', color: '#64748B', backgroundColor: '#F1F5F9', padding: '1px 6px', borderRadius: '4px' }}>
+                    {note.memoType}
+                  </span>
+                </div>
+                <p style={{ color: '#475569', margin: '0 0 6px 0', lineHeight: 1.4 }}>{note.details}</p>
+                <span style={{ fontSize: '10px', color: '#94A3B8' }}>{note.createdAt ? note.createdAt.slice(0, 10) : ''}</span>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

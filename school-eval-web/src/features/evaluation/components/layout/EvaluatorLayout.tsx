@@ -108,7 +108,7 @@ export const EvaluatorLayout: React.FC<EvaluatorLayoutProps> = ({
         setHasOpenCompletionRequest(Boolean(data.completionAlert));
         if (data.schoolInfo) {
           setSchoolInfo(data.schoolInfo);
-          setIsLocked(data.schoolInfo.status === 'Submitted' || data.schoolInfo.status === 'Completed');
+          setIsLocked(data.schoolInfo.status === 'Submitted' || data.schoolInfo.status === 'Completed' || data.schoolInfo.status === 'UnderReview');
         }
       })
       .catch(() => {});

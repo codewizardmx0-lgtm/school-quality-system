@@ -132,4 +132,14 @@ class Evaluation extends Model
     {
         return $this->hasMany(EvidenceLink::class, 'evaluation_id', 'evaluation_id');
     }
+
+    /**
+     * ملاحظات النواقص الإشرافية الميدانية (FR-SUP-04).
+     *
+     * @return HasMany
+     */
+    public function deficiencyNotes(): HasMany
+    {
+        return $this->hasMany(SupervisionDeficiencyNote::class, 'evaluation_id', 'evaluation_id');
+    }
 }

@@ -220,4 +220,204 @@ class AdminPhase6InfrastructureTest extends TestCase
         $this->assertEquals($capital->governorate_id, $createdSchool->governorate_id);
         $this->assertEquals($tahreer->directorate_id, $createdSchool->directorate_id);
     }
+
+    /**
+     * اختبار إضافة مشرف وزاري جغرافي خاص بمحافظة تعز بدون اشتراط مديرية (شامل للمحافظة).
+     */
+    public function test_create_ministry_supervisor_for_taiz_without_mandatory_directorate(): void
+    {
+        Sanctum::actingAs($this->admin);
+
+        $role = \App\Models\Role::where('role_name', 'ministry_supervisor')->firstOrFail();
+
+        $payload = [
+            'fullName'    => 'د. أنور أحمد المخلافي (مشرف تعز)',
+            'username'    => 'sup_taiz_general_' . time(),
+            'email'       => 'taiz_sup_' . time() . '@arteqa.edu.ye',
+            'password'    => 'Secret_Password_2026!',
+            'userType'    => 'ministry',
+            'roleId'      => $role->role_id,
+            'governorate' => 'محافظة تعز',
+            'directorateId' => null, // اختياري - شامل للمحافظة
+            'status'      => 'Active',
+        ];
+
+        $res = $this->postJson('/api/v1/users', $payload);
+        $res->assertStatus(201);
+        $res->assertJsonPath('data.governorate', 'محافظة تعز');
+        $res->assertJsonPath('data.directorateId', null);
+        $res->assertJsonPath('data.userType', 'ministry');
+
+        $userId = $res->json('data.userId');
+        $this->assertDatabaseHas('users', [
+            'user_id'        => $userId,
+            'user_type'      => 'ministry',
+            'governorate'    => 'محافظة تعز',
+            'directorate_id' => null,
+        ]);
+    }
+
+    /**
+     * اختبار إضافة مشرف وزاري بنطاق مديرية محددة داخل محافظة تعز.
+     */
+    public function test_create_ministry_supervisor_with_specific_directorate_in_taiz(): void
+    {
+        Sanctum::actingAs($this->admin);
+
+        $role = \App\Models\Role::where('role_name', 'ministry_supervisor')->firstOrFail();
+        $mudhaffar = Directorate::where('name_ar', 'مديرية المظفر')->firstOrFail();
+
+        $payload = [
+            'fullName'      => 'أ. صهيب جمال الشميري',
+            'username'      => 'sup_mudhaffar_' . time(),
+            'email'         => 'mudhaffar_' . time() . '@arteqa.edu.ye',
+            'password'      => 'Secret_Password_2026!',
+            'userType'      => 'ministry',
+            'roleId'        => $role->role_id,
+            'governorate'   => 'محافظة تعز',
+            'directorateId' => $mudhaffar->directorate_id,
+            'status'        => 'Active',
+        ];
+
+        $res = $this->postJson('/api/v1/users', $payload);
+        $res->assertStatus(201);
+        $res->assertJsonPath('data.governorate', 'محافظة تعز');
+        $res->assertJsonPath('data.directorateId', $mudhaffar->directorate_id);
+        $res->assertJsonPath('data.directorate', 'مديرية المظفر');
+
+        $userId = $res->json('data.userId');
+        $this->assertDatabaseHas('users', [
+            'user_id'        => $userId,
+            'user_type'      => 'ministry',
+            'governorate'    => 'محافظة تعز',
+            'directorate_id' => $mudhaffar->directorate_id,
+        ]);
+    }
+
+    /**
+     * اختبار إضافة مشرف وزاري عام شامل لكافة المحافظات / النظام.
+     */
+    public function test_create_ministry_supervisor_system_wide_without_governorate(): void
+    {
+        Sanctum::actingAs($this->admin);
+
+        $role = \App\Models\Role::where('role_name', 'ministry_supervisor')->firstOrFail();
+
+        $payload = [
+            'fullName'      => 'د. كمال يحيى العماد (إشراف مركزي عام)',
+            'username'      => 'sup_central_' . time(),
+            'email'         => 'central_' . time() . '@arteqa.edu.ye',
+            'password'      => 'Secret_Password_2026!',
+            'userType'      => 'ministry',
+            'roleId'        => $role->role_id,
+            'governorate'   => null,
+            'directorateId' => null,
+            'status'        => 'Active',
+        ];
+
+        $res = $this->postJson('/api/v1/users', $payload);
+        $res->assertStatus(201);
+        $res->assertJsonPath('data.governorate', null);
+        $res->assertJsonPath('data.directorateId', null);
+
+        $userId = $res->json('data.userId');
+        $this->assertDatabaseHas('users', [
+            'user_id'        => $userId,
+            'user_type'      => 'ministry',
+            'governorate'    => null,
+            'directorate_id' => null,
+        ]);
+    }
+
+    /**
+     * اختبار تعديل مستخدم مع الإبقاء على نفس الدور أو تغييره دون حدوث خطأ المفتاح المكرر (Duplicate entry user_roles.PRIMARY).
+     */
+    public function test_update_user_does_not_fail_with_duplicate_role_key(): void
+    {
+        Sanctum::actingAs($this->admin);
+
+        $roleSupervisor = \App\Models\Role::where('role_name', 'ministry_supervisor')->firstOrFail();
+        $roleStandards = \App\Models\Role::where('role_name', 'ministry_standards_manager')->firstOrFail();
+
+        // 1. إنشاء مستخدم
+        $createPayload = [
+            'fullName'      => 'مشرف للاختبار التعديل',
+            'username'      => 'test_edit_dup_' . time(),
+            'email'         => 'edit_dup_' . time() . '@arteqa.edu.ye',
+            'password'      => 'Secret_Password_2026!',
+            'userType'      => 'ministry',
+            'roleId'        => $roleSupervisor->role_id,
+            'governorate'   => 'محافظة تعز',
+            'directorateId' => null,
+            'status'        => 'Active',
+        ];
+
+        $createRes = $this->postJson('/api/v1/users', $createPayload);
+        $createRes->assertStatus(201);
+        $userId = $createRes->json('data.userId');
+
+        // 2. تعديل المستخدم مع تمرير نفس الدور roleSupervisor (المحاكاة الدقيقة لحالة الخطأ التي أبلغ عنها المستخدم)
+        $updateSameRolePayload = [
+            'fullName'      => 'مشرف تم تحديث اسمه',
+            'roleId'        => $roleSupervisor->role_id,
+            'governorate'   => 'محافظة تعز',
+            'directorateId' => null,
+            'userType'      => 'ministry',
+        ];
+
+        $updateRes1 = $this->putJson("/api/v1/users/{$userId}", $updateSameRolePayload);
+        $updateRes1->assertStatus(200);
+        $updateRes1->assertJsonPath('data.fullName', 'مشرف تم تحديث اسمه');
+
+        // التأكد من أن الدور نشط في جدول user_roles
+        $this->assertDatabaseHas('user_roles', [
+            'user_id' => $userId,
+            'role_id' => $roleSupervisor->role_id,
+            'active'  => 1,
+        ]);
+
+        // 3. تعديل المستخدم وتغيير دوره إلى دور آخر (roleStandards)
+        $updateDiffRolePayload = [
+            'fullName' => 'مشرف بدور جديد',
+            'roleId'   => $roleStandards->role_id,
+            'userType' => 'ministry',
+        ];
+
+        $updateRes2 = $this->putJson("/api/v1/users/{$userId}", $updateDiffRolePayload);
+        $updateRes2->assertStatus(200);
+
+        // الدور السابق تم إلغاء تفعيله
+        $this->assertDatabaseHas('user_roles', [
+            'user_id' => $userId,
+            'role_id' => $roleSupervisor->role_id,
+            'active'  => 0,
+        ]);
+
+        // الدور الجديد مفعل
+        $this->assertDatabaseHas('user_roles', [
+            'user_id' => $userId,
+            'role_id' => $roleStandards->role_id,
+            'active'  => 1,
+        ]);
+
+        // 4. إعادة التعديل مرة أخرى وإرجاعه إلى الدور الأول roleSupervisor للتأكد من إعادة التفعيل بسلاسة
+        $updateBackPayload = [
+            'roleId'   => $roleSupervisor->role_id,
+            'userType' => 'ministry',
+        ];
+
+        $updateRes3 = $this->putJson("/api/v1/users/{$userId}", $updateBackPayload);
+        $updateRes3->assertStatus(200);
+
+        $this->assertDatabaseHas('user_roles', [
+            'user_id' => $userId,
+            'role_id' => $roleSupervisor->role_id,
+            'active'  => 1,
+        ]);
+        $this->assertDatabaseHas('user_roles', [
+            'user_id' => $userId,
+            'role_id' => $roleStandards->role_id,
+            'active'  => 0,
+        ]);
+    }
 }

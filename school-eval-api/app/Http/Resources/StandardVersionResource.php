@@ -1,0 +1,87 @@
+<?php
+
+namespace App\Http\Resources;
+
+use Illuminate\Http\Request;
+use Illuminate\Http\Resources\Json\JsonResource;
+
+/**
+ * مورد تحويل بيانات الإصدار المعياري إلى JSON متوافق مع conventions §2 & §3.
+ * جميع الحقول بنمط camelCase والتواريخ بصيغة UTC Zulu.
+ */
+class StandardVersionResource extends JsonResource
+{
+    /**
+     * تحويل الكيان إلى مصفوفة قابلة للترميز بـ JSON.
+     *
+     * @param Request $request
+     * @return array<string, mixed>
+     */
+    public function toArray(Request $request): array
+    {
+        $standardsCount = $this->standards_count ?? $this->standards()->count();
+        $cyclesCount = $this->evaluation_cycles_count ?? $this->evaluationCycles()->count();
+
+        // حساب المدارس الفريدة المرتبطة بالإصدار عبر دورات التقييم الفعلية دون أي أرقام وهمية أو افتراضية
+        $uniqueSchoolsCount = \Illuminate\Support\Facades\DB::table('cycle_participations')
+            ->join('evaluation_cycles', 'cycle_participations.cycle_id', '=', 'evaluation_cycles.cycle_id')
+            ->where('evaluation_cycles.version_id', $this->version_id)
+            ->distinct()
+            ->count('cycle_participations.school_id');
+
+        $activeCyclesCount = $this->relationLoaded('evaluationCycles')
+            ? $this->evaluationCycles->filter(fn($c) => in_array(strtolower($c->status), ['active', 'in_progress']))->count()
+            : $this->evaluationCycles()->whereIn('status', ['Active', 'active', 'In_Progress', 'in_progress'])->count();
+
+        // حساب عدد المؤشرات الإجمالي
+        $indicatorsCount = 0;
+        if ($this->relationLoaded('standards')) {
+            $indicatorsCount = $this->standards->sum(function ($std) {
+                return $std->subStandards->sum(fn($sub) => $sub->indicators->count());
+            });
+        } else {
+            $indicatorsCount = \App\Models\Indicator::whereHas('subStandard.standard', function ($q) {
+                $q->where('version_id', $this->version_id);
+            })->count();
+        }
+
+        $totalWeight = $this->relationLoaded('standards')
+            ? (float) $this->standards->sum('weight')
+            : (float) $this->standards()->sum('weight');
+
+        return [
+            'versionId'             => $this->version_id,
+            'version_id'            => $this->version_id,
+            'versionNo'             => $this->version_no,
+            'version_no'            => $this->version_no,
+            'issueDate'             => $this->issue_date?->toIso8601ZuluString(),
+            'issue_date'            => $this->issue_date?->toIso8601ZuluString(),
+            'issueYear'             => $this->issue_date ? $this->issue_date->format('Y') : null,
+            'sourceOrganization'    => $this->source_organization,
+            'source_organization'   => $this->source_organization,
+            'sourceNumber'          => $this->source_number,
+            'source_number'         => $this->source_number,
+            'sourceDescription'     => $this->source_description,
+            'source_description'    => $this->source_description,
+            'status'                => $this->status,
+            'createdAt'             => $this->created_at?->toIso8601ZuluString(),
+            'created_at'            => $this->created_at?->toIso8601ZuluString(),
+            'updatedAt'             => $this->updated_at?->toIso8601ZuluString(),
+            'updated_at'            => $this->updated_at?->toIso8601ZuluString(),
+            'standardsCount'        => (int) $standardsCount,
+            'standards_count'       => (int) $standardsCount,
+            'indicatorsCount'       => (int) $indicatorsCount,
+            'indicators_count'      => (int) $indicatorsCount,
+            'totalWeight'           => (float) ($totalWeight ?: 100),
+            'total_weight'          => (float) ($totalWeight ?: 100),
+            'evaluationCyclesCount' => (int) $cyclesCount,
+            'evaluation_cycles_count'=> (int) $cyclesCount,
+            'activeCyclesCount'     => (int) $activeCyclesCount,
+            'active_cycles_count'   => (int) $activeCyclesCount,
+            'activeSchoolsCount'    => (int) $uniqueSchoolsCount,
+            'active_schools_count'  => (int) $uniqueSchoolsCount,
+            'uniqueSchoolsCount'    => (int) $uniqueSchoolsCount,
+            'unique_schools_count'  => (int) $uniqueSchoolsCount,
+        ];
+    }
+}

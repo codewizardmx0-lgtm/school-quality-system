@@ -65,12 +65,12 @@ class CompletionWorkflowFeatureTest extends TestCase
         $this->standardVersion = StandardVersion::where('status', 'Active')->firstOrFail();
 
         $this->cycle = EvaluationCycle::where('status', 'Active')->first();
-        if (!$this->cycle) {
+        if (!$this->cycle || Carbon::parse($this->cycle->end_date)->isPast()) {
             $this->cycle = EvaluationCycle::create([
                 'version_id'    => $this->standardVersion->version_id,
                 'academic_year' => '2025/2026',
-                'start_date'    => '2025-09-01',
-                'end_date'      => '2026-06-30',
+                'start_date'    => Carbon::now()->subMonths(1)->format('Y-m-d'),
+                'end_date'      => Carbon::now()->addMonths(6)->format('Y-m-d'),
                 'status'        => 'Active',
             ]);
         }

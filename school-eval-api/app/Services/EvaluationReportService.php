@@ -263,6 +263,7 @@ class EvaluationReportService
                     'sub_standard_id'   => $sub->sub_standard_id,
                     'sub_standard_code' => $sub->code,
                     'sub_standard_name' => $sub->name,
+                    'weight'            => (float) ($sub->weight ?? 0.0),
                     'indicators'        => $indicatorsData,
                 ];
             }

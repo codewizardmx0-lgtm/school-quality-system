@@ -1,0 +1,83 @@
+/**
+ * useSupervisionDashboard.ts
+ * خطاف إدارة بيانات لوحة المتابعة الإشرافية المركزية ومصفوفة المدارس
+ */
+
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { supervisionApi } from '../api/supervisionApi';
+import type { SupervisionDashboardData } from '../api/supervisionTypes';
+
+export function useSupervisionDashboard(cycleId?: number) {
+  const [data, setData] = useState<SupervisionDashboardData | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // الفلاتر والبحث
+  const [searchTerm, setSearchTerm] = useState<string>('');
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [stageFilter, setStageFilter] = useState<string>('all');
+
+  const fetchDashboard = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const result = await supervisionApi.getDashboard(cycleId);
+      setData(result);
+    } catch (err: any) {
+      setError(err?.message || 'تعذر استرجاع بيانات لوحة المتابعة الإشرافية.');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [cycleId]);
+
+  useEffect(() => {
+    fetchDashboard();
+  }, [fetchDashboard]);
+
+  // تصفية المدارس بحسب مصطلحات البحث والفلاتر
+  const filteredSchools = useMemo(() => {
+    if (!data?.schools) return [];
+
+    return data.schools.filter((school) => {
+      // بحث بالاسم أو الكود أو اسم المدير أو المقيم أو المحافظة والمديرية
+      const term = searchTerm.trim().toLowerCase();
+      const matchesSearch =
+        !term ||
+        school.schoolName.toLowerCase().includes(term) ||
+        school.schoolCode.toLowerCase().includes(term) ||
+        (school.principalName && school.principalName.toLowerCase().includes(term)) ||
+        (school.evaluatorName && school.evaluatorName.toLowerCase().includes(term)) ||
+        (school.governorate && school.governorate.toLowerCase().includes(term)) ||
+        (school.directorate && school.directorate.toLowerCase().includes(term));
+
+      // فلترة بالحالة (بما فيها حالة متأخرة عن التسليم FR-SUP-15)
+      const matchesStatus =
+        statusFilter === 'all' ||
+        (statusFilter === 'Delayed' ? Boolean(school.isDelayed) : school.outputStatus === statusFilter);
+
+      // فلترة بالمرحلة
+      const matchesStage =
+        stageFilter === 'all' || school.educationalStage.includes(stageFilter);
+
+      return matchesSearch && matchesStatus && matchesStage;
+    });
+  }, [data?.schools, searchTerm, statusFilter, stageFilter]);
+
+  return {
+    dashboardData: data,
+    schools: filteredSchools,
+    totalCount: data?.schools.length ?? 0,
+    kpis: data?.kpis,
+    governanceCallout: data?.governanceCallout,
+    scope: data?.scope,
+    isLoading,
+    error,
+    refetch: fetchDashboard,
+    searchTerm,
+    setSearchTerm,
+    statusFilter,
+    setStatusFilter,
+    stageFilter,
+    setStageFilter,
+  };
+}

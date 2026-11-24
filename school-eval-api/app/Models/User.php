@@ -52,6 +52,8 @@ class User extends Authenticatable
     protected $fillable = [
         'school_id',
         'ministry_id',
+        'governorate',
+        'directorate_id',
         'username',
         'password_hash',
         'full_name',
@@ -80,6 +82,8 @@ class User extends Authenticatable
             'user_id' => 'integer',
             'school_id' => 'integer',
             'ministry_id' => 'integer',
+            'directorate_id' => 'integer',
+            'governorate' => 'string',
             'created_at' => 'datetime',
             'updated_at' => 'datetime',
         ];
@@ -113,6 +117,16 @@ class User extends Authenticatable
     public function ministry(): BelongsTo
     {
         return $this->belongsTo(Ministry::class, 'ministry_id', 'ministry_id');
+    }
+
+    /**
+     * المديرية التعليمية التي يتبع لها المشرف (إذا تم تخصيص نطاق على مستوى المديرية).
+     *
+     * @return BelongsTo
+     */
+    public function directorate(): BelongsTo
+    {
+        return $this->belongsTo(Directorate::class, 'directorate_id', 'directorate_id');
     }
 
     /**

@@ -80,7 +80,7 @@ export const DraftReportPreview: React.FC<DraftReportPreviewProps> = ({
 
   const schoolName = user?.school?.schoolName || dashboardData?.schoolInfo?.schoolName || 'مدرسة غير محددة';
   const academicYear = dashboardData?.schoolInfo?.academicYear || '2026/2027';
-  const evaluatorName = user?.fullName || dashboardData?.schoolInfo?.currentEvaluator || 'المقيم المعتمد';
+  const evaluatorName = user?.fullName || dashboardData?.schoolInfo?.currentEvaluator || 'مقيّم المدرسة';
   const finalTrackingCode = trackingCode || 'مسودة قيد المراجعة الداخلية';
 
   const getStatusBadge = (percentage: number) => {
@@ -189,11 +189,11 @@ export const DraftReportPreview: React.FC<DraftReportPreviewProps> = ({
           <span style={{ fontSize: '13.5px', fontWeight: 800, color: '#0F172A' }}>{academicYear}</span>
         </div>
         <div>
-          <span style={{ fontSize: '11px', color: '#64748B', display: 'block' }}>المقيم المعتمد</span>
+          <span style={{ fontSize: '11px', color: '#64748B', display: 'block' }}>مقيّم المدرسة</span>
           <span style={{ fontSize: '13.5px', fontWeight: 800, color: '#0F172A' }}>{evaluatorName}</span>
         </div>
         <div>
-          <span style={{ fontSize: '11px', color: '#64748B', display: 'block' }}>رمز الاعتماد والتتبع</span>
+          <span style={{ fontSize: '11px', color: '#64748B', display: 'block' }}>رمز التوثيق والتتبع</span>
           <span style={{ fontSize: '13.5px', fontWeight: 800, color: '#059669' }}>{finalTrackingCode}</span>
         </div>
       </div>
@@ -271,11 +271,11 @@ export const DraftReportPreview: React.FC<DraftReportPreviewProps> = ({
       >
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', flexWrap: 'wrap', gap: '8px' }}>
           <div style={{ fontSize: '13px', fontWeight: 800, color: '#065F46' }}>
-            اعتماد المراجعة الداخلية لمدير المدرسة
+            إقرار ومصادقة المراجعة الداخلية لمدير المدرسة
           </div>
           {isPrincipal && (
             <span style={{ fontSize: '11px', color: '#047857', backgroundColor: '#D1FAE5', padding: '2px 8px', borderRadius: '4px', fontWeight: 700 }}>
-              صلاحية التدوين والاعتماد متاحة لمدير المدرسة
+              صلاحية التدوين والمصادقة متاحة لمدير المدرسة
             </span>
           )}
         </div>
@@ -307,7 +307,7 @@ export const DraftReportPreview: React.FC<DraftReportPreviewProps> = ({
                 resize: 'vertical',
                 boxSizing: 'border-box',
               }}
-              placeholder="اكتب ملاحظات وتوصيات المراجعة والاعتماد الداخلي لمدير المدرسة..."
+              placeholder="اكتب ملاحظات وتوصيات المراجعة والإقرار الداخلي لمدير المدرسة..."
             />
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '10px' }}>
               <button
@@ -353,7 +353,7 @@ export const DraftReportPreview: React.FC<DraftReportPreviewProps> = ({
         ) : (
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#92400E', padding: '8px 12px', backgroundColor: '#FEF3C7', borderRadius: '6px', border: '1px solid #FDE68A' }}>
             <span style={{ fontSize: '12px', fontWeight: 600 }}>
-              لم يتم تدوين ملاحظات المراجعة الداخلية من قبل مدير المدرسة بعد (بانتظار المراجعة والاعتماد).
+              لم يتم تدوين ملاحظات المراجعة الداخلية من قبل مدير المدرسة بعد (بانتظار المراجعة والإقرار الداخلي).
             </span>
           </div>
         )}

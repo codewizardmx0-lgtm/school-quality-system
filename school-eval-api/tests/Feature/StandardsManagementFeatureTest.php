@@ -12,6 +12,7 @@ use App\Models\IndicatorScoreDescriptor;
 use App\Models\IndicatorVerificationMethod;
 use App\Models\Role;
 use App\Models\School;
+use App\Models\ScoreLevel;
 use App\Models\Standard;
 use App\Models\StandardVersion;
 use App\Models\SubStandard;
@@ -774,5 +775,734 @@ class StandardsManagementFeatureTest extends TestCase
         // عدد الإصدارات بحالة Active الآن في النظام هو 1 فقط
         $activeCount = StandardVersion::where('status', StandardVersion::STATUS_ACTIVE)->count();
         $this->assertEquals(1, $activeCount);
+    }
+
+    /**
+     * اختبار إضافة وتحديث وزن المعيار الفرعي (SubStandard Weight Persistence) - القرار 1.
+     */
+    public function test_sub_standard_weight_can_be_stored_and_updated_in_draft(): void
+    {
+        $draft = StandardVersion::create([
+            'version_no'          => '2099.WEIGHT-TEST',
+            'issue_date'          => now()->toDateString(),
+            'source_organization' => 'وزارة التربية والتعليم',
+            'status'              => StandardVersion::STATUS_DRAFT,
+        ]);
+
+        $std = Standard::create([
+            'version_id'  => $draft->version_id,
+            'code'        => 'STD-W1',
+            'name'        => 'معيار تجربة الوزن',
+            'weight'      => 20.0,
+        ]);
+
+        // إضافة معيار فرعي مع وزنه
+        $resStore = $this->actingAs($this->standardsManager, 'sanctum')
+            ->postJson("/api/v1/standards/{$std->standard_id}/sub-standards", [
+                'code'        => 'SUB-W1-1',
+                'name'        => 'مجال فرعي أول',
+                'description' => 'وصف تجريبي',
+                'weight'      => 10.0,
+            ]);
+
+        $resStore->assertCreated();
+        $subId = $resStore->json('data.sub_standard_id');
+        $this->assertDatabaseHas('sub_standards', [
+            'sub_standard_id' => $subId,
+            'weight'          => 10.0,
+        ]);
+
+        // تحديث وزن المعيار الفرعي
+        $resUpdate = $this->actingAs($this->standardsManager, 'sanctum')
+            ->putJson("/api/v1/sub-standards/{$subId}", [
+                'name'   => 'مجال فرعي أول معدل',
+                'weight' => 12.5,
+            ]);
+
+        $resUpdate->assertOk();
+        $this->assertDatabaseHas('sub_standards', [
+            'sub_standard_id' => $subId,
+            'weight'          => 12.5,
+        ]);
+    }
+
+    /**
+     * اختبار التحقق الحتمي من توازن أوزان المعايير الفرعية (المجموع = وزن المعيار الرئيسي) - القرار 1.
+     */
+    public function test_three_level_weights_validation_enforces_sub_standards_sum_matches_parent_standard(): void
+    {
+        $draft = StandardVersion::create([
+            'version_no'          => '2099.THREE-LEVEL',
+            'issue_date'          => now()->toDateString(),
+            'source_organization' => 'وزارة التربية والتعليم',
+            'status'              => StandardVersion::STATUS_DRAFT,
+        ]);
+
+        $std1 = Standard::create([
+            'version_id' => $draft->version_id,
+            'code'       => 'STD-A',
+            'name'       => 'المعيار الأول',
+            'weight'     => 60.0,
+        ]);
+
+        $std2 = Standard::create([
+            'version_id' => $draft->version_id,
+            'code'       => 'STD-B',
+            'name'       => 'المعيار الثاني',
+            'weight'     => 40.0,
+        ]);
+
+        $subA1 = SubStandard::create([
+            'standard_id' => $std1->standard_id,
+            'code'        => 'SUB-A1',
+            'name'        => 'مجال أ-1',
+            'weight'      => 30.0,
+        ]);
+
+        $subA2 = SubStandard::create([
+            'standard_id' => $std1->standard_id,
+            'code'        => 'SUB-A2',
+            'name'        => 'مجال أ-2',
+            'weight'      => 30.0,
+        ]);
+
+        // 1. محاولة إرسال أوزان غير متزنة للمعيار الفرعي (30 + 20 = 50 != 60)
+        $resInvalid = $this->actingAs($this->standardsManager, 'sanctum')
+            ->putJson("/api/v1/standard-versions/{$draft->version_id}/weights", [
+                'standards_weights' => [
+                    ['standard_id' => $std1->standard_id, 'weight' => 60.0],
+                    ['standard_id' => $std2->standard_id, 'weight' => 40.0],
+                ],
+                'sub_standards_weights' => [
+                    ['sub_standard_id' => $subA1->sub_standard_id, 'weight' => 30.0],
+                    ['sub_standard_id' => $subA2->sub_standard_id, 'weight' => 20.0], // نقص 10%
+                ],
+            ]);
+
+        $resInvalid->assertStatus(422);
+        $resInvalid->assertJsonValidationErrors(['sub_standards_weights']);
+
+        // 2. إرسال أوزان متزنة تماماً (30 + 30 = 60)
+        $resValid = $this->actingAs($this->standardsManager, 'sanctum')
+            ->putJson("/api/v1/standard-versions/{$draft->version_id}/weights", [
+                'standards_weights' => [
+                    ['standard_id' => $std1->standard_id, 'weight' => 60.0],
+                    ['standard_id' => $std2->standard_id, 'weight' => 40.0],
+                ],
+                'sub_standards_weights' => [
+                    ['sub_standard_id' => $subA1->sub_standard_id, 'weight' => 35.0],
+                    ['sub_standard_id' => $subA2->sub_standard_id, 'weight' => 25.0], // مجموعها 60
+                ],
+            ]);
+
+        $resValid->assertOk();
+        $this->assertEquals(35.0, (float) $subA1->fresh()->weight);
+        $this->assertEquals(25.0, (float) $subA2->fresh()->weight);
+    }
+
+    /**
+     * اختبار التوزيع التلقائي المتساوي لوزن المعيار الفرعي على مؤشراته عند عدم تحديد أوزان المؤشرات - القرار 1.
+     */
+    public function test_sub_standards_weight_auto_distributes_equally_to_indicators_when_omitted(): void
+    {
+        $draft = StandardVersion::create([
+            'version_no'          => '2099.AUTO-DISTRIB',
+            'issue_date'          => now()->toDateString(),
+            'source_organization' => 'وزارة التربية والتعليم',
+            'status'              => StandardVersion::STATUS_DRAFT,
+        ]);
+
+        $std = Standard::create([
+            'version_id' => $draft->version_id,
+            'code'       => 'STD-AUTO',
+            'name'       => 'معيار التوزيع',
+            'weight'     => 100.0,
+        ]);
+
+        $sub = SubStandard::create([
+            'standard_id' => $std->standard_id,
+            'code'        => 'SUB-AUTO',
+            'name'        => 'مجال التوزيع',
+            'weight'      => 100.0,
+        ]);
+
+        $ind1 = Indicator::create([
+            'sub_standard_id' => $sub->sub_standard_id,
+            'code'            => 'IND-AUTO-1',
+            'name'            => 'مؤشر 1',
+            'status'          => 'Active',
+        ]);
+
+        $ind2 = Indicator::create([
+            'sub_standard_id' => $sub->sub_standard_id,
+            'code'            => 'IND-AUTO-2',
+            'name'            => 'مؤشر 2',
+            'status'          => 'Active',
+        ]);
+
+        // تحديث أوزان المعيار والمجال (100%) دون إرسال indicators_weights
+        $res = $this->actingAs($this->standardsManager, 'sanctum')
+            ->putJson("/api/v1/standard-versions/{$draft->version_id}/weights", [
+                'standards_weights' => [
+                    ['standard_id' => $std->standard_id, 'weight' => 100.0],
+                ],
+                'sub_standards_weights' => [
+                    ['sub_standard_id' => $sub->sub_standard_id, 'weight' => 100.0],
+                ],
+            ]);
+
+        $res->assertOk();
+
+        // يجب أن يوزع الـ 100% بالتساوي (50% لكل مؤشر من الاثنين)
+        $this->assertEquals(50.0, (float) $ind1->fresh()->weight);
+        $this->assertEquals(50.0, (float) $ind2->fresh()->weight);
+    }
+
+    /**
+     * اختبار نسخ وزن المعيار الفرعي في الاستنساخ العميق (Deep Cloning) - القرار 1.
+     */
+    public function test_deep_clone_preserves_sub_standards_weights(): void
+    {
+        $approvedVersion = StandardVersion::create([
+            'version_no'          => '2099.CLONE-SOURCE',
+            'issue_date'          => now()->toDateString(),
+            'source_organization' => 'وزارة التربية والتعليم',
+            'status'              => StandardVersion::STATUS_APPROVED,
+        ]);
+
+        $std = Standard::create([
+            'version_id' => $approvedVersion->version_id,
+            'code'       => 'STD-CLONE',
+            'name'       => 'معيار الاستنساخ',
+            'weight'     => 100.0,
+        ]);
+
+        $sub = SubStandard::create([
+            'standard_id' => $std->standard_id,
+            'code'        => 'SUB-CLONE',
+            'name'        => 'مجال فرعي',
+            'weight'      => 100.0,
+        ]);
+
+        $res = $this->actingAs($this->standardsManager, 'sanctum')
+            ->postJson("/api/v1/standard-versions/{$approvedVersion->version_id}/clone", [
+                'version_no' => '2099.CLONE-DEST',
+            ]);
+
+        $res->assertCreated();
+        $newVersionId = $res->json('data.version_id');
+
+        $clonedSub = SubStandard::whereHas('standard', fn($q) => $q->where('version_id', $newVersionId))->first();
+        $this->assertNotNull($clonedSub);
+        $this->assertEquals(100.0, (float) $clonedSub->weight);
+    }
+
+    /**
+     * اختبار أن diff-log يعيد إحصاءات مقارنة حقيقية ومذكرات الإصدار - القرار 5.
+     */
+    public function test_diff_log_returns_real_stats_and_release_notes(): void
+    {
+        $res = $this->actingAs($this->standardsManager, 'sanctum')
+            ->getJson("/api/v1/standard-versions/{$this->seededVersion->version_id}/diff-log");
+
+        $res->assertOk();
+        $res->assertJsonStructure([
+            'data' => [
+                'versionId',
+                'versionNo',
+                'baselineVersionNo',
+                'integrityHash',
+                'releaseNotes',
+                'realStats' => [
+                    'standardsCount',
+                    'subStandardsCount',
+                    'indicatorsCount',
+                    'totalWeight',
+                    'isWeightBalanced',
+                ],
+                'diffs',
+            ],
+        ]);
+    }
+
+    /**
+     * اختبار خلو سجل الفروقات من البيانات الوهمية المسبقة الصنع (DIFF-01..04).
+     */
+    public function test_diff_log_does_not_contain_mock_diff_items(): void
+    {
+        $res = $this->actingAs($this->standardsManager, 'sanctum')
+            ->getJson("/api/v1/standard-versions/{$this->seededVersion->version_id}/diff-log");
+
+        $res->assertOk();
+        $diffs = $res->json('data.diffs');
+
+        // التأكد من عدم وجود أي من المعرفات الوهمية السابقة
+        $diffIds = collect($diffs)->pluck('id')->all();
+        $this->assertNotContains('DIFF-01', $diffIds);
+        $this->assertNotContains('DIFF-02', $diffIds);
+        $this->assertNotContains('DIFF-03', $diffIds);
+        $this->assertNotContains('DIFF-04', $diffIds);
+    }
+
+    /**
+     * اختبار جلب وتحديث مستويات سلم التقدير اللفظي ديناميكياً على مستوى الإصدار.
+     */
+    public function test_score_levels_can_be_retrieved_and_updated_per_version(): void
+    {
+        // 1. جلب مستويات الإصدار الأول (الافتراضي 0-3)
+        $res = $this->actingAs($this->standardsManager, 'sanctum')
+            ->getJson("/api/v1/score-levels?version_id={$this->seededVersion->version_id}");
+
+        $res->assertOk();
+        $this->assertNotEmpty($res->json('data'));
+
+        // 2. إنشاء مسودة وتحديث سلم التقدير لها
+        $draftRes = $this->actingAs($this->standardsManager, 'sanctum')
+            ->postJson('/api/v1/standard-versions', [
+                'version_no' => '2030.CUSTOM-SCALE',
+            ]);
+        $draftId = $draftRes->json('data.version_id');
+
+        $updateScaleRes = $this->actingAs($this->standardsManager, 'sanctum')
+            ->putJson("/api/v1/standard-versions/{$draftId}/score-levels", [
+                'levels' => [
+                    ['score_value' => 1, 'label' => 'مبتدئ', 'general_description' => 'مستوى أولي', 'display_order' => 1],
+                    ['score_value' => 2, 'label' => 'متمكن', 'general_description' => 'مستوى متوسط', 'display_order' => 2],
+                    ['score_value' => 3, 'label' => 'خبير', 'general_description' => 'مستوى متقدم', 'display_order' => 3],
+                ],
+            ]);
+
+        $updateScaleRes->assertOk();
+        $this->assertCount(3, $updateScaleRes->json('data'));
+    }
+
+    /**
+     * اختبار فصل فحص أدوات التحقق عن متطلبات الشواهد ومانع تفعيل السلم غير المدعوم.
+     */
+    public function test_lock_preconditions_separates_tools_from_evidence_and_blocks_unsupported_scale(): void
+    {
+        // 1. استدعاء الشروط الحاكمة للإصدار التأسيسي
+        $res = $this->actingAs($this->standardsManager, 'sanctum')
+            ->getJson("/api/v1/standard-versions/{$this->seededVersion->version_id}/lock-preconditions");
+
+        $res->assertOk();
+        $checks = collect($res->json('data.checks'))->keyBy('key');
+
+        // التحقق من وجود فحص مستقل لأدوات التحقق
+        $this->assertTrue($checks->has('verification_tools'));
+        // التحقق من وجود فحص مستقل لمتطلبات الشواهد
+        $this->assertTrue($checks->has('evidence_requirements'));
+        // التحقق من وجود فحص التوافق التشغيلي للسلم
+        $this->assertTrue($checks->has('portal_compatibility'));
+
+        // 2. اختبار مانع التفعيل التشغيلي: محاولة تنشيط مسودة بسلم تقديري مخصص (3 مستويات: 1, 2, 3 بدلاً من 0-3)
+        $draft = StandardVersion::create([
+            'version_no'          => 'BLOCKED-SCALE-VER',
+            'issue_date'          => now()->toDateString(),
+            'source_organization' => 'وزارة التربية والتعليم',
+            'status'              => StandardVersion::STATUS_APPROVED,
+        ]);
+
+        ScoreLevel::create(['standard_version_id' => $draft->version_id, 'score_value' => 1, 'label' => 'L1', 'display_order' => 1]);
+        ScoreLevel::create(['standard_version_id' => $draft->version_id, 'score_value' => 2, 'label' => 'L2', 'display_order' => 2]);
+
+        $activateRes = $this->actingAs($this->standardsManager, 'sanctum')
+            ->postJson("/api/v1/standard-versions/{$draft->version_id}/activate");
+
+        $activateRes->assertStatus(422)
+            ->assertJsonValidationErrors(['scale_compatibility']);
+    }
+
+    /**
+     * اختبار نموذج الحالات الرباعي وخيار الإقرار والجدولة مقابل التفعيل الفوري (القرار 6).
+     */
+    public function test_lock_action_supports_approve_and_schedule_versus_activate_immediately(): void
+    {
+        // 1. إنشاء مسودة متزنة بنسبة 100%
+        $draft = StandardVersion::create([
+            'version_no'          => 'LOCK-CYCLE-2027',
+            'issue_date'          => now()->toDateString(),
+            'source_organization' => 'وزارة التربية والتعليم',
+            'status'              => StandardVersion::STATUS_DRAFT,
+        ]);
+
+        // إضافة معيار واحد بوزن 100%
+        Standard::create([
+            'version_id'  => $draft->version_id,
+            'code'        => 'STD-FULL',
+            'name'        => 'المعيار الشامل',
+            'description' => 'وصف المعيار',
+            'weight'      => 100.00,
+        ]);
+
+        // إضافة مستويات السلم القياسي (0-3)
+        foreach ([0, 1, 2, 3] as $val) {
+            ScoreLevel::create([
+                'standard_version_id' => $draft->version_id,
+                'score_value'         => $val,
+                'label'               => "Level {$val}",
+                'display_order'       => $val,
+            ]);
+        }
+
+        // حفظ الإصدار النشط الأصلي
+        $originalActiveId = $this->seededVersion->version_id;
+
+        // 2. إقرار وجدولة للدورة القادمة (action = approve)
+        $approveRes = $this->actingAs($this->standardsManager, 'sanctum')
+            ->postJson("/api/v1/standard-versions/{$draft->version_id}/lock", [
+                'action'             => 'approve',
+                'approval_code'      => 'DEC-COUNCIL-2027',
+                'legal_confirmation' => true,
+            ]);
+
+        $approveRes->assertOk();
+        $this->assertEquals(StandardVersion::STATUS_APPROVED, $draft->fresh()->status);
+        $this->assertEquals('DEC-COUNCIL-2027', $draft->fresh()->source_number);
+
+        // التحقق من أن الإصدار النشط السابق لم يتأثر (حماية للدورات الجارية)
+        $this->assertEquals(StandardVersion::STATUS_ACTIVE, StandardVersion::find($originalActiveId)->status);
+
+        // 3. تفعيل فوري للدورة الحالية (action = activate)
+        $activateRes = $this->actingAs($this->standardsManager, 'sanctum')
+            ->postJson("/api/v1/standard-versions/{$draft->version_id}/lock", [
+                'action'             => 'activate',
+                'approval_code'      => 'DEC-COUNCIL-2027-ACT',
+                'legal_confirmation' => true,
+            ]);
+
+        $activateRes->assertOk();
+        $this->assertEquals(StandardVersion::STATUS_ACTIVE, $draft->fresh()->status);
+
+        // التحقق من أرشفة الإصدار النشط السابق تلقائياً
+        $this->assertEquals(StandardVersion::STATUS_ARCHIVED, StandardVersion::find($originalActiveId)->status);
+    }
+
+    /**
+     * اختبار حذف مسودة إصدار معياري وحذف كافة بياناته التابعة (Cascade).
+     */
+    public function test_can_delete_draft_standard_version_and_cascade_all_data(): void
+    {
+        $draft = StandardVersion::create([
+            'version_no'          => '2099.DELETE-ME',
+            'issue_date'          => now()->toDateString(),
+            'source_organization' => 'وزارة التربية والتعليم',
+            'status'              => StandardVersion::STATUS_DRAFT,
+        ]);
+
+        $std = Standard::create([
+            'version_id' => $draft->version_id,
+            'code'       => 'STD-DEL',
+            'name'       => 'معيار للحذف',
+            'weight'     => 100.0,
+        ]);
+
+        $sub = SubStandard::create([
+            'standard_id' => $std->standard_id,
+            'code'        => 'SUB-DEL',
+            'name'        => 'مجال للحذف',
+            'weight'      => 100.0,
+        ]);
+
+        $ind = Indicator::create([
+            'sub_standard_id' => $sub->sub_standard_id,
+            'code'            => 'IND-DEL-1',
+            'name'            => 'مؤشر للحذف',
+            'status'          => 'Active',
+        ]);
+
+        $level = ScoreLevel::create([
+            'standard_version_id' => $draft->version_id,
+            'score_value'         => 0,
+            'label'               => 'غير متوفر',
+            'display_order'       => 1,
+        ]);
+
+        $descriptor = IndicatorScoreDescriptor::create([
+            'indicator_id'        => $ind->indicator_id,
+            'score_level_id'      => $level->score_level_id,
+            'standard_version_id' => $draft->version_id,
+            'label'               => 'غير متوفر',
+            'description'         => 'وصف المستوى للحذف',
+            'display_order'       => 1,
+            'is_active'           => true,
+        ]);
+
+        // تنفيذ الحذف
+        $res = $this->actingAs($this->standardsManager, 'sanctum')
+            ->deleteJson("/api/v1/standard-versions/{$draft->version_id}");
+
+        $res->assertOk();
+        $this->assertDatabaseMissing('standard_versions', ['version_id' => $draft->version_id]);
+        $this->assertDatabaseMissing('standards', ['standard_id' => $std->standard_id]);
+        $this->assertDatabaseMissing('sub_standards', ['sub_standard_id' => $sub->sub_standard_id]);
+        $this->assertDatabaseMissing('indicators', ['indicator_id' => $ind->indicator_id]);
+        $this->assertDatabaseMissing('score_levels', ['score_level_id' => $level->score_level_id]);
+        $this->assertDatabaseMissing('indicator_score_descriptors', ['descriptor_id' => $descriptor->descriptor_id]);
+    }
+
+    /**
+     * اختبار منع حذف إصدار نشط أو مُقرّ.
+     */
+    public function test_cannot_delete_active_or_approved_standard_version(): void
+    {
+        $res = $this->actingAs($this->standardsManager, 'sanctum')
+            ->deleteJson("/api/v1/standard-versions/{$this->seededVersion->version_id}");
+
+        $res->assertStatus(422);
+        $this->assertDatabaseHas('standard_versions', ['version_id' => $this->seededVersion->version_id]);
+    }
+
+    /**
+     * اختبار منع المستخدم غير المصرح له من حذف مسودة إصدار معياري.
+     */
+    public function test_unauthorized_user_cannot_delete_standard_version(): void
+    {
+        $draft = StandardVersion::create([
+            'version_no'          => '2099.UNAUTH-DEL',
+            'issue_date'          => now()->toDateString(),
+            'source_organization' => 'وزارة التربية والتعليم',
+            'status'              => StandardVersion::STATUS_DRAFT,
+        ]);
+
+        $res = $this->actingAs($this->schoolEvaluator, 'sanctum')
+            ->deleteJson("/api/v1/standard-versions/{$draft->version_id}");
+
+        $res->assertStatus(403);
+        $this->assertDatabaseHas('standard_versions', ['version_id' => $draft->version_id]);
+
+        // تنظيف المسودة
+        $draft->delete();
+    }
+
+    /**
+     * اختبار استرجاع قائمة أدوات التحقق المعتمدة مع إحصاء عدد المؤشرات المرتبطة.
+     */
+    public function test_can_list_verification_tools_with_indicators_count(): void
+    {
+        $res = $this->actingAs($this->standardsManager, 'sanctum')
+            ->getJson('/api/v1/verification-tools');
+
+        $res->assertOk();
+        $res->assertJsonStructure([
+            'data' => [
+                'tools' => [
+                    '*' => ['toolId', 'name', 'toolType', 'description', 'approved', 'indicatorsCount']
+                ],
+                'totalCount'
+            ]
+        ]);
+        $this->assertGreaterThanOrEqual(1, count($res->json('data.tools')));
+    }
+
+    /**
+     * اختبار إضافة أداة تحقق جديدة وحذفها إذا لم تكن مرتبطة بمؤشرات.
+     */
+    public function test_can_create_and_delete_custom_verification_tool(): void
+    {
+        $toolName = 'اختبار أداة رقمية تجريبية ' . uniqid();
+
+        // 1. إضافة أداة جديدة
+        $createRes = $this->actingAs($this->standardsManager, 'sanctum')
+            ->postJson('/api/v1/verification-tools', [
+                'name'        => $toolName,
+                'tool_type'   => 'رقمي ذكي',
+                'description' => 'أداة رقمية للتحقق الذاتي واختبار الجودة',
+            ]);
+
+        $createRes->assertStatus(201);
+        $toolId = $createRes->json('data.toolId');
+        $this->assertNotNull($toolId);
+        $this->assertDatabaseHas('verification_tools', ['tool_id' => $toolId, 'name' => $toolName]);
+
+        // 2. حذف الأداة غير المرتبطة
+        $delRes = $this->actingAs($this->standardsManager, 'sanctum')
+            ->deleteJson("/api/v1/verification-tools/{$toolId}");
+
+        $delRes->assertOk();
+        $this->assertDatabaseMissing('verification_tools', ['tool_id' => $toolId]);
+    }
+
+    /**
+     * اختبار منع حذف أداة تحقق مرتبطة بمؤشرات معيارية.
+     */
+    public function test_cannot_delete_verification_tool_linked_to_indicators(): void
+    {
+        // أداة 1 مرتبطة بمؤشرات في البيانات الافتراضية
+        $tool = \App\Models\VerificationTool::first();
+        $this->assertNotNull($tool);
+        $indicator = \App\Models\Indicator::first();
+        $this->assertNotNull($indicator);
+
+        // التأكد من وجود ارتباط
+        \Illuminate\Support\Facades\DB::table('indicator_verification_methods')->updateOrInsert(
+            ['indicator_id' => $indicator->indicator_id, 'tool_id' => $tool->tool_id],
+            ['required' => true, 'usage_guidance' => 'فحص وثائقي', 'created_at' => now()]
+        );
+
+        $delRes = $this->actingAs($this->standardsManager, 'sanctum')
+            ->deleteJson("/api/v1/verification-tools/{$tool->tool_id}");
+
+        $delRes->assertStatus(422);
+        $this->assertDatabaseHas('verification_tools', ['tool_id' => $tool->tool_id]);
+    }
+
+    /**
+     * اختبار مزامنة وتحديث أدوات التحقق المرتبطة بمؤشر داخل مسودة.
+     */
+    public function test_can_sync_indicator_verification_tools_in_draft(): void
+    {
+        $draft = StandardVersion::create([
+            'version_no'          => '2099.TOOLS-SYNC',
+            'issue_date'          => now()->toDateString(),
+            'source_organization' => 'وزارة التربية والتعليم',
+            'status'              => StandardVersion::STATUS_DRAFT,
+        ]);
+
+        $std = Standard::create([
+            'version_id' => $draft->version_id,
+            'code'       => 'STD-SYNC',
+            'name'       => 'معيار المزامنة',
+            'weight'     => 100,
+        ]);
+
+        $sub = SubStandard::create([
+            'standard_id' => $std->standard_id,
+            'code'        => 'SUB-SYNC',
+            'name'        => 'فرعي المزامنة',
+            'weight'      => 100,
+        ]);
+
+        $indicator = Indicator::create([
+            'sub_standard_id' => $sub->sub_standard_id,
+            'code'            => 'IND-SYNC',
+            'name'            => 'مؤشر المزامنة',
+            'weight'          => 100,
+            'status'          => 'Active',
+        ]);
+
+        $tools = \App\Models\VerificationTool::take(2)->get();
+        $toolIds = $tools->pluck('tool_id')->all();
+
+        $res = $this->actingAs($this->standardsManager, 'sanctum')
+            ->putJson("/api/v1/indicators/{$indicator->indicator_id}", [
+                'name'                  => $indicator->name . ' - محدث الأدوات',
+                'verification_tool_ids' => $toolIds,
+            ]);
+
+        $res->assertOk();
+
+        // التحقق من جدول الربط
+        $linkedCount = \Illuminate\Support\Facades\DB::table('indicator_verification_methods')
+            ->where('indicator_id', $indicator->indicator_id)
+            ->whereIn('tool_id', $toolIds)
+            ->count();
+
+        $this->assertEquals(count($toolIds), $linkedCount);
+
+        // التحقق من استجابة شجرة المعايير
+        $treeRes = $this->actingAs($this->standardsManager, 'sanctum')
+            ->getJson("/api/v1/standard-versions/{$draft->version_id}/tree");
+
+        $treeRes->assertOk();
+        $firstInd = $treeRes->json('data.standards.0.subStandards.0.indicators.0');
+        $this->assertNotEmpty($firstInd['verificationTools']);
+        $this->assertNotEmpty($firstInd['verificationToolIds']);
+
+        // تنظيف باستخدام الخدمة لضمان الحذف التتابعي
+        app(\App\Services\StandardManagementService::class)->deleteVersion($draft);
+    }
+
+    /**
+     * اختبار نموذج الإقرار على مرحلتين: المرحلة الأولى إقرار وقفل رقمي (Approved)، والمرحلة الثانية جدولة للدورة القادمة.
+     */
+    public function test_two_stage_approval_and_scheduling(): void
+    {
+        $draft = StandardVersion::create([
+            'version_no'          => '2099.TWO-STAGE',
+            'issue_date'          => now()->toDateString(),
+            'source_organization' => 'وزارة التربية والتعليم',
+            'status'              => StandardVersion::STATUS_DRAFT,
+        ]);
+
+        $std = Standard::create([
+            'version_id' => $draft->version_id,
+            'code'       => 'STD-2STG',
+            'name'       => 'معيار المرحلتين',
+            'weight'     => 100,
+        ]);
+
+        $sub = SubStandard::create([
+            'standard_id' => $std->standard_id,
+            'code'        => 'SUB-2STG',
+            'name'        => 'فرعي المرحلتين',
+            'weight'      => 100,
+        ]);
+
+        $ind = Indicator::create([
+            'sub_standard_id' => $sub->sub_standard_id,
+            'code'            => 'IND-2STG',
+            'name'            => 'مؤشر المرحلتين',
+            'weight'          => 100,
+            'status'          => 'Active',
+        ]);
+
+        // المرحلة الأولى: إقرار وقفل الإصدار المعياري (approve)
+        $lockRes = $this->actingAs($this->standardsManager, 'sanctum')
+            ->postJson("/api/v1/standard-versions/{$draft->version_id}/lock", [
+                'approval_code'      => 'DEC-STAGE1-2099',
+                'legal_confirmation' => true,
+                'action'             => 'approve',
+            ]);
+
+        $lockRes->assertOk();
+        $this->assertEquals(StandardVersion::STATUS_APPROVED, $draft->fresh()->status);
+        $this->assertStringContainsString('DEC-STAGE1-2099', $draft->fresh()->source_number);
+
+        // المرحلة الثانية: جدولة الإصدار للدورة القادمة (schedule)
+        $scheduleRes = $this->actingAs($this->standardsManager, 'sanctum')
+            ->postJson("/api/v1/standard-versions/{$draft->version_id}/lock", [
+                'approval_code'      => 'DEC-STAGE2-2099',
+                'legal_confirmation' => true,
+                'action'             => 'schedule',
+            ]);
+
+        $scheduleRes->assertOk();
+        $this->assertStringContainsString('مجدول', $draft->fresh()->source_description);
+
+        // تنظيف
+        app(\App\Services\StandardManagementService::class)->deleteVersion($draft);
+    }
+
+    /**
+     * اختبار سجل الفروقات الغني بمقارنة المؤشرات التفصيلية (الأدوات والشواهد وسلالم التقدير).
+     */
+    public function test_diff_log_includes_enriched_indicator_comparisons(): void
+    {
+        $res = $this->actingAs($this->standardsManager, 'sanctum')
+            ->getJson("/api/v1/standard-versions/{$this->seededVersion->version_id}/diff-log");
+
+        $res->assertOk()
+            ->assertJsonStructure([
+                'data' => [
+                    'versionId',
+                    'versionNo',
+                    'integrityHash',
+                    'standardsComparison',
+                    'indicatorsComparison' => [
+                        '*' => [
+                            'code',
+                            'name',
+                            'standardCode',
+                            'weight',
+                            'status',
+                            'tools',
+                            'evidence',
+                            'descriptors',
+                        ],
+                    ],
+                    'rubricsComparison',
+                ],
+            ]);
     }
 }

@@ -322,4 +322,49 @@ class EvaluatorScreenRegressionTest extends TestCase
             'document_type' => 'minutes',
         ]);
     }
+
+    /**
+     * اختبار Phase 2-A: التحقق من توفير أوزان المعايير الفرعية والبيانات المرجعية والتحقق الميداني.
+     */
+    public function test_phase2a_standards_tree_metadata_and_substandard_weights(): void
+    {
+        Sanctum::actingAs($this->evaluatorBelqees);
+
+        // 1. فحص /api/v1/standard-versions/active/tree
+        $resActive = $this->getJson('/api/v1/standard-versions/active/tree');
+        $resActive->assertStatus(200);
+
+        $root = $resActive->json('data');
+        $this->assertArrayHasKey('approvalCode', $root);
+        $this->assertArrayHasKey('approvedAt', $root);
+        $this->assertArrayHasKey('effectiveFrom', $root);
+        $this->assertArrayHasKey('integrityHash', $root);
+
+        $firstStd = $root['standards'][0];
+        $firstSub = $firstStd['subStandards'][0];
+        $this->assertArrayHasKey('weight', $firstSub, 'يجب أن يحوي المعيار الفرعي وزناً نسبياً.');
+        $this->assertArrayHasKey('description', $firstSub, 'يجب أن يحوي المعيار الفرعي وصفاً.');
+
+        $firstInd = $firstSub['indicators'][0];
+        $this->assertArrayHasKey('standardName', $firstInd);
+        $this->assertArrayHasKey('subStandardName', $firstInd);
+        $this->assertArrayHasKey('subStandardWeight', $firstInd);
+
+        // 2. فحص /api/v1/evaluations/{id}/standards-tree
+        $resEvalTree = $this->getJson("/api/v1/evaluations/{$this->evalBelqees->evaluation_id}/standards-tree");
+        $resEvalTree->assertStatus(200);
+        $evalSub = $resEvalTree->json('data.standards.0.subStandards.0');
+        $this->assertArrayHasKey('weight', $evalSub);
+        $evalInd = $evalSub['indicators'][0];
+        $this->assertArrayHasKey('subStandardWeight', $evalInd);
+
+        // 3. فحص /api/v1/evaluation-results/{indicatorId} وتوافر isCovered
+        $resIndResult = $this->getJson("/api/v1/evaluation-results/{$firstInd['indicatorId']}");
+        $resIndResult->assertStatus(200);
+        $reqs = $resIndResult->json('data.evidenceRequirements');
+        if (!empty($reqs)) {
+            $this->assertArrayHasKey('isCovered', $reqs[0]);
+            $this->assertIsBool($reqs[0]['isCovered']);
+        }
+    }
 }

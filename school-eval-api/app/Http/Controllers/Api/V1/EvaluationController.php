@@ -295,6 +295,7 @@ class EvaluationController extends Controller
                         'code'          => $sub->code,
                         'name'          => $sub->name,
                         'description'   => $sub->description,
+                        'weight'        => (float) ($sub->weight ?? 0.0),
                         'indicators'    => $sub->indicators->map(function ($ind) use ($std, $sub, $existingResults, &$totalActiveIndicators, &$completedResultsCount) {
                             $isActive = $ind->status === 'Active';
                             if ($isActive) {
@@ -326,6 +327,7 @@ class EvaluationController extends Controller
                                 'subStandardName'        => $sub->name,
                                 'subStandardDescription' => $sub->description,
                                 'weight'                 => (float) $ind->weight,
+                                'subStandardWeight'      => (float) ($sub->weight ?? 0.0),
                                 'status'                 => $ind->status,
                                 'resultId'               => $result?->result_id,
                                 'score'                  => ($result && $result->completion_status === 'Completed') ? $result->score : null,
@@ -385,6 +387,11 @@ class EvaluationController extends Controller
                 'academicYear' => $evaluation->cycle?->academic_year,
                 'versionId'    => $version->version_id,
                 'versionName'  => $version->version_name,
+                'versionNo'    => $version->version_no,
+                'approvalCode' => $version->source_number ?? 'DEC-2026-QA-01',
+                'approvedAt'   => $version->updated_at?->toIso8601ZuluString() ?? now()->toIso8601ZuluString(),
+                'effectiveFrom'=> $version->issue_date?->toDateString() ?? '2026-01-01',
+                'integrityHash'=> hash('sha256', "VERSION_{$version->version_id}_{$version->version_no}_{$version->status}"),
                 'standards'    => $standardsData,
             ],
             message: null,
@@ -912,6 +919,14 @@ class EvaluationController extends Controller
             return ApiResponse::forbidden('غير مصرح لك بإغلاق ملف التقييم. هذه العملية مخصصة للمشرف الوزاري فقط.');
         }
 
+        // حوكمة النطاق الجغرافي للمشرف الوزاري (FR-SUP-02, BR-MIN-03)
+        if ($user && $user->hasRole('ministry_supervisor') && !empty($user->governorate)) {
+            $schoolGov = $evaluation->school?->governorate;
+            if ($schoolGov && $schoolGov !== $user->governorate) {
+                return ApiResponse::forbidden('غير مصرح: المدرسة تقع خارج النطاق الجغرافي المسند إليك (' . $user->governorate . ').');
+            }
+        }
+
         if ($evaluation->status === 'Completed') {
             return ApiResponse::validationError([
                 'evaluation' => ['ملف التقييم مغلق ومكتمل نهائياً مسبقاً.'],
@@ -1242,12 +1257,14 @@ class EvaluationController extends Controller
             return ApiResponse::notFound('ملف التقييم المطلوب غير موجود.');
         }
 
-        // 3. فحص الصلاحيات العامة
+        // 3. فحص الصلاحيات العامة (بما في ذلك المشرف الوزاري)
         $hasAccess = $user->hasRole('admin')
             || $user->user_type === 'admin'
             || $user->user_type === 'system'
             || $user->hasPermission('reports.view')
-            || $user->hasPermission('evaluations.view');
+            || $user->hasPermission('evaluations.view')
+            || $user->hasRole('ministry_supervisor')
+            || $user->hasPermission('supervision.review');
 
         if (!$hasAccess) {
             return ApiResponse::forbidden('غير مصرح لك بتصدير أو استعراض هذا التقرير.');

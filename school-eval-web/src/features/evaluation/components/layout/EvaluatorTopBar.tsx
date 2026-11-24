@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import type { EvaluatorSchoolInfo, EvaluatorScreen, EvaluationCycleArchiveItem } from '../../api/evaluationTypes';
 import {
   Bell,
@@ -8,18 +8,23 @@ import {
   KeyRound,
   LogOut,
   ChevronLeft,
-  History,
+  ChevronDown,
+  User as UserIcon,
+  BookOpen,
+  Calendar,
 } from 'lucide-react';
 import { SYSTEM_SHORT_NAME } from '../../../../constants/systemConstants';
 import { evaluatorApi } from '../../api/evaluatorApi';
 import { useAuth } from '../../../auth/AuthContext';
+import { ConfirmationDialog } from '../../../admin/components/common/ConfirmationDialog';
+import { UniversalNotificationsDrawer } from '../../../../components/notifications/UniversalNotificationsDrawer';
 
 interface EvaluatorTopBarProps {
   activeScreen: EvaluatorScreen;
   schoolInfo?: EvaluatorSchoolInfo | null;
   hasOpenCompletionRequest?: boolean;
   onOpenCompletionRequest?: () => void;
-  onNavigate: (screen: EvaluatorScreen) => void;
+  onNavigate: (screen: EvaluatorScreen, param?: any) => void;
   isLocked?: boolean;
   isMobile?: boolean;
   onOpenMobile?: () => void;
@@ -56,6 +61,21 @@ export const EvaluatorTopBar: React.FC<EvaluatorTopBarProps> = ({
   isPrincipal = false,
 }) => {
   const [unreadNotificationsCount, setUnreadNotificationsCount] = useState<number>(0);
+  const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+  const [isNotificationsDrawerOpen, setIsNotificationsDrawerOpen] = useState(false);
+  const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  // Close user menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setIsUserMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const { user: authUser } = useAuth();
   const displayName = authUser?.fullName || authUser?.username || schoolInfo?.currentEvaluator || 'مقيّم المدرسة';
@@ -65,7 +85,7 @@ export const EvaluatorTopBar: React.FC<EvaluatorTopBarProps> = ({
     school_evaluator: 'مقيّم المدرسة',
     school_principal: 'مدير المدرسة',
     ministry_standards_manager: 'مسؤول إدارة المعايير',
-    ministry_supervisor: 'مشرف وزاري معتمد',
+    ministry_supervisor: 'المشرف الوزاري',
   };
   const displayRole = roleObj
     ? (roleNameMap[roleObj.roleName] || roleObj.description || roleObj.roleName)
@@ -102,7 +122,7 @@ export const EvaluatorTopBar: React.FC<EvaluatorTopBarProps> = ({
       case 'audit-hub':
         return isPrincipal ? 'مركز التدقيق والمراجعة الإدارية الشاملة' : 'سجل تدقيق ومراجعات مدير المدرسة';
       case 'final-review':
-        return isPrincipal ? 'المراجعة والاعتماد الداخلي لمدير المدرسة' : 'المراجعة الداخلية والختم الرقمي';
+        return isPrincipal ? 'المراجعة والإقرار الداخلي لمدير المدرسة' : 'المراجعة الداخلية والختم الرقمي';
       case 'completion-request':
         return 'معالجة طلب استكمال المشرف الوزاري';
       case 'reports':
@@ -227,27 +247,49 @@ export const EvaluatorTopBar: React.FC<EvaluatorTopBarProps> = ({
                 {isLocked ? <Lock size={11} /> : <CheckCircle2 size={11} />}
                 <span>{statusLabel}</span>
               </div>
+
+              {/* Standard Version Badge (Separate & Isolated) */}
+              <div
+                className="hidden lg:inline-flex"
+                style={{
+                  padding: '3px 9px',
+                  borderRadius: '14px',
+                  backgroundColor: '#FEF3C7',
+                  color: '#92400E',
+                  border: '1px solid #FCD34D',
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  whiteSpace: 'nowrap',
+                }}
+                title={`المرجعية المعيارية المعتمدة: ${schoolInfo?.standardVersion?.title || 'المعايير الوطنية'} (${schoolInfo?.standardVersion?.status || 'Active'})`}
+              >
+                <BookOpen size={11} color="#D97706" />
+                <span>المعايير: {schoolInfo?.standardVersion?.versionNumber || 'v2026.1'}</span>
+              </div>
             </div>
           </div>
         </div>
 
         {/* Left (RTL End): Actions & User Capsule */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
-          {/* Archive / Evaluation Cycles Switcher (IMP-06: Read-Only for Past Cycles) */}
-          {archiveEvaluations.length > 0 && onSelectArchiveEvaluation && (
+          {/* Separate Evaluation Cycle Display / Switcher */}
+          {archiveEvaluations.length > 0 && onSelectArchiveEvaluation ? (
             <div
               className="hidden md:flex"
               style={{
                 alignItems: 'center',
                 gap: '6px',
-                backgroundColor: selectedArchiveEvalId ? '#EFF6FF' : '#F8FAFC',
-                border: `1px solid ${selectedArchiveEvalId ? '#93C5FD' : '#E2E8F0'}`,
+                backgroundColor: selectedArchiveEvalId ? '#EFF6FF' : '#F0FDF4',
+                border: `1px solid ${selectedArchiveEvalId ? '#93C5FD' : '#BBF7D0'}`,
                 borderRadius: '8px',
                 padding: '4px 8px',
               }}
               title="استعراض أرشيف دورات التقييم السابقة للمدرسة (للقراءة فقط)"
             >
-              <History size={14} color={selectedArchiveEvalId ? '#2563EB' : '#64748B'} />
+              <Calendar size={14} color={selectedArchiveEvalId ? '#2563EB' : '#16A34A'} />
               <select
                 value={selectedArchiveEvalId ? String(selectedArchiveEvalId) : ''}
                 onChange={(e) => {
@@ -259,14 +301,14 @@ export const EvaluatorTopBar: React.FC<EvaluatorTopBarProps> = ({
                   background: 'transparent',
                   fontSize: '12px',
                   fontWeight: 700,
-                  color: selectedArchiveEvalId ? '#1E40AF' : '#334155',
+                  color: selectedArchiveEvalId ? '#1E40AF' : '#166534',
                   outline: 'none',
                   cursor: 'pointer',
                   paddingLeft: '4px',
                 }}
               >
                 <option value="">
-                  الدورة الحالية ({archiveEvaluations[0]?.academicYear || '2026/2027'})
+                  الدورة الحالية ({archiveEvaluations[0]?.academicYear || schoolInfo?.academicYear || '2025/2026'})
                 </option>
                 {archiveEvaluations.slice(1).map((ev) => (
                   <option key={ev.evaluationId} value={String(ev.evaluationId)}>
@@ -275,16 +317,36 @@ export const EvaluatorTopBar: React.FC<EvaluatorTopBarProps> = ({
                 ))}
               </select>
             </div>
+          ) : (
+            <div
+              className="hidden md:flex"
+              style={{
+                alignItems: 'center',
+                gap: '5px',
+                backgroundColor: '#F0FDF4',
+                border: '1px solid #BBF7D0',
+                borderRadius: '8px',
+                padding: '4px 8px',
+                fontSize: '11.5px',
+                fontWeight: 700,
+                color: '#166534',
+              }}
+              title="الدورة التقييمية الحالية للمدرسة"
+            >
+              <Calendar size={13} color="#16A34A" />
+              <span>الدورة التقييمية: {schoolInfo?.evaluationCycle?.academicYear || schoolInfo?.academicYear || '2025/2026'}</span>
+            </div>
           )}
 
-          {/* Notifications */}
+          {/* Notifications Bell */}
           <button
-            onClick={() => onNavigate('notifications')}
+            type="button"
+            onClick={() => setIsNotificationsDrawerOpen(true)}
             style={{
               position: 'relative',
-              width: '36px',
-              height: '36px',
-              borderRadius: '8px',
+              width: '38px',
+              height: '38px',
+              borderRadius: '9px',
               backgroundColor: '#F8FAFC',
               border: '1px solid #E2E8F0',
               display: 'flex',
@@ -292,112 +354,244 @@ export const EvaluatorTopBar: React.FC<EvaluatorTopBarProps> = ({
               justifyContent: 'center',
               cursor: 'pointer',
               color: '#64748B',
+              transition: 'all 0.15s ease',
             }}
-            title="مركز التنبيهات"
+            title="مركز التنبيهات والإشعارات"
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = '#EFF6FF';
+              e.currentTarget.style.color = '#2563EB';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = '#F8FAFC';
+              e.currentTarget.style.color = '#64748B';
+            }}
           >
-            <Bell size={17} />
+            <Bell size={18} />
             {unreadNotificationsCount > 0 && (
               <span
                 style={{
                   position: 'absolute',
-                  top: '5px',
-                  right: '6px',
-                  width: '7px',
-                  height: '7px',
-                  borderRadius: '50%',
+                  top: '-3px',
+                  right: '-3px',
+                  minWidth: '18px',
+                  height: '18px',
+                  padding: '0 4px',
+                  borderRadius: '999px',
                   backgroundColor: '#EF4444',
+                  color: '#FFFFFF',
+                  fontSize: '10.5px',
+                  fontWeight: 800,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  boxShadow: '0 2px 4px rgba(239, 68, 68, 0.4)',
+                  border: '2px solid #FFFFFF',
+                  boxSizing: 'border-box',
                 }}
-              />
+              >
+                {unreadNotificationsCount > 99 ? '99+' : unreadNotificationsCount}
+              </span>
             )}
           </button>
 
-          {/* Change Password Button */}
-          {onOpenChangePassword && (
+          {/* User Profile Capsule with Dropdown Menu (UI_STANDARDS.md §7.1) */}
+          <div ref={menuRef} style={{ position: 'relative' }}>
             <button
-              onClick={onOpenChangePassword}
+              type="button"
+              onClick={() => setIsUserMenuOpen((prev) => !prev)}
               style={{
-                width: '36px',
-                height: '36px',
-                borderRadius: '8px',
-                backgroundColor: '#F8FAFC',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '4px 10px 4px 6px',
+                borderRadius: '10px',
+                backgroundColor: isUserMenuOpen ? '#F1F5F9' : '#F8FAFC',
                 border: '1px solid #E2E8F0',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
                 cursor: 'pointer',
-                color: '#64748B',
+                transition: 'all 0.15s ease',
               }}
-              title="تغيير كلمة المرور"
+              title="خيارات الحساب الشخصي"
             >
-              <KeyRound size={16} />
-            </button>
-          )}
-
-          {/* Logout Button */}
-          {onLogout && (
-            <button
-              onClick={onLogout}
-              style={{
-                width: '36px',
-                height: '36px',
-                borderRadius: '8px',
-                backgroundColor: '#F8FAFC',
-                border: '1px solid #E2E8F0',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                cursor: 'pointer',
-                color: '#EF4444',
-              }}
-              title="تسجيل الخروج"
-            >
-              <LogOut size={16} />
-            </button>
-          )}
-
-          {/* User Profile Capsule (UI_STANDARDS.md §3.2) */}
-          <div
-            onClick={onOpenProfile}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              padding: '3px 8px 3px 6px',
-              borderRadius: '8px',
-              backgroundColor: '#F1F5F9',
-              border: '1px solid #E2E8F0',
-              cursor: onOpenProfile ? 'pointer' : 'default',
-              transition: 'background-color 0.15s ease',
-            }}
-            title={onOpenProfile ? 'الملف الشخصي وإعدادات الحساب' : undefined}
-          >
-            <div
-              style={{
-                width: '30px',
-                height: '30px',
-                borderRadius: '6px',
-                backgroundColor: '#059669',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: '#FFFFFF',
-                fontWeight: 700,
-                fontSize: '11px',
-              }}
-            >
-              {userInitials}
-            </div>
-            <div className="hidden sm:block" style={{ textAlign: 'right' }}>
-              <div style={{ fontSize: '11.5px', fontWeight: 700, color: '#0F172A', lineHeight: 1.2 }}>
-                {displayName}
+              <div
+                style={{
+                  width: '32px',
+                  height: '32px',
+                  borderRadius: '8px',
+                  backgroundColor: isPrincipal ? '#0284C7' : '#059669',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#FFFFFF',
+                  fontWeight: 700,
+                  fontSize: '12px',
+                  boxShadow: isPrincipal
+                    ? '0 2px 6px rgba(2, 132, 199, 0.25)'
+                    : '0 2px 6px rgba(5, 150, 105, 0.25)',
+                  flexShrink: 0,
+                }}
+              >
+                {userInitials}
               </div>
-              <div style={{ fontSize: '9.5px', color: '#64748B' }}>
-                {displayRole}
+              <div className="hidden sm:block" style={{ textAlign: 'right' }}>
+                <div style={{ fontSize: '12px', fontWeight: 700, color: '#0F172A', lineHeight: 1.25 }}>
+                  {displayName}
+                </div>
+                <div style={{ fontSize: '10px', color: '#64748B', fontWeight: 500 }}>
+                  {displayRole}
+                </div>
               </div>
-            </div>
+              <ChevronDown
+                size={14}
+                style={{
+                  color: '#94A3B8',
+                  transform: isUserMenuOpen ? 'rotate(180deg)' : 'none',
+                  transition: 'transform 0.2s ease',
+                  marginRight: '2px',
+                }}
+              />
+            </button>
+
+            {/* Dropdown Menu */}
+            {isUserMenuOpen && (
+              <div
+                style={{
+                  position: 'absolute',
+                  top: 'calc(100% + 8px)',
+                  left: 0,
+                  width: '210px',
+                  backgroundColor: '#FFFFFF',
+                  borderRadius: '12px',
+                  boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.05)',
+                  border: '1px solid #E2E8F0',
+                  padding: '6px',
+                  zIndex: 50,
+                  direction: 'rtl',
+                }}
+              >
+                {onOpenProfile && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsUserMenuOpen(false);
+                      onOpenProfile();
+                    }}
+                    style={{
+                      width: '100%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '10px',
+                      padding: '9px 12px',
+                      borderRadius: '8px',
+                      fontSize: '12.5px',
+                      fontWeight: 600,
+                      color: '#334155',
+                      border: 'none',
+                      background: 'none',
+                      cursor: 'pointer',
+                      textAlign: 'right',
+                      transition: 'background 0.15s ease',
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#F8FAFC')}
+                    onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                  >
+                    <UserIcon size={15} color={isPrincipal ? '#0284C7' : '#059669'} />
+                    <span>ملفي الشخصي</span>
+                  </button>
+                )}
+
+                {onOpenChangePassword && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsUserMenuOpen(false);
+                      onOpenChangePassword();
+                    }}
+                    style={{
+                      width: '100%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '10px',
+                      padding: '9px 12px',
+                      borderRadius: '8px',
+                      fontSize: '12.5px',
+                      fontWeight: 600,
+                      color: '#334155',
+                      border: 'none',
+                      background: 'none',
+                      cursor: 'pointer',
+                      textAlign: 'right',
+                      transition: 'background 0.15s ease',
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#F8FAFC')}
+                    onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                  >
+                    <KeyRound size={15} color="#64748B" />
+                    <span>تغيير كلمة المرور</span>
+                  </button>
+                )}
+
+                {onLogout && (
+                  <>
+                    <div style={{ height: '1px', backgroundColor: '#F1F5F9', margin: '4px 0' }} />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsUserMenuOpen(false);
+                        setIsLogoutConfirmOpen(true);
+                      }}
+                      style={{
+                        width: '100%',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '10px',
+                        padding: '9px 12px',
+                        borderRadius: '8px',
+                        fontSize: '12.5px',
+                        fontWeight: 700,
+                        color: '#DC2626',
+                        border: 'none',
+                        background: 'none',
+                        cursor: 'pointer',
+                        textAlign: 'right',
+                        transition: 'background 0.15s ease',
+                      }}
+                      onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#FEF2F2')}
+                      onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                    >
+                      <LogOut size={15} color="#DC2626" />
+                      <span>تسجيل الخروج</span>
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>
+
+      {/* Confirmation Dialog for Logout */}
+      {isLogoutConfirmOpen && (
+        <ConfirmationDialog
+          isOpen={isLogoutConfirmOpen}
+          title="تأكيد تسجيل الخروج"
+          message="هل أنت متأكد من رغبتك في تسجيل الخروج من منصة ارتقاء للتقييم الذاتي والتحسين المدرسي؟"
+          confirmLabel="نعم، تسجيل الخروج"
+          cancelLabel="إلغاء"
+          variant="danger"
+          onConfirm={() => {
+            setIsLogoutConfirmOpen(false);
+            onLogout?.();
+          }}
+          onCancel={() => setIsLogoutConfirmOpen(false)}
+        />
+      )}
+
+      {/* Universal Notifications Drawer (FE-GAP-10) */}
+      <UniversalNotificationsDrawer
+        isOpen={isNotificationsDrawerOpen}
+        onClose={() => setIsNotificationsDrawerOpen(false)}
+        onNavigate={(screen, param) => onNavigate(screen as EvaluatorScreen, param)}
+      />
     </header>
   );
 };

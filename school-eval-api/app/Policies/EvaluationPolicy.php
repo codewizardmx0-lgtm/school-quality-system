@@ -48,6 +48,14 @@ class EvaluationPolicy
 
         // المستخدم الوزاري يملك صلاحية الاطلاع على التقييمات
         if ($user->user_type === 'ministry') {
+            // حوكمة النطاق الجغرافي (FR-SUP-02): حصر المشرف الوزاري بمحافظته إن كانت محددة، دون المساس بالأدوار الأخرى
+            if ($user->hasRole('ministry_supervisor') && !empty($user->governorate)) {
+                $schoolGov = $evaluation->school?->governorate;
+                if ($schoolGov && $schoolGov !== $user->governorate) {
+                    return false;
+                }
+            }
+
             return $user->hasPermission('evaluations.view');
         }
 

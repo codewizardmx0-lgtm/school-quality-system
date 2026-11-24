@@ -39,6 +39,7 @@ class SubStandardSeeder extends Seeder
                     [
                         'name'        => $sub['name'],
                         'description' => $sub['description'],
+                        'weight'      => (float) ($sub['weight'] ?? 0.0),
                     ]
                 );
             }

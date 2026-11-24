@@ -9,11 +9,13 @@ import {
   UploadCloud,
   Send,
   Unlock,
-  ArrowLeft,
   Copy,
   Check,
   ShieldCheck,
   AlertCircle,
+  Edit3,
+  Target,
+  FolderUp,
 } from 'lucide-react';
 
 interface HandleCompletionPageProps {
@@ -41,7 +43,7 @@ export const HandleCompletionPage: React.FC<HandleCompletionPageProps> = ({
   const [copiedCode, setCopiedCode] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [schoolGeneralNotes, setSchoolGeneralNotes] = useState(
-    'تمت معالجة كافة الملاحظات الواردة من سعادة المشرف الوزاري واستيفاء الشواهد الميدانية المعتمدة.'
+    'تمت معالجة كافة الملاحظات الواردة من سعادة المشرف الوزاري واستيفاء الشواهد الميدانية الرسمية.'
   );
 
   const copyToClipboard = (text: string) => {
@@ -108,13 +110,13 @@ export const HandleCompletionPage: React.FC<HandleCompletionPageProps> = ({
               }}
             >
               <ShieldCheck size={16} />
-              <span>إعادة الرفع المعتمدة — المحاولة رقم {resubmitResult.submissionAttempt ?? 2}</span>
+              <span>إعادة التسليم الرسمية — المحاولة رقم {resubmitResult.submissionAttempt ?? 2}</span>
             </div>
             <h2 style={{ fontSize: '22px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
               تمت إعادة رفع ملف التقييم إلى المشرف الوزاري بنجاح
             </h2>
             <p style={{ fontSize: '13.5px', color: '#64748B', maxWidth: '580px', margin: '8px auto 0', lineHeight: 1.6 }}>
-              {resubmitResult.message || 'تم قفل التعديل الجزئي وإرسال الشواهد والردود الرسمية المحدثة للمشرف الوزاري لمتابعة التحقق والاعتماد النهائي.'}
+              {resubmitResult.message || 'تم قفل التعديل الجزئي وإرسال الشواهد والردود الرسمية المحدثة للمشرف الوزاري لمتابعة التحقق والمراجعة الإشرافية النهائية.'}
             </p>
           </div>
 
@@ -152,7 +154,7 @@ export const HandleCompletionPage: React.FC<HandleCompletionPageProps> = ({
                   color: '#0369A1',
                 }}
               >
-                <span>{resubmitResult.trackingCode || 'رمز استكمال معتمد'}</span>
+                <span>{resubmitResult.trackingCode || 'رمز استكمال موثق'}</span>
                 {resubmitResult.trackingCode && (
                   <button
                     onClick={() => copyToClipboard(resubmitResult.trackingCode!)}
@@ -260,7 +262,7 @@ export const HandleCompletionPage: React.FC<HandleCompletionPageProps> = ({
         <CheckCircle2 size={48} color="#059669" style={{ margin: '0 auto 12px' }} />
         <h3 style={{ fontSize: '17px', fontWeight: 800, color: '#0F172A' }}>لا توجد طلبات استكمال معلقة حالياً</h3>
         <p style={{ fontSize: '13px', color: '#64748B', maxWidth: '480px', margin: '8px auto 20px', lineHeight: 1.6 }}>
-          ملف التقييم الذاتي للمدرسة يسير وفق المسار المعتمد، ولم تصدر المراجعة الوزارية أي طلبات استكمال أو نواقص على ملف المدرسة.
+          ملف التقييم الذاتي للمدرسة يسير وفق المسار النظامي، ولم تصدر المراجعة الوزارية أي طلبات استكمال أو نواقص على ملف المدرسة.
         </p>
         <button
           onClick={() => onNavigate('dashboard')}
@@ -501,6 +503,9 @@ export const HandleCompletionPage: React.FC<HandleCompletionPageProps> = ({
           items.map((item) => {
             const isResolved = item.status === 'Resolved';
             const file = uploadedFiles[item.itemId];
+            const actions = (item.allowedActions && item.allowedActions.length > 0)
+              ? item.allowedActions
+              : ['modify_scores', 'upload_evidences'];
 
             return (
               <div
@@ -517,37 +522,63 @@ export const HandleCompletionPage: React.FC<HandleCompletionPageProps> = ({
                 }}
               >
                 {/* Header */}
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <span
-                      style={{
-                        fontSize: '11.5px',
-                        fontWeight: 800,
-                        padding: '3px 8px',
-                        borderRadius: '6px',
-                        backgroundColor: isResolved ? '#ECFDF5' : '#FFFBEB',
-                        color: isResolved ? '#059669' : '#D97706',
-                        border: `1px solid ${isResolved ? '#A7F3D0' : '#FDE68A'}`,
-                      }}
-                    >
-                      {item.indicatorCode}
-                    </span>
-                    <span style={{ fontSize: '14px', fontWeight: 800, color: '#0F172A' }}>
-                      {item.indicatorTitle}
-                    </span>
-                    {item.standardTitle && (
-                      <span style={{ fontSize: '11px', color: '#64748B' }}>
-                        ({item.standardTitle})
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                      <span
+                        style={{
+                          fontSize: '11.5px',
+                          fontWeight: 800,
+                          padding: '3px 8px',
+                          borderRadius: '6px',
+                          backgroundColor: isResolved ? '#ECFDF5' : '#FFFBEB',
+                          color: isResolved ? '#059669' : '#D97706',
+                          border: `1px solid ${isResolved ? '#A7F3D0' : '#FDE68A'}`,
+                        }}
+                      >
+                        {item.indicatorCode}
                       </span>
-                    )}
+                      <span style={{ fontSize: '14px', fontWeight: 800, color: '#0F172A' }}>
+                        {item.indicatorTitle}
+                      </span>
+                      {item.standardTitle && (
+                        <span style={{ fontSize: '11px', color: '#64748B' }}>
+                          ({item.standardTitle})
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Allowed Actions Badges (IR-04 & FR-SUP-07) */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', marginTop: '2px' }}>
+                      <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 600 }}>الإجراءات المصرح بها:</span>
+                      {actions.includes('modify_scores') && (
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', fontSize: '10.5px', fontWeight: 700, padding: '2px 7px', borderRadius: '4px', backgroundColor: '#EFF6FF', color: '#1D4ED8', border: '1px solid #BFDBFE' }}>
+                          <Edit3 size={11} />
+                          <span>تعديل التقدير</span>
+                        </span>
+                      )}
+                      {actions.includes('upload_evidences') && (
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', fontSize: '10.5px', fontWeight: 700, padding: '2px 7px', borderRadius: '4px', backgroundColor: '#ECFDF5', color: '#047857', border: '1px solid #A7F3D0' }}>
+                          <UploadCloud size={11} />
+                          <span>رفع الشواهد</span>
+                        </span>
+                      )}
+                      {actions.includes('edit_plan') && (
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', fontSize: '10.5px', fontWeight: 700, padding: '2px 7px', borderRadius: '4px', backgroundColor: '#F3E8FF', color: '#6B21A8', border: '1px solid #D8B4FE' }}>
+                          <Target size={11} />
+                          <span>تعديل الخطة</span>
+                        </span>
+                      )}
+                    </div>
                   </div>
 
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  {/* Actions & Deep Linking Buttons */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                     <span
                       style={{
                         fontSize: '11.5px',
                         fontWeight: 700,
-                        padding: '3px 10px',
+                        padding: '4px 10px',
                         borderRadius: '12px',
                         backgroundColor: isResolved ? '#ECFDF5' : '#FFFBEB',
                         color: isResolved ? '#059669' : '#D97706',
@@ -556,25 +587,77 @@ export const HandleCompletionPage: React.FC<HandleCompletionPageProps> = ({
                       {isResolved ? '✓ تم الاستيفاء والمعالجة' : 'قيد المعالجة'}
                     </span>
 
-                    <button
-                      onClick={() => onNavigate('rubric-assessment', item.indicatorId)}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '4px',
-                        padding: '6px 12px',
-                        borderRadius: '6px',
-                        backgroundColor: '#F1F5F9',
-                        color: '#334155',
-                        fontSize: '12px',
-                        fontWeight: 600,
-                        border: 'none',
-                        cursor: 'pointer',
-                      }}
-                    >
-                      <span>فتح المؤشر للتقييم</span>
-                      <ArrowLeft size={13} />
-                    </button>
+                    {actions.includes('modify_scores') && (
+                      <button
+                        onClick={() => onNavigate('rubric-assessment', item.indicatorId)}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '5px',
+                          padding: '6px 12px',
+                          borderRadius: '6px',
+                          backgroundColor: '#EFF6FF',
+                          color: '#1D4ED8',
+                          fontSize: '12px',
+                          fontWeight: 700,
+                          border: '1px solid #BFDBFE',
+                          cursor: 'pointer',
+                          transition: 'background-color 0.15s ease',
+                        }}
+                        title="الانتقال المباشر لتقييم المؤشر وتعديل المستوى"
+                      >
+                        <Edit3 size={13} />
+                        <span>تعديل التقدير</span>
+                      </button>
+                    )}
+
+                    {actions.includes('upload_evidences') && (
+                      <button
+                        onClick={() => onNavigate('evidences')}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '5px',
+                          padding: '6px 12px',
+                          borderRadius: '6px',
+                          backgroundColor: '#ECFDF5',
+                          color: '#047857',
+                          fontSize: '12px',
+                          fontWeight: 700,
+                          border: '1px solid #A7F3D0',
+                          cursor: 'pointer',
+                          transition: 'background-color 0.15s ease',
+                        }}
+                        title="فتح مستودع الشواهد الرقمية لإدارة الملفات"
+                      >
+                        <FolderUp size={13} />
+                        <span>مستودع الشواهد</span>
+                      </button>
+                    )}
+
+                    {actions.includes('edit_plan') && (
+                      <button
+                        onClick={() => onNavigate('improvement-plan')}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '5px',
+                          padding: '6px 12px',
+                          borderRadius: '6px',
+                          backgroundColor: '#F3E8FF',
+                          color: '#6B21A8',
+                          fontSize: '12px',
+                          fontWeight: 700,
+                          border: '1px solid #D8B4FE',
+                          cursor: 'pointer',
+                          transition: 'background-color 0.15s ease',
+                        }}
+                        title="الانتقال لخطة التحسين المدرسية لتحديث الأنشطة والإجراءات"
+                      >
+                        <Target size={13} />
+                        <span>خطة التحسين</span>
+                      </button>
+                    )}
                   </div>
                 </div>
 
@@ -686,7 +769,7 @@ export const HandleCompletionPage: React.FC<HandleCompletionPageProps> = ({
                     }}
                   >
                     <div>
-                      <strong>رد المدرسة المعتمد:</strong> {item.resolutionNotes || 'تم استيفاء النقص وإرفاق الشاهد المطلوب بنجاح.'}
+                      <strong>رد المدرسة والمصادقة:</strong> {item.resolutionNotes || 'تم استيفاء النقص وإرفاق الشاهد المطلوب بنجاح.'}
                     </div>
                     <div style={{ fontSize: '11.5px', color: '#047857' }}>
                       ✓ تم تسجيل المعالجة ويمكنك تعديلها بالضغط على المؤشر أعلاه إذا دعت الحاجة قبل إعادة الرفع النهائي.

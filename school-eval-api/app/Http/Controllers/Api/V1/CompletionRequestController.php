@@ -48,6 +48,14 @@ class CompletionRequestController extends Controller
             return ApiResponse::notFound('ملف التقييم المطلوب غير موجود.');
         }
 
+        // 2.ب التحقق من العزل الجغرافي للمشرف الوزاري (FR-SUP-02)
+        if ($user->hasRole('ministry_supervisor') && !empty($user->governorate)) {
+            $schoolGov = $evaluation->school?->governorate;
+            if ($schoolGov && $schoolGov !== $user->governorate) {
+                return ApiResponse::forbidden('غير مصرح: المدرسة تقع خارج النطاق الجغرافي المسند إليك (' . $user->governorate . ').');
+            }
+        }
+
         // 3. التحقق من حالة التقييم المؤهلة لطلب الاستكمال
         if ($evaluation->status === 'Completed') {
             return ApiResponse::validationError([
@@ -61,10 +69,29 @@ class CompletionRequestController extends Controller
             ], 'لا يمكن إنشاء طلب استكمال لتقييم قيد الإنجاز.');
         }
 
-        if ($evaluation->status === 'NeedsCompletion') {
+        $existingOpen = CompletionRequest::whereHas('submission.report', fn($q) => $q->where('evaluation_id', $evaluation->evaluation_id))
+            ->where('status', 'Open')
+            ->exists();
+        if ($evaluation->status === 'NeedsCompletion' || $existingOpen) {
             return ApiResponse::validationError([
                 'evaluation' => ['يوجد طلب استكمال مفتوح مسبقاً لهذا التقييم ويجب معالجته أو إغلاقه أولاً.'],
             ], 'يوجد طلب استكمال مفتوح مسبقاً لهذا التقييم.');
+        }
+
+        // 3.ب التحقق من سقف محاولات الاستكمال (attempt_no <= 3)
+        $report = Report::where('evaluation_id', $evaluation->evaluation_id)->first();
+        if ($report) {
+            $latestSubmission = EvaluationSubmission::where('report_id', $report->report_id)
+                ->orderBy('attempt_no', 'desc')
+                ->first();
+
+            if ($latestSubmission && (int) $latestSubmission->attempt_no >= 3) {
+                return ApiResponse::validationError([
+                    'attempt_no' => [
+                        'تم بلوغ الحد الأقصى لمحاولات الاستكمال (3 محاولات). لا يمكن إصدار طلب استكمال جديد؛ يجب إكمال المراجعة الإشرافية وقفل المخرج وتثبيت التقييم.'
+                    ],
+                ], 'تم بلوغ الحد الأقصى لمحاولات الاستكمال المسموح بها (3 محاولات).');
+            }
         }
 
         // 4. التحقق من صحة المدخلات
@@ -75,6 +102,8 @@ class CompletionRequestController extends Controller
             'items.*.indicator_id' => 'required|integer|exists:indicators,indicator_id',
             'items.*.missing_description' => 'required|string|max:1000',
             'items.*.evidence_link_id' => 'nullable|integer|exists:evidence_links,id',
+            'items.*.allowed_actions' => 'nullable|array',
+            'items.*.allowed_actions.*' => 'string|max:100',
         ], [
             'completion_deadline.required' => 'حقل مهلة الاستكمال (completion_deadline) إلزامي.',
             'completion_deadline.after' => 'يجب أن يكون تاريخ مهلة الاستكمال بعد الوقت الحالي.',
@@ -86,6 +115,28 @@ class CompletionRequestController extends Controller
 
         if ($validator->fails()) {
             return ApiResponse::validationError($validator->errors()->toArray());
+        }
+
+        // 4.ب التحقق من قيد نهاية الدورة التقييمية وقيد سقف مهلة الاستكمال للدورة (FR-SUP-09, BR-MIN-02)
+        $cycle = $evaluation->cycle;
+        if ($cycle) {
+            if ($cycle->end_date && Carbon::parse($request->input('completion_deadline'))->gt(Carbon::parse($cycle->end_date))) {
+                return ApiResponse::validationError([
+                    'completion_deadline' => [
+                        'مهلة الاستكمال لا يمكن أن تتجاوز تاريخ نهاية الدورة التقييمية (' . Carbon::parse($cycle->end_date)->format('Y/m/d') . '). يرجى تمديد الدورة أولاً أو تحديد مهلة تنتهي قبل إغلاقها.'
+                    ],
+                ], 'مهلة الاستكمال تتجاوز موعد إغلاق الدورة التقييمية.');
+            }
+
+            $maxDays = (int) ($cycle->max_completion_days ?? 14);
+            $maxAllowedDate = now()->addDays($maxDays)->endOfDay();
+            if (Carbon::parse($request->input('completion_deadline'))->gt($maxAllowedDate)) {
+                return ApiResponse::validationError([
+                    'completion_deadline' => [
+                        "مهلة الاستكمال لا يمكن أن تتجاوز الحد الأقصى المعتمد في الدورة ({$maxDays} يوماً). يرجى تعديل المهلة أو تعديل الحد الأقصى من إعدادات الدورة."
+                    ],
+                ], 'مهلة الاستكمال تتجاوز الحد الأقصى المسموح به للدورة.');
+            }
         }
 
         // 5. التنفيذ داخل Transaction
@@ -129,6 +180,7 @@ class CompletionRequestController extends Controller
                     'indicator_id' => $item['indicator_id'],
                     'evidence_link_id' => $item['evidence_link_id'] ?? null,
                     'missing_description' => $item['missing_description'],
+                    'allowed_actions' => !empty($item['allowed_actions']) ? (array) $item['allowed_actions'] : ['upload_replace_evidence'],
                     'status' => 'pending',
                 ]);
             }
@@ -272,9 +324,17 @@ class CompletionRequestController extends Controller
             return ApiResponse::forbidden('غير مصرح لك بتمديد المهلة. هذه العملية مخصصة للمشرف الوزاري فقط.');
         }
 
-        $completionRequest = CompletionRequest::find($id);
+        $completionRequest = CompletionRequest::with(['submission.report.evaluation.school'])->find($id);
         if (!$completionRequest) {
             return ApiResponse::notFound('طلب الاستكمال المطلوب غير موجود.');
+        }
+
+        // التحقق من العزل الجغرافي للمشرف الوزاري (FR-SUP-02)
+        $school = $completionRequest->submission?->report?->evaluation?->school ?? $completionRequest->evaluation?->school;
+        if ($user->hasRole('ministry_supervisor') && !empty($user->governorate)) {
+            if ($school && $school->governorate && $school->governorate !== $user->governorate) {
+                return ApiResponse::forbidden('غير مصرح: المدرسة تقع خارج النطاق الجغرافي المسند إليك (' . $user->governorate . ').');
+            }
         }
 
         if ($completionRequest->status !== 'Open') {
@@ -285,6 +345,7 @@ class CompletionRequestController extends Controller
 
         $validator = Validator::make($request->all(), [
             'new_deadline' => 'required|date',
+            'reason' => 'nullable|string|max:1000',
         ], [
             'new_deadline.required' => 'حقل المهلة الجديدة (new_deadline) إلزامي.',
             'new_deadline.date' => 'صيغة تاريخ المهلة الجديدة غير صحيحة.',
@@ -303,12 +364,23 @@ class CompletionRequestController extends Controller
             ], 'يجب أن يكون تاريخ المهلة الجديد بعد تاريخ المهلة الحالي.');
         }
 
+        // التحقق من قيد نهاية الدورة التقييمية (FR-SUP-09)
+        $cycle = $completionRequest->submission?->report?->evaluation?->cycle ?? $completionRequest->evaluation?->cycle;
+        if ($cycle && $cycle->end_date && $newDeadline->gt(Carbon::parse($cycle->end_date))) {
+            return ApiResponse::validationError([
+                'new_deadline' => [
+                    'مهلة التمديد لا يمكن أن تتجاوز تاريخ نهاية الدورة التقييمية (' . Carbon::parse($cycle->end_date)->format('Y/m/d') . '). يرجى تمديد الدورة أولاً أو تحديد مهلة تقع ضمن الدورة.'
+                ],
+            ], 'مهلة التمديد تتجاوز موعد إغلاق الدورة التقييمية.');
+        }
+
+        $reason = $request->input('reason');
         $completionRequest->completion_deadline = $newDeadline;
         $completionRequest->deadline_extended_at = now();
         $completionRequest->deadline_extensions_count = ((int) $completionRequest->deadline_extensions_count) + 1;
         $completionRequest->save();
 
-        // تسجيل تمديد المهلة في سجل التدقيق
+        // تسجيل تمديد المهلة مع المبرر الإشرافي في سجل التدقيق (FR-SUP-11)
         app(\App\Services\AuditLoggerService::class)->log(
             action: 'completion.deadline_extended',
             targetType: 'CompletionRequest',
@@ -317,6 +389,7 @@ class CompletionRequestController extends Controller
             newValues: [
                 'completion_deadline' => $newDeadline->toIso8601ZuluString(),
                 'deadline_extensions_count' => $completionRequest->deadline_extensions_count,
+                'extension_reason' => $reason,
             ],
             userId: $user->user_id,
             schoolId: $completionRequest->submission?->report?->evaluation?->school_id

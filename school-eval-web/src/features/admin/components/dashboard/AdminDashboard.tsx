@@ -819,7 +819,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate, addT
                   المدارس التي تتطلب إجراءات ربط فورية
                 </h3>
                 <span style={{ fontSize: '0.75rem', color: '#64748B' }}>
-                  مدارس مسجلة بدون منسق جودة وتقييم معتمد
+                  مدارس مسجلة بدون منسق جودة وتقييم رسمي
                 </span>
               </div>
             </div>
@@ -872,7 +872,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate, addT
                   fontWeight: 600,
                 }}
               >
-                {urgentSearch.trim() ? 'لا توجد مدارس مطابقة لبحثك' : '✓ جميع المدارس المسجلة مكتملة ولها مدير ومقيّم معتمد بنجاح'}
+                {urgentSearch.trim() ? 'لا توجد مدارس مطابقة لبحثك' : '✓ جميع المدارس المسجلة مكتملة ولها مدير ومقيّم رسمي بنجاح'}
               </div>
             ) : (
               filteredUrgentSchools.map((school: School) => {

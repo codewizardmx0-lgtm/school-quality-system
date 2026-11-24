@@ -4,6 +4,7 @@ import {
   CheckCircle2,
   Clock,
   AlertCircle,
+  AlertTriangle,
   FileCheck2,
   Target,
   Search,
@@ -315,13 +316,13 @@ export const AuditReviewHubPage: React.FC<AuditReviewHubPageProps> = ({
                 borderRadius: '999px',
               }}
             >
-              {isPrincipal ? 'صلاحيات الإشراف الإداري' : 'سجل المراجعة والاعتماد'}
+              {isPrincipal ? 'صلاحيات الإشراف الإداري' : 'سجل المراجعة والإقرار الداخلي'}
             </span>
           </div>
           <p style={{ color: '#94A3B8', fontSize: '13px', margin: 0, maxWidth: '780px', lineHeight: 1.6 }}>
             {isPrincipal
-              ? 'نافذة القيادة الموحدة لمراجعة وتدقيق كافة مؤشرات الأداء المدرسي الـ 109، ومتابعة خطط التحسين المعتمدة، وطلبات الاستكمال، والاعتماد الإداري الشامل.'
-              : 'استعراض تدقيقات وملاحظات الإدارة المدرسية على مؤشرات التقييم الذاتي وخطط التطوير والاعتماد قبل الاعتماد النهائي.'}
+              ? 'نافذة القيادة الموحدة لمراجعة وتدقيق كافة مؤشرات الأداء المدرسي الـ 109، ومتابعة خطط التحسين المدرسية، وطلبات الاستكمال، والإقرار الإداري الشامل.'
+              : 'استعراض تدقيقات وملاحظات الإدارة المدرسية على مؤشرات التقييم الذاتي وخطط التطوير المدرسية قبل الإقرار والختم النهائي.'}
           </p>
         </div>
 
@@ -352,7 +353,7 @@ export const AuditReviewHubPage: React.FC<AuditReviewHubPageProps> = ({
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))',
           gap: '16px',
         }}
       >
@@ -363,7 +364,7 @@ export const AuditReviewHubPage: React.FC<AuditReviewHubPageProps> = ({
             <BookOpen size={18} style={{ color: '#0284C7' }} />
           </div>
           <div style={{ fontSize: '26px', fontWeight: 800, color: '#0F172A' }}>{summary.totalIndicators}</div>
-          <div style={{ fontSize: '11px', color: '#94A3B8', marginTop: '4px' }}>موزعة عبر 4 معايير وطنية</div>
+          <div style={{ fontSize: '11px', color: '#94A3B8', marginTop: '4px' }}>موزعة عبر 7 معايير وطنية</div>
         </div>
 
         {/* Card 2: Reviewed Indicators */}
@@ -408,7 +409,21 @@ export const AuditReviewHubPage: React.FC<AuditReviewHubPageProps> = ({
           <div style={{ fontSize: '11px', color: '#94A3B8', marginTop: '4px' }}>الخطط الثلاث الأساسية</div>
         </div>
 
-        {/* Card 5: Completion Requests */}
+        {/* Card 5: Overdue Actions (FR-SCH-24) */}
+        <div style={{ backgroundColor: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '12px', padding: '16px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+            <span style={{ fontSize: '12px', fontWeight: 700, color: '#64748B' }}>الإجراءات المتأخرة</span>
+            <AlertTriangle size={18} style={{ color: (summary.overdueActionsCount || 0) > 0 ? '#EF4444' : '#10B981' }} />
+          </div>
+          <div style={{ fontSize: '26px', fontWeight: 800, color: (summary.overdueActionsCount || 0) > 0 ? '#DC2626' : '#10B981' }}>
+            {summary.overdueActionsCount ?? 0}
+          </div>
+          <div style={{ fontSize: '11px', color: '#94A3B8', marginTop: '4px' }}>
+            {(summary.overdueActionsCount || 0) > 0 ? 'تجاوزت تاريخ الاستحقاق' : 'لا توجد إجراءات متأخرة'}
+          </div>
+        </div>
+
+        {/* Card 6: Completion Requests */}
         <div style={{ backgroundColor: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '12px', padding: '16px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
             <span style={{ fontSize: '12px', fontWeight: 700, color: '#64748B' }}>طلبات الاستكمال</span>
@@ -422,7 +437,7 @@ export const AuditReviewHubPage: React.FC<AuditReviewHubPageProps> = ({
           </div>
         </div>
 
-        {/* Card 6: Final Signoff */}
+        {/* Card 7: Final Signoff */}
         <div style={{ backgroundColor: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '12px', padding: '16px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
             <span style={{ fontSize: '12px', fontWeight: 700, color: '#64748B' }}>الإقرار الإداري</span>
@@ -987,27 +1002,47 @@ export const AuditReviewHubPage: React.FC<AuditReviewHubPageProps> = ({
                       {p.title}
                     </h3>
                     <div style={{ fontSize: '12px', color: '#64748B' }}>
-                      النوع: {p.planType === 'quality' ? 'خطة الجودة والاعتماد' : p.planType === 'operational' ? 'الخطة التشغيلية' : 'خطة التطوير المهني'}
+                      النوع: {p.planType === 'quality' ? 'خطة تحسين الجودة المدرسية' : p.planType === 'operational' ? 'الخطة التشغيلية' : 'خطة التطوير المهني'}
                     </div>
                   </div>
 
-                  <span
-                    style={{
-                      backgroundColor: p.status === 'Active' ? '#DCFCE7' : '#F1F5F9',
-                      color: p.status === 'Active' ? '#15803D' : '#64748B',
-                      fontSize: '11px',
-                      fontWeight: 700,
-                      padding: '3px 8px',
-                      borderRadius: '6px',
-                    }}
-                  >
-                    {p.status === 'Active' ? 'نشطة' : p.status}
-                  </span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    {(p.overdueActionsCount ?? 0) > 0 && (
+                      <span
+                        style={{
+                          backgroundColor: '#FEE2E2',
+                          color: '#DC2626',
+                          fontSize: '11px',
+                          fontWeight: 700,
+                          padding: '3px 8px',
+                          borderRadius: '6px',
+                        }}
+                      >
+                        {p.overdueActionsCount} متأخرة
+                      </span>
+                    )}
+                    <span
+                      style={{
+                        backgroundColor: p.status === 'Active' ? '#DCFCE7' : '#F1F5F9',
+                        color: p.status === 'Active' ? '#15803D' : '#64748B',
+                        fontSize: '11px',
+                        fontWeight: 700,
+                        padding: '3px 8px',
+                        borderRadius: '6px',
+                      }}
+                    >
+                      {p.status === 'Active' ? 'نشطة' : p.status}
+                    </span>
+                  </div>
                 </div>
 
                 <div style={{ backgroundColor: '#F8FAFC', borderRadius: '8px', padding: '12px', fontSize: '12px', color: '#475569', display: 'flex', justifyContent: 'space-between' }}>
                   <span>عدد الأنشطة والإجراءات: <strong>{p.actionsCount}</strong></span>
-                  <span>ملاحظات المدير: <strong>{p.principalNotesCount}</strong></span>
+                  {(p.overdueActionsCount ?? 0) > 0 ? (
+                    <span style={{ color: '#DC2626', fontWeight: 700 }}>إجراءات متأخرة: <strong>{p.overdueActionsCount}</strong></span>
+                  ) : (
+                    <span>ملاحظات المدير: <strong>{p.principalNotesCount}</strong></span>
+                  )}
                 </div>
 
                 {/* Review Notes Section */}
@@ -1182,7 +1217,7 @@ export const AuditReviewHubPage: React.FC<AuditReviewHubPageProps> = ({
                     حالة الإقرار الإداري والختم الرقمي للتقرير
                   </h3>
                   <div style={{ fontSize: '12px', color: '#64748B', marginTop: '2px' }}>
-                    اعتماد مدير المدرسة لنتائج التقييم الذاتي قبل الإقفال والرفع النهائي
+                    إقرار ومصادقة مدير المدرسة على نتائج التقييم الذاتي قبل الإقفال والتسليم النهائي
                   </div>
                 </div>
               </div>
@@ -1204,14 +1239,14 @@ export const AuditReviewHubPage: React.FC<AuditReviewHubPageProps> = ({
             {finalReview.hasPrincipalAcknowledgment ? (
               <div style={{ backgroundColor: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: '10px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                 <div style={{ fontSize: '13px', fontWeight: 700, color: '#166534' }}>
-                  نص الإقرار الإداري المعتمد:
+                  نص الإقرار الإداري والمصادقة:
                 </div>
                 <p style={{ margin: 0, fontSize: '13px', color: '#14532D', lineHeight: 1.6 }}>
                   "{finalReview.acknowledgmentText || 'أقر أنا مدير المدرسة بصفتي المسؤول الإداري والتربوي الأول عن دقة البيانات والشواهد المرفقة.'}"
                 </p>
                 {finalReview.acknowledgedAt && (
                   <div style={{ fontSize: '11px', color: '#15803D', marginTop: '4px' }}>
-                    تاريخ الاعتماد: {new Date(finalReview.acknowledgedAt).toLocaleString('ar-SA')}
+                    تاريخ الإقرار والختم: {new Date(finalReview.acknowledgedAt).toLocaleString('ar-SA')}
                   </div>
                 )}
               </div>
@@ -1239,7 +1274,7 @@ export const AuditReviewHubPage: React.FC<AuditReviewHubPageProps> = ({
                 alignSelf: 'flex-start',
               }}
             >
-              <span>الانتقال لشاشة المراجعة والاعتماد الداخلي والختم</span>
+              <span>الانتقال لشاشة المراجعة والإقرار الداخلي والختم</span>
               <ExternalLink size={14} />
             </button>
           </div>

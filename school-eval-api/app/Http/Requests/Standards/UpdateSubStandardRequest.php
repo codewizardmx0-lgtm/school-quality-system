@@ -17,6 +17,7 @@ class UpdateSubStandardRequest extends FormRequest
             'name'        => ['nullable', 'string', 'max:200'],
             'description' => ['nullable', 'string'],
             'code'        => ['nullable', 'string', 'max:20'],
+            'weight'      => ['nullable', 'numeric', 'min:0', 'max:100'],
         ];
     }
 }

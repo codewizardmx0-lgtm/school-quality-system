@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Power,
   Menu,
@@ -6,10 +6,16 @@ import {
   PanelRightOpen,
   KeyRound,
   LogOut,
+  Bell,
+  ChevronDown,
+  User as UserIcon,
 } from 'lucide-react';
 import { theme } from '../../theme';
 import { useAuth } from '../../../auth/AuthContext';
 import { ConfirmationDialog } from '../common/ConfirmationDialog';
+import { ProfileModal } from '../../../auth/ProfileModal';
+import { UniversalNotificationsDrawer } from '../../../../components/notifications/UniversalNotificationsDrawer';
+import { get } from '../../../../api/apiClient';
 import type { AdminScreen } from '../../types/admin.types';
 import { SYSTEM_SHORT_NAME } from '../../../../constants/systemConstants';
 
@@ -45,6 +51,38 @@ export const AdminTopBar: React.FC<AdminTopBarProps> = ({
   onLogout,
 }) => {
   const [isConfirmMaintenanceOpen, setIsConfirmMaintenanceOpen] = useState(false);
+  const [unreadCount, setUnreadCount] = useState<number>(0);
+  const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [isNotificationsDrawerOpen, setIsNotificationsDrawerOpen] = useState(false);
+  const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  // Close user menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setIsUserMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Fetch unread notifications count
+  useEffect(() => {
+    let isMounted = true;
+    get<{ unreadCount: number }>('/notifications/unread-count')
+      .then((res) => {
+        if (isMounted && res?.data?.unreadCount !== undefined) {
+          setUnreadCount(res.data.unreadCount);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      isMounted = false;
+    };
+  }, []);
   const current = SCREEN_TITLES[activeScreen] || SCREEN_TITLES.dashboard;
 
   const { user: authUser } = useAuth();
@@ -55,7 +93,7 @@ export const AdminTopBar: React.FC<AdminTopBarProps> = ({
     school_evaluator: 'مقيّم المدرسة',
     school_principal: 'مدير المدرسة',
     ministry_standards_manager: 'مسؤول إدارة المعايير',
-    ministry_supervisor: 'مشرف وزاري معتمد',
+    ministry_supervisor: 'المشرف الوزاري',
   };
   const displayRole = roleObj
     ? (roleNameMap[roleObj.roleName] || roleObj.description || roleObj.roleName)
@@ -160,135 +198,255 @@ export const AdminTopBar: React.FC<AdminTopBarProps> = ({
 
         {/* User Profile & Actions Area */}
         <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? '6px' : '10px', flexShrink: 0 }}>
-          {/* User Profile Capsule */}
-          <div
-            title={`${displayName} • ${displayRole}`}
+          {/* Notifications Bell (ADM-TOP-01) */}
+          <button
+            type="button"
+            onClick={() => setIsNotificationsDrawerOpen(true)}
             style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              padding: isMobile ? '4px' : '4px 10px 4px 6px',
-              borderRadius: theme.radii.xl,
+              position: 'relative',
+              width: '38px',
+              height: '38px',
+              borderRadius: '9px',
               backgroundColor: '#F8FAFC',
               border: '1px solid #E2E8F0',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              color: '#64748B',
+              transition: 'all 0.15s ease',
+            }}
+            title={unreadCount > 0 ? `لديك ${unreadCount} إشعار جديد` : 'مركز التنبيهات والإشعارات'}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = '#EFF6FF';
+              e.currentTarget.style.color = '#2563EB';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = '#F8FAFC';
+              e.currentTarget.style.color = '#64748B';
             }}
           >
-            {/* Avatar Circle with Initials */}
-            <div
+            <Bell size={18} />
+            {unreadCount > 0 && (
+              <span
+                style={{
+                  position: 'absolute',
+                  top: '-3px',
+                  right: '-3px',
+                  minWidth: '18px',
+                  height: '18px',
+                  padding: '0 4px',
+                  borderRadius: '999px',
+                  backgroundColor: '#EF4444',
+                  color: '#FFFFFF',
+                  fontSize: '10.5px',
+                  fontWeight: 800,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  boxShadow: '0 2px 4px rgba(239, 68, 68, 0.4)',
+                  border: '2px solid #FFFFFF',
+                  boxSizing: 'border-box',
+                }}
+              >
+                {unreadCount > 99 ? '99+' : unreadCount}
+              </span>
+            )}
+          </button>
+
+          {/* User Profile Capsule with Dropdown Menu (UI_STANDARDS.md §7.1) */}
+          <div ref={menuRef} style={{ position: 'relative' }}>
+            <button
+              type="button"
+              onClick={() => setIsUserMenuOpen((prev) => !prev)}
               style={{
-                width: '34px',
-                height: '34px',
-                borderRadius: '50%',
-                backgroundColor: '#4F46E5',
-                color: '#FFFFFF',
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: 'center',
-                fontWeight: 700,
-                fontSize: '0.75rem',
-                flexShrink: 0,
-                boxShadow: '0 2px 4px rgba(79, 70, 229, 0.25)',
+                gap: '8px',
+                padding: '4px 10px 4px 6px',
+                borderRadius: '10px',
+                backgroundColor: isUserMenuOpen ? '#F1F5F9' : '#F8FAFC',
+                border: '1px solid #E2E8F0',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease',
               }}
+              title="خيارات الحساب الشخصي"
             >
-              {userInitials}
-            </div>
-
-            {/* User Name & Role text */}
-            {!isMobile && (
-              <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, maxWidth: '140px' }}>
-                <span
-                  style={{
-                    fontSize: '0.78rem',
-                    fontWeight: 700,
-                    color: '#0F172A',
-                    whiteSpace: 'nowrap',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    lineHeight: 1.2,
-                  }}
-                >
-                  {displayName}
-                </span>
-                <span
-                  style={{
-                    fontSize: '0.66rem',
-                    color: '#64748B',
-                    whiteSpace: 'nowrap',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    lineHeight: 1.2,
-                    marginTop: '2px',
-                    fontWeight: 500,
-                  }}
-                >
-                  {displayRole}
-                </span>
+              {/* Avatar Circle with Initials */}
+              <div
+                style={{
+                  width: '32px',
+                  height: '32px',
+                  borderRadius: '8px',
+                  backgroundColor: '#4F46E5',
+                  color: '#FFFFFF',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontWeight: 700,
+                  fontSize: '12px',
+                  flexShrink: 0,
+                  boxShadow: '0 2px 6px rgba(79, 70, 229, 0.25)',
+                }}
+              >
+                {userInitials}
               </div>
-            )}
-          </div>
 
-          {/* User Action Buttons: Change Password & Logout */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-            {onOpenChangePassword && (
-              <button
-                onClick={onOpenChangePassword}
-                title="تغيير كلمة المرور"
+              {/* User Name & Role text */}
+              {!isMobile && (
+                <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, maxWidth: '140px', textAlign: 'right' }}>
+                  <span
+                    style={{
+                      fontSize: '12px',
+                      fontWeight: 700,
+                      color: '#0F172A',
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      lineHeight: 1.25,
+                    }}
+                  >
+                    {displayName}
+                  </span>
+                  <span
+                    style={{
+                      fontSize: '10px',
+                      color: '#64748B',
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      lineHeight: 1.2,
+                      marginTop: '1px',
+                      fontWeight: 500,
+                    }}
+                  >
+                    {displayRole}
+                  </span>
+                </div>
+              )}
+
+              <ChevronDown
+                size={14}
                 style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  width: '34px',
-                  height: '34px',
-                  borderRadius: theme.radii.lg,
-                  border: '1px solid #E2E8F0',
+                  color: '#94A3B8',
+                  transform: isUserMenuOpen ? 'rotate(180deg)' : 'none',
+                  transition: 'transform 0.2s ease',
+                  marginRight: '2px',
+                }}
+              />
+            </button>
+
+            {/* Dropdown Menu */}
+            {isUserMenuOpen && (
+              <div
+                style={{
+                  position: 'absolute',
+                  top: 'calc(100% + 8px)',
+                  left: 0,
+                  width: '210px',
                   backgroundColor: '#FFFFFF',
-                  color: '#475569',
-                  cursor: 'pointer',
-                  transition: 'all 0.15s ease',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = '#F0F9FF';
-                  e.currentTarget.style.color = '#0284C7';
-                  e.currentTarget.style.borderColor = '#BAE6FD';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = '#FFFFFF';
-                  e.currentTarget.style.color = '#475569';
-                  e.currentTarget.style.borderColor = '#E2E8F0';
+                  borderRadius: '12px',
+                  boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.05)',
+                  border: '1px solid #E2E8F0',
+                  padding: '6px',
+                  zIndex: 50,
+                  direction: 'rtl',
                 }}
               >
-                <KeyRound size={15} />
-              </button>
-            )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsUserMenuOpen(false);
+                    setIsProfileOpen(true);
+                  }}
+                  style={{
+                    width: '100%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px',
+                    padding: '9px 12px',
+                    borderRadius: '8px',
+                    fontSize: '12.5px',
+                    fontWeight: 600,
+                    color: '#334155',
+                    border: 'none',
+                    background: 'none',
+                    cursor: 'pointer',
+                    textAlign: 'right',
+                    transition: 'background 0.15s ease',
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#F8FAFC')}
+                  onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                >
+                  <UserIcon size={15} color="#4F46E5" />
+                  <span>ملفي الشخصي</span>
+                </button>
 
-            {onLogout && (
-              <button
-                onClick={onLogout}
-                title="تسجيل الخروج من النظام"
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  width: '34px',
-                  height: '34px',
-                  borderRadius: theme.radii.lg,
-                  border: '1px solid #FEE2E2',
-                  backgroundColor: '#FEF2F2',
-                  color: '#DC2626',
-                  cursor: 'pointer',
-                  transition: 'all 0.15s ease',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = '#FEE2E2';
-                  e.currentTarget.style.borderColor = '#FCA5A5';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = '#FEF2F2';
-                  e.currentTarget.style.borderColor = '#FEE2E2';
-                }}
-              >
-                <LogOut size={15} />
-              </button>
+                {onOpenChangePassword && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsUserMenuOpen(false);
+                      onOpenChangePassword();
+                    }}
+                    style={{
+                      width: '100%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '10px',
+                      padding: '9px 12px',
+                      borderRadius: '8px',
+                      fontSize: '12.5px',
+                      fontWeight: 600,
+                      color: '#334155',
+                      border: 'none',
+                      background: 'none',
+                      cursor: 'pointer',
+                      textAlign: 'right',
+                      transition: 'background 0.15s ease',
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#F8FAFC')}
+                    onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                  >
+                    <KeyRound size={15} color="#64748B" />
+                    <span>تغيير كلمة المرور</span>
+                  </button>
+                )}
+
+                {onLogout && (
+                  <>
+                    <div style={{ height: '1px', backgroundColor: '#F1F5F9', margin: '4px 0' }} />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsUserMenuOpen(false);
+                        setIsLogoutConfirmOpen(true);
+                      }}
+                      style={{
+                        width: '100%',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '10px',
+                        padding: '9px 12px',
+                        borderRadius: '8px',
+                        fontSize: '12.5px',
+                        fontWeight: 700,
+                        color: '#DC2626',
+                        border: 'none',
+                        background: 'none',
+                        cursor: 'pointer',
+                        textAlign: 'right',
+                        transition: 'background 0.15s ease',
+                      }}
+                      onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#FEF2F2')}
+                      onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                    >
+                      <LogOut size={15} color="#DC2626" />
+                      <span>تسجيل الخروج</span>
+                    </button>
+                  </>
+                )}
+              </div>
             )}
           </div>
 
@@ -335,6 +493,38 @@ export const AdminTopBar: React.FC<AdminTopBarProps> = ({
           </button>
         </div>
       </header>
+
+      {/* Confirmation Dialog for Logout */}
+      {isLogoutConfirmOpen && (
+        <ConfirmationDialog
+          isOpen={isLogoutConfirmOpen}
+          title="تأكيد تسجيل الخروج"
+          message="هل أنت متأكد من رغبتك في تسجيل الخروج من لوحة الإدارة المركزية لمنصة ارتقاء؟"
+          confirmLabel="نعم، تسجيل الخروج"
+          cancelLabel="إلغاء"
+          variant="danger"
+          onConfirm={() => {
+            setIsLogoutConfirmOpen(false);
+            onLogout?.();
+          }}
+          onCancel={() => setIsLogoutConfirmOpen(false)}
+        />
+      )}
+
+      {/* Profile Modal */}
+      {isProfileOpen && (
+        <ProfileModal
+          isOpen={isProfileOpen}
+          onClose={() => setIsProfileOpen(false)}
+          addToast={() => {}}
+        />
+      )}
+
+      {/* Universal Notifications Drawer (ADM-TOP-01 / FE-GAP-10) */}
+      <UniversalNotificationsDrawer
+        isOpen={isNotificationsDrawerOpen}
+        onClose={() => setIsNotificationsDrawerOpen(false)}
+      />
 
       {/* Prominent Confirmation Dialog for Maintenance Mode Toggle */}
       <ConfirmationDialog

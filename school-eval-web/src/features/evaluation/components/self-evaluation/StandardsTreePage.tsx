@@ -10,6 +10,10 @@ import {
   FileSpreadsheet,
   RotateCcw,
   RefreshCw,
+  ShieldCheck,
+  FileText,
+  Calendar,
+  Hash,
 } from 'lucide-react';
 import { DetailedReportExportModal } from '../reports/DetailedReportExportModal';
 import { SafeResetConfirmModal } from './SafeResetConfirmModal';
@@ -96,11 +100,43 @@ export const StandardsTreePage: React.FC<StandardsTreePageProps> = ({
         }}
       >
         <div>
-          <h2 style={{ fontSize: '18px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
-            مستكشف المعايير الوطنية والمؤشرات المعتمدة
-          </h2>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+            <h2 style={{ fontSize: '18px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
+              مستكشف المعايير الوطنية والمؤشرات المعتمدة
+            </h2>
+            {treeData?.versionNumber && (
+              <span
+                style={{
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  padding: '2px 8px',
+                  borderRadius: '6px',
+                  backgroundColor: '#FEF3C7',
+                  color: '#92400E',
+                  border: '1px solid #FCD34D',
+                }}
+              >
+                وثيقة المعايير: v{treeData.versionNumber}
+              </span>
+            )}
+            {treeData?.academicYear && (
+              <span
+                style={{
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  padding: '2px 8px',
+                  borderRadius: '6px',
+                  backgroundColor: '#EFF6FF',
+                  color: '#1E40AF',
+                  border: '1px solid #BFDBFE',
+                }}
+              >
+                الدورة التقييمية: {treeData.academicYear}
+              </span>
+            )}
+          </div>
           <p style={{ fontSize: '13px', color: '#64748B', margin: '4px 0 0 0' }}>
-            {treeData?.title || 'المعايير الوطنية لتقويم جودة الأداء المدرسي 2026'} — {standards.length} معايير وطنية رئيسية
+            {treeData?.title || 'المعايير الوطنية لتقويم جودة الأداء المدرسي 2026'} — {standards.length} معايير رئيسية
           </p>
         </div>
 
@@ -171,6 +207,103 @@ export const StandardsTreePage: React.FC<StandardsTreePageProps> = ({
             />
           </div>
         </div>
+      </div>
+
+      {/* بطاقة التوثيق المرجعي للوثيقة الحاكمة (BR-GEN-04) */}
+      <div
+        data-testid="governing-version-metadata-card"
+        style={{
+          backgroundColor: '#FFFFFF',
+          borderRadius: '12px',
+          padding: '12px 18px',
+          border: '1px solid #E2E8F0',
+          boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '12px',
+          fontSize: '12px',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+          <div
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '4px 10px',
+              borderRadius: '6px',
+              backgroundColor: '#ECFDF5',
+              color: '#065F46',
+              fontWeight: 700,
+              border: '1px solid #A7F3D0',
+            }}
+          >
+            <ShieldCheck size={15} color="#059669" />
+            <span>الوثيقة الحاكمة:</span>
+            <strong>{treeData?.title || 'المعايير الوطنية لتقويم الأداء المدرسي 2026'}</strong>
+          </div>
+
+          <div
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '4px 10px',
+              borderRadius: '6px',
+              backgroundColor: '#EFF6FF',
+              color: '#1E40AF',
+              fontWeight: 600,
+              border: '1px solid #BFDBFE',
+            }}
+          >
+            <FileText size={14} color="#2563EB" />
+            <span>رقم قرار الإقرار:</span>
+            <strong style={{ fontFamily: 'monospace' }}>{treeData?.approvalCode || 'DEC-2026-QA-01'}</strong>
+          </div>
+
+          <div
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '4px 10px',
+              borderRadius: '6px',
+              backgroundColor: '#FFFBEB',
+              color: '#92400E',
+              fontWeight: 600,
+              border: '1px solid #FDE68A',
+            }}
+          >
+            <Calendar size={14} color="#D97706" />
+            <span>تاريخ النفاذ:</span>
+            <strong>{treeData?.effectiveFrom || '2026-01-01'}</strong>
+          </div>
+        </div>
+
+        {treeData?.integrityHash && (
+          <div
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '4px 10px',
+              borderRadius: '6px',
+              backgroundColor: '#F8FAFC',
+              color: '#475569',
+              border: '1px solid #CBD5E1',
+              fontSize: '11px',
+            }}
+            title={`البصمة المشفرة الكاملة (SHA-256): ${treeData.integrityHash}`}
+          >
+            <Hash size={13} color="#64748B" />
+            <span>بصمة النزاهة الرقمية (SHA-256):</span>
+            <span style={{ fontFamily: 'monospace', fontWeight: 800, color: '#0F172A' }}>
+              {treeData.integrityHash.substring(0, 16)}...
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Standards List */}
@@ -459,11 +592,28 @@ export const StandardsTreePage: React.FC<StandardsTreePageProps> = ({
                             padding: '6px 12px',
                             backgroundColor: '#F1F5F9',
                             borderRadius: '6px',
-                            display: 'inline-block',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '8px',
                             alignSelf: 'flex-start',
                           }}
                         >
-                          {sub.code}: {sub.title}
+                          <span>{sub.code}: {sub.title}</span>
+                          {sub.weight !== undefined && (
+                            <span
+                              style={{
+                                fontSize: '11px',
+                                fontWeight: 800,
+                                padding: '1px 8px',
+                                borderRadius: '4px',
+                                backgroundColor: '#ECFDF5',
+                                color: '#065F46',
+                                border: '1px solid #A7F3D0',
+                              }}
+                            >
+                              الوزن: {sub.weight}%
+                            </span>
+                          )}
                         </div>
 
                         {/* Indicators Cards */}

@@ -6,7 +6,7 @@ import { FinalSubmissionLockModal } from './FinalSubmissionLockModal';
 import { StandardsProgressBar } from '../dashboard/StandardsProgressBar';
 import { InteractiveDonutChart } from '../../../../components/ui/InteractiveDonutChart';
 import { InteractiveBarChart } from '../../../../components/ui/InteractiveBarChart';
-import type { EvaluatorScreen, EvaluatorDashboardData } from '../../api/evaluationTypes';
+import type { EvaluatorScreen, EvaluatorDashboardData, StandardNode } from '../../api/evaluationTypes';
 import {
   CheckCircle2,
   XCircle,
@@ -49,6 +49,7 @@ export const InternalReviewPage: React.FC<InternalReviewPageProps> = ({
   const [isLockModalOpen, setIsLockModalOpen] = useState(false);
   const [successBanner, setSuccessBanner] = useState<string | null>(null);
   const [dashboardData, setDashboardData] = useState<EvaluatorDashboardData | null>(null);
+  const [standardsTree, setStandardsTree] = useState<StandardNode[]>([]);
   const [expandedCriteria, setExpandedCriteria] = useState<Record<string, boolean>>({
     scores_completed: true,
   });
@@ -61,6 +62,13 @@ export const InternalReviewPage: React.FC<InternalReviewPageProps> = ({
         if (isMounted) setDashboardData(data);
       })
       .catch((err) => console.error('Failed to load dashboard data for review:', err));
+
+    evaluatorApi
+      .getActiveStandardsTree()
+      .then((data) => {
+        if (isMounted && data?.standards) setStandardsTree(data.standards);
+      })
+      .catch((err) => console.error('Failed to load standards tree for review:', err));
 
     return () => {
       isMounted = false;
@@ -79,7 +87,7 @@ export const InternalReviewPage: React.FC<InternalReviewPageProps> = ({
     {
       id: 'evidence_linked',
       title: 'فهرسة وربط الشواهد والوثائق الداعمة للتقديرات',
-      description: 'تم فهرسة الشواهد المربوطة عبر وثائق معتمدة في مستودع الأدلة.',
+      description: 'تم فهرسة الشواهد المربوطة عبر وثائق موثقة في مستودع الأدلة.',
       passed: false,
       weight: 25,
     },
@@ -93,7 +101,7 @@ export const InternalReviewPage: React.FC<InternalReviewPageProps> = ({
     {
       id: 'draft_report_generated',
       title: 'جاهزية مسودة التقرير الشامل والمراجعة الداخلية لمدير المدرسة',
-      description: 'مسودة التقرير الشامل ومصفوفة التقييم جاهزة ومستوفية للمراجعة الداخلية والاعتماد.',
+      description: 'مسودة التقرير الشامل ومصفوفة التقييم جاهزة ومستوفية للمراجعة والإقرار الداخلي.',
       passed: false,
       weight: 20,
     },
@@ -104,7 +112,7 @@ export const InternalReviewPage: React.FC<InternalReviewPageProps> = ({
   const [isExporting, setIsExporting] = useState(false);
 
   const submissionStatus = dashboardData?.schoolInfo?.status || preflightData?.digitalSealInfo?.submissionStatus || (isLocked ? 'Submitted' : 'Draft');
-  const activeTrackingCode = preflightData?.digitalSealInfo?.trackingCode || preflightData?.digitalSealInfo?.systemCode || dashboardData?.schoolInfo?.trackingCode || (isLocked ? 'ARQ-LOCKED' : 'بانتظار الاعتماد والختم');
+  const activeTrackingCode = preflightData?.digitalSealInfo?.trackingCode || preflightData?.digitalSealInfo?.systemCode || dashboardData?.schoolInfo?.trackingCode || (isLocked ? 'ARQ-LOCKED' : 'بانتظار الإقرار والختم');
   const activeDigitalHash = preflightData?.digitalSealInfo?.digitalHash || dashboardData?.schoolInfo?.digitalHash || (isLocked ? 'بصمة مشفرة مسجلة' : 'تُولَّد البصمة المشفرة (SHA-256) فور تأكيد الختم النهائي');
 
   const toggleCriterionExpand = (id: string) => {
@@ -304,7 +312,7 @@ export const InternalReviewPage: React.FC<InternalReviewPageProps> = ({
             <RefreshCw size={20} color="#059669" className="animate-spin" />
             <div>
               <div style={{ fontSize: '13.5px', fontWeight: 800, color: '#1E293B' }}>
-                جاري فحص معايير الجاهزية والتحقق من الشواهد المعتمدة...
+                جاري فحص معايير الجاهزية والتحقق من الشواهد المرفقة...
               </div>
               <div style={{ fontSize: '12px', color: '#64748B', marginTop: '2px' }}>
                 يتم التحقق آلياً من اكتمال الرصد، وربط الشواهد، وجاهزية خطة التحسين ومسودة التقرير.
@@ -549,7 +557,7 @@ export const InternalReviewPage: React.FC<InternalReviewPageProps> = ({
                 }}
               >
                 <Lock size={14} />
-                <span>الختم الرقمي والتسليم النهائي محصور بمقيم المدرسة المعتمد</span>
+                <span>الختم الرقمي والتسليم النهائي محصور بمقيّم المدرسة</span>
               </div>
             )}
           </div>
@@ -561,8 +569,8 @@ export const InternalReviewPage: React.FC<InternalReviewPageProps> = ({
             {[
               { id: '1', title: 'رصد تقديرات كافة مؤشرات المعايير الوطنية (109 مؤشرات)', desc: 'جاري التحقق من اكتمال الرصد العددي...' },
               { id: '2', title: 'فهرسة وربط الشواهد والوثائق الداعمة للتقديرات', desc: 'جاري فحص المستندات المودعة والمربوطة بالمؤشرات...' },
-              { id: '3', title: 'صياغة خطة التحسين ومبادرات التطوير للمؤشرات المتدنية', desc: 'جاري التحقق من اعتماد إجراءات خطة التحسين...' },
-              { id: '4', title: 'جاهزية مسودة التقرير الشامل والمراجعة الداخلية لمدير المدرسة', desc: 'جاري تدقيق مصفوفة النتائج المعتمدة...' },
+              { id: '3', title: 'صياغة خطة التحسين ومبادرات التطوير للمؤشرات المتدنية', desc: 'جاري التحقق من إقرار إجراءات خطة التحسين...' },
+              { id: '4', title: 'جاهزية مسودة التقرير الشامل والمراجعة الداخلية لمدير المدرسة', desc: 'جاري تدقيق مصفوفة النتائج المرصودة...' },
             ].map((skel) => (
               <div
                 key={skel.id}
@@ -800,7 +808,7 @@ export const InternalReviewPage: React.FC<InternalReviewPageProps> = ({
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <FileCheck2 size={20} color="#059669" />
                 <h3 style={{ fontSize: '15px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
-                  اعتماد ومراجعة مدير المدرسة الداخلي
+                  إقرار ومراجعة مدير المدرسة الداخلي
                 </h3>
               </div>
               <span
@@ -813,7 +821,7 @@ export const InternalReviewPage: React.FC<InternalReviewPageProps> = ({
                   color: '#059669',
                 }}
               >
-                معتمد داخلياً
+                مُقَرّ داخلياً
               </span>
             </div>
             <p style={{ fontSize: '12px', color: '#64748B', lineHeight: 1.6, margin: 0 }}>
@@ -833,7 +841,7 @@ export const InternalReviewPage: React.FC<InternalReviewPageProps> = ({
               fontSize: '11.5px',
             }}
           >
-            <span style={{ color: '#64748B' }}>المسؤول المعتمد:</span>
+            <span style={{ color: '#64748B' }}>المسؤول المصادق:</span>
             <span style={{ fontWeight: 700, color: '#1E293B' }}>
               {dashboardData?.schoolInfo?.currentEvaluator || 'مدير المدرسة / مسؤول الجودة'}
             </span>
@@ -939,7 +947,7 @@ export const InternalReviewPage: React.FC<InternalReviewPageProps> = ({
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', fontWeight: 800, color: '#334155', marginBottom: '4px' }}>
               <Info size={16} color="#059669" />
-              <span>دليل مستويات الأداء المعتمدة في الإطار الوطني:</span>
+              <span>دليل مستويات الأداء الرسمية في الإطار الوطني:</span>
             </div>
 
             {/* Level 3 */}
@@ -948,7 +956,7 @@ export const InternalReviewPage: React.FC<InternalReviewPageProps> = ({
                 <span style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: '#10B981' }} />
                 <div>
                   <div style={{ fontSize: '12.5px', fontWeight: 800, color: '#065F46' }}>المستوى 3: متحقق</div>
-                  <div style={{ fontSize: '11px', color: '#047857' }}>وصول المؤسسة للمستوى المطلوب تحقيقه وبشكل مستمر</div>
+                  <div style={{ fontSize: '11px', color: '#047857' }}>وصول المؤسسة للمستوى المطلوب تحقيقه وبشكل مستمر مع متابعة دورية وخطط تحسين.</div>
                 </div>
               </div>
               <span style={{ fontSize: '14px', fontWeight: 900, color: '#065F46' }}>{l3}</span>
@@ -960,7 +968,7 @@ export const InternalReviewPage: React.FC<InternalReviewPageProps> = ({
                 <span style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: '#3B82F6' }} />
                 <div>
                   <div style={{ fontSize: '12.5px', fontWeight: 800, color: '#1E40AF' }}>المستوى 2: متحقق بدرجة متوسطة</div>
-                  <div style={{ fontSize: '11px', color: '#1D4ED8' }}>أداءات متحققة بصورة متوسطة الفاعلية وبحاجة لتحسين</div>
+                  <div style={{ fontSize: '11px', color: '#1D4ED8' }}>أداءات متحققة بصورة متوسطة الفاعلية مع وجود مجال للتحسين وخطط للتطوير.</div>
                 </div>
               </div>
               <span style={{ fontSize: '14px', fontWeight: 900, color: '#1E40AF' }}>{l2}</span>
@@ -972,7 +980,7 @@ export const InternalReviewPage: React.FC<InternalReviewPageProps> = ({
                 <span style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: '#F59E0B' }} />
                 <div>
                   <div style={{ fontSize: '12.5px', fontWeight: 800, color: '#92400E' }}>المستوى 1: متحقق بدرجة ضعيفة</div>
-                  <div style={{ fontSize: '11px', color: '#B45309' }}>أداءات كتابية تفتقر للمنهجية وبحاجة لاستكمال الشواهد</div>
+                  <div style={{ fontSize: '11px', color: '#B45309' }}>أداءات كتابية أو متحققة أحياناً وتفتقر للمنهجية وبحاجة لمجهود واستكمال الشواهد.</div>
                 </div>
               </div>
               <span style={{ fontSize: '14px', fontWeight: 900, color: '#92400E' }}>{l1}</span>
@@ -984,7 +992,7 @@ export const InternalReviewPage: React.FC<InternalReviewPageProps> = ({
                 <span style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: '#EF4444' }} />
                 <div>
                   <div style={{ fontSize: '12.5px', fontWeight: 800, color: '#991B1B' }}>المستوى 0: غير متوفر</div>
-                  <div style={{ fontSize: '11px', color: '#B91C1C' }}>عدم قيام المدرسة بالأداءات المطلوبة منها وبحاجة لتصحيح</div>
+                  <div style={{ fontSize: '11px', color: '#B91C1C' }}>عدم قيام المدرسة بالأداءات المطلوبة منها وبحاجة لمراجعة أدائها وتصحيح أخطائها.</div>
                 </div>
               </div>
               <span style={{ fontSize: '14px', fontWeight: 900, color: '#991B1B' }}>{l0}</span>
@@ -1024,6 +1032,106 @@ export const InternalReviewPage: React.FC<InternalReviewPageProps> = ({
             onSelectStandard={(id) => onNavigate?.('standards-tree', id)}
           />
         </div>
+
+        {/* مصفوفة المعايير الفرعية الـ 14 وأوزانها المقررة رسمياً (The 14 National Sub-Standards Matrix) */}
+        {standardsTree.length > 0 && (
+          <div
+            data-testid="substandards-matrix-card"
+            style={{
+              marginTop: '10px',
+              backgroundColor: '#F8FAFC',
+              borderRadius: '12px',
+              padding: '20px',
+              border: '1px solid #E2E8F0',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px', flexWrap: 'wrap', gap: '8px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <FileCheck2 size={18} color="#059669" />
+                <h4 style={{ fontSize: '14.5px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
+                  تقسيم المعايير الفرعية الـ 14 والأوزان النسبية المقررة (النموذج الوطني)
+                </h4>
+              </div>
+              <span
+                style={{
+                  fontSize: '11.5px',
+                  fontWeight: 700,
+                  padding: '3px 10px',
+                  borderRadius: '8px',
+                  backgroundColor: '#ECFDF5',
+                  color: '#065F46',
+                  border: '1px solid #A7F3D0',
+                }}
+              >
+                14 معياراً فرعياً — إجمالي الأوزان: 100%
+              </span>
+            </div>
+
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+                gap: '12px',
+              }}
+            >
+              {standardsTree.flatMap((std) =>
+                std.subStandards.map((sub) => (
+                  <div
+                    key={sub.subStandardId}
+                    style={{
+                      backgroundColor: '#FFFFFF',
+                      borderRadius: '8px',
+                      padding: '12px 14px',
+                      border: '1px solid #E2E8F0',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: '10px',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span
+                        style={{
+                          fontSize: '11px',
+                          fontWeight: 800,
+                          padding: '2px 7px',
+                          borderRadius: '4px',
+                          backgroundColor: '#EFF6FF',
+                          color: '#1D4ED8',
+                        }}
+                      >
+                        {sub.code}
+                      </span>
+                      <div>
+                        <div style={{ fontSize: '12.5px', fontWeight: 700, color: '#1E293B' }}>
+                          {sub.title}
+                        </div>
+                        <div style={{ fontSize: '11px', color: '#64748B', marginTop: '1px' }}>
+                          المجال: {std.title} ({sub.indicators.length} مؤشرات)
+                        </div>
+                      </div>
+                    </div>
+
+                    <span
+                      style={{
+                        fontSize: '12px',
+                        fontWeight: 800,
+                        padding: '3px 8px',
+                        borderRadius: '6px',
+                        backgroundColor: '#ECFDF5',
+                        color: '#065F46',
+                        border: '1px solid #A7F3D0',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {sub.weight ?? 0}%
+                    </span>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* 5. Draft Report Preview */}

@@ -530,7 +530,7 @@ const SchoolEvaluationsIsolatedCard: React.FC = () => {
       {loading ? (
         <div style={{ padding: '40px', textAlign: 'center', color: theme.colors.neutral[500] }}>
           <Loader2 size={28} className="animate-spin" color={theme.colors.primary[600]} style={{ margin: '0 auto 8px auto' }} />
-          <div style={{ fontSize: theme.typography.fontSizes.xs }}>جاري التحقق وجلب بيانات المدرسة المعتمدة...</div>
+          <div style={{ fontSize: theme.typography.fontSizes.xs }}>جاري التحقق وجلب بيانات المدرسة المسجلة...</div>
         </div>
       ) : error ? (
         <div style={{ padding: '20px', color: theme.colors.status.danger.text, backgroundColor: theme.colors.status.danger.bg, borderRadius: theme.radii.md }}>

@@ -36,6 +36,7 @@ class StandardVersionController extends Controller
             'standards.subStandards.indicators' => function ($q) {
                 $q->orderBy('indicator_id', 'asc');
             },
+            'standards.subStandards.indicators.verificationTools',
             'standards.subStandards.indicators.scoreDescriptors' => function ($q) {
                 $q->orderBy('display_order', 'asc');
             },
@@ -76,6 +77,15 @@ class StandardVersionController extends Controller
                                     'description'      => $ind->description,
                                     'weight'           => (float) $ind->weight,
                                     'status'           => $ind->status,
+                                    'verificationTools' => $ind->verificationTools->pluck('name')->values()->all(),
+                                    'verificationToolIds' => $ind->verificationTools->pluck('tool_id')->values()->all(),
+                                    'verificationToolDetails' => $ind->verificationTools->map(fn($t) => [
+                                        'toolId'      => $t->tool_id,
+                                        'name'        => $t->name,
+                                        'toolType'    => $t->tool_type,
+                                        'description' => $t->description,
+                                        'approved'    => (bool) $t->approved,
+                                    ])->values()->all(),
                                     'scoreDescriptors' => $ind->scoreDescriptors
                                         ->where('standard_version_id', $version->version_id)
                                         ->map(function ($desc) {

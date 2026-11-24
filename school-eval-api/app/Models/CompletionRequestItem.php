@@ -45,6 +45,7 @@ class CompletionRequestItem extends Model
         'indicator_id',
         'evidence_link_id',
         'missing_description',
+        'allowed_actions',
         'status',
     ];
 
@@ -58,6 +59,7 @@ class CompletionRequestItem extends Model
         return [
             'indicator_id' => 'integer',
             'evidence_link_id' => 'integer',
+            'allowed_actions' => 'array',
             'created_at' => 'datetime',
             'updated_at' => 'datetime',
         ];
@@ -133,10 +135,6 @@ class CompletionRequestItem extends Model
                     return 'resolved';
                 }
             }
-        }
-
-        if ($this->status === 'resolved') {
-            $this->update(['status' => 'pending']);
         }
 
         return $this->status;

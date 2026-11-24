@@ -86,6 +86,7 @@ export const RubricAssessmentPage: React.FC<RubricAssessmentPageProps> = ({
   const [justification, setJustification] = useState<string>('');
   const [selectedVerificationMethods, setSelectedVerificationMethods] = useState<number[]>([]);
   const [isResetModalOpen, setIsResetModalOpen] = useState<boolean>(false);
+  const [isGuidanceExpanded, setIsGuidanceExpanded] = useState<boolean>(false);
   const [linkModalEvidence, setLinkModalEvidence] = useState<EvidenceItem | null>(null);
   const [linkModalMode, setLinkModalMode] = useState<'single' | 'multi' | 'unlink'>('single');
   const [editModalEvidence, setEditModalEvidence] = useState<EvidenceItem | null>(null);
@@ -236,6 +237,23 @@ export const RubricAssessmentPage: React.FC<RubricAssessmentPageProps> = ({
     }).then(() => {
       onResetSuccess?.();
     });
+  };
+
+  const handleToggleVerificationMethod = (methodId: number) => {
+    if (isLocked || isPrincipal) return;
+    const next = selectedVerificationMethods.includes(methodId)
+      ? selectedVerificationMethods.filter((id) => id !== methodId)
+      : [...selectedVerificationMethods, methodId];
+    setSelectedVerificationMethods(next);
+
+    if (selectedScore !== null) {
+      saveRubricAssessment({
+        score: selectedScore,
+        justification,
+        verificationMethods: next,
+        completionStatus: 'Completed',
+      });
+    }
   };
 
   const isDirty =
@@ -801,6 +819,100 @@ export const RubricAssessmentPage: React.FC<RubricAssessmentPageProps> = ({
             </p>
           </div>
 
+          {/* الإطار التوجيهي للمعيار الفرعي (GAP-EVAL-STD-DESC / IMP-11 / الخيار أ) */}
+          <div
+            data-testid="substandard-guidance-card"
+            style={{
+              backgroundColor: '#F8FAFC',
+              borderRadius: '12px',
+              border: '1px solid #CBD5E1',
+              borderRight: '4px solid #059669',
+              padding: '14px 18px',
+              boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                <Compass size={17} color="#059669" />
+                <span style={{ fontSize: '13.5px', fontWeight: 800, color: '#0F172A' }}>
+                  الإطار التوجيهي للمعيار الفرعي: {subStandard?.title || indicator?.subStandardName || 'المعيار الفرعي'}
+                </span>
+                {(subStandard?.weight !== undefined || indicator?.subStandardWeight !== undefined) && (
+                  <span
+                    style={{
+                      fontSize: '11px',
+                      fontWeight: 800,
+                      padding: '2px 8px',
+                      borderRadius: '6px',
+                      backgroundColor: '#ECFDF5',
+                      color: '#065F46',
+                      border: '1px solid #A7F3D0',
+                    }}
+                  >
+                    الوزن النسبي: {subStandard?.weight ?? indicator?.subStandardWeight}%
+                  </span>
+                )}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setIsGuidanceExpanded((prev) => !prev)}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  background: 'none',
+                  border: 'none',
+                  color: '#059669',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  padding: '2px 6px',
+                }}
+              >
+                <span>{isGuidanceExpanded ? 'إخفاء الإرشادات ▴' : 'عرض الإرشادات الكاملة ▾'}</span>
+              </button>
+            </div>
+
+            {/* سطر مقتضب يظهر دائماً */}
+            <p style={{ fontSize: '12px', color: '#475569', margin: '6px 0 0 0', lineHeight: 1.5 }}>
+              {subStandard?.description || indicator?.subStandardDescription || 'يركز هذا المعيار الفرعي على قياس جودة الممارسات المدرسية الداعمة لفاعلية المؤشرات.'}
+            </p>
+
+            {/* المحتوى التفصيلي عند التوسيع */}
+            {isGuidanceExpanded && (
+              <div
+                style={{
+                  marginTop: '12px',
+                  paddingTop: '12px',
+                  borderTop: '1px dashed #CBD5E1',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '8px',
+                  fontSize: '12px',
+                  color: '#334155',
+                }}
+              >
+                <div>
+                  <strong style={{ color: '#0F172A' }}>المجال المعياري الرئيسي: </strong>
+                  <span>{standard?.title || indicator?.standardName}</span>
+                  {(standard?.description || indicator?.standardDescription) && (
+                    <div style={{ color: '#64748B', marginTop: '2px', fontSize: '11.5px' }}>
+                      {standard?.description || indicator?.standardDescription}
+                    </div>
+                  )}
+                </div>
+
+                <div style={{ marginTop: '4px' }}>
+                  <strong style={{ color: '#0F172A' }}>إرشادات التطبيق للمقيم: </strong>
+                  <span style={{ color: '#475569' }}>
+                    يجب استناد التقدير إلى مطابقة الممارسات الموثقة بالشواهد مع واصفات المستويات الأربعة، والتحقق الميداني عبر الأدوات المعتمدة أدناه قبل تثبيت الدرجة.
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* Rubric Grading Scale 0 to 3 */}
           <div
             style={{
@@ -909,8 +1021,9 @@ export const RubricAssessmentPage: React.FC<RubricAssessmentPageProps> = ({
             />
           </div>
 
-          {/* Official Verification Tools Reference (Static Cards per National Standards - Decision 2) */}
+          {/* Official Verification Tools (Interactive Checkboxes FR-SCH-03 + FR-SCH-13) */}
           <div
+            data-testid="verification-tools-section"
             style={{
               backgroundColor: '#FFFFFF',
               borderRadius: '14px',
@@ -923,25 +1036,27 @@ export const RubricAssessmentPage: React.FC<RubricAssessmentPageProps> = ({
               <div>
                 <h3 style={{ fontSize: '15px', fontWeight: 800, color: '#0F172A', margin: '0 0 4px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <FileCheck2 size={18} color="#2563EB" />
-                  أساليب وأدوات التحقق المعتمدة لهذا المؤشر (وفق وثيقة المعايير الوطنية)
+                  أساليب وأدوات التحقق الميدانية المعتمدة للمؤشر (FR-SCH-03 / FR-SCH-13)
                 </h3>
                 <p style={{ fontSize: '12px', color: '#64748B', margin: 0 }}>
-                  أدوات التقييم المعتمدة رسمياً للتثبت من استيفاء شواهد وأداء المؤشر (مرجعية نظامية للعرض والاسترشاد).
+                  حدد أدوات التحقق الميدانية التي تم تطبيقها فعلياً لإثبات نتيجة المؤشر (تُحفظ تلقائياً مع التقدير).
                 </p>
               </div>
-              <span
-                style={{
-                  fontSize: '11.5px',
-                  fontWeight: 700,
-                  padding: '3px 10px',
-                  borderRadius: '8px',
-                  backgroundColor: '#EFF6FF',
-                  color: '#1D4ED8',
-                  border: '1px solid #BFDBFE',
-                }}
-              >
-                {officialMethods.length} أدوات معتمدة
-              </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span
+                  style={{
+                    fontSize: '11.5px',
+                    fontWeight: 700,
+                    padding: '3px 10px',
+                    borderRadius: '8px',
+                    backgroundColor: '#EFF6FF',
+                    color: '#1D4ED8',
+                    border: '1px solid #BFDBFE',
+                  }}
+                >
+                  {selectedVerificationMethods.length} من {officialMethods.length} مطبقة
+                </span>
+              </div>
             </div>
 
             {officialMethods.length === 0 ? (
@@ -951,47 +1066,95 @@ export const RubricAssessmentPage: React.FC<RubricAssessmentPageProps> = ({
             ) : (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '14px', marginTop: '16px' }}>
                 {officialMethods.map((method) => {
+                  const isChecked = selectedVerificationMethods.includes(method.id);
+                  const isMandatory = method.required !== false;
+
                   return (
                     <div
                       key={method.id}
+                      onClick={() => handleToggleVerificationMethod(method.id)}
                       style={{
                         display: 'flex',
                         flexDirection: 'column',
                         gap: '8px',
                         padding: '14px 16px',
                         borderRadius: '10px',
-                        border: '1px solid #E2E8F0',
-                        backgroundColor: '#F8FAFC',
+                        border: isChecked ? '2px solid #2563EB' : '1px solid #E2E8F0',
+                        backgroundColor: isChecked ? '#EFF6FF' : '#F8FAFC',
+                        cursor: isLocked || isPrincipal ? 'default' : 'pointer',
+                        transition: 'all 0.15s ease',
+                        boxShadow: isChecked ? '0 2px 6px rgba(37, 99, 235, 0.1)' : 'none',
                       }}
                     >
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
-                        <span style={{ fontSize: '13.5px', fontWeight: 800, color: '#1E293B' }}>
-                          {method.name}
-                        </span>
-                        {method.toolType && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={() => handleToggleVerificationMethod(method.id)}
+                            disabled={isLocked || isPrincipal}
+                            style={{ width: '16px', height: '16px', accentColor: '#2563EB', cursor: isLocked || isPrincipal ? 'default' : 'pointer' }}
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                          <span style={{ fontSize: '13.5px', fontWeight: 800, color: isChecked ? '#1E3A8A' : '#1E293B' }}>
+                            {method.name}
+                          </span>
+                        </div>
+
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                           <span
                             style={{
-                              fontSize: '11px',
-                              fontWeight: 700,
-                              padding: '2px 8px',
-                              borderRadius: '6px',
-                              backgroundColor: '#EEF2FF',
-                              color: '#4F46E5',
-                              border: '1px solid #C7D2FE',
+                              fontSize: '10.5px',
+                              fontWeight: 800,
+                              padding: '2px 7px',
+                              borderRadius: '4px',
+                              backgroundColor: isMandatory ? '#FEF2F2' : '#F1F5F9',
+                              color: isMandatory ? '#DC2626' : '#64748B',
+                              border: `1px solid ${isMandatory ? '#FECACA' : '#CBD5E1'}`,
                             }}
                           >
-                            {method.toolType}
+                            {isMandatory ? 'إلزامية' : 'استرشادية'}
                           </span>
-                        )}
+                          {method.toolType && (
+                            <span
+                              style={{
+                                fontSize: '10.5px',
+                                fontWeight: 700,
+                                padding: '2px 7px',
+                                borderRadius: '4px',
+                                backgroundColor: '#EEF2FF',
+                                color: '#4F46E5',
+                                border: '1px solid #C7D2FE',
+                              }}
+                            >
+                              {method.toolType}
+                            </span>
+                          )}
+                        </div>
                       </div>
+
                       {method.description && (
                         <p style={{ fontSize: '12px', color: '#475569', margin: 0, lineHeight: 1.5 }}>
                           {method.description}
                         </p>
                       )}
+
                       {method.guidance && (
-                        <div style={{ fontSize: '11px', color: '#059669', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                          <span>• {method.guidance}</span>
+                        <div
+                          style={{
+                            fontSize: '11px',
+                            color: '#059669',
+                            backgroundColor: '#ECFDF5',
+                            padding: '4px 8px',
+                            borderRadius: '6px',
+                            border: '1px solid #A7F3D0',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                          }}
+                          title={method.guidance}
+                        >
+                          <span>💡 إرشادات الاستخدام: {method.guidance}</span>
                         </div>
                       )}
                     </div>
@@ -1154,6 +1317,8 @@ export const RubricAssessmentPage: React.FC<RubricAssessmentPageProps> = ({
           >
             <EvidenceUploader
               indicatorId={indicator?.indicatorId}
+              indicatorCode={indicator?.code}
+              standardCode={standard?.code}
               evidenceLinks={currentResult?.evidenceLinks || []}
               evidenceRequirements={currentResult?.evidenceRequirements || indicator?.evidenceRequirements || []}
               onUploadFile={handleUploadIndicatorEvidence}

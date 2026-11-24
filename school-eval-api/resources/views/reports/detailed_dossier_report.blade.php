@@ -358,6 +358,9 @@
                     <tr>
                         <td colspan="5" class="substandard-banner-td">
                             المعيار الفرعي {{ $sub['sub_standard_code'] }}: {{ $sub['sub_standard_name'] }}
+                            @if(isset($sub['weight']) && (float)$sub['weight'] > 0)
+                                <span style="color: #0f766e; margin-right: 8px;">(الوزن النسبي: {{ $sub['weight'] }}%)</span>
+                            @endif
                         </td>
                     </tr>
                     <tr>

@@ -15,6 +15,23 @@ export type AiRecommendationStatus = 'PendingReview' | 'Accepted' | 'Modified' |
 export type AiRecommendationType = 'strength' | 'improvement' | 'recommendation' | 'draft';
 export type VerificationTagStatus = 'Compliant' | 'NeedsReplacement' | 'UnderReview';
 
+export interface StandardVersionSummary {
+  versionId: number;
+  versionNumber: string;
+  title?: string;
+  status: string;
+  issueDate?: string;
+}
+
+export interface EvaluationCycleSummary {
+  cycleId: number;
+  name: string;
+  academicYear: string;
+  status: string;
+  startDate?: string;
+  endDate?: string;
+}
+
 export interface EvaluatorSchoolInfo {
   schoolId: number;
   schoolName: string;
@@ -24,6 +41,8 @@ export interface EvaluatorSchoolInfo {
   currentEvaluator: string;
   academicYear: string;
   cycleName: string;
+  standardVersion?: StandardVersionSummary;
+  evaluationCycle?: EvaluationCycleSummary;
   trackingCode?: string;
   digitalHash?: string;
   submittedAt?: string;
@@ -108,6 +127,13 @@ export interface EvaluatorDashboardData {
   standardsProgress: StandardProgressItem[];
   pendingIndicators: PendingIndicatorItem[];
   completionAlert: CompletionAlert | null;
+  supervisorNotes?: Array<{
+    noteId: number;
+    memoType: string;
+    subject: string;
+    details: string;
+    createdAt: string;
+  }>;
 }
 
 export interface ScoreDescriptor {
@@ -140,6 +166,11 @@ export interface IndicatorNode {
   title: string;
   description: string;
   weight: number;
+  standardName?: string;
+  standardDescription?: string;
+  subStandardName?: string;
+  subStandardDescription?: string;
+  subStandardWeight?: number;
   score?: number | null;
   evidenceCount?: number;
   mandatoryRequirementsCount?: number;
@@ -153,6 +184,8 @@ export interface SubStandardNode {
   subStandardId: number;
   code: string;
   title: string;
+  description?: string;
+  weight?: number;
   indicators: IndicatorNode[];
 }
 
@@ -183,7 +216,15 @@ export interface StandardsTreeData {
   evaluationId?: number;
   versionId: number;
   versionCode: string;
+  versionNumber?: string;
+  versionStatus?: string;
+  approvalCode?: string;
+  approvedAt?: string;
+  effectiveFrom?: string;
+  integrityHash?: string;
   title: string;
+  academicYear?: string;
+  cycleName?: string;
   standards: StandardNode[];
 }
 
@@ -587,6 +628,7 @@ export interface FlaggedCompletionItem {
   indicatorTitle: string;
   standardTitle: string;
   missingDescription: string;
+  allowedActions?: string[];
   status: ItemStatus;
   resolutionNotes: string;
 }
@@ -914,6 +956,7 @@ export interface AuditHubPlan {
   status: string;
   progressDescription?: string;
   actionsCount: number;
+  overdueActionsCount?: number;
   hasPrincipalReview: boolean;
   reviewNotesCount: number;
   principalNotesCount: number;
@@ -951,6 +994,7 @@ export interface AuditHubSummary {
   reviewCoveragePercentage: number;
   plansCount: number;
   reviewedPlansCount: number;
+  overdueActionsCount?: number;
   hasOpenCompletionRequest: boolean;
   finalReviewAcknowledged: boolean;
 }

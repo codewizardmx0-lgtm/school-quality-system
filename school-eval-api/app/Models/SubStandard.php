@@ -41,6 +41,7 @@ class SubStandard extends Model
         'code',
         'name',
         'description',
+        'weight',
     ];
 
     /**
@@ -51,6 +52,7 @@ class SubStandard extends Model
     protected function casts(): array
     {
         return [
+            'weight'     => 'float',
             'created_at' => 'datetime',
             'updated_at' => 'datetime',
         ];
