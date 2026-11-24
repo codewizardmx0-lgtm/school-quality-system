@@ -19,19 +19,25 @@ import {
   User as UserIcon,
   KeyRound,
   LogOut,
+  Menu,
 } from 'lucide-react';
 import type { SupervisionScreenKey } from '../../api/supervisionTypes';
 import { useAuth } from '../../../../features/auth/AuthContext';
 import { ProfileModal } from '../../../auth/ProfileModal';
 import { ChangePasswordModal } from '../../../auth/ChangePasswordModal';
+import { ConfirmationDialog } from '../../../admin/components/common/ConfirmationDialog';
+import { UniversalNotificationsDrawer } from '../../../../components/notifications/UniversalNotificationsDrawer';
 import { get } from '../../../../api/apiClient';
 
 interface SupervisionTopBarProps {
   activeScreen: SupervisionScreenKey;
-  onNavigate: (screen: SupervisionScreenKey) => void;
+  onNavigate: (screen: SupervisionScreenKey, params?: any) => void;
   scopeText?: string;
   userName?: string;
   userRole?: string;
+  isMobile?: boolean;
+  onToggleMobileMenu?: () => void;
+  onLogout?: () => void;
 }
 
 const screenTitleMap: Record<SupervisionScreenKey, string> = {
@@ -60,12 +66,17 @@ export const SupervisionTopBar: React.FC<SupervisionTopBarProps> = ({
   scopeText = 'الإشراف العام',
   userName = 'المشرف الوزاري',
   userRole = 'المشرف الوزاري',
+  isMobile = false,
+  onToggleMobileMenu,
+  onLogout,
 }) => {
   const { user, logout } = useAuth();
   const [unreadCount, setUnreadCount] = useState<number>(0);
   const [isMenuOpen, setIsMenuOpen] = useState<boolean>(false);
   const [isProfileOpen, setIsProfileOpen] = useState<boolean>(false);
   const [isChangePasswordOpen, setIsChangePasswordOpen] = useState<boolean>(false);
+  const [isNotificationsDrawerOpen, setIsNotificationsDrawerOpen] = useState<boolean>(false);
+  const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState<boolean>(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
   const effectiveName = user?.fullName || userName;
@@ -98,11 +109,9 @@ export const SupervisionTopBar: React.FC<SupervisionTopBarProps> = ({
     };
   }, []);
 
-  const handleLogout = async () => {
+  const handleLogout = () => {
     setIsMenuOpen(false);
-    if (window.confirm('هل أنت متأكد من رغبتك في تسجيل الخروج من منصة ارتقاء؟')) {
-      await logout();
-    }
+    setIsLogoutConfirmOpen(true);
   };
 
   return (
@@ -113,7 +122,7 @@ export const SupervisionTopBar: React.FC<SupervisionTopBarProps> = ({
           maxHeight: '68px',
           backgroundColor: '#FFFFFF',
           borderBottom: '1px solid #E2E8F0',
-          padding: '0 24px',
+          padding: isMobile ? '0 12px' : '0 24px',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
@@ -124,8 +133,31 @@ export const SupervisionTopBar: React.FC<SupervisionTopBarProps> = ({
           boxSizing: 'border-box',
         }}
       >
-        {/* 1. مسار التنقل النظيف (Breadcrumb) */}
+        {/* 1. مسار التنقل النظيف (Breadcrumb) + زر الجوال */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+          {isMobile && onToggleMobileMenu && (
+            <button
+              type="button"
+              onClick={onToggleMobileMenu}
+              title="فتح القائمة الجانبية"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: '38px',
+                height: '38px',
+                borderRadius: '8px',
+                border: '1px solid #E2E8F0',
+                backgroundColor: '#F8FAFC',
+                color: '#1E293B',
+                cursor: 'pointer',
+                flexShrink: 0,
+              }}
+            >
+              <Menu size={20} />
+            </button>
+          )}
+
           <button
             type="button"
             onClick={() => onNavigate('dashboard')}
@@ -207,13 +239,7 @@ export const SupervisionTopBar: React.FC<SupervisionTopBarProps> = ({
           {/* جرس الإشعارات مع عداد التنبيهات غير المقروءة */}
           <button
             type="button"
-            onClick={() => {
-              if (unreadCount > 0) {
-                alert(`لديك ${unreadCount} إشعار غير مقروء في سجل المتابعة والنظام.`);
-              } else {
-                alert('لا توجد إشعارات جديدة غير مقروءة.');
-              }
-            }}
+            onClick={() => setIsNotificationsDrawerOpen(true)}
             style={{
               position: 'relative',
               width: '38px',
@@ -466,6 +492,34 @@ export const SupervisionTopBar: React.FC<SupervisionTopBarProps> = ({
           addToast={() => {}}
         />
       )}
+
+      {/* نافذة تأكيد تسجيل الخروج */}
+      {isLogoutConfirmOpen && (
+        <ConfirmationDialog
+          isOpen={isLogoutConfirmOpen}
+          title="تأكيد تسجيل الخروج"
+          message="هل أنت متأكد من رغبتك في تسجيل الخروج من منصة ارتقاء للإشراف الوزاري؟"
+          confirmLabel="نعم، تسجيل الخروج"
+          cancelLabel="إلغاء"
+          variant="danger"
+          onConfirm={async () => {
+            setIsLogoutConfirmOpen(false);
+            if (onLogout) {
+              onLogout();
+            } else {
+              await logout();
+            }
+          }}
+          onCancel={() => setIsLogoutConfirmOpen(false)}
+        />
+      )}
+
+      {/* درج التنبيهات والإشعارات الموحد (FE-GAP-10) */}
+      <UniversalNotificationsDrawer
+        isOpen={isNotificationsDrawerOpen}
+        onClose={() => setIsNotificationsDrawerOpen(false)}
+        onNavigate={(screen, param) => onNavigate(screen as SupervisionScreenKey, param)}
+      />
     </>
   );
 };

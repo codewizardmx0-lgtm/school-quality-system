@@ -7,7 +7,7 @@
  * - التمرير حصري لمنطقة المحتوى الداخلية
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import '../../styles/standards.css';
 import { StandardsSidebar, type StandardsScreenKey } from './StandardsSidebar';
 import { StandardsTopBar } from './StandardsTopBar';
@@ -28,6 +28,28 @@ export const StandardsLayout: React.FC<StandardsLayoutProps> = ({
   const [activeScreen, setActiveScreen] = useState<StandardsScreenKey>(initialScreen);
   const [selectedVersionId, setSelectedVersionId] = useState<number | undefined>(undefined);
 
+  // Responsive & Sidebar Collapse state (UI_STANDARDS.md §2 & §7)
+  const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isMobileOpen, setIsMobileOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      return window.innerWidth < 1024;
+    }
+    return false;
+  });
+
+  useEffect(() => {
+    const handleResize = () => {
+      const mobile = window.innerWidth < 1024;
+      setIsMobile(mobile);
+      if (!mobile) {
+        setIsMobileOpen(false);
+      }
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   const {
     versions,
     activeVersion,
@@ -46,6 +68,9 @@ export const StandardsLayout: React.FC<StandardsLayoutProps> = ({
       setSelectedVersionId(Number(versionId));
     }
     setActiveScreen(screen);
+    if (isMobile) {
+      setIsMobileOpen(false);
+    }
     // التمرير إلى أعلى منطقة المحتوى القابلة للتمرير
     const contentEl = document.getElementById('standards-scroll-area');
     if (contentEl) {
@@ -122,13 +147,34 @@ export const StandardsLayout: React.FC<StandardsLayoutProps> = ({
         backgroundColor: '#F8FAFC',
         direction: 'rtl',
         fontFamily: "'Cairo', 'Tajawal', system-ui, -apple-system, sans-serif",
+        position: 'relative',
       }}
     >
+      {/* Backdrop for Mobile Drawer */}
+      {isMobile && isMobileOpen && (
+        <div
+          onClick={() => setIsMobileOpen(false)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(15, 23, 42, 0.6)',
+            backdropFilter: 'blur(3px)',
+            WebkitBackdropFilter: 'blur(3px)',
+            zIndex: 9998,
+            transition: 'opacity 0.25s ease',
+          }}
+        />
+      )}
+
       {/* 1. Dark Slate Fixed Sidebar (#0B0F19) */}
       <StandardsSidebar
         activeScreen={activeScreen}
-        onSelectScreen={setActiveScreen}
-        onLogout={onLogout}
+        onSelectScreen={(screen) => navigateToScreen(screen)}
+        isCollapsed={isCollapsed}
+        onToggleCollapse={() => setIsCollapsed(!isCollapsed)}
+        isMobile={isMobile}
+        isMobileOpen={isMobileOpen}
+        onCloseMobile={() => setIsMobileOpen(false)}
       />
 
       {/* 2. Main Workspace Container */}
@@ -150,7 +196,10 @@ export const StandardsLayout: React.FC<StandardsLayoutProps> = ({
         <StandardsTopBar
           activeScreen={activeScreen}
           activeVersionNo={activeVersion?.versionNo}
-          onNavigateHome={() => setActiveScreen('versions')}
+          onNavigateHome={() => navigateToScreen('versions')}
+          isMobile={isMobile}
+          onToggleMobileMenu={() => setIsMobileOpen(!isMobileOpen)}
+          onLogout={onLogout}
         />
 
         {/* 4. Independent Scrollable Content View */}

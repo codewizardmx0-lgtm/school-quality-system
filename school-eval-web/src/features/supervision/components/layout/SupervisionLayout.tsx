@@ -1,6 +1,6 @@
 /**
  * Component: SupervisionLayout
- * الهيكل العام والشامل لبوابة المشرف الوزاري - الإدارة العامة لضمان الجودة والاعتماد المدرسي
+ * الهيكل العام والشامل لبوابة المشرف الوزاري - الإدارة العامة لتقويم الجودة المدرسية
  * منصة ارتقاء للتقييم الذاتي والتحسين المدرسي
  * 
  * - الشريط الجانبي ثابت تماماً (Fixed Sidebar #0B0F19 بعرض 260px)
@@ -56,6 +56,45 @@ export const SupervisionLayout: React.FC<SupervisionLayoutProps> = ({
   // قائمة المدارس والمخرجات المتاحة في النطاق الجغرافي للمشرف
   const [availableSubmissions, setAvailableSubmissions] = useState<ReviewableSubmissionItem[]>([]);
   const [isLoadingAvailable, setIsLoadingAvailable] = useState<boolean>(false);
+
+  // Responsive & Sidebar Collapse state (UI_STANDARDS.md §2 & §7)
+  const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isMobileOpen, setIsMobileOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      return window.innerWidth < 1024;
+    }
+    return false;
+  });
+  const [activeStandardVersion, setActiveStandardVersion] = useState<string>('2026.1');
+
+  useEffect(() => {
+    const handleResize = () => {
+      const mobile = window.innerWidth < 1024;
+      setIsMobile(mobile);
+      if (!mobile) {
+        setIsMobileOpen(false);
+      }
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  // جلب رقم إصدار المعايير النشط رسمياً للربط الحي مع تذييل القائمة الجانبية
+  useEffect(() => {
+    let isMounted = true;
+    supervisionApi.getActiveStandardVersion()
+      .then((ver) => {
+        const num = ver?.versionNumber || (ver as any)?.versionNo;
+        if (isMounted && num) {
+          setActiveStandardVersion(num);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     let isMounted = true;
@@ -119,6 +158,9 @@ export const SupervisionLayout: React.FC<SupervisionLayoutProps> = ({
     }
 
     setActiveScreen(screen);
+    if (isMobile) {
+      setIsMobileOpen(false);
+    }
 
     // التمرير السلس لأعلى منطقة المحتوى
     const scrollContainer = document.getElementById('supervision-scroll-area');
@@ -231,14 +273,36 @@ export const SupervisionLayout: React.FC<SupervisionLayoutProps> = ({
         backgroundColor: '#F8FAFC',
         direction: 'rtl',
         fontFamily: "'Cairo', 'Tajawal', system-ui, sans-serif",
+        position: 'relative',
       }}
     >
+      {/* Backdrop for Mobile Drawer */}
+      {isMobile && isMobileOpen && (
+        <div
+          onClick={() => setIsMobileOpen(false)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(15, 23, 42, 0.6)',
+            backdropFilter: 'blur(3px)',
+            WebkitBackdropFilter: 'blur(3px)',
+            zIndex: 9998,
+            transition: 'opacity 0.25s ease',
+          }}
+        />
+      )}
+
       {/* 1. الشريط الجانبي الثابت (#0B0F19) */}
       <SupervisionSidebar
         activeScreen={activeScreen}
         onSelectScreen={(screen) => navigateToScreen(screen)}
-        onLogout={onLogout}
         selectedSchoolName={selectedSchoolName}
+        isCollapsed={isCollapsed}
+        onToggleCollapse={() => setIsCollapsed(!isCollapsed)}
+        isMobile={isMobile}
+        isMobileOpen={isMobileOpen}
+        onCloseMobile={() => setIsMobileOpen(false)}
+        standardVersionNo={activeStandardVersion}
       />
 
       {/* 2. منطقة العمل الرئيسية: الشريط العلوي + شريط سياق المدرسة + المحتوى الداخلي */}
@@ -256,10 +320,13 @@ export const SupervisionLayout: React.FC<SupervisionLayoutProps> = ({
         {/* الشريط العلوي الثابت بارتفاع 68px */}
         <SupervisionTopBar
           activeScreen={activeScreen}
-          onNavigate={(screen) => navigateToScreen(screen)}
+          onNavigate={(screen, params) => navigateToScreen(screen, params)}
           scopeText={user?.governorate ? user.governorate : 'كافة المحافظات (إشراف مركزي عام)'}
           userName={user?.fullName || user?.username || 'المشرف الوزاري'}
           userRole="المشرف الوزاري"
+          isMobile={isMobile}
+          onToggleMobileMenu={() => setIsMobileOpen(!isMobileOpen)}
+          onLogout={onLogout}
         />
 
         {/* شريط سياق المدرسة الموحد الثابت للواجهات الأربع (4، 5، 6، 8) */}

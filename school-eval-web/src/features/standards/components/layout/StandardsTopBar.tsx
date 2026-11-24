@@ -18,17 +18,23 @@ import {
   KeyRound,
   LogOut,
   Bell,
+  Menu,
 } from 'lucide-react';
 import type { StandardsScreenKey } from './StandardsSidebar';
 import { useAuth } from '../../../../hooks/useAuth';
 import { ProfileModal } from '../../../auth/ProfileModal';
 import { ChangePasswordModal } from '../../../auth/ChangePasswordModal';
+import { ConfirmationDialog } from '../../../admin/components/common/ConfirmationDialog';
+import { UniversalNotificationsDrawer } from '../../../../components/notifications/UniversalNotificationsDrawer';
 import { get } from '../../../../api/apiClient';
 
 interface StandardsTopBarProps {
   activeScreen: StandardsScreenKey;
   activeVersionNo?: string;
   onNavigateHome?: () => void;
+  isMobile?: boolean;
+  onToggleMobileMenu?: () => void;
+  onLogout?: () => void;
 }
 
 const screenTitles: Record<StandardsScreenKey, string> = {
@@ -44,12 +50,17 @@ export const StandardsTopBar: React.FC<StandardsTopBarProps> = ({
   activeScreen,
   activeVersionNo = '2026.1',
   onNavigateHome,
+  isMobile = false,
+  onToggleMobileMenu,
+  onLogout,
 }) => {
   const { user, logout } = useAuth();
   const [unreadCount, setUnreadCount] = useState<number>(0);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
+  const [isNotificationsDrawerOpen, setIsNotificationsDrawerOpen] = useState(false);
+  const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
   // Close menu when clicking outside
@@ -78,11 +89,9 @@ export const StandardsTopBar: React.FC<StandardsTopBarProps> = ({
     };
   }, []);
 
-  const handleLogout = async () => {
+  const handleLogout = () => {
     setIsMenuOpen(false);
-    if (window.confirm('هل أنت متأكد من رغبتك في تسجيل الخروج؟')) {
-      await logout();
-    }
+    setIsLogoutConfirmOpen(true);
   };
 
   const displayName = user?.fullName || 'د. خالد الرازحي';
@@ -105,7 +114,7 @@ export const StandardsTopBar: React.FC<StandardsTopBarProps> = ({
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          padding: '0 28px',
+          padding: isMobile ? '0 12px' : '0 28px',
           backgroundColor: '#FFFFFF',
           borderBottom: '1px solid #E2E8F0',
           flexShrink: 0,
@@ -113,8 +122,31 @@ export const StandardsTopBar: React.FC<StandardsTopBarProps> = ({
           boxShadow: '0 1px 3px rgba(0, 0, 0, 0.04)',
         }}
       >
-        {/* 1. Breadcrumbs */}
+        {/* 1. Breadcrumbs + Mobile Menu Button */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px' }}>
+          {isMobile && onToggleMobileMenu && (
+            <button
+              type="button"
+              onClick={onToggleMobileMenu}
+              title="فتح القائمة الجانبية"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: '38px',
+                height: '38px',
+                borderRadius: '8px',
+                border: '1px solid #E2E8F0',
+                backgroundColor: '#F8FAFC',
+                color: '#1E293B',
+                cursor: 'pointer',
+                flexShrink: 0,
+              }}
+            >
+              <Menu size={20} />
+            </button>
+          )}
+
           <button
             type="button"
             onClick={onNavigateHome}
@@ -170,13 +202,7 @@ export const StandardsTopBar: React.FC<StandardsTopBarProps> = ({
           {/* Notification Bell Button */}
           <button
             type="button"
-            onClick={() => {
-              if (unreadCount > 0) {
-                alert(`لديك ${unreadCount} إشعار غير مقروء في سجل التنبيهات.`);
-              } else {
-                alert('لا توجد إشعارات جديدة غير مقروءة.');
-              }
-            }}
+            onClick={() => setIsNotificationsDrawerOpen(true)}
             style={{
               position: 'relative',
               width: '38px',
@@ -409,6 +435,33 @@ export const StandardsTopBar: React.FC<StandardsTopBarProps> = ({
           addToast={() => {}}
         />
       )}
+
+      {/* Confirmation Dialog for Logout */}
+      {isLogoutConfirmOpen && (
+        <ConfirmationDialog
+          isOpen={isLogoutConfirmOpen}
+          title="تأكيد تسجيل الخروج"
+          message="هل أنت متأكد من رغبتك في تسجيل الخروج من منصة ارتقاء لإدارة المعايير؟"
+          confirmLabel="نعم، تسجيل الخروج"
+          cancelLabel="إلغاء"
+          variant="danger"
+          onConfirm={async () => {
+            setIsLogoutConfirmOpen(false);
+            if (onLogout) {
+              onLogout();
+            } else {
+              await logout();
+            }
+          }}
+          onCancel={() => setIsLogoutConfirmOpen(false)}
+        />
+      )}
+
+      {/* Universal Notifications Drawer (FE-GAP-10) */}
+      <UniversalNotificationsDrawer
+        isOpen={isNotificationsDrawerOpen}
+        onClose={() => setIsNotificationsDrawerOpen(false)}
+      />
     </>
   );
 };

@@ -242,7 +242,7 @@ export const UsersManagement: React.FC<UsersManagementProps> = ({ onNavigate, ad
         <StatCard
           title="مقيّمو ومسؤولو الجودة بالمدرسة"
           value={loading ? '...' : `${schoolEvaluatorsCount} مستخدماً`}
-          subtitle="المقيّمون المعتمدون بالمدارس"
+          subtitle="المقيّمون المسجلون بالمدارس"
           icon={<UserCheck size={24} />}
           iconBgColor="#ECFDF5"
           iconColor="#059669"
@@ -569,7 +569,7 @@ export const UsersManagement: React.FC<UsersManagementProps> = ({ onNavigate, ad
                             {user.schoolName}
                           </div>
                           <div style={{ fontSize: theme.typography.fontSizes.xs, color: theme.colors.neutral[400] }}>
-                            {[user.directorate, user.governorate].filter(Boolean).join(' • ') || 'مدرسة معتمدة'} {user.schoolCode ? `• كود: ${user.schoolCode}` : ''}
+                            {[user.directorate, user.governorate].filter(Boolean).join(' • ') || 'المدرسة المسجلة'} {user.schoolCode ? `• كود: ${user.schoolCode}` : ''}
                           </div>
                         </div>
                       ) : user.governorate || user.directorate ? (
