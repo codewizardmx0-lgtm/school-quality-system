@@ -1331,10 +1331,12 @@ class StandardsManagementFeatureTest extends TestCase
         // أداة 1 مرتبطة بمؤشرات في البيانات الافتراضية
         $tool = \App\Models\VerificationTool::first();
         $this->assertNotNull($tool);
+        $indicator = \App\Models\Indicator::first();
+        $this->assertNotNull($indicator);
 
         // التأكد من وجود ارتباط
         \Illuminate\Support\Facades\DB::table('indicator_verification_methods')->updateOrInsert(
-            ['indicator_id' => 1, 'tool_id' => $tool->tool_id],
+            ['indicator_id' => $indicator->indicator_id, 'tool_id' => $tool->tool_id],
             ['required' => true, 'usage_guidance' => 'فحص وثائقي', 'created_at' => now()]
         );
 

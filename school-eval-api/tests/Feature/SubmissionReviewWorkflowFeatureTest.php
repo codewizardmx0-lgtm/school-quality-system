@@ -166,11 +166,14 @@ class SubmissionReviewWorkflowFeatureTest extends TestCase
             'submitted_at' => now(),
         ]);
 
+        $desc = \App\Models\IndicatorScoreDescriptor::where('indicator_id', $this->indicator->indicator_id)->first()
+            ?? \App\Models\IndicatorScoreDescriptor::first();
+
         EvaluationResult::firstOrCreate([
             'evaluation_id' => $evaluation->evaluation_id,
             'indicator_id' => $this->indicator->indicator_id,
         ], [
-            'score_descriptor_id' => 1,
+            'score_descriptor_id' => $desc?->descriptor_id ?? 1,
             'standard_version_id' => $this->version->version_id,
             'evaluator_user_id' => $this->centralSupervisor->user_id,
             'score' => 2,

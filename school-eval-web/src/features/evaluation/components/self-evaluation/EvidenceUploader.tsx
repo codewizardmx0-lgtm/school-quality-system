@@ -323,7 +323,7 @@ export const EvidenceUploader: React.FC<EvidenceUploaderProps> = ({
               </div>
               <div style={{ minWidth: 0 }}>
                 <div style={{ fontSize: '13px', fontWeight: 800, color: '#14532D' }}>
-                  نموذج القالب المعتمد: {activeTemplate.title}
+                  نموذج القالب الرسمي: {activeTemplate.title}
                 </div>
                 <div style={{ fontSize: '11px', color: '#166534', marginTop: '2px' }}>
                   {activeTemplate.standardCode} ({activeTemplate.standardTitle}) • رمز الشاهد المقترح: {activeTemplate.id}
@@ -374,7 +374,7 @@ export const EvidenceUploader: React.FC<EvidenceUploaderProps> = ({
                 }}
               >
                 <Download size={13} />
-                <span>تحميل نموذج القالب المعتمد (.md)</span>
+                <span>تحميل نموذج القالب الرسمي (.md)</span>
               </button>
             </div>
           </div>
@@ -801,7 +801,7 @@ export const EvidenceUploader: React.FC<EvidenceUploaderProps> = ({
         </div>
       )}
 
-      {/* Modal: معاينة وتحميل قالب الشاهد المعتمد */}
+      {/* Modal: معاينة وتحميل قالب الشاهد الرسمي */}
       {isTemplateModalOpen && activeTemplate && (
         <div
           style={{
@@ -868,7 +868,7 @@ export const EvidenceUploader: React.FC<EvidenceUploaderProps> = ({
                   <div style={{ fontSize: '11.5px', color: '#64748B', marginTop: '2px', display: 'flex', gap: '8px' }}>
                     <span>{activeTemplate.standardCode} — {activeTemplate.standardTitle}</span>
                     <span>•</span>
-                    <span style={{ color: '#059669', fontWeight: 700 }}>معتمد للاعتماد المدرسي ({activeTemplate.id})</span>
+                    <span style={{ color: '#059669', fontWeight: 700 }}>نموذج رسمي لتقويم الجودة ({activeTemplate.id})</span>
                   </div>
                 </div>
               </div>

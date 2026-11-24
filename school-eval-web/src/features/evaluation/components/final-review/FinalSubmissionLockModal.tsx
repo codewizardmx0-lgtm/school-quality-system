@@ -21,7 +21,7 @@ export const FinalSubmissionLockModal: React.FC<FinalSubmissionLockModalProps> =
   if (!isOpen) return null;
 
   const [password, setPassword] = useState('');
-  const [notes, setNotes] = useState('تم استيفاء وتدقيق كافة المعايير والشواهد المعتمدة والرفع النهائي للاعتماد الوزاري.');
+  const [notes, setNotes] = useState('تم استيفاء وتدقيق كافة المعايير والشواهد الرسمية والتسليم النهائي للفحص والمراجعة الإشرافية.');
   const [isAgreed, setIsAgreed] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -226,8 +226,8 @@ export const FinalSubmissionLockModal: React.FC<FinalSubmissionLockModalProps> =
               style={{ marginTop: '3px', cursor: 'pointer', width: '16px', height: '16px' }}
             />
             <span>
-              <strong>إقرار الحوكمة القانونية:</strong> أقر بصفتي مسؤول التقييم المعتمد بصحة واكتمال كافة التقديرات
-              والشواهد المرفقة ومطابقتها للواقع الميداني، وأتحمل المسؤولية المهنية المترتبة على ذلك وفق المعايير واللوائح الوطنية المعتمدة.
+              <strong>إقرار الحوكمة القانونية:</strong> أقر بصفتي مسؤول التقييم بالمدرسة بصحة واكتمال كافة التقديرات
+              والشواهد المرفقة ومطابقتها للواقع الميداني، وأتحمل المسؤولية المهنية المترتبة على ذلك وفق المعايير واللوائح الوطنية الرسمية.
             </span>
           </label>
 
@@ -253,7 +253,7 @@ export const FinalSubmissionLockModal: React.FC<FinalSubmissionLockModalProps> =
               }}
             />
             <div style={{ fontSize: '11px', color: '#64748B', marginTop: '4px' }}>
-              (يتم التحقق الأمني وإثبات عدم الإنكار بربط الختم بهوية المستخدم المعتمد)
+              (يتم التحقق الأمني وإثبات عدم الإنكار بربط الختم بهوية المستخدم المسجل)
             </div>
           </div>
 

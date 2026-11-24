@@ -137,10 +137,6 @@ class CompletionRequestItem extends Model
             }
         }
 
-        if ($this->status === 'resolved') {
-            $this->update(['status' => 'pending']);
-        }
-
         return $this->status;
     }
 }

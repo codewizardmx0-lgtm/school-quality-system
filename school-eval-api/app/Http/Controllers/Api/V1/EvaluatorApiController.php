@@ -2828,7 +2828,7 @@ class EvaluatorApiController extends Controller
             'issuedAt' => $completionRequest->created_at?->toDateString(),
             'completionDeadline' => $completionRequest->completion_deadline?->toDateString(),
             'remainingDays' => $completionRequest->completion_deadline ? max(0, now()->diffInDays($completionRequest->completion_deadline, false)) : 0,
-            'supervisorGeneralNotes' => 'يرجى مراجعة البنود الموضحة وتحديث المرفقات والمبررات المطلوبة لإعادة الاعتماد.',
+            'supervisorGeneralNotes' => 'يرجى مراجعة البنود الموضحة وتحديث المرفقات والمبررات المطلوبة لإعادة الفحص والمراجعة الإشرافية.',
             'flaggedItems' => $items->map(fn($item) => [
                 'itemId' => $item->request_item_id,
                 'indicatorId' => $item->indicator_id,
@@ -2836,6 +2836,7 @@ class EvaluatorApiController extends Controller
                 'indicatorTitle' => $item->indicator?->name ?? 'مؤشر معياري مطلوب استكماله',
                 'standardTitle' => $item->indicator?->subStandard?->standard?->name ?? 'المعايير المحددة للاستكمال',
                 'missingDescription' => $item->missing_description,
+                'allowedActions' => $item->allowed_actions ?? [],
                 'status' => $item->status,
                 'resolutionNotes' => '',
             ]),
@@ -4070,18 +4071,28 @@ class EvaluatorApiController extends Controller
         $coveragePercentage = $totalIndicators > 0 ? round(($reviewedCount / $totalIndicators) * 100) : 0;
 
         // 6. جلب خطط التحسين المدرسية الثلاث مع مراجعاتها
+        $todayStr = now()->toDateString();
+        $totalOverdueActions = 0;
+
         $plans = ImprovementPlan::where('school_id', $schoolId)
             ->where('cycle_id', $evaluation->cycle_id)
             ->with(['reviewNotes.author', 'actions'])
             ->orderBy('plan_id', 'desc')
             ->get()
-            ->map(function ($p) use ($principalUser) {
+            ->map(function ($p) use ($principalUser, $todayStr, &$totalOverdueActions) {
                 $pNotes = $p->reviewNotes->filter(function ($n) use ($principalUser) {
                     if ($principalUser && (int)$n->author_user_id === (int)$principalUser->user_id) return true;
                     return in_array($n->reviewer_role ?? '', ['school_principal', 'principal']);
                 })->values();
 
                 $latestNote = $pNotes->sortByDesc('note_id')->first() ?? $p->reviewNotes->sortByDesc('note_id')->first();
+
+                $pOverdueCount = $p->actions->filter(function ($a) use ($todayStr) {
+                    if (in_array($a->status, ['Completed', 'Cancelled', 'Done'])) return false;
+                    return $a->due_date && $a->due_date->format('Y-m-d') < $todayStr;
+                })->count();
+
+                $totalOverdueActions += $pOverdueCount;
 
                 return [
                     'planId'               => (int) $p->plan_id,
@@ -4092,6 +4103,7 @@ class EvaluatorApiController extends Controller
                     'status'               => $p->status,
                     'progressDescription'  => $p->progress_description,
                     'actionsCount'         => $p->actions->count(),
+                    'overdueActionsCount'  => $pOverdueCount,
                     'hasPrincipalReview'   => $pNotes->isNotEmpty(),
                     'reviewNotesCount'     => $p->reviewNotes->count(),
                     'principalNotesCount'  => $pNotes->count(),
@@ -4161,6 +4173,7 @@ class EvaluatorApiController extends Controller
                 'reviewCoveragePercentage'   => $coveragePercentage,
                 'plansCount'                 => $plans->count(),
                 'reviewedPlansCount'         => $plans->where('hasPrincipalReview', true)->count(),
+                'overdueActionsCount'        => $totalOverdueActions,
                 'hasOpenCompletionRequest'   => $completionRequestData !== null && $completionRequestData['status'] === 'Pending',
                 'finalReviewAcknowledged'    => $finalReviewData['hasPrincipalAcknowledgment'],
             ],

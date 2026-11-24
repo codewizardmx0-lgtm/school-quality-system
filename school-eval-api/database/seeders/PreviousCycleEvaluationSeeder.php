@@ -9,6 +9,7 @@ use App\Models\Indicator;
 use App\Models\IndicatorScoreDescriptor;
 use App\Models\School;
 use App\Models\ScoreLevel;
+use App\Models\StandardVersion;
 use App\Models\User;
 use Illuminate\Database\Seeder;
 
@@ -29,13 +30,31 @@ class PreviousCycleEvaluationSeeder extends Seeder
             return;
         }
 
+        // ضمان وجود إصدار معياري مُقرّ ومتاح لربط الدورة السابقة به
+        $approvedVersion = StandardVersion::whereIn('status', ['Approved', 'Active'])->first()
+            ?? StandardVersion::first();
+
+        if (!$approvedVersion) {
+            $approvedVersion = new StandardVersion();
+            $approvedVersion->version_no = '1.0';
+            $approvedVersion->status = 'Approved';
+            $approvedVersion->issue_date = '2024-08-01';
+            $approvedVersion->source_organization = 'وزارة التربية والتعليم';
+            $approvedVersion->source_description = 'وثيقة المعايير الوطنية لتقويم الجودة المدرسية';
+            $approvedVersion->save();
+        } elseif (!$approvedVersion->isApproved()) {
+            $approvedVersion->update(['status' => 'Approved']);
+        }
+
+        $targetVersionId = (int) $approvedVersion->version_id;
+
         // 1. الدورة التقييمية السابقة (2024/2025)
         $prevCycle = EvaluationCycle::updateOrCreate(
             ['academic_year' => '2024/2025'],
             [
                 'name'               => 'دورة التقييم الذاتي للعام الدراسي 2024/2025',
                 'status'             => 'Closed',
-                'version_id'         => 1,
+                'version_id'         => $targetVersionId,
                 'scope_governorate'  => null,
                 'start_date'         => '2024-09-01',
                 'end_date'           => '2025-06-30',

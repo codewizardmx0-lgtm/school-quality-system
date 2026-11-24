@@ -97,7 +97,56 @@ class SupervisionHistoricalComparisonFeatureTest extends TestCase
             'status'               => 'Active',
         ]);
 
-        // ضمان وجود بيانات الدورة السابقة لمدرسة الفاروق عبر الـ Seeder
+        // ضمان وجود دورة 2025/2026 مع تقييم ونتائج لمدرسة الفاروق للمقارنة
+        $approvedVersion = StandardVersion::whereIn('status', ['Approved', 'Active'])->first();
+        $targetVersionId = (int) ($approvedVersion?->version_id ?? 1);
+
+        $cycle2026 = EvaluationCycle::firstOrCreate(
+            ['academic_year' => '2025/2026'],
+            [
+                'name'               => 'الدورة التقييمية 2025/2026',
+                'status'             => 'Active',
+                'version_id'         => $targetVersionId,
+                'start_date'         => '2025-09-01',
+                'end_date'           => '2026-06-30',
+                'max_completion_days'=> 14,
+            ]
+        );
+
+        $eval2026 = Evaluation::firstOrCreate(
+            [
+                'cycle_id'  => $cycle2026->cycle_id,
+                'school_id' => $this->schoolFarouq->school_id,
+            ],
+            [
+                'created_by_user_id' => $this->supervisorCentral->user_id,
+                'status'             => 'Completed',
+            ]
+        );
+
+        // إذا لم تكن النتائج مرصودة لتقييم 2025/2026، نرصدها للمؤشرات الـ 109
+        $defaultDescId = IndicatorScoreDescriptor::first()?->descriptor_id ?? 1;
+        if (EvaluationResult::where('evaluation_id', $eval2026->evaluation_id)->count() < 109) {
+            $allInds = Indicator::whereHas('subStandard.standard', fn($q) => $q->where('version_id', $targetVersionId))->get();
+            foreach ($allInds as $ind) {
+                $indDesc = IndicatorScoreDescriptor::where('indicator_id', $ind->indicator_id)->first();
+                EvaluationResult::firstOrCreate(
+                    [
+                        'evaluation_id' => $eval2026->evaluation_id,
+                        'indicator_id'  => $ind->indicator_id,
+                    ],
+                    [
+                        'score_descriptor_id' => $indDesc?->descriptor_id ?? $defaultDescId,
+                        'standard_version_id' => $targetVersionId,
+                        'evaluator_user_id'   => $this->supervisorCentral->user_id,
+                        'score'               => ($ind->indicator_id % 3) + 1,
+                        'completion_status'   => 'Complete',
+                    ]
+                );
+            }
+        }
+
+        // الآن نشغل Seeder الدورة السابقة لضمان التباين والتطور (تحسن، تراجع، ثبات)
         (new PreviousCycleEvaluationSeeder())->run();
     }
 
@@ -154,16 +203,19 @@ class SupervisionHistoricalComparisonFeatureTest extends TestCase
     {
         Sanctum::actingAs($this->supervisorCentral);
 
+        $approvedVersion = StandardVersion::whereIn('status', ['Approved', 'Active'])->first();
+        $targetVersionId = (int) ($approvedVersion?->version_id ?? 1);
+
         // إنشاء دورة واحدة فقط وتقييم واحد لمدرسة الأمانة
         $cycle = EvaluationCycle::firstOrCreate(
             ['academic_year' => '2025/2026'],
-            ['name' => 'دورة 2025/2026', 'status' => 'Active', 'version_id' => 1]
+            ['name' => 'دورة 2025/2026', 'status' => 'Active', 'version_id' => $targetVersionId]
         );
         Evaluation::where('school_id', $this->schoolAmana->school_id)->delete();
         Evaluation::create([
             'cycle_id'           => $cycle->cycle_id,
             'school_id'          => $this->schoolAmana->school_id,
-            'created_by_user_id' => 1,
+            'created_by_user_id' => $this->supervisorCentral->user_id,
             'status'             => 'InProgress',
         ]);
 
