@@ -408,7 +408,7 @@ export const standardsApi = {
       document.body.removeChild(link);
       window.URL.revokeObjectURL(url);
 
-      return { message: 'تم تحميل وثيقة الإقرار والاعتماد المعياري الرسمية بصيغة PDF بنجاح.' };
+      return { message: 'تم تحميل وثيقة الإقرار المعياري الرسمي بصيغة PDF بنجاح.' };
     } catch {
       // Fallback to JSON endpoint
       const res = await apiClient.get(`/standard-versions/${versionId}/export-pdf`);

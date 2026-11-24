@@ -84,8 +84,13 @@ class Phase1TrackingCodeAndCompletionSeederTest extends TestCase
 
         $comp = CompletionRequest::where('status', 'Open')->firstOrFail();
 
-        // حل كافة البنود
-        CompletionRequestItem::where('request_id', $comp->request_id)->update(['status' => 'resolved']);
+        // إكمال الشواهد وحل كافة البنود
+        foreach ($comp->items as $item) {
+            if ($item->evidence_link_id) {
+                \App\Models\EvidenceLink::where('id', $item->evidence_link_id)->update(['status' => 'completed']);
+            }
+            $item->update(['status' => 'resolved']);
+        }
 
         $response = $this->postJson("/api/v1/completion-requests/{$comp->request_id}/resubmit", [
             'schoolNotes' => 'تم استيفاء كافة الشواهد والتقارير المطلوبة.',

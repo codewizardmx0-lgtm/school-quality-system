@@ -21,11 +21,13 @@ class StoreUserRequest extends FormRequest
             'password'   => ['required', 'string', 'min:8'],
             'fullName'   => ['required', 'string', 'max:150'],
             'email'      => ['required', 'email', 'max:150', 'unique:users,email'],
-            'userType'   => ['required', 'string', 'in:school,ministry,system'],
-            'schoolId'   => ['nullable', 'required_if:userType,school', 'exists:schools,school_id'],
-            'ministryId' => ['nullable', 'required_if:userType,ministry', 'exists:ministries,ministry_id'],
-            'roleId'     => ['required', 'integer', 'exists:roles,role_id'],
-            'status'     => ['required', 'string', 'in:Active,Disabled'],
+            'userType'      => ['required', 'string', 'in:school,ministry,system'],
+            'governorate'   => ['nullable', 'string', 'max:100'],
+            'directorateId' => ['nullable', 'exists:directorates,directorate_id'],
+            'schoolId'      => ['nullable', 'required_if:userType,school', 'exists:schools,school_id'],
+            'ministryId'    => ['nullable', 'exists:ministries,ministry_id'],
+            'roleId'        => ['required', 'integer', 'exists:roles,role_id'],
+            'status'        => ['required', 'string', 'in:Active,Disabled'],
         ];
     }
 

@@ -16,6 +16,7 @@ use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 
@@ -45,7 +46,7 @@ class AdminController extends Controller
                 'school_evaluator'            => 'مقيم المدرسة',
                 'school_principal'            => 'مدير المدرسة',
                 'ministry_standards_manager'  => 'مسؤول إدارة المعايير',
-                'ministry_supervisor'         => 'مشرف وزاري معتمد',
+                'ministry_supervisor'         => 'المشرف والمراجع الوزاري',
             ];
             $typeMap = [
                 'admin'                       => 'system',
@@ -373,6 +374,12 @@ class AdminController extends Controller
         $govId = $request->query('governorateId') ?? $request->query('governorate_id');
         if ($govId && !empty($govId)) {
             $query->where('governorate_id', (int) $govId);
+        } elseif ($request->filled('governorate')) {
+            $govName = $request->query('governorate');
+            $query->whereHas('governorate', function ($q) use ($govName) {
+                $q->where('name_ar', $govName)
+                  ->orWhere('name_ar', 'like', "%{$govName}%");
+            });
         }
 
         $directorates = $query->orderBy('governorate_id', 'asc')
@@ -577,10 +584,18 @@ class AdminController extends Controller
             ->orWhere('educational_district', $shortName)
             ->count();
 
+        $linkedUsersCount = User::where('directorate_id', $dir->directorate_id)->count();
+
         if ($linkedSchoolsCount > 0) {
             return ApiResponse::validationError([
                 'directorate' => ['لا يمكن حذف المديرية لأنها مرتبطة بمدارس.'],
             ], 'لا يمكن حذف المديرية لأنها مرتبطة بمدارس');
+        }
+
+        if ($linkedUsersCount > 0) {
+            return ApiResponse::validationError([
+                'directorate' => ['لا يمكن حذف المديرية لأنها مرتبطة بمشرفين مسجلين.'],
+            ], 'لا يمكن حذف المديرية لأنها مرتبطة بمشرفين مسجلين في النظام.');
         }
 
         $dir->delete();
@@ -889,7 +904,7 @@ class AdminController extends Controller
     }
 
     /**
-     * إطلاق نسخة احتياطية فورية.
+     * إطلاق نسخة احتياطية فورية حقيقية (U-43 / BE-GAP-06).
      */
     public function triggerBackup(Request $request): JsonResponse
     {
@@ -914,16 +929,42 @@ class AdminController extends Controller
         $backupId = (int) ($now->getTimestamp());
         $fileName = "backup_{$validated['backupType']}_{$dateStr}_{$timeStr}_{$backupId}.enc";
 
-        // التأكد من حماية وتواجد مجلد النسخ الاحتياطية المحلي
+        // 1. التأكد من حماية وتواجد مجلد النسخ الاحتياطية المحلي بعيداً عن مجلد العرض العام public
         $backupDir = storage_path('app/backups');
         if (!is_dir($backupDir)) {
             mkdir($backupDir, 0750, true);
         }
         $filePath = $backupDir . DIRECTORY_SEPARATOR . $fileName;
+        $tempSqlPath = $backupDir . DIRECTORY_SEPARATOR . "temp_{$backupId}.sql";
 
-        // توليد ملف النسخة الاحتياطية المحلي المشفر
-        $header = "-- School Quality System Local Secure Backup Archive\n-- Type: {$validated['backupType']}\n-- Created: {$now->toIso8601ZuluString()}\n-- Hash Algorithm: SHA-256\n-- Schema: 42 Relational Tables\n";
-        file_put_contents($filePath, $header);
+        // 2. توليد التفريغ الحقيقي لقاعدة البيانات (mysqldump أو Fallback لـ SQLite/Testing)
+        $dumpSuccess = false;
+        $defaultDriver = config('database.default');
+
+        if ($defaultDriver === 'mysql' && !app()->environment('testing')) {
+            $dumpSuccess = $this->dumpMysqlDatabase($tempSqlPath);
+        }
+
+        // إذا فشل mysqldump أو كانت البيئة SQLite/Testing، نستخدم محرك التفريغ الاحتياطي الذكي (PHP PDO Dump Engine)
+        if (!$dumpSuccess || !file_exists($tempSqlPath) || filesize($tempSqlPath) === 0) {
+            $this->dumpPdoDatabase($tempSqlPath, $validated['backupType']);
+        }
+
+        // 3. قراءة محتوى التفريغ، ضغطه بواسطة gzip، ثم تشفيره بواسطة AES-256
+        $rawSql = file_exists($tempSqlPath) ? file_get_contents($tempSqlPath) : "-- Backup empty";
+        @unlink($tempSqlPath);
+
+        $compressed = function_exists('gzencode') ? gzencode($rawSql, 9) : $rawSql;
+
+        $cipher = 'aes-256-cbc';
+        $appKey = config('app.key') ?: 'base64:SchoolQualitySystemSecureProductionKey32B';
+        $encryptionKey = substr(hash('sha256', $appKey, true), 0, 32);
+        $iv = openssl_random_pseudo_bytes(openssl_cipher_iv_length($cipher));
+        $encrypted = openssl_encrypt($compressed, $cipher, $encryptionKey, OPENSSL_RAW_DATA, $iv);
+
+        // كتابة الملف المشفر مع ترويسة الحماية وبصمة الـ IV
+        $archiveContent = "SQS-AES256-V1\n" . $iv . $encrypted;
+        file_put_contents($filePath, $archiveContent);
 
         $realSize = filesize($filePath);
         $realHash = hash_file('sha256', $filePath);
@@ -944,8 +985,142 @@ class AdminController extends Controller
 
         return ApiResponse::created(
             data: $newBackup,
-            message: 'تم إنشاء النسخة الاحتياطية بنجاح.'
+            message: 'تم إنشاء النسخة الاحتياطية وتشفيرها بنجاح.'
         );
+    }
+
+    /**
+     * استكشاف مسار أداة mysqldump في النظام المحلي ومسارات بيئة Laragon/MySQL.
+     */
+    protected function resolveMysqlDumpBinary(): ?string
+    {
+        $envPath = env('DB_DUMP_BINARY_PATH');
+        if ($envPath && file_exists($envPath)) {
+            return $envPath;
+        }
+
+        $candidates = [
+            'D:/laragon/bin/mysql/mysql-8.4.3-winx64/bin/mysqldump.exe',
+            'C:/laragon/bin/mysql/mysql-8.4.3-winx64/bin/mysqldump.exe',
+        ];
+
+        foreach (['D:/laragon/bin/mysql/*/bin/mysqldump.exe', 'C:/laragon/bin/mysql/*/bin/mysqldump.exe'] as $pattern) {
+            $globResults = glob($pattern);
+            if (!empty($globResults)) {
+                $candidates = array_merge($candidates, $globResults);
+            }
+        }
+
+        foreach ($candidates as $cand) {
+            if (file_exists($cand)) {
+                return $cand;
+            }
+        }
+
+        // فحص المسار العام للنظام PATH
+        $pathCheck = PHP_OS_FAMILY === 'Windows' ? 'where mysqldump 2>nul' : 'which mysqldump 2>/dev/null';
+        $output = @shell_exec($pathCheck);
+        if ($output) {
+            $lines = array_filter(array_map('trim', explode("\n", $output)));
+            if (!empty($lines)) {
+                $first = reset($lines);
+                if (file_exists($first)) {
+                    return $first;
+                }
+            }
+        }
+
+        return 'mysqldump';
+    }
+
+    /**
+     * تنفيذ التفريغ الحقيقي لقاعدة بيانات MySQL عبر mysqldump.
+     */
+    protected function dumpMysqlDatabase(string $outputPath): bool
+    {
+        $binary = $this->resolveMysqlDumpBinary();
+        if (!$binary) {
+            return false;
+        }
+
+        $conn = config('database.connections.mysql');
+        $host = escapeshellarg($conn['host'] ?? '127.0.0.1');
+        $port = escapeshellarg((string)($conn['port'] ?? 3306));
+        $db = escapeshellarg($conn['database'] ?? 'school_eval');
+        $user = escapeshellarg($conn['username'] ?? 'root');
+        $pass = $conn['password'] ?? '';
+        $passArg = $pass !== '' ? '--password=' . escapeshellarg($pass) : '';
+        $outArg = '--result-file=' . escapeshellarg($outputPath);
+        $binArg = escapeshellarg($binary);
+
+        $cmd = "{$binArg} --host={$host} --port={$port} --user={$user} {$passArg} --single-transaction --quick --skip-lock-tables {$outArg} {$db} 2>&1";
+
+        @exec($cmd, $cmdOutput, $returnVar);
+
+        return ($returnVar === 0 && file_exists($outputPath) && filesize($outputPath) > 0);
+    }
+
+    /**
+     * محرك تفريغ احتياطي ذكي عبر PDO (Fallback لبيئات SQLite واختبارات PHPUnit).
+     */
+    protected function dumpPdoDatabase(string $outputPath, string $backupType): void
+    {
+        $handle = fopen($outputPath, 'w');
+        if (!$handle) {
+            return;
+        }
+
+        $now = now();
+        $driver = DB::connection()->getDriverName();
+        $dbName = DB::connection()->getDatabaseName();
+
+        fwrite($handle, "-- School Quality System Database Archive Dump\n");
+        fwrite($handle, "-- Type: {$backupType}\n");
+        fwrite($handle, "-- Driver: {$driver}\n");
+        fwrite($handle, "-- Database: {$dbName}\n");
+        fwrite($handle, "-- Generated: {$now->toIso8601ZuluString()}\n\n");
+        fwrite($handle, "SET FOREIGN_KEY_CHECKS=0;\n\n");
+
+        $tableNames = [];
+        if ($driver === 'sqlite') {
+            $tables = DB::select("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'");
+            $tableNames = array_map(fn($t) => $t->name, $tables);
+        } else {
+            $tables = DB::select('SHOW TABLES');
+            $prop = 'Tables_in_' . $dbName;
+            $tableNames = array_map(fn($t) => $t->{$prop} ?? reset($t), $tables);
+        }
+
+        foreach ($tableNames as $tableName) {
+            if ($driver === 'sqlite') {
+                $create = DB::selectOne("SELECT sql FROM sqlite_master WHERE type='table' AND name = ?", [$tableName]);
+                if ($create && isset($create->sql)) {
+                    fwrite($handle, "DROP TABLE IF EXISTS `{$tableName}`;\n");
+                    fwrite($handle, $create->sql . ";\n\n");
+                }
+            }
+
+            try {
+                $rows = DB::table($tableName)->get();
+                if ($rows->isNotEmpty()) {
+                    foreach ($rows as $row) {
+                        $rowArr = (array) $row;
+                        $columns = implode(', ', array_map(fn($c) => "`{$c}`", array_keys($rowArr)));
+                        $values = implode(', ', array_map(function ($val) {
+                            if (is_null($val)) return 'NULL';
+                            return "'" . addslashes((string) $val) . "'";
+                        }, array_values($rowArr)));
+                        fwrite($handle, "INSERT INTO `{$tableName}` ({$columns}) VALUES ({$values});\n");
+                    }
+                    fwrite($handle, "\n");
+                }
+            } catch (\Throwable $e) {
+                // تجاوز الجداول غير القابلة للقراءة أثناء التوليد
+            }
+        }
+
+        fwrite($handle, "SET FOREIGN_KEY_CHECKS=1;\n");
+        fclose($handle);
     }
 
     /**
@@ -1008,7 +1183,11 @@ class AdminController extends Controller
         $filePath = storage_path('app/backups' . DIRECTORY_SEPARATOR . $safeFileName);
 
         if (!file_exists($filePath)) {
-            file_put_contents($filePath, "-- Demo Local Backup Archive #{$backupId}\n-- Name: {$safeFileName}\n");
+            $backupDir = storage_path('app/backups');
+            if (!is_dir($backupDir)) {
+                mkdir($backupDir, 0750, true);
+            }
+            $this->dumpPdoDatabase($filePath, $found['backupType'] ?? 'full');
         }
 
         return response()->download($filePath, $safeFileName, [

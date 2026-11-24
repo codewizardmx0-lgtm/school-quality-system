@@ -3,7 +3,7 @@
  * معايرة وتوزيع الأوزان النسبية للمستويات الثلاثة:
  * 1. المعايير الرئيسية (إلزامي 100.0%)
  * 2. المعايير الفرعية (إلزامي مجموع كل معيار فرعي = وزن معياره الرئيسي)
- * 3. المؤشرات (توزيع تلقائي متساوٍ افتراضي مع إمكانية التعديل)
+ * 3. المؤشرات (إلزامي مجموع أوزان مؤشرات كل معيار فرعي = وزن المعيار الفرعي التابع له)
  */
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
@@ -89,8 +89,50 @@ export function useWeightsRubrics(versionId?: number | string) {
     return Object.values(subStandardsBalanceMap).every((b) => b.isBalanced);
   }, [subStandardsBalanceMap]);
 
-  // الاتزان الكلي لكافة المستويات
-  const isBalanced = isMainBalanced && isAllSubStandardsBalanced;
+  // فحص اتزان المؤشرات لكل معيار فرعي (مجموع أوزان المؤشرات = وزن المعيار الفرعي)
+  const indicatorsBalanceMap = useMemo(() => {
+    const map: Record<
+      number,
+      { isBalanced: boolean; currentSum: number; expected: number; diff: number; indicatorsCount: number }
+    > = {};
+
+    weights.forEach((std) => {
+      (std.subStandards || []).forEach((sub) => {
+        const indicators = sub.indicators || [];
+        if (indicators.length === 0) {
+          map[sub.subStandardId] = {
+            isBalanced: true,
+            currentSum: sub.weight,
+            expected: sub.weight,
+            diff: 0,
+            indicatorsCount: 0,
+          };
+        } else {
+          const sum = indicators.reduce((acc, ind) => acc + (Number(ind.weight) || 0), 0);
+          const roundedSum = Math.round(sum * 100) / 100;
+          const roundedExpected = Math.round((Number(sub.weight) || 0) * 100) / 100;
+          const diff = Math.round((roundedSum - roundedExpected) * 100) / 100;
+          map[sub.subStandardId] = {
+            isBalanced: Math.abs(diff) < 0.05,
+            currentSum: roundedSum,
+            expected: roundedExpected,
+            diff,
+            indicatorsCount: indicators.length,
+          };
+        }
+      });
+    });
+
+    return map;
+  }, [weights]);
+
+  // هل كافة المؤشرات متزنة مع معاييرها الفرعية عبر كامل الشجرة؟
+  const isAllIndicatorsBalanced = useMemo(() => {
+    return Object.values(indicatorsBalanceMap).every((b) => b.isBalanced);
+  }, [indicatorsBalanceMap]);
+
+  // الاتزان الكلي الشامل لكافة المستويات الثلاثة
+  const isBalanced = isMainBalanced && isAllSubStandardsBalanced && isAllIndicatorsBalanced;
 
   // تعديل وزن معيار رئيسي محدد
   const handleWeightChange = (standardId: number, newWeight: number) => {
@@ -244,6 +286,10 @@ export function useWeightsRubrics(versionId?: number | string) {
       setError('لا يمكن حفظ الأوزان لأن بعض المعايير الفرعية غير متزنة مع وزن معيارها الرئيسي التابع له.');
       return;
     }
+    if (!isAllIndicatorsBalanced) {
+      setError('لا يمكن حفظ الأوزان لأن أوزان بعض المؤشرات غير متزنة مع وزن معيارها الفرعي التابع له.');
+      return;
+    }
 
     setIsSaving(true);
     setError(null);
@@ -258,6 +304,14 @@ export function useWeightsRubrics(versionId?: number | string) {
             sub_standard_id: sub.subStandardId,
             weight: sub.weight,
           }))
+        ),
+        indicators_weights: weights.flatMap((w) =>
+          (w.subStandards || []).flatMap((sub) =>
+            (sub.indicators || []).map((ind) => ({
+              indicator_id: ind.indicatorId,
+              weight: ind.weight,
+            }))
+          )
         ),
       };
 
@@ -283,7 +337,9 @@ export function useWeightsRubrics(versionId?: number | string) {
     isBalanced,
     isMainBalanced,
     isAllSubStandardsBalanced,
+    isAllIndicatorsBalanced,
     subStandardsBalanceMap,
+    indicatorsBalanceMap,
     isLoading,
     isSaving,
     saveSuccess,

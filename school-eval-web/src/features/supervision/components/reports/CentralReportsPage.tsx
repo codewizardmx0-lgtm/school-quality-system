@@ -1,42 +1,65 @@
 /**
  * Component: CentralReportsPage
- * الشاشة 6: التقارير والتحليلات المركزية ومؤشرات الجودة المدرسية الوطنية
+ * الشاشة 8 (الأخيرة في حزمة الإشراف): التحليلات المركزية ومؤشرات الجودة الوطنية الشاملة
  * منصة ارتقاء للتقييم الذاتي والتحسين المدرسي
+ * الامتثال الصارم للنسخة النهائية رقم 5 من وثيقة التخرج (UC-SUP-05, FR-SUP-12..15, BR-MIN-02, BR-MIN-03) ودستور الواجهات UI_STANDARDS.md
  */
 
-import React from 'react';
+import React, { useState } from 'react';
 import {
   ArrowRight,
   TrendingUp,
   Award,
-  AlertOctagon,
-  FileSpreadsheet,
-  Download,
-  Lightbulb,
+  AlertTriangle,
+  Clock,
+  ClipboardList,
+  Layers,
+  SlidersHorizontal,
   History,
+  CheckCircle2,
 } from 'lucide-react';
 import { useCentralReports } from '../../hooks/useCentralReports';
-import { StandardsMeanChart } from './StandardsMeanChart';
+import { CentralReportsFilterStrip } from './CentralReportsFilterStrip';
+import { StandardsAndIndicatorsTab } from './StandardsAndIndicatorsTab';
+import { CentralSchoolsStatusTab } from './CentralSchoolsStatusTab';
+import { CompetencyAndStagesTab } from './CompetencyAndStagesTab';
+import { GapsAndInterventionsTab } from './GapsAndInterventionsTab';
 import { EmptySupervisionState } from '../common/EmptySupervisionState';
 import type { SupervisionScreenKey } from '../../api/supervisionTypes';
 
 interface CentralReportsPageProps {
-  onNavigate: (screen: SupervisionScreenKey, params?: { schoolId?: number }) => void;
+  cycleId?: number;
+  onNavigate: (screen: SupervisionScreenKey, params?: { schoolId?: number; cycleId?: number; submissionId?: number }) => void;
 }
 
-export const CentralReportsPage: React.FC<CentralReportsPageProps> = ({ onNavigate }) => {
+type CentralReportsTabKey = 'standards' | 'schools_status' | 'competency_stages' | 'gaps_interventions';
+
+export const CentralReportsPage: React.FC<CentralReportsPageProps> = ({ cycleId, onNavigate }) => {
   const {
     analyticsData,
     standardsMeans,
+    isLoadingAnalytics,
     analyticsError,
     refetchAnalytics,
+    selectedCycleId,
+    setSelectedCycleId,
+    selectedStage,
+    setSelectedStage,
+    selectedSchoolIds,
+    setSelectedSchoolIds,
     handleExportAnalyticsExcel,
     handleExportAnalyticsPdf,
-  } = useCentralReports(104);
+    isExportingPdf,
+  } = useCentralReports(cycleId);
+
+  // التبويب النشط
+  const [activeTab, setActiveTab] = useState<CentralReportsTabKey>('standards');
+
+  const scopeSummary = analyticsData?.scopeSummary;
 
   return (
-    <div style={{ padding: '24px 32px', maxWidth: '1440px', margin: '0 auto' }}>
-      {/* 1. الترويسة الرئيسية والإجراءات */}
+    <div style={{ padding: '24px 32px', width: '100%', boxSizing: 'border-box' }}>
+      {/* 1. الترويسة الرئيسية وزر العودة */}
       <div
         style={{
           display: 'flex',
@@ -44,7 +67,7 @@ export const CentralReportsPage: React.FC<CentralReportsPageProps> = ({ onNaviga
           alignItems: 'center',
           justifyContent: 'space-between',
           gap: '16px',
-          marginBottom: '24px',
+          marginBottom: '20px',
         }}
       >
         <div>
@@ -62,65 +85,64 @@ export const CentralReportsPage: React.FC<CentralReportsPageProps> = ({ onNaviga
               border: 'none',
               cursor: 'pointer',
               marginBottom: '6px',
+              padding: 0,
             }}
           >
             <ArrowRight size={16} />
-            <span>العودة إلى لوحة المتابعة</span>
+            <span>العودة إلى لوحة المتابعة الإشرافية</span>
           </button>
 
           <h1 style={{ fontSize: '22px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
-            التقارير التحليلية الشاملة ومؤشرات الجودة الوطنية
+            التحليلات المركزية ومؤشرات الجودة الوطنية الشاملة
           </h1>
           <p style={{ fontSize: '13px', color: '#64748B', marginTop: '4px', margin: 0 }}>
-            تحليل مجمّع لنتائج التقييم المدرسي لنطاق أمانة العاصمة عبر المعايير الوطنية السبعة
+            تحليل مجمّع لنتائج التقييم المدرسي لنطاق {scopeSummary?.governorate ?? 'النطاق الإشرافي'} للدورة {analyticsData?.academicYear ?? 'الجارية'} عبر المعايير الوطنية السبعة ومصفوفة المؤشرات الـ 109
           </p>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <button
-            type="button"
-            onClick={handleExportAnalyticsExcel}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '9px 14px',
-              backgroundColor: '#FFFFFF',
-              color: '#059669',
-              border: '1px solid #A7F3D0',
-              borderRadius: '8px',
-              fontSize: '13px',
-              fontWeight: 700,
-              cursor: 'pointer',
-            }}
-          >
-            <FileSpreadsheet size={16} />
-            <span>تصدير المؤشرات (XLSX)</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={handleExportAnalyticsPdf}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '9px 16px',
-              backgroundColor: '#2563EB',
-              color: '#FFFFFF',
-              borderRadius: '8px',
-              fontSize: '13px',
-              fontWeight: 700,
-              cursor: 'pointer',
-              border: 'none',
-              boxShadow: '0 4px 12px rgba(37, 99, 235, 0.3)',
-            }}
-          >
-            <Download size={16} />
-            <span>تصدير التقرير التحليلي (PDF)</span>
-          </button>
-        </div>
+        {/* زر الانتقال للمقارنة التاريخية */}
+        <button
+          type="button"
+          onClick={() => onNavigate('historical')}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '8px',
+            padding: '8px 16px',
+            backgroundColor: '#F0FDFA',
+            color: '#0F766E',
+            border: '1px solid #99F6E4',
+            borderRadius: '8px',
+            fontSize: '12.5px',
+            fontWeight: 700,
+            cursor: 'pointer',
+            transition: 'all 0.15s ease',
+          }}
+          title="الانتقال إلى التحليل والمقارنة التاريخية التراكمية لمدرسة عبر الدورات (Screen 7)"
+        >
+          <History size={16} />
+          <span>المقارنة التاريخية عبر الدورات</span>
+        </button>
       </div>
+
+      {/* 2. شريط التصفية العلوي المتكامل مع التصدير المزدوج */}
+      <CentralReportsFilterStrip
+        cycles={analyticsData?.availableCycles}
+        selectedCycleId={selectedCycleId}
+        onSelectCycleId={setSelectedCycleId}
+        selectedStage={selectedStage}
+        onSelectStage={setSelectedStage}
+        availableSchools={analyticsData?.availableSchools}
+        selectedSchoolIds={selectedSchoolIds}
+        onSelectSchoolIds={setSelectedSchoolIds}
+        onExportExcel={handleExportAnalyticsExcel}
+        onExportPdf={handleExportAnalyticsPdf}
+        isExportingPdf={isExportingPdf}
+        onResetFilters={() => {
+          setSelectedStage('');
+          setSelectedSchoolIds([]);
+        }}
+      />
 
       {analyticsError ? (
         <EmptySupervisionState
@@ -132,116 +154,126 @@ export const CentralReportsPage: React.FC<CentralReportsPageProps> = ({ onNaviga
         />
       ) : (
         <>
-          {/* 2. بطاقات ملخص المؤشرات الثلاثة العلوية */}
+          {/* 3. شريط المؤشرات الكمية الرباعي الأفقي (Horizontal KPI Strip) */}
           <div
             style={{
               display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
-              gap: '16px',
-              marginBottom: '24px',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+              gap: '14px',
+              marginBottom: '22px',
             }}
           >
-            {/* متوسط النطاق الكلي */}
+            {/* KPI 1: متوسط الأداء ونسبة التحقق الموزونة */}
             <div
               style={{
                 backgroundColor: '#FFFFFF',
                 borderRadius: '12px',
                 border: '1px solid #E2E8F0',
-                padding: '20px',
+                borderTop: '4px solid #0F766E',
+                padding: '16px 18px',
+                boxShadow: '0 1px 3px rgba(0, 0, 0, 0.03)',
                 display: 'flex',
                 alignItems: 'center',
-                gap: '16px',
-                boxShadow: '0 1px 3px rgba(0, 0, 0, 0.04)',
+                gap: '14px',
               }}
             >
               <div
                 style={{
-                  width: '46px',
-                  height: '46px',
-                  borderRadius: '12px',
-                  backgroundColor: '#EFF6FF',
-                  border: '1px solid #BFDBFE',
-                  color: '#2563EB',
+                  width: '42px',
+                  height: '42px',
+                  borderRadius: '10px',
+                  backgroundColor: '#F0FDFA',
+                  border: '1px solid #CCFBF1',
+                  color: '#0F766E',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   flexShrink: 0,
                 }}
               >
-                <TrendingUp size={24} />
+                <TrendingUp size={22} />
               </div>
-              <div>
-                <span style={{ fontSize: '12px', color: '#64748B', fontWeight: 600, display: 'block' }}>
-                  متوسط الأداء العام لمدارس النطاق
+              <div style={{ flex: 1 }}>
+                <span style={{ fontSize: '11.5px', color: '#64748B', fontWeight: 600, display: 'block' }}>
+                  متوسط الأداء الموزون لمدارس النطاق
                 </span>
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px' }}>
-                  <span style={{ fontSize: '26px', fontWeight: 800, color: '#0F172A' }}>
-                    {analyticsData?.scopeSummary.averageScore.toFixed(2) ?? '2.34'}
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px', marginTop: '2px' }}>
+                  <span style={{ fontSize: '22px', fontWeight: 900, color: '#0F172A' }}>
+                    {scopeSummary?.averageScore != null ? scopeSummary.averageScore.toFixed(2) : '0.00'}
                   </span>
-                  <span style={{ fontSize: '13px', color: '#64748B', fontWeight: 700 }}>
-                    / 3.0 ({analyticsData?.scopeSummary.overallPercentage ?? 78.0}%)
+                  <span style={{ fontSize: '12px', color: '#0F766E', fontWeight: 700 }}>
+                    / 3.00 ({scopeSummary?.overallPercentage ?? 0}%)
                   </span>
                 </div>
               </div>
             </div>
 
-            {/* أعلى المعايير أداءً */}
+            {/* KPI 2: نسبة إنجاز المدارس */}
             <div
               style={{
                 backgroundColor: '#FFFFFF',
                 borderRadius: '12px',
                 border: '1px solid #E2E8F0',
-                padding: '20px',
+                borderTop: '4px solid #0284C7',
+                padding: '16px 18px',
+                boxShadow: '0 1px 3px rgba(0, 0, 0, 0.03)',
                 display: 'flex',
                 alignItems: 'center',
-                gap: '16px',
-                boxShadow: '0 1px 3px rgba(0, 0, 0, 0.04)',
+                gap: '14px',
               }}
             >
               <div
                 style={{
-                  width: '46px',
-                  height: '46px',
-                  borderRadius: '12px',
-                  backgroundColor: '#ECFDF5',
-                  border: '1px solid #A7F3D0',
-                  color: '#059669',
+                  width: '42px',
+                  height: '42px',
+                  borderRadius: '10px',
+                  backgroundColor: '#F0F9FF',
+                  border: '1px solid #BAE6FD',
+                  color: '#0284C7',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   flexShrink: 0,
                 }}
               >
-                <Award size={24} />
+                <CheckCircle2 size={22} />
               </div>
-              <div>
-                <span style={{ fontSize: '12px', color: '#64748B', fontWeight: 600, display: 'block' }}>
-                  أعلى المعايير أداءً (نقطة تميز)
+              <div style={{ flex: 1 }}>
+                <span style={{ fontSize: '11.5px', color: '#64748B', fontWeight: 600, display: 'block' }}>
+                  نسبة المدارس التي رفعت مخرجاتها
                 </span>
-                <span style={{ fontSize: '15px', fontWeight: 800, color: '#047857' }}>
-                  {analyticsData?.scopeSummary.highestStandard ?? 'الإدارة المدرسية والقيادة (2.71)'}
-                </span>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px', marginTop: '2px' }}>
+                  <span style={{ fontSize: '22px', fontWeight: 900, color: '#0F172A' }}>
+                    {scopeSummary?.totalSchools && scopeSummary.totalSchools > 0
+                      ? Math.round(((scopeSummary.evaluatedSchools ?? 0) / scopeSummary.totalSchools) * 100)
+                      : 0}%
+                  </span>
+                  <span style={{ fontSize: '12px', color: '#64748B', fontWeight: 600 }}>
+                    ({scopeSummary?.evaluatedSchools ?? 0} من {scopeSummary?.totalSchools ?? 0} مدرسة)
+                  </span>
+                </div>
               </div>
             </div>
 
-            {/* المعيار الأقل أداءً ويتطلب دعماً */}
+            {/* KPI 3: المدارس المتأخرة عن التسليم آلياً (FR-SUP-15) */}
             <div
               style={{
                 backgroundColor: '#FFFFFF',
                 borderRadius: '12px',
                 border: '1px solid #E2E8F0',
-                padding: '20px',
+                borderTop: '4px solid #DC2626',
+                padding: '16px 18px',
+                boxShadow: '0 1px 3px rgba(0, 0, 0, 0.03)',
                 display: 'flex',
                 alignItems: 'center',
-                gap: '16px',
-                boxShadow: '0 1px 3px rgba(0, 0, 0, 0.04)',
+                gap: '14px',
               }}
             >
               <div
                 style={{
-                  width: '46px',
-                  height: '46px',
-                  borderRadius: '12px',
+                  width: '42px',
+                  height: '42px',
+                  borderRadius: '10px',
                   backgroundColor: '#FEF2F2',
                   border: '1px solid #FECACA',
                   color: '#DC2626',
@@ -251,216 +283,175 @@ export const CentralReportsPage: React.FC<CentralReportsPageProps> = ({ onNaviga
                   flexShrink: 0,
                 }}
               >
-                <AlertOctagon size={24} />
+                <AlertTriangle size={22} />
               </div>
-              <div>
-                <span style={{ fontSize: '12px', color: '#64748B', fontWeight: 600, display: 'block' }}>
-                  المعيار الأقل أداءً (فجوة ذات أولوية)
+              <div style={{ flex: 1 }}>
+                <span style={{ fontSize: '11.5px', color: '#64748B', fontWeight: 600, display: 'block' }}>
+                  متأخرة عن التسليم (قاعدة 80%)
                 </span>
-                <span style={{ fontSize: '15px', fontWeight: 800, color: '#B91C1C' }}>
-                  {analyticsData?.scopeSummary.lowestStandard ?? 'التعليم والتعلم والتقويم (1.82)'}
-                </span>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px', marginTop: '2px' }}>
+                  <span style={{ fontSize: '22px', fontWeight: 900, color: '#991B1B' }}>
+                    {scopeSummary?.overdueSchoolsCount ?? 0}
+                  </span>
+                  <span style={{ fontSize: '12px', color: '#991B1B', fontWeight: 600 }}>
+                    مدرسة متأخرة 🔴
+                  </span>
+                </div>
               </div>
             </div>
-          </div>
 
-          {/* 3. مساحة التحليل الرئيسية بعمودين */}
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'minmax(0, 1.8fr) minmax(0, 1.1fr)',
-              gap: '24px',
-              alignItems: 'start',
-            }}
-          >
-            {/* العمود الأيمن: الرسم البياني لمتوسطات المعايير الـ 7 والتوجيه السياسي */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-              <StandardsMeanChart standards={standardsMeans} />
-
-              {/* ملاحظة التحليل التوليدي للسياسات التربوية */}
+            {/* KPI 4: طلبات الاستكمال النشطة */}
+            <div
+              style={{
+                backgroundColor: '#FFFFFF',
+                borderRadius: '12px',
+                border: '1px solid #E2E8F0',
+                borderTop: '4px solid #D97706',
+                padding: '16px 18px',
+                boxShadow: '0 1px 3px rgba(0, 0, 0, 0.03)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '14px',
+              }}
+            >
               <div
                 style={{
-                  padding: '18px 20px',
-                  backgroundColor: '#EFF6FF',
-                  border: '1px solid #BFDBFE',
-                  borderRadius: '12px',
+                  width: '42px',
+                  height: '42px',
+                  borderRadius: '10px',
+                  backgroundColor: '#FFFBEB',
+                  border: '1px solid #FDE68A',
+                  color: '#D97706',
                   display: 'flex',
-                  alignItems: 'flex-start',
-                  gap: '12px',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
                 }}
               >
-                <Lightbulb size={22} color="#2563EB" style={{ marginTop: '2px', flexShrink: 0 }} />
-                <div>
-                  <h3 style={{ fontSize: '14px', fontWeight: 800, color: '#1E40AF', margin: '0 0 4px 0' }}>
-                    خلاصة التحليل التوجيهي للسياسات الإشرافية
-                  </h3>
-                  <p style={{ fontSize: '13px', color: '#1E3A8A', margin: 0, lineHeight: 1.6 }}>
-                    {analyticsData?.scopeSummary.policySynthesisNote ??
-                      'تشير مؤشرات الجودة إلى تفوق واضح في معايير القيادة والإدارة والبيئة المدرسية، مع حاجة ملحة لبرامج دعم مركزية موجهة لمعيار التعليم والتعلم والتقويم وتدريب المعلمين.'}
-                  </p>
-                </div>
+                <Clock size={22} />
               </div>
-            </div>
-
-            {/* العمود الأيسر: لوحة الفلاتر وتوزيع الأداء والمراحل */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-              {/* بطاقة توزيع الأداء */}
-              <div
-                style={{
-                  backgroundColor: '#FFFFFF',
-                  borderRadius: '12px',
-                  border: '1px solid #E2E8F0',
-                  padding: '24px',
-                  boxShadow: '0 1px 3px rgba(0, 0, 0, 0.04)',
-                }}
-              >
-                <h2 style={{ fontSize: '15px', fontWeight: 800, color: '#0F172A', marginBottom: '16px' }}>
-                  توزيع مستويات الكفاءة لمدارس النطاق
-                </h2>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                  <div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', marginBottom: '6px' }}>
-                      <span style={{ fontWeight: 700, color: '#1E40AF' }}>
-                        المتميز (أعلى من 80%): {analyticsData?.distribution.advancedPercentage ?? 37}%
-                      </span>
-                      <span style={{ color: '#64748B' }}>18 مدرسة</span>
-                    </div>
-                    <div style={{ width: '100%', height: '8px', backgroundColor: '#F1F5F9', borderRadius: '999px', overflow: 'hidden' }}>
-                      <div
-                        style={{
-                          width: `${analyticsData?.distribution.advancedPercentage ?? 37}%`,
-                          height: '100%',
-                          backgroundColor: '#2563EB',
-                        }}
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', marginBottom: '6px' }}>
-                      <span style={{ fontWeight: 700, color: '#065F46' }}>
-                        المتوسط (60% - 79%): {analyticsData?.distribution.proficientPercentage ?? 53}%
-                      </span>
-                      <span style={{ color: '#64748B' }}>25 مدرسة</span>
-                    </div>
-                    <div style={{ width: '100%', height: '8px', backgroundColor: '#F1F5F9', borderRadius: '999px', overflow: 'hidden' }}>
-                      <div
-                        style={{
-                          width: `${analyticsData?.distribution.proficientPercentage ?? 53}%`,
-                          height: '100%',
-                          backgroundColor: '#059669',
-                        }}
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', marginBottom: '6px' }}>
-                      <span style={{ fontWeight: 700, color: '#991B1B' }}>
-                        بحاجة لدعم (أقل من 60%): {analyticsData?.distribution.needsSupportPercentage ?? 10}%
-                      </span>
-                      <span style={{ color: '#64748B' }}>5 مدارس</span>
-                    </div>
-                    <div style={{ width: '100%', height: '8px', backgroundColor: '#F1F5F9', borderRadius: '999px', overflow: 'hidden' }}>
-                      <div
-                        style={{
-                          width: `${analyticsData?.distribution.needsSupportPercentage ?? 10}%`,
-                          height: '100%',
-                          backgroundColor: '#DC2626',
-                        }}
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* بطاقة مقارنة المراحل الدراسية */}
-              <div
-                style={{
-                  backgroundColor: '#FFFFFF',
-                  borderRadius: '12px',
-                  border: '1px solid #E2E8F0',
-                  padding: '24px',
-                  boxShadow: '0 1px 3px rgba(0, 0, 0, 0.04)',
-                }}
-              >
-                <h2 style={{ fontSize: '15px', fontWeight: 800, color: '#0F172A', marginBottom: '14px' }}>
-                  مقارنة المراحل الدراسية
-                </h2>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                  {analyticsData?.stageBreakdown.map((stage, idx) => (
-                    <div
-                      key={idx}
-                      style={{
-                        padding: '12px 14px',
-                        borderRadius: '8px',
-                        backgroundColor: '#F8FAFC',
-                        border: '1px solid #E2E8F0',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                      }}
-                    >
-                      <div>
-                        <span style={{ fontSize: '13px', fontWeight: 700, color: '#0F172A', display: 'block' }}>
-                          {stage.stage}
-                        </span>
-                        <span style={{ fontSize: '11px', color: '#64748B' }}>
-                          {stage.schoolsCount} مدرسة مشاركة
-                        </span>
-                      </div>
-                      <span style={{ fontSize: '16px', fontWeight: 800, color: '#2563EB' }}>
-                        {stage.averageScore.toFixed(2)}
-                      </span>
-                    </div>
-                  ))}
+              <div style={{ flex: 1 }}>
+                <span style={{ fontSize: '11.5px', color: '#64748B', fontWeight: 600, display: 'block' }}>
+                  طلبات الاستكمال النشطة الصادرة
+                </span>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px', marginTop: '2px' }}>
+                  <span style={{ fontSize: '22px', fontWeight: 900, color: '#0F172A' }}>
+                    {scopeSummary?.activeRequestsCount ?? 0}
+                  </span>
+                  <span style={{ fontSize: '12px', color: '#B45309', fontWeight: 600 }}>
+                    طلب قيد المعالجة
+                  </span>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* 4. شريط الإجراءات السفلي */}
+          {/* 4. شريط التبويبات الأربعة المتكاملة */}
           <div
             style={{
               display: 'flex',
               alignItems: 'center',
-              justifyContent: 'space-between',
-              flexWrap: 'wrap',
-              gap: '12px',
-              marginTop: '24px',
-              padding: '16px 20px',
-              backgroundColor: '#FFFFFF',
-              borderRadius: '10px',
-              border: '1px solid #E2E8F0',
+              gap: '8px',
+              borderBottom: '2px solid #E2E8F0',
+              marginBottom: '20px',
+              overflowX: 'auto',
             }}
           >
-            <span style={{ fontSize: '13px', color: '#64748B' }}>
-              للاطلاع على مسار نمو مدرسة محددة عبر الدورات السابقة:
-            </span>
+            {[
+              {
+                id: 'standards',
+                label: 'تحليل المعايير السبعة ومصفوفة المؤشرات (109)',
+                icon: Award,
+              },
+              {
+                id: 'schools_status',
+                label: `التقرير المركزي لحالة المدارس ومخرجاتها (FR-SUP-15) ${
+                  scopeSummary?.overdueSchoolsCount && scopeSummary.overdueSchoolsCount > 0
+                    ? `🔴 (${scopeSummary.overdueSchoolsCount})`
+                    : ''
+                }`,
+                icon: ClipboardList,
+              },
+              {
+                id: 'competency_stages',
+                label: 'التوزيع الإحصائي والمراحل الدراسية',
+                icon: Layers,
+              },
+              {
+                id: 'gaps_interventions',
+                label: 'مصفوفة الفجوات وأولويات التدخل الإشرافي',
+                icon: SlidersHorizontal,
+              },
+            ].map((tab) => {
+              const isActive = activeTab === tab.id;
+              const Icon = tab.icon;
 
-            <button
-              type="button"
-              onClick={() => onNavigate('historical', { schoolId: 104 })}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '8px',
-                padding: '9px 18px',
-                backgroundColor: '#EFF6FF',
-                color: '#1D4ED8',
-                border: '1px solid #BFDBFE',
-                borderRadius: '8px',
-                fontSize: '13px',
-                fontWeight: 700,
-                cursor: 'pointer',
-              }}
-            >
-              <History size={16} />
-              <span>مقارنة مدرسة بلقيس النموذجية عبر الدورات (SCH-104)</span>
-            </button>
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setActiveTab(tab.id as CentralReportsTabKey)}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    padding: '12px 18px',
+                    backgroundColor: 'transparent',
+                    border: 'none',
+                    borderBottom: `3px solid ${isActive ? '#0F766E' : 'transparent'}`,
+                    marginBottom: '-2px',
+                    fontSize: '13.5px',
+                    fontWeight: isActive ? 800 : 600,
+                    color: isActive ? '#0F766E' : '#64748B',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  <Icon size={16} />
+                  <span>{tab.label}</span>
+                </button>
+              );
+            })}
           </div>
+
+          {/* 5. محتوى التبويب النشط */}
+          {isLoadingAnalytics ? (
+            <div style={{ padding: '48px', textAlign: 'center', color: '#64748B' }}>
+              <div style={{ fontSize: '14px', fontWeight: 700 }}>جارِ تحميل التحليلات الإحصائية وتطبيق الفلاتر...</div>
+            </div>
+          ) : (
+            <div>
+              {activeTab === 'standards' && (
+                <StandardsAndIndicatorsTab
+                  standards={standardsMeans}
+                  allIndicators={analyticsData?.allIndicatorsMeans}
+                />
+              )}
+
+              {activeTab === 'schools_status' && (
+                <CentralSchoolsStatusTab
+                  schoolsReport={analyticsData?.centralSchoolsReport}
+                  onNavigate={onNavigate}
+                />
+              )}
+
+              {activeTab === 'competency_stages' && (
+                <CompetencyAndStagesTab
+                  distribution={analyticsData?.distribution}
+                  stageBreakdown={analyticsData?.stageBreakdown}
+                />
+              )}
+
+              {activeTab === 'gaps_interventions' && (
+                <GapsAndInterventionsTab
+                  topStrengths={analyticsData?.topStrengths}
+                  bottomGaps={analyticsData?.bottomGaps}
+                  policySynthesisNote={scopeSummary?.policySynthesisNote}
+                />
+              )}
+            </div>
+          )}
         </>
       )}
     </div>

@@ -180,7 +180,9 @@ export const StandardsTreeBuilderPage: React.FC<StandardsTreeBuilderPageProps> =
             </span>
           </div>
           <h2 style={{ fontSize: '20px', fontWeight: 900, margin: 0, letterSpacing: '-0.02em' }}>
-            المسودة المستهدفة: وثيقة معايير التقييم والاعتماد المدرسي المطورة
+            {isDraft
+              ? `المسودة المستهدفة: وثيقة المعايير الوطنية لتقويم الجودة المدرسية (${treeData?.versionNo || 'مسودة'})`
+              : `${treeData?.versionName || 'وثيقة المعايير الوطنية لتقويم الجودة المدرسية'} (${treeData?.versionNo || ''})`}
           </h2>
           <p style={{ fontSize: '12px', color: '#FEF3C7', margin: '4px 0 0' }}>
             ({standards.length} معايير رئيسية • {totalSubStandards || 14} معياراً فرعياً • {totalIndicators || 109} مؤشراً معتمداً بأدوات تحقق ملزمة)

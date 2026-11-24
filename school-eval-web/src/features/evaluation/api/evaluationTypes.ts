@@ -127,6 +127,13 @@ export interface EvaluatorDashboardData {
   standardsProgress: StandardProgressItem[];
   pendingIndicators: PendingIndicatorItem[];
   completionAlert: CompletionAlert | null;
+  supervisorNotes?: Array<{
+    noteId: number;
+    memoType: string;
+    subject: string;
+    details: string;
+    createdAt: string;
+  }>;
 }
 
 export interface ScoreDescriptor {
@@ -621,6 +628,7 @@ export interface FlaggedCompletionItem {
   indicatorTitle: string;
   standardTitle: string;
   missingDescription: string;
+  allowedActions?: string[];
   status: ItemStatus;
   resolutionNotes: string;
 }
@@ -948,6 +956,7 @@ export interface AuditHubPlan {
   status: string;
   progressDescription?: string;
   actionsCount: number;
+  overdueActionsCount?: number;
   hasPrincipalReview: boolean;
   reviewNotesCount: number;
   principalNotesCount: number;
@@ -985,6 +994,7 @@ export interface AuditHubSummary {
   reviewCoveragePercentage: number;
   plansCount: number;
   reviewedPlansCount: number;
+  overdueActionsCount?: number;
   hasOpenCompletionRequest: boolean;
   finalReviewAcknowledged: boolean;
 }

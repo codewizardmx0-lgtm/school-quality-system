@@ -507,19 +507,32 @@ class StandardManagementController extends Controller
      */
     public function getWeights(int $id): JsonResponse
     {
-        $version = StandardVersion::with(['standards.subStandards' => fn($q) => $q->withCount('indicators')->orderBy('sub_standard_id', 'asc')])->find($id);
+        $version = StandardVersion::with([
+            'standards.subStandards' => fn($q) => $q->withCount('indicators')->orderBy('sub_standard_id', 'asc'),
+            'standards.subStandards.indicators' => fn($q) => $q->orderBy('indicator_id', 'asc'),
+        ])->find($id);
         if (!$version) {
             return ApiResponse::notFound('الإصدار المعياري غير موجود.');
         }
 
         $standards = $version->standards->map(function ($std) {
             $subStandards = $std->subStandards->map(function ($sub) {
+                $indicators = $sub->indicators->map(function ($ind) {
+                    return [
+                        'indicatorId' => $ind->indicator_id,
+                        'code' => $ind->code,
+                        'name' => $ind->title ?? $ind->name,
+                        'weight' => (float) $ind->weight,
+                    ];
+                });
+
                 return [
                     'subStandardId' => $sub->sub_standard_id,
                     'code' => $sub->code,
                     'name' => $sub->name,
                     'weight' => (float) $sub->weight,
                     'indicatorsCount' => $sub->indicators_count,
+                    'indicators' => $indicators,
                 ];
             });
 
@@ -1194,7 +1207,47 @@ class StandardManagementController extends Controller
         $action = $request->input('action', 'approve'); // 'approve' (إقرار وجدولة) أو 'activate' (إقرار وتفعيل فوري)
 
         if (!$legalConfirmation) {
-            return ApiResponse::validationError(['legalConfirmation' => ['يجب الإقرار بالمسؤولية القانونية للاعتماد.']], 'يجب تأكيد الإقرار القانوني');
+            return ApiResponse::validationError(['legalConfirmation' => ['يجب الإقرار بالمسؤولية القانونية للإقرار الرسمي.']], 'يجب تأكيد الإقرار القانوني');
+        }
+
+        if ($action === 'approve') {
+            if (!$version->isDraft()) {
+                return ApiResponse::validationError([
+                    'version' => ["لا يمكن إعادة إقرار وثيقة غير مسودة (الإصدار الحالي بحالة {$version->status} ومقفل بالفعل)."],
+                ], 'الإصدار المعياري مُقرّ ومقفل بالفعل.');
+            }
+        }
+
+        if ($action === 'schedule') {
+            if ($version->isArchived()) {
+                return ApiResponse::validationError([
+                    'version' => ['لا يمكن جدولة إصدار مؤرشف للدورة القادمة.'],
+                ], 'الإصدار المعياري مؤرشف ومقفل تاريخياً.');
+            }
+            if ($version->status === StandardVersion::STATUS_ACTIVE) {
+                return ApiResponse::validationError([
+                    'version' => ['الإصدار المعياري نافذ ومُفعّل حالياً بالفعل ولا يحتاج إلى جدولة للدورة القادمة.'],
+                ], 'الإصدار المعياري نافذ ومُفعّل حالياً.');
+            }
+            if ($version->isDraft()) {
+                // يجب إقراره أولاً قبل الجدولة
+                $this->service->approveVersion($version);
+            }
+
+            // حوكمة تفرد الإصدار المجدول (FR-MSM-03): إلغاء جدولة أي إصدار سابق مجدول
+            StandardVersion::where('version_id', '!=', $version->version_id)
+                ->where('source_description', 'LIKE', '%مجدول رسمياً للدورة التقييمية القادمة%')
+                ->each(function ($other) {
+                    $other->source_description = 'مُقرّ ومقفل رسمياً بختم النزاهة الرقمية (أُلغيت جدولته السابقة لصالح إصدار أحدث).';
+                    $other->save();
+                });
+
+            if ($approvalCode) {
+                $version->source_number = $approvalCode;
+            }
+            $version->source_description = 'مُقرّ ومجدول رسمياً للدورة التقييمية القادمة بقرار وزاري رقم ' . ($approvalCode ?: ($version->source_number ?: 'DEC-NAT-2026-88'));
+            $version->save();
+            return ApiResponse::success($version, 'تمت جدولة الإصدار المعياري للدورة التقييمية القادمة بنجاح.');
         }
 
         if ($approvalCode) {
@@ -1202,14 +1255,13 @@ class StandardManagementController extends Controller
             $version->save();
         }
 
-        if ($action === 'schedule') {
-            $version->source_description = 'مُقرّ ومجدول رسمياً للدورة التقييمية القادمة بقرار وزاري رقم ' . ($approvalCode ?: ($version->source_number ?: 'DEC-NAT-2026-88'));
-            $version->save();
-            return ApiResponse::success($version, 'تمت جدولة الإصدار المعياري للدورة التقييمية القادمة بنجاح.');
-        }
-
         try {
             if ($action === 'activate') {
+                if ($version->isArchived()) {
+                    return ApiResponse::validationError([
+                        'version' => ['لا يمكن تفعيل إصدار مؤرشف.'],
+                    ], 'الإصدار المعياري مؤرشف ومقفل تاريخياً.');
+                }
                 $activated = $this->service->activateVersion($version);
                 return ApiResponse::success($activated, 'تم قفل وتنشيط وثيقة المعايير رسمياً للدورة التقييمية الحالية بنجاح وأرشفة الإصدار السابق.');
             } else {
@@ -1266,7 +1318,7 @@ class StandardManagementController extends Controller
 
             $mpdf = new \Mpdf\Mpdf($mpdfConfig);
             $mpdf->SetDirectionality('rtl');
-            $mpdf->SetTitle("وثيقة إقرار معايير الاعتماد - {$version->version_no}");
+            $mpdf->SetTitle("وثيقة إقرار المعايير الوطنية - {$version->version_no}");
             $mpdf->WriteHTML($html);
 
             $pdfContent = $mpdf->Output('', 'S');
@@ -1283,7 +1335,7 @@ class StandardManagementController extends Controller
         return ApiResponse::success([
             'versionId'      => $version->version_id,
             'versionNo'      => $version->version_no,
-            'title'          => "وثيقة معايير الاعتماد المدرسي - {$version->version_no}",
+            'title'          => "وثيقة المعايير الوطنية لتقويم الجودة المدرسية - {$version->version_no}",
             'systemName'     => 'منصة ارتقاء للتقييم الذاتي والتحسين المدرسي',
             'authority'      => 'أمانة المعايير ومجلس الاعتماد الأكاديمي وضمان جودة التعليم',
             'generatedAt'    => now()->toIso8601String(),
@@ -1291,7 +1343,7 @@ class StandardManagementController extends Controller
             'totalWeight'    => 100.0,
             'hash'           => $hash,
             'downloadUrl'    => "/api/v1/standard-versions/{$version->version_id}/export-pdf?download=1",
-        ], 'تم توليد تقرير الاعتماد المعياري الرسمي بنجاح.');
+        ], 'تم توليد تقرير الإقرار المعياري الرسمي بنجاح.');
     }
 
     /**

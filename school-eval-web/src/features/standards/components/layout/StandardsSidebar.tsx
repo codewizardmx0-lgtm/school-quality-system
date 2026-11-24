@@ -7,15 +7,15 @@
  * - تذييل متزن: حالة المنظومة متصلة ومستقرة + إصدار v1.0
  */
 
-import React, { useState } from 'react';
+import React from 'react';
 import {
   BookOpen,
   GitFork,
   ShieldCheck,
   ChevronLeft,
   ChevronRight,
-  LogOut,
   Award,
+  X,
 } from 'lucide-react';
 
 export type StandardsScreenKey = 'versions' | 'workspace' | 'diff-log' | 'tree' | 'weights' | 'audit-lock';
@@ -23,7 +23,11 @@ export type StandardsScreenKey = 'versions' | 'workspace' | 'diff-log' | 'tree' 
 interface StandardsSidebarProps {
   activeScreen: StandardsScreenKey;
   onSelectScreen: (screen: StandardsScreenKey) => void;
-  onLogout?: () => void;
+  isCollapsed?: boolean;
+  onToggleCollapse?: () => void;
+  isMobile?: boolean;
+  isMobileOpen?: boolean;
+  onCloseMobile?: () => void;
 }
 
 interface NavItemConfig {
@@ -42,16 +46,33 @@ const navItems: NavItemConfig[] = [
 export const StandardsSidebar: React.FC<StandardsSidebarProps> = ({
   activeScreen,
   onSelectScreen,
-  onLogout,
+  isCollapsed = false,
+  onToggleCollapse,
+  isMobile = false,
+  isMobileOpen = false,
+  onCloseMobile,
 }) => {
-  const [isCollapsed, setIsCollapsed] = useState(false);
+  const sidebarWidth = isMobile ? '280px' : isCollapsed ? '76px' : '260px';
 
-  const sidebarWidth = isCollapsed ? '76px' : '260px';
-
-  return (
-    <aside
-      className={`std-sidebar-fixed ${isCollapsed ? 'std-sidebar-collapsed' : ''}`}
-      style={{
+  const sidebarStyle: React.CSSProperties = isMobile
+    ? {
+        position: 'fixed',
+        top: 0,
+        right: 0,
+        bottom: 0,
+        width: '280px',
+        backgroundColor: '#0B0F19',
+        borderLeft: '1px solid #1E293B',
+        display: 'flex',
+        flexDirection: 'column',
+        zIndex: 9999,
+        transform: isMobileOpen ? 'translateX(0)' : 'translateX(100%)',
+        transition: 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+        boxShadow: isMobileOpen ? '-4px 0 24px rgba(0, 0, 0, 0.5)' : 'none',
+        color: '#CBD5E1',
+        userSelect: 'none',
+      }
+    : {
         width: sidebarWidth,
         minWidth: sidebarWidth,
         maxWidth: sidebarWidth,
@@ -67,7 +88,12 @@ export const StandardsSidebar: React.FC<StandardsSidebarProps> = ({
         color: '#CBD5E1',
         transition: 'width 0.25s cubic-bezier(0.16, 1, 0.3, 1), min-width 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
         userSelect: 'none',
-      }}
+      };
+
+  return (
+    <aside
+      className={`std-sidebar-fixed ${isCollapsed && !isMobile ? 'std-sidebar-collapsed' : ''}`}
+      style={sidebarStyle}
     >
       {/* 1. Header: Platform Name & Authority Badge */}
       <div
@@ -98,7 +124,7 @@ export const StandardsSidebar: React.FC<StandardsSidebarProps> = ({
             <Award size={20} color="#FFFFFF" />
           </div>
 
-          {!isCollapsed && (
+          {(!isCollapsed || isMobile) && (
             <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
               <span
                 style={{
@@ -129,25 +155,48 @@ export const StandardsSidebar: React.FC<StandardsSidebarProps> = ({
           )}
         </div>
 
-        {/* Toggle Collapse Button */}
-        <button
-          type="button"
-          onClick={() => setIsCollapsed(!isCollapsed)}
-          style={{
-            padding: '6px',
-            borderRadius: '8px',
-            color: '#94A3B8',
-            cursor: 'pointer',
-            border: 'none',
-            background: 'none',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-          title={isCollapsed ? 'توسيع القائمة' : 'طي القائمة'}
-        >
-          {isCollapsed ? <ChevronLeft size={16} /> : <ChevronRight size={16} />}
-        </button>
+        {/* Mobile Close Button or Toggle Collapse Button */}
+        {isMobile ? (
+          <button
+            type="button"
+            onClick={onCloseMobile}
+            style={{
+              padding: '6px',
+              borderRadius: '8px',
+              color: '#94A3B8',
+              cursor: 'pointer',
+              border: 'none',
+              background: 'rgba(255, 255, 255, 0.05)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+            title="إغلاق القائمة"
+          >
+            <X size={18} />
+          </button>
+        ) : (
+          onToggleCollapse && (
+            <button
+              type="button"
+              onClick={onToggleCollapse}
+              style={{
+                padding: '6px',
+                borderRadius: '8px',
+                color: '#94A3B8',
+                cursor: 'pointer',
+                border: 'none',
+                background: 'none',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+              title={isCollapsed ? 'توسيع القائمة' : 'طي القائمة'}
+            >
+              {isCollapsed ? <ChevronLeft size={16} /> : <ChevronRight size={16} />}
+            </button>
+          )
+        )}
       </div>
 
       {/* 2. Navigation Items */}
@@ -188,8 +237,13 @@ export const StandardsSidebar: React.FC<StandardsSidebarProps> = ({
             <button
               key={item.key}
               type="button"
-              onClick={() => onSelectScreen(item.key)}
-              title={isCollapsed ? item.label : undefined}
+              onClick={() => {
+                onSelectScreen(item.key);
+                if (isMobile && onCloseMobile) {
+                  onCloseMobile();
+                }
+              }}
+              title={isCollapsed && !isMobile ? item.label : undefined}
               style={{
                 width: '100%',
                 display: 'flex',
@@ -300,33 +354,6 @@ export const StandardsSidebar: React.FC<StandardsSidebarProps> = ({
                 v1.0
               </span>
             </div>
-
-            {/* Logout button */}
-            {onLogout && (
-              <button
-                type="button"
-                onClick={onLogout}
-                style={{
-                  width: '100%',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  padding: '9px 12px',
-                  borderRadius: '8px',
-                  fontSize: '12px',
-                  fontWeight: 600,
-                  color: '#EF4444',
-                  backgroundColor: 'rgba(239, 68, 68, 0.1)',
-                  border: '1px solid rgba(239, 68, 68, 0.2)',
-                  cursor: 'pointer',
-                  textAlign: 'right',
-                  transition: 'background-color 0.15s ease',
-                }}
-              >
-                <LogOut size={14} />
-                <span>تسجيل الخروج</span>
-              </button>
-            )}
           </>
         ) : (
           <div style={{ display: 'flex', justifyContent: 'center' }}>

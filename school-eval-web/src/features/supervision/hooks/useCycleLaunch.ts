@@ -7,29 +7,38 @@ import { useState, useEffect, useCallback } from 'react';
 import { supervisionApi } from '../api/supervisionApi';
 import type { ActiveStandardVersion, CycleLaunchPayload } from '../api/supervisionTypes';
 
-export function useCycleLaunch(onSuccess?: () => void) {
+export function useCycleLaunch(onSuccess?: () => void, prefillData?: any) {
   const [activeVersion, setActiveVersion] = useState<ActiveStandardVersion | null>(null);
   const [isLoadingVersion, setIsLoadingVersion] = useState<boolean>(true);
   const [versionError, setVersionError] = useState<string | null>(null);
 
-  // حالة نموذج الإطلاق
-  const [academicYear, setAcademicYear] = useState<string>('2026/2027');
-  const [cycleTitle, setCycleTitle] = useState<string>('دورة التقييم الذاتي والاعتماد المدرسي 2026/2027');
-  const [targetTerm, setTargetTerm] = useState<string>('الفصل الدراسي الأول');
-  const [startDate, setStartDate] = useState<string>('2026-09-01');
-  const [endDate, setEndDate] = useState<string>('2026-11-30');
-  const [completionDeadlineDays, setCompletionDeadlineDays] = useState<number>(14);
+  // حالة نموذج الإطلاق مع التهيئة المسبقة الآمنة (Smart Clone Prefill)
+  const [academicYear, setAcademicYear] = useState<string>(prefillData?.academicYear || '2026/2027');
+  const [cycleTitle, setCycleTitle] = useState<string>(
+    prefillData?.name || prefillData?.cycleTitle || `دورة التقييم الذاتي المدرسي ${prefillData?.academicYear || '2026/2027'}`
+  );
+  const [targetTerm, setTargetTerm] = useState<string>(prefillData?.targetTerm || 'الفصل الدراسي الأول');
+  const [startDate, setStartDate] = useState<string>(prefillData?.startDate || '2026-09-01');
+  const [endDate, setEndDate] = useState<string>(prefillData?.endDate || '2026-11-30');
+  const [completionDeadlineDays, setCompletionDeadlineDays] = useState<number>(
+    prefillData?.completionDeadlineDays || 14
+  );
   const [publicDirectives, setPublicDirectives] = useState<string>(
-    'الالتزام الصارم بوثيقة المعايير الوطنية v2.1 ورفع الشواهد الميدانية المعتمدة مع خطة تحسين تشغيلية قابلة للقياس.'
+    prefillData?.publicDirectives ||
+      'الالتزام الصارم بوثيقة المعايير الوطنية v2.1 ورفع الشواهد الميدانية المعتمدة مع خطة تحسين تشغيلية قابلة للقياس.'
   );
 
   // النطاق المستهدف
-  const [targetGovernorate, setTargetGovernorate] = useState<string>('أمانة العاصمة');
-  const [selectedStages, setSelectedStages] = useState<string[]>([
-    'المرحلة الأساسية (1-9)',
-    'المرحلة الثانوية (10-12)',
-  ]);
-  const [enrollAllSchools, setEnrollAllSchools] = useState<boolean>(true);
+  const [targetGovernorate, setTargetGovernorate] = useState<string>(
+    prefillData?.targetGovernorate || 'كافة المحافظات'
+  );
+  const [selectedStages, setSelectedStages] = useState<string[]>(
+    prefillData?.selectedStages || ['المرحلة الأساسية (1-9)', 'المرحلة الثانوية (10-12)']
+  );
+  const [schoolIds, setSchoolIds] = useState<number[]>(prefillData?.schoolIds || []);
+  const [enrollAllSchools, setEnrollAllSchools] = useState<boolean>(
+    prefillData?.enrollAllSchools ?? (!prefillData?.schoolIds || prefillData.schoolIds.length === 0)
+  );
 
   // حالة الإرسال والتحقق
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
@@ -74,8 +83,8 @@ export function useCycleLaunch(onSuccess?: () => void) {
     if (startDate && endDate && new Date(endDate) <= new Date(startDate)) {
       errors.endDate = 'يجب أن يكون تاريخ قفل المخرجات لاحقاً لتاريخ بداية الدورة.';
     }
-    if (completionDeadlineDays < 7) {
-      errors.completionDeadlineDays = 'مهلة الاستكمال لا يمكن أن تقل عن 7 أيام نظامياً.';
+    if (completionDeadlineDays < 1 || completionDeadlineDays > 60) {
+      errors.completionDeadlineDays = 'مهلة الاستكمال يجب أن تكون بين 1 و 60 يوماً.';
     }
     if (selectedStages.length === 0) {
       errors.selectedStages = 'يرجى اختيار مرحلة دراسية واحدة على الأقل.';
@@ -101,9 +110,10 @@ export function useCycleLaunch(onSuccess?: () => void) {
         endDate,
         completionDeadlineDays,
         publicDirectives,
-        targetGovernorate,
+        targetGovernorate: targetGovernorate === 'كافة المحافظات' ? undefined : targetGovernorate,
         educationalStages: selectedStages,
         enrollAllSchools,
+        schoolIds: !enrollAllSchools ? schoolIds : undefined,
       };
 
       await supervisionApi.launchCycle(payload);
@@ -147,6 +157,8 @@ export function useCycleLaunch(onSuccess?: () => void) {
     setTargetGovernorate,
     selectedStages,
     toggleStage,
+    schoolIds,
+    setSchoolIds,
     enrollAllSchools,
     setEnrollAllSchools,
     // Validation & state

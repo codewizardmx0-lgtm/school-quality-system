@@ -4,7 +4,7 @@
  */
 
 import React from 'react';
-import { Lock, ShieldCheck, CheckCircle2 } from 'lucide-react';
+import { Lock, ShieldCheck, CheckCircle2, Hash } from 'lucide-react';
 import type { ActiveStandardVersion } from '../../api/supervisionTypes';
 
 interface ActiveVersionBadgeProps {
@@ -52,9 +52,9 @@ export const ActiveVersionBadge: React.FC<ActiveVersionBadgeProps> = ({
         </div>
 
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
             <span style={{ fontSize: '14px', fontWeight: 800, color: '#FFFFFF' }}>
-              {isLoading ? 'جاري التحقق من الإصدار المعياري...' : version?.title || 'وثيقة المعايير الوطنية v2.1'}
+              {isLoading ? 'جاري التحقق من الإصدار المعياري...' : version?.title || 'وثيقة المعايير الوطنية المقرة'}
             </span>
             <span
               style={{
@@ -67,12 +67,31 @@ export const ActiveVersionBadge: React.FC<ActiveVersionBadgeProps> = ({
                 borderRadius: '999px',
               }}
             >
-              {version?.versionNumber || 'v2.1'} مُقر ومعتمد
+              {version?.versionNumber || '1.0.0'} مُقر نظامياً ونشط
             </span>
+            {version?.checksum && (
+              <span
+                style={{
+                  fontSize: '10px',
+                  fontWeight: 600,
+                  fontFamily: 'monospace',
+                  color: '#94A3B8',
+                  backgroundColor: 'rgba(51, 65, 85, 0.4)',
+                  padding: '2px 6px',
+                  borderRadius: '4px',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                }}
+              >
+                <Hash size={10} />
+                SHA: {version.checksum.substring(0, 10)}...
+              </span>
+            )}
           </div>
           <p style={{ fontSize: '12px', color: '#94A3B8', margin: '3px 0 0 0' }}>
             {version?.governanceNote ||
-              'الإصدار مقفل ومعتمد من أمانة المعايير ومجلس الاعتماد الأكاديمي. تتضمن الدورة 7 معايير رئيسية و 109 مؤشرات مقفلة.'}
+              'الإصدار مقفل ومُقرّ رسمياً من وزارة التربية والتعليم والبحث العلمي (BR-GEN-04). كافة المعايير والمؤشرات مقفلة ضد التعديل الميداني.'}
           </p>
         </div>
       </div>
@@ -80,11 +99,16 @@ export const ActiveVersionBadge: React.FC<ActiveVersionBadgeProps> = ({
       <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: '#CBD5E1' }}>
           <ShieldCheck size={16} color="#34D399" />
-          <span>7 معايير وطنية</span>
+          <span>{version?.standardsCount ?? 7} معايير وطنية</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: '#CBD5E1' }}>
           <CheckCircle2 size={16} color="#34D399" />
-          <span>109 مؤشرات مقفلة</span>
+          <span>{version?.indicatorsCount ?? 109} مؤشرات مقفلة</span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: '#CBD5E1' }}>
+          <span style={{ fontSize: '11px', color: '#93C5FD', fontWeight: 700 }}>
+            الوزن: {version?.totalWeight ?? 100}%
+          </span>
         </div>
       </div>
     </div>

@@ -36,6 +36,7 @@ export interface User {
   fullName: string;
   email: string;
   userType: 'school' | 'ministry' | 'system';
+  governorate?: string | null;
   status: 'Active' | 'Disabled' | string;
   school: SchoolBrief | null;
   ministry: MinistryBrief | null;

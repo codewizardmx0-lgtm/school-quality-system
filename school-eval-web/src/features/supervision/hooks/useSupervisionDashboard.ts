@@ -7,7 +7,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { supervisionApi } from '../api/supervisionApi';
 import type { SupervisionDashboardData } from '../api/supervisionTypes';
 
-export function useSupervisionDashboard() {
+export function useSupervisionDashboard(cycleId?: number) {
   const [data, setData] = useState<SupervisionDashboardData | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -21,14 +21,14 @@ export function useSupervisionDashboard() {
     setIsLoading(true);
     setError(null);
     try {
-      const result = await supervisionApi.getDashboard();
+      const result = await supervisionApi.getDashboard(cycleId);
       setData(result);
     } catch (err: any) {
       setError(err?.message || 'تعذر استرجاع بيانات لوحة المتابعة الإشرافية.');
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [cycleId]);
 
   useEffect(() => {
     fetchDashboard();
@@ -39,15 +39,21 @@ export function useSupervisionDashboard() {
     if (!data?.schools) return [];
 
     return data.schools.filter((school) => {
-      // بحث بالاسم أو الكود
+      // بحث بالاسم أو الكود أو اسم المدير أو المقيم أو المحافظة والمديرية
+      const term = searchTerm.trim().toLowerCase();
       const matchesSearch =
-        !searchTerm.trim() ||
-        school.schoolName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        school.schoolCode.toLowerCase().includes(searchTerm.toLowerCase());
+        !term ||
+        school.schoolName.toLowerCase().includes(term) ||
+        school.schoolCode.toLowerCase().includes(term) ||
+        (school.principalName && school.principalName.toLowerCase().includes(term)) ||
+        (school.evaluatorName && school.evaluatorName.toLowerCase().includes(term)) ||
+        (school.governorate && school.governorate.toLowerCase().includes(term)) ||
+        (school.directorate && school.directorate.toLowerCase().includes(term));
 
-      // فلترة بالحالة
+      // فلترة بالحالة (بما فيها حالة متأخرة عن التسليم FR-SUP-15)
       const matchesStatus =
-        statusFilter === 'all' || school.outputStatus === statusFilter;
+        statusFilter === 'all' ||
+        (statusFilter === 'Delayed' ? Boolean(school.isDelayed) : school.outputStatus === statusFilter);
 
       // فلترة بالمرحلة
       const matchesStage =

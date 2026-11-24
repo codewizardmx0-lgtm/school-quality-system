@@ -919,6 +919,14 @@ class EvaluationController extends Controller
             return ApiResponse::forbidden('غير مصرح لك بإغلاق ملف التقييم. هذه العملية مخصصة للمشرف الوزاري فقط.');
         }
 
+        // حوكمة النطاق الجغرافي للمشرف الوزاري (FR-SUP-02, BR-MIN-03)
+        if ($user && $user->hasRole('ministry_supervisor') && !empty($user->governorate)) {
+            $schoolGov = $evaluation->school?->governorate;
+            if ($schoolGov && $schoolGov !== $user->governorate) {
+                return ApiResponse::forbidden('غير مصرح: المدرسة تقع خارج النطاق الجغرافي المسند إليك (' . $user->governorate . ').');
+            }
+        }
+
         if ($evaluation->status === 'Completed') {
             return ApiResponse::validationError([
                 'evaluation' => ['ملف التقييم مغلق ومكتمل نهائياً مسبقاً.'],
@@ -1249,12 +1257,14 @@ class EvaluationController extends Controller
             return ApiResponse::notFound('ملف التقييم المطلوب غير موجود.');
         }
 
-        // 3. فحص الصلاحيات العامة
+        // 3. فحص الصلاحيات العامة (بما في ذلك المشرف الوزاري)
         $hasAccess = $user->hasRole('admin')
             || $user->user_type === 'admin'
             || $user->user_type === 'system'
             || $user->hasPermission('reports.view')
-            || $user->hasPermission('evaluations.view');
+            || $user->hasPermission('evaluations.view')
+            || $user->hasRole('ministry_supervisor')
+            || $user->hasPermission('supervision.review');
 
         if (!$hasAccess) {
             return ApiResponse::forbidden('غير مصرح لك بتصدير أو استعراض هذا التقرير.');

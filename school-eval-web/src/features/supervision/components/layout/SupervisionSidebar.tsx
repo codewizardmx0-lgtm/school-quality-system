@@ -8,10 +8,10 @@
  * - إزالة أي تكرار لملف المستخدم من التذييل
  */
 
-import React, { useState } from 'react';
+import React from 'react';
 import {
   LayoutDashboard,
-  PlusCircle,
+  Calendar,
   FileCheck2,
   FileEdit,
   ClipboardList,
@@ -19,16 +19,22 @@ import {
   History,
   ChevronLeft,
   ChevronRight,
-  LogOut,
   Building2,
   ShieldCheck,
+  X,
 } from 'lucide-react';
 import type { SupervisionScreenKey } from '../../api/supervisionTypes';
 
 interface SupervisionSidebarProps {
   activeScreen: SupervisionScreenKey;
   onSelectScreen: (screen: SupervisionScreenKey) => void;
-  onLogout?: () => void;
+  selectedSchoolName?: string;
+  isCollapsed?: boolean;
+  onToggleCollapse?: () => void;
+  isMobile?: boolean;
+  isMobileOpen?: boolean;
+  onCloseMobile?: () => void;
+  standardVersionNo?: string;
 }
 
 interface NavItemConfig {
@@ -38,28 +44,53 @@ interface NavItemConfig {
   icon: React.ComponentType<{ size?: number; color?: string; style?: React.CSSProperties }>;
 }
 
-const navItems: NavItemConfig[] = [
+// القسم 1: المتابعة المركزية وإدارة الدورات (نطاق الإشراف العام)
+const centralNavItems: NavItemConfig[] = [
   { key: 'dashboard', label: 'لوحة المتابعة', icon: LayoutDashboard },
-  { key: 'cycles-new', label: 'إطلاق دورة تقييم', icon: PlusCircle },
-  { key: 'submissions', label: 'استلام ومراجعة', icon: FileCheck2, badge: '12' },
-  { key: 'completion-requests', label: 'طلبات الاستكمال', icon: FileEdit, badge: '5' },
-  { key: 'tracking-log', label: 'سجل إجراءات المتابعة', icon: ClipboardList },
+  { key: 'cycles-list', label: 'إدارة الدورات التقييمية', icon: Calendar },
   { key: 'reports', label: 'التقارير والتحليل', icon: BarChart3 },
+];
+
+// القسم 2: ملفات المدارس الفردية (متابعة مدرسة محددة)
+const schoolNavItems: NavItemConfig[] = [
+  { key: 'submissions', label: 'استلام ومراجعة', icon: FileCheck2 },
+  { key: 'completion-requests', label: 'طلبات الاستكمال', icon: FileEdit },
+  { key: 'tracking-log', label: 'سجل إجراءات المتابعة', icon: ClipboardList },
   { key: 'historical', label: 'المقارنة التاريخية', icon: History },
 ];
 
 export const SupervisionSidebar: React.FC<SupervisionSidebarProps> = ({
   activeScreen,
   onSelectScreen,
-  onLogout,
+  selectedSchoolName = 'مدرسة الفاروق النموذجية',
+  isCollapsed = false,
+  onToggleCollapse,
+  isMobile = false,
+  isMobileOpen = false,
+  onCloseMobile,
+  standardVersionNo,
 }) => {
-  const [isCollapsed, setIsCollapsed] = useState(false);
+  const sidebarWidth = isMobile ? '280px' : isCollapsed ? '76px' : '260px';
 
-  const sidebarWidth = isCollapsed ? '76px' : '260px';
-
-  return (
-    <aside
-      style={{
+  const sidebarStyle: React.CSSProperties = isMobile
+    ? {
+        position: 'fixed',
+        top: 0,
+        right: 0,
+        bottom: 0,
+        width: '280px',
+        backgroundColor: '#0B0F19',
+        borderLeft: '1px solid #1E293B',
+        display: 'flex',
+        flexDirection: 'column',
+        zIndex: 9999,
+        transform: isMobileOpen ? 'translateX(0)' : 'translateX(100%)',
+        transition: 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+        boxShadow: isMobileOpen ? '-4px 0 24px rgba(0, 0, 0, 0.5)' : 'none',
+        color: '#CBD5E1',
+        userSelect: 'none',
+      }
+    : {
         width: sidebarWidth,
         minWidth: sidebarWidth,
         maxWidth: sidebarWidth,
@@ -75,8 +106,10 @@ export const SupervisionSidebar: React.FC<SupervisionSidebarProps> = ({
         color: '#CBD5E1',
         transition: 'width 0.25s cubic-bezier(0.16, 1, 0.3, 1), min-width 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
         userSelect: 'none',
-      }}
-    >
+      };
+
+  return (
+    <aside style={sidebarStyle}>
       {/* 1. Header: Platform Short Name & Authority Badge */}
       <div
         style={{
@@ -106,7 +139,7 @@ export const SupervisionSidebar: React.FC<SupervisionSidebarProps> = ({
             <Building2 size={20} color="#FFFFFF" />
           </div>
 
-          {!isCollapsed && (
+          {(!isCollapsed || isMobile) && (
             <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
               <div
                 style={{
@@ -137,30 +170,55 @@ export const SupervisionSidebar: React.FC<SupervisionSidebarProps> = ({
           )}
         </div>
 
-        {/* زر طي/توسيع القائمة الجانبية */}
-        <button
-          type="button"
-          onClick={() => setIsCollapsed(!isCollapsed)}
-          title={isCollapsed ? 'توسيع القائمة' : 'طي القائمة'}
-          style={{
-            width: '28px',
-            height: '28px',
-            borderRadius: '6px',
-            backgroundColor: '#1E293B',
-            color: '#94A3B8',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            cursor: 'pointer',
-            border: 'none',
-            flexShrink: 0,
-          }}
-        >
-          {isCollapsed ? <ChevronLeft size={16} /> : <ChevronRight size={16} />}
-        </button>
+        {/* Mobile Close Button or Desktop Collapse Toggle */}
+        {isMobile ? (
+          <button
+            type="button"
+            onClick={onCloseMobile}
+            title="إغلاق القائمة"
+            style={{
+              width: '32px',
+              height: '32px',
+              borderRadius: '6px',
+              backgroundColor: '#1E293B',
+              color: '#94A3B8',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              border: 'none',
+              flexShrink: 0,
+            }}
+          >
+            <X size={18} />
+          </button>
+        ) : (
+          onToggleCollapse && (
+            <button
+              type="button"
+              onClick={onToggleCollapse}
+              title={isCollapsed ? 'توسيع القائمة' : 'طي القائمة'}
+              style={{
+                width: '28px',
+                height: '28px',
+                borderRadius: '6px',
+                backgroundColor: '#1E293B',
+                color: '#94A3B8',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                border: 'none',
+                flexShrink: 0,
+              }}
+            >
+              {isCollapsed ? <ChevronLeft size={16} /> : <ChevronRight size={16} />}
+            </button>
+          )
+        )}
       </div>
 
-      {/* 2. Navigation Items */}
+      {/* 2. Navigation Items (Divided into 2 Logical Sections) */}
       <nav
         style={{
           flex: 1,
@@ -172,23 +230,38 @@ export const SupervisionSidebar: React.FC<SupervisionSidebarProps> = ({
           gap: '4px',
         }}
       >
-        {navItems.map((item) => {
-          const isActive = activeScreen === item.key;
+        {/* عنوان القسم 1: المتابعة المركزية وإدارة الدورات */}
+        {!isCollapsed && (
+          <div style={{ padding: '0 6px 4px', fontSize: '10.5px', fontWeight: 800, color: '#64748B', letterSpacing: '0.3px' }}>
+            المتابعة المركزية والدورات
+          </div>
+        )}
+
+        {centralNavItems.map((item) => {
+          const isActive =
+            item.key === 'cycles-list'
+              ? activeScreen === 'cycles-list' || activeScreen === 'cycles-new'
+              : activeScreen === item.key;
           const Icon = item.icon;
 
           return (
             <button
               key={item.key}
               type="button"
-              onClick={() => onSelectScreen(item.key)}
-              title={isCollapsed ? item.label : undefined}
+              onClick={() => {
+                onSelectScreen(item.key);
+                if (isMobile && onCloseMobile) {
+                  onCloseMobile();
+                }
+              }}
+              title={isCollapsed && !isMobile ? item.label : undefined}
               style={{
                 width: '100%',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: isCollapsed ? 'center' : 'space-between',
                 gap: '12px',
-                padding: isCollapsed ? '10px 0' : '10px 14px',
+                padding: isCollapsed ? '10px 0' : '9px 12px',
                 borderRadius: '8px',
                 fontSize: '13px',
                 fontWeight: isActive ? 700 : 500,
@@ -213,8 +286,119 @@ export const SupervisionSidebar: React.FC<SupervisionSidebarProps> = ({
                 }
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
-                <Icon size={19} color={isActive ? '#FFFFFF' : '#94A3B8'} />
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
+                <Icon size={18} color={isActive ? '#FFFFFF' : '#94A3B8'} />
+                {!isCollapsed && (
+                  <span
+                    style={{
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                    }}
+                  >
+                    {item.label}
+                  </span>
+                )}
+              </div>
+
+              {!isCollapsed && item.badge && (
+                <span
+                  style={{
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    padding: '2px 7px',
+                    borderRadius: '999px',
+                    backgroundColor: isActive ? 'rgba(255, 255, 255, 0.2)' : '#1E293B',
+                    color: isActive ? '#FFFFFF' : '#38BDF8',
+                  }}
+                >
+                  {item.badge}
+                </span>
+              )}
+            </button>
+          );
+        })}
+
+        {/* فاصل وعنوان القسم 2: ملفات المدارس الفردية */}
+        {!isCollapsed ? (
+          <div style={{ margin: '14px 4px 6px', display: 'flex', flexDirection: 'column', gap: '5px' }}>
+            <div style={{ height: '1px', backgroundColor: '#1E293B', marginBottom: '4px' }} />
+            <span style={{ fontSize: '10.5px', fontWeight: 800, color: '#64748B', letterSpacing: '0.3px' }}>
+              متابعة مدرسة محددة
+            </span>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '5px 8px',
+                backgroundColor: '#0F172A',
+                border: '1px solid #1E293B',
+                borderRadius: '6px',
+                fontSize: '11px',
+                color: '#93C5FD',
+                overflow: 'hidden',
+              }}
+              title={`المدرسة النشطة حالياً: ${selectedSchoolName}`}
+            >
+              <Building2 size={13} style={{ flexShrink: 0, color: '#38BDF8' }} />
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 700 }}>
+                {selectedSchoolName}
+              </span>
+            </div>
+          </div>
+        ) : (
+          <div style={{ height: '1px', backgroundColor: '#1E293B', margin: '10px 4px' }} />
+        )}
+
+        {schoolNavItems.map((item) => {
+          const isActive = activeScreen === item.key;
+          const Icon = item.icon;
+
+          return (
+            <button
+              key={item.key}
+              type="button"
+              onClick={() => {
+                onSelectScreen(item.key);
+                if (isMobile && onCloseMobile) {
+                  onCloseMobile();
+                }
+              }}
+              title={isCollapsed && !isMobile ? item.label : undefined}
+              style={{
+                width: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: isCollapsed ? 'center' : 'space-between',
+                gap: '12px',
+                padding: isCollapsed ? '10px 0' : '9px 12px',
+                borderRadius: '8px',
+                fontSize: '13px',
+                fontWeight: isActive ? 700 : 500,
+                color: isActive ? '#FFFFFF' : '#94A3B8',
+                backgroundColor: isActive ? '#2563EB' : 'transparent',
+                cursor: 'pointer',
+                border: 'none',
+                whiteSpace: 'nowrap',
+                transition: 'all 0.15s ease',
+                boxShadow: isActive ? '0 4px 12px rgba(37, 99, 235, 0.35)' : 'none',
+              }}
+              onMouseEnter={(e) => {
+                if (!isActive) {
+                  e.currentTarget.style.backgroundColor = '#1E293B';
+                  e.currentTarget.style.color = '#F8FAFC';
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (!isActive) {
+                  e.currentTarget.style.backgroundColor = 'transparent';
+                  e.currentTarget.style.color = '#94A3B8';
+                }
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
+                <Icon size={18} color={isActive ? '#FFFFFF' : '#94A3B8'} />
                 {!isCollapsed && (
                   <span
                     style={{
@@ -301,7 +485,7 @@ export const SupervisionSidebar: React.FC<SupervisionSidebarProps> = ({
             />
           </span>
 
-          {!isCollapsed && (
+          {(!isCollapsed || isMobile) && (
             <span
               style={{
                 fontSize: '11px',
@@ -315,9 +499,10 @@ export const SupervisionSidebar: React.FC<SupervisionSidebarProps> = ({
           )}
         </div>
 
-        {/* Active standards version pill */}
-        {!isCollapsed ? (
+        {/* Active standards version pill (dynamic version) */}
+        {(!isCollapsed || isMobile) ? (
           <div
+            title={`وثيقة المعايير الوطنية ${standardVersionNo || '2026.1'}`}
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -351,12 +536,12 @@ export const SupervisionSidebar: React.FC<SupervisionSidebarProps> = ({
                 borderRadius: '4px',
               }}
             >
-              v2.1
+              {standardVersionNo || '2026.1'}
             </span>
           </div>
         ) : (
           <div
-            title="وثيقة المعايير الوطنية v2.1"
+            title={`وثيقة المعايير الوطنية ${standardVersionNo || '2026.1'}`}
             style={{
               display: 'flex',
               justifyContent: 'center',
@@ -372,44 +557,9 @@ export const SupervisionSidebar: React.FC<SupervisionSidebarProps> = ({
                 borderRadius: '4px',
               }}
             >
-              v2.1
+              {standardVersionNo ? (standardVersionNo.startsWith('v') ? standardVersionNo : `v${standardVersionNo}`) : 'v2026.1'}
             </span>
           </div>
-        )}
-
-        {/* زر تسجيل الخروج إن وجد */}
-        {onLogout && (
-          <button
-            type="button"
-            onClick={onLogout}
-            title={isCollapsed ? 'تسجيل الخروج' : undefined}
-            style={{
-              width: '100%',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: isCollapsed ? 'center' : 'flex-start',
-              gap: '8px',
-              padding: '6px 8px',
-              borderRadius: '6px',
-              fontSize: '12px',
-              color: '#94A3B8',
-              backgroundColor: 'transparent',
-              cursor: 'pointer',
-              border: 'none',
-              transition: 'all 0.15s ease',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = '#1E293B';
-              e.currentTarget.style.color = '#EF4444';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = 'transparent';
-              e.currentTarget.style.color = '#94A3B8';
-            }}
-          >
-            <LogOut size={15} />
-            {!isCollapsed && <span>تسجيل الخروج</span>}
-          </button>
         )}
       </div>
     </aside>

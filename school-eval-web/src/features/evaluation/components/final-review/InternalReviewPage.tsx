@@ -87,7 +87,7 @@ export const InternalReviewPage: React.FC<InternalReviewPageProps> = ({
     {
       id: 'evidence_linked',
       title: 'فهرسة وربط الشواهد والوثائق الداعمة للتقديرات',
-      description: 'تم فهرسة الشواهد المربوطة عبر وثائق معتمدة في مستودع الأدلة.',
+      description: 'تم فهرسة الشواهد المربوطة عبر وثائق موثقة في مستودع الأدلة.',
       passed: false,
       weight: 25,
     },
@@ -101,7 +101,7 @@ export const InternalReviewPage: React.FC<InternalReviewPageProps> = ({
     {
       id: 'draft_report_generated',
       title: 'جاهزية مسودة التقرير الشامل والمراجعة الداخلية لمدير المدرسة',
-      description: 'مسودة التقرير الشامل ومصفوفة التقييم جاهزة ومستوفية للمراجعة الداخلية والاعتماد.',
+      description: 'مسودة التقرير الشامل ومصفوفة التقييم جاهزة ومستوفية للمراجعة والإقرار الداخلي.',
       passed: false,
       weight: 20,
     },
@@ -112,7 +112,7 @@ export const InternalReviewPage: React.FC<InternalReviewPageProps> = ({
   const [isExporting, setIsExporting] = useState(false);
 
   const submissionStatus = dashboardData?.schoolInfo?.status || preflightData?.digitalSealInfo?.submissionStatus || (isLocked ? 'Submitted' : 'Draft');
-  const activeTrackingCode = preflightData?.digitalSealInfo?.trackingCode || preflightData?.digitalSealInfo?.systemCode || dashboardData?.schoolInfo?.trackingCode || (isLocked ? 'ARQ-LOCKED' : 'بانتظار الاعتماد والختم');
+  const activeTrackingCode = preflightData?.digitalSealInfo?.trackingCode || preflightData?.digitalSealInfo?.systemCode || dashboardData?.schoolInfo?.trackingCode || (isLocked ? 'ARQ-LOCKED' : 'بانتظار الإقرار والختم');
   const activeDigitalHash = preflightData?.digitalSealInfo?.digitalHash || dashboardData?.schoolInfo?.digitalHash || (isLocked ? 'بصمة مشفرة مسجلة' : 'تُولَّد البصمة المشفرة (SHA-256) فور تأكيد الختم النهائي');
 
   const toggleCriterionExpand = (id: string) => {
@@ -312,7 +312,7 @@ export const InternalReviewPage: React.FC<InternalReviewPageProps> = ({
             <RefreshCw size={20} color="#059669" className="animate-spin" />
             <div>
               <div style={{ fontSize: '13.5px', fontWeight: 800, color: '#1E293B' }}>
-                جاري فحص معايير الجاهزية والتحقق من الشواهد المعتمدة...
+                جاري فحص معايير الجاهزية والتحقق من الشواهد المرفقة...
               </div>
               <div style={{ fontSize: '12px', color: '#64748B', marginTop: '2px' }}>
                 يتم التحقق آلياً من اكتمال الرصد، وربط الشواهد، وجاهزية خطة التحسين ومسودة التقرير.
@@ -557,7 +557,7 @@ export const InternalReviewPage: React.FC<InternalReviewPageProps> = ({
                 }}
               >
                 <Lock size={14} />
-                <span>الختم الرقمي والتسليم النهائي محصور بمقيم المدرسة المعتمد</span>
+                <span>الختم الرقمي والتسليم النهائي محصور بمقيّم المدرسة</span>
               </div>
             )}
           </div>
@@ -569,8 +569,8 @@ export const InternalReviewPage: React.FC<InternalReviewPageProps> = ({
             {[
               { id: '1', title: 'رصد تقديرات كافة مؤشرات المعايير الوطنية (109 مؤشرات)', desc: 'جاري التحقق من اكتمال الرصد العددي...' },
               { id: '2', title: 'فهرسة وربط الشواهد والوثائق الداعمة للتقديرات', desc: 'جاري فحص المستندات المودعة والمربوطة بالمؤشرات...' },
-              { id: '3', title: 'صياغة خطة التحسين ومبادرات التطوير للمؤشرات المتدنية', desc: 'جاري التحقق من اعتماد إجراءات خطة التحسين...' },
-              { id: '4', title: 'جاهزية مسودة التقرير الشامل والمراجعة الداخلية لمدير المدرسة', desc: 'جاري تدقيق مصفوفة النتائج المعتمدة...' },
+              { id: '3', title: 'صياغة خطة التحسين ومبادرات التطوير للمؤشرات المتدنية', desc: 'جاري التحقق من إقرار إجراءات خطة التحسين...' },
+              { id: '4', title: 'جاهزية مسودة التقرير الشامل والمراجعة الداخلية لمدير المدرسة', desc: 'جاري تدقيق مصفوفة النتائج المرصودة...' },
             ].map((skel) => (
               <div
                 key={skel.id}
@@ -808,7 +808,7 @@ export const InternalReviewPage: React.FC<InternalReviewPageProps> = ({
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <FileCheck2 size={20} color="#059669" />
                 <h3 style={{ fontSize: '15px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
-                  اعتماد ومراجعة مدير المدرسة الداخلي
+                  إقرار ومراجعة مدير المدرسة الداخلي
                 </h3>
               </div>
               <span
@@ -821,7 +821,7 @@ export const InternalReviewPage: React.FC<InternalReviewPageProps> = ({
                   color: '#059669',
                 }}
               >
-                معتمد داخلياً
+                مُقَرّ داخلياً
               </span>
             </div>
             <p style={{ fontSize: '12px', color: '#64748B', lineHeight: 1.6, margin: 0 }}>
@@ -841,7 +841,7 @@ export const InternalReviewPage: React.FC<InternalReviewPageProps> = ({
               fontSize: '11.5px',
             }}
           >
-            <span style={{ color: '#64748B' }}>المسؤول المعتمد:</span>
+            <span style={{ color: '#64748B' }}>المسؤول المصادق:</span>
             <span style={{ fontWeight: 700, color: '#1E293B' }}>
               {dashboardData?.schoolInfo?.currentEvaluator || 'مدير المدرسة / مسؤول الجودة'}
             </span>
@@ -947,7 +947,7 @@ export const InternalReviewPage: React.FC<InternalReviewPageProps> = ({
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', fontWeight: 800, color: '#334155', marginBottom: '4px' }}>
               <Info size={16} color="#059669" />
-              <span>دليل مستويات الأداء المعتمدة في الإطار الوطني:</span>
+              <span>دليل مستويات الأداء الرسمية في الإطار الوطني:</span>
             </div>
 
             {/* Level 3 */}
@@ -1033,7 +1033,7 @@ export const InternalReviewPage: React.FC<InternalReviewPageProps> = ({
           />
         </div>
 
-        {/* مصفوفة المعايير الفرعية الـ 14 وأوزانها المعتمدة رسمياً (The 14 National Sub-Standards Matrix) */}
+        {/* مصفوفة المعايير الفرعية الـ 14 وأوزانها المقررة رسمياً (The 14 National Sub-Standards Matrix) */}
         {standardsTree.length > 0 && (
           <div
             data-testid="substandards-matrix-card"
@@ -1049,7 +1049,7 @@ export const InternalReviewPage: React.FC<InternalReviewPageProps> = ({
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <FileCheck2 size={18} color="#059669" />
                 <h4 style={{ fontSize: '14.5px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
-                  تقسيم المعايير الفرعية الـ 14 والأوزان النسبية المعتمدة (النموذج الوطني)
+                  تقسيم المعايير الفرعية الـ 14 والأوزان النسبية المقررة (النموذج الوطني)
                 </h4>
               </div>
               <span

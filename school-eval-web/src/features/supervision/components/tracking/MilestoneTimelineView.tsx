@@ -1,6 +1,7 @@
 /**
  * Component: MilestoneTimelineView
  * الخط الزمني المرئي المتسلسل لمحطات التقييم وإجراءات المتابعة الميدانية
+ * متوافق تماماً مع UC-SUP-06 و FR-SUP-08 و NFR-INT-02 (سجل تراكمي محمي - Append-Only)
  */
 
 import React, { useState, useMemo } from 'react';
@@ -17,29 +18,67 @@ import {
   X,
   ArrowUp,
   ArrowDown,
+  ArrowLeft,
+  Filter,
+  RotateCcw,
 } from 'lucide-react';
-import type { MilestoneEvent } from '../../api/supervisionTypes';
+import type { MilestoneEvent, TrackingSelectorItem } from '../../api/supervisionTypes';
 
 interface MilestoneTimelineViewProps {
   milestones: MilestoneEvent[];
+  availableCycles?: TrackingSelectorItem[];
 }
 
-export const MilestoneTimelineView: React.FC<MilestoneTimelineViewProps> = ({ milestones }) => {
+export const MilestoneTimelineView: React.FC<MilestoneTimelineViewProps> = ({
+  milestones,
+  availableCycles = [],
+}) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedType, setSelectedType] = useState<string>('all');
+  const [selectedActor, setSelectedActor] = useState<string>('all');
+  const [selectedCycle, setSelectedCycle] = useState<string>('all');
+  const [fromDate, setFromDate] = useState<string>('');
+  const [toDate, setToDate] = useState<string>('');
   const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState<boolean>(false);
 
+  // تصفية وفرز الأحداث
   const filteredAndSortedMilestones = useMemo(() => {
     let list = milestones.filter((item) => {
-      // Type filter
+      // 1. تصفية نوع المحطة
       if (selectedType !== 'all') {
         if (selectedType === 'submission' && item.eventType !== 'submission') return false;
         if (selectedType === 'completion' && item.eventType !== 'completion_request') return false;
         if (selectedType === 'memo' && item.eventType !== 'supervisor_memo') return false;
-        if (selectedType === 'check' && item.eventType !== 'automated_check') return false;
         if (selectedType === 'visit' && item.eventType !== 'field_visit') return false;
+        if (selectedType === 'phone' && item.eventType !== 'phone_call') return false;
+        if (selectedType === 'check' && item.eventType !== 'automated_check') return false;
+        if (selectedType === 'corrective' && item.eventType !== 'corrective_memo') return false;
       }
-      // Search filter
+
+      // 2. تصفية الجهة القائمة بالإجراء (Actor)
+      if (selectedActor !== 'all') {
+        if (selectedActor === 'school' && item.actorType !== 'school') return false;
+        if (selectedActor === 'supervisor' && item.actorType !== 'supervisor') return false;
+        if (selectedActor === 'system' && item.actorType !== 'system') return false;
+      }
+
+      // 3. تصفية الدورة التقييمية
+      if (selectedCycle !== 'all') {
+        if (String(item.cycleId) !== selectedCycle) return false;
+      }
+
+      // 4. تصفية النطاق الزمني (Date Range)
+      if (fromDate) {
+        const itemDate = new Date(item.timestamp).toISOString().split('T')[0];
+        if (itemDate < fromDate) return false;
+      }
+      if (toDate) {
+        const itemDate = new Date(item.timestamp).toISOString().split('T')[0];
+        if (itemDate > toDate) return false;
+      }
+
+      // 5. البحث النصي الفوري
       if (searchTerm.trim()) {
         const q = searchTerm.trim().toLowerCase();
         const matchTitle = item.title?.toLowerCase().includes(q);
@@ -48,6 +87,7 @@ export const MilestoneTimelineView: React.FC<MilestoneTimelineViewProps> = ({ mi
         const matchBadge = item.statusBadge?.toLowerCase().includes(q);
         if (!matchTitle && !matchDesc && !matchActor && !matchBadge) return false;
       }
+
       return true;
     });
 
@@ -56,16 +96,19 @@ export const MilestoneTimelineView: React.FC<MilestoneTimelineViewProps> = ({ mi
       const timeB = new Date(b.timestamp).getTime();
       return sortOrder === 'desc' ? timeB - timeA : timeA - timeB;
     });
-  }, [milestones, selectedType, searchTerm, sortOrder]);
+  }, [milestones, selectedType, selectedActor, selectedCycle, fromDate, toDate, searchTerm, sortOrder]);
 
+  // إحصائيات التصفية السريعة
   const typeCounts = useMemo(() => {
     return {
       all: milestones.length,
       submission: milestones.filter((m) => m.eventType === 'submission').length,
       completion: milestones.filter((m) => m.eventType === 'completion_request').length,
       memo: milestones.filter((m) => m.eventType === 'supervisor_memo').length,
-      check: milestones.filter((m) => m.eventType === 'automated_check').length,
       visit: milestones.filter((m) => m.eventType === 'field_visit').length,
+      phone: milestones.filter((m) => m.eventType === 'phone_call').length,
+      check: milestones.filter((m) => m.eventType === 'automated_check').length,
+      corrective: milestones.filter((m) => m.eventType === 'corrective_memo').length,
     };
   }, [milestones]);
 
@@ -81,6 +124,8 @@ export const MilestoneTimelineView: React.FC<MilestoneTimelineViewProps> = ({ mi
         return <MapPin size={18} color="#7C3AED" />;
       case 'phone_call':
         return <PhoneCall size={18} color="#0284C7" />;
+      case 'corrective_memo':
+        return <RotateCcw size={18} color="#DC2626" />;
       case 'supervisor_memo':
       default:
         return <FileText size={18} color="#4F46E5" />;
@@ -105,61 +150,81 @@ export const MilestoneTimelineView: React.FC<MilestoneTimelineViewProps> = ({ mi
     }
   };
 
+  const hasActiveFilters =
+    selectedType !== 'all' ||
+    selectedActor !== 'all' ||
+    selectedCycle !== 'all' ||
+    Boolean(fromDate) ||
+    Boolean(toDate) ||
+    Boolean(searchTerm.trim());
+
+  const resetFilters = () => {
+    setSelectedType('all');
+    setSelectedActor('all');
+    setSelectedCycle('all');
+    setFromDate('');
+    setToDate('');
+    setSearchTerm('');
+  };
+
   return (
     <div
       style={{
         backgroundColor: '#FFFFFF',
-        borderRadius: '12px',
+        borderRadius: '14px',
         border: '1px solid #E2E8F0',
         padding: '24px',
         boxShadow: '0 1px 3px rgba(0, 0, 0, 0.04)',
+        width: '100%',
+        boxSizing: 'border-box',
       }}
     >
+      {/* 1. الترويسة وأدوات البحث والفرز */}
       <div
         style={{
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
           flexWrap: 'wrap',
-          gap: '12px',
-          marginBottom: '16px',
+          gap: '14px',
+          marginBottom: '18px',
         }}
       >
         <div>
           <h2 style={{ fontSize: '16px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
-            الخط الزمني الموحد للإجراءات والأحداث ({filteredAndSortedMilestones.length} محطات)
+            الخط الزمني الموحد للأحداث والتدخلات الميدانية ({filteredAndSortedMilestones.length} محطة)
           </h2>
-          <p style={{ fontSize: '12px', color: '#64748B', marginTop: '4px', margin: 0 }}>
-            تسلسل زمني موثق يربط أحداث التسليم الآلية بالمذكرات الإشرافية والزيارات الميدانية
+          <p style={{ fontSize: '12.5px', color: '#64748B', marginTop: '4px', margin: 0 }}>
+            تسلسل زمني غير قابل للتعديل (NFR-INT-02) يربط دورات التسليم بطلبات الاستكمال والمذكرات التوجيهية
           </p>
         </div>
 
-        {/* أدوات البحث والترتيب */}
+        {/* أدوات البحث والفرز وأزرار الفلاتر */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-          {/* حقل البحث */}
+          {/* حقل البحث السريع */}
           <div
             style={{
               display: 'flex',
               alignItems: 'center',
-              gap: '6px',
+              gap: '8px',
               backgroundColor: '#F8FAFC',
               border: '1px solid #CBD5E1',
               borderRadius: '8px',
-              padding: '6px 10px',
-              minWidth: '220px',
+              padding: '7px 12px',
+              minWidth: '240px',
             }}
           >
-            <Search size={14} color="#64748B" />
+            <Search size={15} color="#64748B" />
             <input
               type="text"
-              placeholder="بحث في سجل المحطات..."
+              placeholder="بحث في نصوص السجل والمحطات..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               style={{
                 border: 'none',
                 background: 'none',
                 outline: 'none',
-                fontSize: '12px',
+                fontSize: '12.5px',
                 color: '#0F172A',
                 width: '100%',
               }}
@@ -168,14 +233,53 @@ export const MilestoneTimelineView: React.FC<MilestoneTimelineViewProps> = ({ mi
               <button
                 type="button"
                 onClick={() => setSearchTerm('')}
-                style={{ border: 'none', background: 'none', cursor: 'pointer', padding: 0, color: '#94A3B8' }}
+                style={{
+                  border: 'none',
+                  background: 'none',
+                  cursor: 'pointer',
+                  padding: 0,
+                  color: '#94A3B8',
+                }}
               >
-                <X size={12} />
+                <X size={14} />
               </button>
             )}
           </div>
 
-          {/* زر الترتيب الزمني */}
+          {/* زر الفلاتر المتقدمة */}
+          <button
+            type="button"
+            onClick={() => setShowAdvancedFilters((prev) => !prev)}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '7px 12px',
+              borderRadius: '8px',
+              border: showAdvancedFilters ? '1px solid #2563EB' : '1px solid #CBD5E1',
+              backgroundColor: showAdvancedFilters ? '#EFF6FF' : '#FFFFFF',
+              color: showAdvancedFilters ? '#1D4ED8' : '#334155',
+              fontSize: '12.5px',
+              fontWeight: 700,
+              cursor: 'pointer',
+              transition: 'all 0.15s ease',
+            }}
+          >
+            <Filter size={14} />
+            <span>تصفية متقدمة</span>
+            {hasActiveFilters && (
+              <span
+                style={{
+                  width: '7px',
+                  height: '7px',
+                  borderRadius: '50%',
+                  backgroundColor: '#2563EB',
+                }}
+              />
+            )}
+          </button>
+
+          {/* زر اتجاه الفرز الزمني */}
           <button
             type="button"
             onClick={() => setSortOrder((prev) => (prev === 'desc' ? 'asc' : 'desc'))}
@@ -183,24 +287,149 @@ export const MilestoneTimelineView: React.FC<MilestoneTimelineViewProps> = ({ mi
               display: 'inline-flex',
               alignItems: 'center',
               gap: '6px',
-              padding: '6px 12px',
+              padding: '7px 14px',
               backgroundColor: '#F8FAFC',
               color: '#334155',
               border: '1px solid #CBD5E1',
               borderRadius: '8px',
-              fontSize: '12px',
-              fontWeight: 600,
+              fontSize: '12.5px',
+              fontWeight: 700,
               cursor: 'pointer',
               transition: 'all 0.15s ease',
             }}
           >
-            {sortOrder === 'desc' ? <ArrowDown size={14} color="#2563EB" /> : <ArrowUp size={14} color="#2563EB" />}
+            {sortOrder === 'desc' ? (
+              <ArrowDown size={14} color="#2563EB" />
+            ) : (
+              <ArrowUp size={14} color="#2563EB" />
+            )}
             <span>{sortOrder === 'desc' ? 'الأحدث أولاً' : 'الأقدم أولاً'}</span>
           </button>
         </div>
       </div>
 
-      {/* ألسنة التصفية لنوع الحدث */}
+      {/* 2. شريط التصفية المتقدمة (عند التفعيل) */}
+      {showAdvancedFilters && (
+        <div
+          style={{
+            padding: '14px 18px',
+            borderRadius: '10px',
+            backgroundColor: '#F8FAFC',
+            border: '1px solid #E2E8F0',
+            marginBottom: '16px',
+            display: 'flex',
+            flexWrap: 'wrap',
+            alignItems: 'center',
+            gap: '16px',
+          }}
+        >
+          {/* تصفية الجهة */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ fontSize: '12px', fontWeight: 700, color: '#475569' }}>الجهة المنفذة:</span>
+            <select
+              value={selectedActor}
+              onChange={(e) => setSelectedActor(e.target.value)}
+              style={{
+                padding: '5px 10px',
+                borderRadius: '6px',
+                border: '1px solid #CBD5E1',
+                fontSize: '12px',
+                backgroundColor: '#FFFFFF',
+                color: '#0F172A',
+                outline: 'none',
+              }}
+            >
+              <option value="all">كافة الجهات</option>
+              <option value="school">المدرسة (فريق الجودة)</option>
+              <option value="supervisor">المشرف الوزاري</option>
+              <option value="system">النظام الآلي</option>
+            </select>
+          </div>
+
+          {/* تصفية الدورة */}
+          {availableCycles.length > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '12px', fontWeight: 700, color: '#475569' }}>الدورة:</span>
+              <select
+                value={selectedCycle}
+                onChange={(e) => setSelectedCycle(e.target.value)}
+                style={{
+                  padding: '5px 10px',
+                  borderRadius: '6px',
+                  border: '1px solid #CBD5E1',
+                  fontSize: '12px',
+                  backgroundColor: '#FFFFFF',
+                  color: '#0F172A',
+                  outline: 'none',
+                }}
+              >
+                <option value="all">كافة الدورات</option>
+                {availableCycles.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* تصفية التاريخ من وإلى */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ fontSize: '12px', fontWeight: 700, color: '#475569' }}>من تاريخ:</span>
+            <input
+              type="date"
+              value={fromDate}
+              onChange={(e) => setFromDate(e.target.value)}
+              style={{
+                padding: '4px 8px',
+                borderRadius: '6px',
+                border: '1px solid #CBD5E1',
+                fontSize: '11.5px',
+                backgroundColor: '#FFFFFF',
+                color: '#0F172A',
+                outline: 'none',
+              }}
+            />
+            <span style={{ fontSize: '12px', fontWeight: 700, color: '#475569' }}>إلى:</span>
+            <input
+              type="date"
+              value={toDate}
+              onChange={(e) => setToDate(e.target.value)}
+              style={{
+                padding: '4px 8px',
+                borderRadius: '6px',
+                border: '1px solid #CBD5E1',
+                fontSize: '11.5px',
+                backgroundColor: '#FFFFFF',
+                color: '#0F172A',
+                outline: 'none',
+              }}
+            />
+          </div>
+
+          {/* زر إعادة الضبط */}
+          {hasActiveFilters && (
+            <button
+              type="button"
+              onClick={resetFilters}
+              style={{
+                fontSize: '12px',
+                fontWeight: 700,
+                color: '#DC2626',
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                marginRight: 'auto',
+                textDecoration: 'underline',
+              }}
+            >
+              إلغاء الفلاتر
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* 3. ألسنة تصفية نوع المحطة السريعة */}
       <div
         style={{
           display: 'flex',
@@ -210,20 +439,22 @@ export const MilestoneTimelineView: React.FC<MilestoneTimelineViewProps> = ({ mi
           padding: '10px 14px',
           backgroundColor: '#F8FAFC',
           border: '1px solid #E2E8F0',
-          borderRadius: '8px',
-          marginBottom: '20px',
+          borderRadius: '10px',
+          marginBottom: '24px',
         }}
       >
-        <span style={{ fontSize: '11px', fontWeight: 700, color: '#475569', marginLeft: '4px' }}>
-          تصفية النوع:
+        <span style={{ fontSize: '11.5px', fontWeight: 800, color: '#475569', marginLeft: '4px' }}>
+          تصنيف المحطات:
         </span>
         {[
           { key: 'all', label: 'كافة المحطات', count: typeCounts.all },
-          { key: 'submission', label: 'التسليم والمخرجات', count: typeCounts.submission },
+          { key: 'submission', label: 'مخرجات التسليم', count: typeCounts.submission },
           { key: 'completion', label: 'طلبات الاستكمال', count: typeCounts.completion },
           { key: 'memo', label: 'المذكرات الإشرافية', count: typeCounts.memo },
-          { key: 'check', label: 'التدقيق الآلي', count: typeCounts.check },
           { key: 'visit', label: 'الزيارات الميدانية', count: typeCounts.visit },
+          { key: 'phone', label: 'الاتصالات', count: typeCounts.phone },
+          { key: 'check', label: 'الفحص الآلي', count: typeCounts.check },
+          { key: 'corrective', label: 'مذكرات تعقيبية', count: typeCounts.corrective },
         ].map((tab) => {
           const isSelected = selectedType === tab.key;
           return (
@@ -234,10 +465,10 @@ export const MilestoneTimelineView: React.FC<MilestoneTimelineViewProps> = ({ mi
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
-                gap: '5px',
-                padding: '4px 10px',
-                borderRadius: '6px',
-                fontSize: '11px',
+                gap: '6px',
+                padding: '5px 12px',
+                borderRadius: '8px',
+                fontSize: '11.5px',
                 fontWeight: isSelected ? 800 : 600,
                 cursor: 'pointer',
                 border: isSelected ? '1px solid #2563EB' : '1px solid #CBD5E1',
@@ -250,8 +481,8 @@ export const MilestoneTimelineView: React.FC<MilestoneTimelineViewProps> = ({ mi
               <span
                 style={{
                   fontSize: '10px',
-                  fontWeight: 700,
-                  padding: '1px 5px',
+                  fontWeight: 800,
+                  padding: '1px 6px',
                   borderRadius: '999px',
                   backgroundColor: isSelected ? 'rgba(255, 255, 255, 0.3)' : '#F1F5F9',
                   color: isSelected ? '#FFFFFF' : '#475569',
@@ -264,21 +495,19 @@ export const MilestoneTimelineView: React.FC<MilestoneTimelineViewProps> = ({ mi
         })}
       </div>
 
+      {/* 4. قائمة المحطات والخط الزمني */}
       {filteredAndSortedMilestones.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '40px 16px', color: '#64748B' }}>
-          <p style={{ fontSize: '14px', fontWeight: 600, margin: 0 }}>
+        <div style={{ textAlign: 'center', padding: '50px 20px', color: '#64748B' }}>
+          <p style={{ fontSize: '14px', fontWeight: 700, margin: 0 }}>
             لا توجد محطات أو أحداث تطابق معايير البحث والتصفية المحددة.
           </p>
           <button
             type="button"
-            onClick={() => {
-              setSearchTerm('');
-              setSelectedType('all');
-            }}
+            onClick={resetFilters}
             style={{
-              marginTop: '10px',
-              fontSize: '12px',
-              fontWeight: 700,
+              marginTop: '12px',
+              fontSize: '13px',
+              fontWeight: 800,
               color: '#2563EB',
               background: 'none',
               border: 'none',
@@ -286,138 +515,211 @@ export const MilestoneTimelineView: React.FC<MilestoneTimelineViewProps> = ({ mi
               textDecoration: 'underline',
             }}
           >
-            إلغاء معايير التصفية
+            إعادة تعيين كافة الفلاتر والبحث
           </button>
         </div>
       ) : (
-        /* شريط المسار العمودي */
-        <div style={{ position: 'relative', paddingRight: '28px' }}>
-          {/* الخط الرابط */}
+        /* المسار الزمني المتسلسل بعرض 100% كامل */
+        <div style={{ position: 'relative', paddingRight: '32px' }}>
+          {/* الخط الرابط العمودي */}
           <div
             style={{
               position: 'absolute',
-              top: '8px',
-              bottom: '16px',
-              right: '9px',
+              top: '12px',
+              bottom: '24px',
+              right: '11px',
               width: '2px',
               backgroundColor: '#E2E8F0',
             }}
           />
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
             {filteredAndSortedMilestones.map((milestone) => {
               const badge = getBadgeStyle(milestone.badgeColor);
+              const isCorrective = milestone.eventType === 'corrective_memo';
+
               return (
                 <div key={milestone.id} style={{ position: 'relative' }}>
-                  {/* نقطة العقدة الأيقونية */}
+                  {/* عقدة النقطة الأيقونية في الخط الرابط */}
                   <div
                     style={{
                       position: 'absolute',
-                      top: '2px',
-                      right: '-28px',
-                      width: '20px',
-                      height: '20px',
+                      top: '6px',
+                      right: '-32px',
+                      width: '24px',
+                      height: '24px',
                       borderRadius: '50%',
                       backgroundColor: '#FFFFFF',
-                      border: '2px solid #2563EB',
+                      border: isCorrective ? '2px solid #DC2626' : '2px solid #2563EB',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      boxShadow: '0 0 0 3px rgba(37, 99, 235, 0.15)',
+                      boxShadow: isCorrective
+                        ? '0 0 0 4px rgba(220, 38, 38, 0.15)'
+                        : '0 0 0 4px rgba(37, 99, 235, 0.15)',
                       zIndex: 2,
                     }}
                   >
-                    <div style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#2563EB' }} />
+                    <div
+                      style={{
+                        width: '8px',
+                        height: '8px',
+                        borderRadius: '50%',
+                        backgroundColor: isCorrective ? '#DC2626' : '#2563EB',
+                      }}
+                    />
                   </div>
 
-                  {/* بطاقة المحطة */}
+                  {/* بطاقة تفاصيل المحطة بعرض كامل */}
                   <div
                     style={{
-                      padding: '16px',
-                      borderRadius: '10px',
-                      backgroundColor: '#FAFBFD',
-                      border: '1px solid #E2E8F0',
+                      padding: '18px 20px',
+                      borderRadius: '12px',
+                      backgroundColor: isCorrective ? '#FFFDFD' : '#FAFBFD',
+                      border: isCorrective ? '1px solid #FECACA' : '1px solid #E2E8F0',
+                      boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
                       transition: 'all 0.15s ease',
                     }}
                   >
+                    {/* الترويسة العليا للمحطة */}
                     <div
                       style={{
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'space-between',
                         flexWrap: 'wrap',
-                        gap: '8px',
-                        marginBottom: '8px',
+                        gap: '10px',
+                        marginBottom: '10px',
                       }}
                     >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                         <div
                           style={{
-                            width: '30px',
-                            height: '30px',
+                            width: '34px',
+                            height: '34px',
                             borderRadius: '8px',
                             backgroundColor: '#FFFFFF',
                             border: '1px solid #E2E8F0',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
+                            flexShrink: 0,
                           }}
                         >
                           {getEventIcon(milestone.eventType)}
                         </div>
-                        <span style={{ fontSize: '14px', fontWeight: 800, color: '#0F172A' }}>
-                          {milestone.title}
-                        </span>
+                        <div>
+                          <span
+                            style={{
+                              fontSize: '14.5px',
+                              fontWeight: 800,
+                              color: isCorrective ? '#991B1B' : '#0F172A',
+                            }}
+                          >
+                            {milestone.title}
+                          </span>
+                        </div>
                       </div>
 
-                      <span
-                        style={{
-                          fontSize: '11px',
-                          fontWeight: 700,
-                          padding: '3px 8px',
-                          borderRadius: '999px',
-                          backgroundColor: badge.bg,
-                          color: badge.text,
-                          border: `1px solid ${badge.border}`,
-                        }}
-                      >
-                        {milestone.statusBadge}
-                      </span>
+                      {/* شارات الحالة وسياق المحطة */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                        {milestone.cycleName && (
+                          <span
+                            style={{
+                              fontSize: '11px',
+                              fontWeight: 700,
+                              padding: '2px 8px',
+                              borderRadius: '6px',
+                              backgroundColor: '#F1F5F9',
+                              color: '#475569',
+                              border: '1px solid #CBD5E1',
+                            }}
+                          >
+                            {milestone.cycleName}
+                          </span>
+                        )}
+
+                        <span
+                          style={{
+                            fontSize: '11.5px',
+                            fontWeight: 800,
+                            padding: '3px 10px',
+                            borderRadius: '999px',
+                            backgroundColor: badge.bg,
+                            color: badge.text,
+                            border: `1px solid ${badge.border}`,
+                          }}
+                        >
+                          {milestone.statusBadge}
+                        </span>
+                      </div>
                     </div>
 
+                    {/* انتقال الحالة المعتمد (State Transition Badge) إن وُجد */}
+                    {milestone.stateTransition && (
+                      <div
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '8px',
+                          padding: '4px 12px',
+                          borderRadius: '8px',
+                          backgroundColor: '#EFF6FF',
+                          border: '1px solid #BFDBFE',
+                          marginBottom: '10px',
+                          fontSize: '12px',
+                          fontWeight: 700,
+                          color: '#1E40AF',
+                        }}
+                      >
+                        <span style={{ color: '#64748B' }}>انتقال الحالة:</span>
+                        <span style={{ backgroundColor: '#DBEAFE', padding: '1px 6px', borderRadius: '4px' }}>
+                          {milestone.stateTransition.from}
+                        </span>
+                        <ArrowLeft size={13} color="#2563EB" />
+                        <span style={{ backgroundColor: '#2563EB', color: '#FFFFFF', padding: '1px 6px', borderRadius: '4px' }}>
+                          {milestone.stateTransition.to}
+                        </span>
+                      </div>
+                    )}
+
+                    {/* نص الشرح والتفاصيل والملاحظات */}
                     <p
                       style={{
                         fontSize: '13px',
-                        color: '#475569',
-                        margin: '0 0 12px 0',
-                        lineHeight: 1.6,
+                        color: '#334155',
+                        margin: '0 0 14px 0',
+                        lineHeight: 1.65,
                       }}
                     >
                       {milestone.description}
                     </p>
 
+                    {/* التذييل: القائم بالإجراء والتاريخ وسياق النزاهة */}
                     <div
                       style={{
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'space-between',
-                        fontSize: '11px',
+                        flexWrap: 'wrap',
+                        gap: '12px',
+                        fontSize: '11.5px',
                         color: '#64748B',
-                        paddingTop: '8px',
+                        paddingTop: '10px',
                         borderTop: '1px solid #F1F5F9',
                       }}
                     >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                        <User size={13} color="#94A3B8" />
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <User size={14} color="#94A3B8" />
                         <span>
-                          {milestone.actorName} ({milestone.actorRole})
+                          <strong>{milestone.actorName}</strong> ({milestone.actorRole})
                         </span>
                       </div>
 
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                        <Clock size={13} color="#94A3B8" />
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <Clock size={14} color="#94A3B8" />
                         <span>
-                          {new Date(milestone.timestamp).toLocaleDateString('ar-YE', {
+                          {new Date(milestone.timestamp).toLocaleString('ar-YE', {
                             year: 'numeric',
                             month: 'short',
                             day: 'numeric',

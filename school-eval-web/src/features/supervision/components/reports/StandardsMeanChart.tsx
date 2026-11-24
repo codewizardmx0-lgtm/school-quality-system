@@ -12,10 +12,9 @@ interface StandardsMeanChartProps {
 
 export const StandardsMeanChart: React.FC<StandardsMeanChartProps> = ({ standards }) => {
   const getBarColor = (score: number) => {
-    if (score >= 2.5) return '#2563EB'; // أزرق متميز
-    if (score >= 2.0) return '#059669'; // زمردي متوسط مرتفع
-    if (score >= 1.9) return '#D97706'; // عنبري متوسط
-    return '#DC2626'; // أحمر بحاجة لدعم
+    if (score >= 2.40) return '#059669'; // زمردي متميز (>= 80%)
+    if (score >= 1.80) return '#2563EB'; // أزرق متوسط ومستقر (60 - 79.9%)
+    return '#DC2626'; // أحمر بحاجة لدعم وتدخل (< 60%)
   };
 
   return (
@@ -31,8 +30,10 @@ export const StandardsMeanChart: React.FC<StandardsMeanChartProps> = ({ standard
       <div
         style={{
           display: 'flex',
+          flexWrap: 'wrap',
           alignItems: 'center',
           justifyContent: 'space-between',
+          gap: '12px',
           marginBottom: '20px',
           paddingBottom: '12px',
           borderBottom: '1px solid #F1F5F9',
@@ -43,22 +44,22 @@ export const StandardsMeanChart: React.FC<StandardsMeanChartProps> = ({ standard
             المتوسطات الحسابية لنتائج المعايير الوطنية السبعة (0 - 3)
           </h2>
           <p style={{ fontSize: '12px', color: '#64748B', marginTop: '4px', margin: 0 }}>
-            مؤشر الإنجاز الكلي لمدارس النطاق مقارنة بمستويات الكفاءة الوطنية المعتمدة
+            مؤشر الإنجاز الكلي الموزون لمدارس النطاق مقارنة بمستويات الكفاءة الوطنية المعتمدة
           </p>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '11px', color: '#64748B' }}>
-          <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-            <span style={{ width: '10px', height: '10px', backgroundColor: '#2563EB', borderRadius: '2px' }} />
-            متميز (≥ 2.5)
-          </span>
-          <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '14px', fontSize: '11px', color: '#64748B' }}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
             <span style={{ width: '10px', height: '10px', backgroundColor: '#059669', borderRadius: '2px' }} />
-            متوسط (2.0 - 2.49)
+            متميز (≥ 80% / 2.40)
           </span>
-          <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+            <span style={{ width: '10px', height: '10px', backgroundColor: '#2563EB', borderRadius: '2px' }} />
+            متوسط (60% - 79.9% / 1.80 - 2.39)
+          </span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
             <span style={{ width: '10px', height: '10px', backgroundColor: '#DC2626', borderRadius: '2px' }} />
-            بحاجة لدعم (&lt; 2.0)
+            بحاجة لدعم (&lt; 60% / 1.80)
           </span>
         </div>
       </div>
@@ -67,7 +68,7 @@ export const StandardsMeanChart: React.FC<StandardsMeanChartProps> = ({ standard
       <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
         {standards.map((item) => {
           const barColor = getBarColor(item.meanScore);
-          const barWidthPercent = (item.meanScore / 3.0) * 100;
+          const barWidthPercent = Math.min(100, Math.max(0, (item.meanScore / 3.0) * 100));
 
           return (
             <div key={item.standardId}>
@@ -94,6 +95,21 @@ export const StandardsMeanChart: React.FC<StandardsMeanChartProps> = ({ standard
                     {item.code}
                   </span>
                   <span style={{ fontWeight: 700, color: '#0F172A' }}>{item.name}</span>
+                  {item.weight !== undefined && (
+                    <span
+                      style={{
+                        fontSize: '11px',
+                        fontWeight: 600,
+                        color: '#0D9488',
+                        backgroundColor: '#F0FDFA',
+                        padding: '1px 6px',
+                        borderRadius: '4px',
+                        border: '1px solid #CCFBF1',
+                      }}
+                    >
+                      الوزن: {item.weight}%
+                    </span>
+                  )}
                   <span style={{ fontSize: '11px', color: '#94A3B8' }}>
                     ({item.indicatorsCount} مؤشراً)
                   </span>

@@ -651,7 +651,7 @@ class EvidenceController extends Controller
     {
         $user = $request->user();
 
-        if (!$user->hasPermission('evaluations.view') && !$user->hasPermission('evidence.manage') && !$user->hasPermission('school.view')) {
+        if (!$user->hasPermission('evaluations.view') && !$user->hasPermission('evidence.manage') && !$user->hasPermission('school.view') && !$user->hasPermission('supervision.review') && !$user->hasRole('ministry_supervisor')) {
             return ApiResponse::forbidden('غير مصرح لك بتحميل الملف.');
         }
 

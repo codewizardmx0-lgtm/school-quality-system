@@ -8,13 +8,11 @@ import {
   FileCheck2,
   AlertCircle,
   Bell,
-  LogOut,
   ShieldCheck,
   ChevronLeft,
   ChevronRight,
   Lock,
   X,
-  User as UserIcon,
   Lightbulb,
   Archive,
   BarChart3,
@@ -43,8 +41,6 @@ export const EvaluatorSidebar: React.FC<EvaluatorSidebarProps> = ({
   onNavigate,
   hasOpenCompletionRequest = false,
   isLocked = false,
-  onLogout,
-  onOpenProfile,
   isCollapsed = false,
   onToggleCollapse,
   isMobile = false,
@@ -107,7 +103,7 @@ export const EvaluatorSidebar: React.FC<EvaluatorSidebarProps> = ({
       ],
     },
     {
-      title: isPrincipal ? 'الاعتماد الداخلي والحوكمة' : '3. المراجعة والاعتماد',
+      title: isPrincipal ? 'الإقرار الداخلي والحوكمة' : '3. المراجعة والإقرار',
       items: [
         {
           id: 'audit-hub',
@@ -116,7 +112,7 @@ export const EvaluatorSidebar: React.FC<EvaluatorSidebarProps> = ({
         },
         {
           id: 'final-review',
-          label: isPrincipal ? 'المراجعة والاعتماد الداخلي' : 'المراجعة والختم',
+          label: isPrincipal ? 'المراجعة والإقرار الداخلي' : 'المراجعة والختم',
           icon: <FileCheck2 size={19} />,
           badge: isLocked ? 'مختوم' : isPrincipal ? 'مطلوب إقرارك' : undefined,
           badgeColor: isLocked ? '#10B981' : '#D97706',
@@ -480,26 +476,6 @@ export const EvaluatorSidebar: React.FC<EvaluatorSidebarProps> = ({
                 gap: '8px',
               }}
             >
-              {onOpenProfile && (
-                <button
-                  onClick={onOpenProfile}
-                  title="الملف الشخصي"
-                  style={{
-                    width: '32px',
-                    height: '32px',
-                    borderRadius: '8px',
-                    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-                    border: '1px solid #1E293B',
-                    color: '#34D399',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    cursor: 'pointer',
-                  }}
-                >
-                  <UserIcon size={15} />
-                </button>
-              )}
               <span
                 style={{
                   width: '9px',
@@ -531,60 +507,48 @@ export const EvaluatorSidebar: React.FC<EvaluatorSidebarProps> = ({
               >
                 <span>🏫</span>
                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {user?.school?.schoolName || 'مدرسة معتمدة'}
+                  {user?.school?.schoolName || 'المدرسة المسجلة'}
                 </span>
               </div>
 
-              <div style={{ display: 'flex', gap: '6px' }}>
-                {onOpenProfile && (
-                  <button
-                    onClick={onOpenProfile}
-                    style={{
-                      flex: 1,
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '5px',
-                      padding: '7px 8px',
-                      borderRadius: '8px',
-                      color: '#E2E8F0',
-                      backgroundColor: 'rgba(255, 255, 255, 0.08)',
-                      border: '1px solid #1E293B',
-                      cursor: 'pointer',
-                      fontSize: '11.5px',
-                      fontWeight: 700,
-                      justifyContent: 'center',
-                    }}
-                    title="الملف الشخصي وإعدادات الحساب"
-                  >
-                    <UserIcon size={14} color="#34D399" />
-                    بروفايلي
-                  </button>
-                )}
-
-                {onLogout && (
-                  <button
-                    onClick={onLogout}
-                    style={{
-                      flex: onOpenProfile ? undefined : 1,
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '5px',
-                      padding: '7px 10px',
-                      borderRadius: '8px',
-                      color: '#F87171',
-                      backgroundColor: 'rgba(239, 68, 68, 0.08)',
-                      border: '1px solid rgba(239, 68, 68, 0.2)',
-                      cursor: 'pointer',
-                      fontSize: '11.5px',
-                      fontWeight: 600,
-                      justifyContent: 'center',
-                    }}
-                    title="تسجيل الخروج"
-                  >
-                    <LogOut size={14} />
-                    {!onOpenProfile && 'تسجيل الخروج'}
-                  </button>
-                )}
+              {/* Glowing System Status Indicator */}
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '6px 10px',
+                  borderRadius: '6px',
+                  backgroundColor: 'rgba(30, 41, 59, 0.5)',
+                  fontSize: '11px',
+                  fontWeight: 600,
+                  color: '#CBD5E1',
+                }}
+              >
+                <span
+                  style={{
+                    width: '7px',
+                    height: '7px',
+                    borderRadius: '50%',
+                    backgroundColor: '#10B981',
+                    boxShadow: '0 0 8px #10B981',
+                    display: 'inline-block',
+                  }}
+                />
+                <span style={{ whiteSpace: 'nowrap' }}>المنظومة متصلة ومستقرة</span>
+                <span
+                  style={{
+                    marginRight: 'auto',
+                    fontSize: '9px',
+                    padding: '2px 6px',
+                    borderRadius: '4px',
+                    backgroundColor: '#0F172A',
+                    color: '#94A3B8',
+                    fontWeight: 700,
+                  }}
+                >
+                  v1.0
+                </span>
               </div>
             </>
           )}

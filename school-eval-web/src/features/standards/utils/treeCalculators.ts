@@ -41,7 +41,7 @@ export function distributeWeightsEqually(count: number): number[] {
 }
 
 /**
- * التوزيع الموصى به للاعتماد الأكاديمي الوطني (7 معايير)
+ * التوزيع الموصى به لتقويم الجودة المدرسية الوطني (7 معايير)
  * 15%, 20%, 15%, 20%, 15%, 5%, 10% = 100%
  */
 export const RECOMMENDED_WEIGHTS_7 = [15, 20, 15, 20, 15, 5, 10];

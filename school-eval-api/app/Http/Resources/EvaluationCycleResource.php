@@ -32,9 +32,11 @@ class EvaluationCycleResource extends JsonResource
             'cycleId'             => $this->cycle_id,
             'name'                => $this->name ?? "الدورة التقييمية {$this->academic_year}",
             'academicYear'        => $this->academic_year,
+            'scopeGovernorate'    => $this->scope_governorate,
             'versionId'           => $this->version_id,
             'startDate'           => $this->start_date?->format('Y-m-d'),
             'endDate'             => $this->end_date?->format('Y-m-d'),
+            'maxCompletionDays'   => (int) ($this->max_completion_days ?? 14),
             'status'              => $this->status,
             'createdAt'           => $this->created_at?->toIso8601ZuluString(),
             'updatedAt'           => $this->updated_at?->toIso8601ZuluString(),
@@ -47,12 +49,15 @@ class EvaluationCycleResource extends JsonResource
             'participationsCount' => $this->participations()->count(),
             'evaluationsCount'    => $this->evaluations()->count(),
             'participatingSchools'=> $this->when(
-                $user && ($user->hasRole('ministry_supervisor') || $user->hasRole('admin') || $user->hasPermission('cycles.manage')),
+                $user && ($user->hasRole('ministry_supervisor') || $user->hasRole('admin') || $user->hasPermission('cycles.manage') || $user->hasPermission('cycles.manage_local')),
                 fn () => $this->schools->map(fn ($s) => [
-                    'schoolId'   => $s->school_id,
-                    'schoolName' => $s->school_name,
-                    'stage'      => $s->educational_stage,
-                    'district'   => $s->educational_district,
+                    'schoolId'    => $s->school_id,
+                    'schoolName'  => $s->school_name,
+                    'schoolCode'  => $s->school_code ?? $s->identification_data ?? "SCH-{$s->school_id}",
+                    'stage'       => $s->educational_stage,
+                    'governorate' => $s->governorate,
+                    'district'    => $s->educational_district,
+                    'enrolledAt'  => $s->pivot?->created_at?->toIso8601String() ?? $this->created_at?->toIso8601String(),
                 ])
             ),
             'schoolContext'       => $schoolId ? [

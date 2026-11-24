@@ -436,6 +436,49 @@ export const EvaluatorDashboard: React.FC<EvaluatorDashboardProps> = ({
         </div>
       )}
 
+      {/* 2.1. Supervisor Memos Visible to School */}
+      {dashboardData?.supervisorNotes && dashboardData.supervisorNotes.length > 0 && (
+        <div
+          style={{
+            backgroundColor: '#F8FAFC',
+            borderRadius: '12px',
+            border: '1px solid #CBD5E1',
+            padding: '16px 20px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '10px',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', fontWeight: 800, color: '#1E293B' }}>
+            <Info size={18} color="#2563EB" />
+            <span>المذكرات والتوجيهات الإشرافية الميدانية الموجهة للمدرسة ({dashboardData.supervisorNotes.length})</span>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '10px' }}>
+            {dashboardData.supervisorNotes.map((note) => (
+              <div
+                key={note.noteId}
+                style={{
+                  backgroundColor: '#FFFFFF',
+                  padding: '10px 14px',
+                  borderRadius: '8px',
+                  border: '1px solid #E2E8F0',
+                  fontSize: '12px',
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                  <span style={{ fontWeight: 800, color: '#0F172A' }}>{note.subject}</span>
+                  <span style={{ fontSize: '10px', color: '#64748B', backgroundColor: '#F1F5F9', padding: '1px 6px', borderRadius: '4px' }}>
+                    {note.memoType}
+                  </span>
+                </div>
+                <p style={{ color: '#475569', margin: '0 0 6px 0', lineHeight: 1.4 }}>{note.details}</p>
+                <span style={{ fontSize: '10px', color: '#94A3B8' }}>{note.createdAt ? note.createdAt.slice(0, 10) : ''}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* 3. Four Core Stat Cards */}
       <div
         style={{

@@ -33,9 +33,15 @@ export const EvidenceCard: React.FC<EvidenceCardProps> = ({
     board: { label: 'لوحة إعلانات', bg: '#FDF2F8', text: '#BE185D', border: '#FBCFE8' },
     image: { label: 'صورة فوتوغرافية', bg: '#F0FDFA', text: '#0F766E', border: '#99F6E4' },
     evidence: { label: 'شاهد توثيقي', bg: '#F8FAFC', text: '#334155', border: '#CBD5E1' },
+    cover: { label: 'غلاف سجل (تمهيدي)', bg: '#FFFBEB', text: '#B45309', border: '#FDE68A' },
     other: { label: 'أخرى / عام', bg: '#F8FAFC', text: '#475569', border: '#E2E8F0' },
   };
   const typeConf = docTypeLabels[evidence.documentType || 'other'] || docTypeLabels.other;
+
+  const isPreliminaryCover =
+    (evidence.title && (evidence.title.includes('غلاف') || evidence.title.includes('تمهيدي'))) ||
+    (evidence.fileName && (evidence.fileName.includes('غلاف') || evidence.fileName.includes('cover'))) ||
+    evidence.documentType === 'cover';
 
   return (
     <div
@@ -153,6 +159,27 @@ export const EvidenceCard: React.FC<EvidenceCardProps> = ({
               >
                 {evidence.description}
               </p>
+            )}
+
+            {/* Amber badge for preliminary cover documents */}
+            {isPreliminaryCover && (
+              <div
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  backgroundColor: '#FFFBEB',
+                  border: '1px solid #FDE68A',
+                  color: '#B45309',
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  padding: '3px 8px',
+                  borderRadius: '5px',
+                  marginTop: '6px',
+                }}
+              >
+                <span>⚠️ شاهد تمهيدي (غلاف فقط) - بحاجة لاستكمال الصفحات الداخلية المعبأة</span>
+              </div>
             )}
           </div>
         </div>

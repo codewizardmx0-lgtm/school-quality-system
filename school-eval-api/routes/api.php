@@ -162,6 +162,8 @@ Route::prefix('v1')->group(function () {
         // --------------------------------------------------------------------------
         Route::prefix('supervision')->group(function () {
             Route::get('/dashboard', [\App\Http\Controllers\Api\V1\SupervisionController::class, 'dashboard'])->name('api.v1.supervision.dashboard');
+            Route::get('/completion-requests', [\App\Http\Controllers\Api\V1\SupervisionController::class, 'completionRequestsTracker'])->name('api.v1.supervision.completion-requests.index');
+            Route::get('/standards-tree', [\App\Http\Controllers\Api\V1\SupervisionController::class, 'nationalStandardsTree'])->name('api.v1.supervision.standards-tree');
             Route::get('/reports/analytics', [\App\Http\Controllers\Api\V1\SupervisionController::class, 'centralAnalytics'])->name('api.v1.supervision.reports.analytics');
             Route::get('/reports/analytics/pdf', [\App\Http\Controllers\Api\V1\SupervisionController::class, 'exportAnalyticsPdf'])->name('api.v1.supervision.reports.analytics.pdf');
         });
@@ -169,9 +171,11 @@ Route::prefix('v1')->group(function () {
         Route::get('/standard-versions/active', [\App\Http\Controllers\Api\V1\SupervisionController::class, 'activeStandardVersion'])->name('api.v1.standard-versions.active');
 
         Route::prefix('evaluation-submissions')->group(function () {
+            Route::get('/available-for-review', [\App\Http\Controllers\Api\V1\SupervisionController::class, 'reviewableSubmissions'])->name('api.v1.evaluation-submissions.available-for-review');
             Route::get('/{id}/review', [\App\Http\Controllers\Api\V1\SupervisionController::class, 'reviewSubmission'])->name('api.v1.evaluation-submissions.review');
-            Route::post('/{id}/approve', [\App\Http\Controllers\Api\V1\SupervisionController::class, 'approveSubmission'])->name('api.v1.evaluation-submissions.approve');
             Route::post('/{id}/completion-requests', [\App\Http\Controllers\Api\V1\SupervisionController::class, 'createCompletionRequest'])->name('api.v1.evaluation-submissions.completion-requests');
+            Route::post('/{id}/deficiency-notes', [\App\Http\Controllers\Api\V1\SupervisionController::class, 'saveDeficiencyNote'])->name('api.v1.evaluation-submissions.deficiency-notes.store');
+            Route::delete('/{id}/deficiency-notes/{indicatorId}', [\App\Http\Controllers\Api\V1\SupervisionController::class, 'deleteDeficiencyNote'])->name('api.v1.evaluation-submissions.deficiency-notes.delete');
         });
 
         Route::prefix('schools/{id}')->group(function () {
@@ -179,6 +183,7 @@ Route::prefix('v1')->group(function () {
             Route::post('/supervisor-notes', [\App\Http\Controllers\Api\V1\SupervisionController::class, 'addSupervisorMemo'])->name('api.v1.schools.supervisor-notes');
             Route::get('/historical-comparison', [\App\Http\Controllers\Api\V1\SupervisionController::class, 'historicalComparison'])->name('api.v1.schools.historical-comparison');
             Route::get('/tracking-log/pdf', [\App\Http\Controllers\Api\V1\SupervisionController::class, 'exportTrackingLogPdf'])->name('api.v1.schools.tracking-log.pdf');
+            Route::get('/tracking-log/excel', [\App\Http\Controllers\Api\V1\SupervisionController::class, 'exportTrackingLogExcel'])->name('api.v1.schools.tracking-log.excel');
             Route::get('/historical-comparison/pdf', [\App\Http\Controllers\Api\V1\SupervisionController::class, 'exportHistoricalComparisonPdf'])->name('api.v1.schools.historical-comparison.pdf');
         });
 
@@ -279,7 +284,9 @@ Route::prefix('v1')->group(function () {
             Route::post('/', [\App\Http\Controllers\Api\V1\EvaluationCycleController::class, 'store'])->name('api.v1.evaluation-cycles.store');
             Route::get('/{id}', [\App\Http\Controllers\Api\V1\EvaluationCycleController::class, 'show'])->name('api.v1.evaluation-cycles.show');
             Route::patch('/{id}', [\App\Http\Controllers\Api\V1\EvaluationCycleController::class, 'update'])->name('api.v1.evaluation-cycles.update');
+            Route::delete('/{id}', [\App\Http\Controllers\Api\V1\EvaluationCycleController::class, 'destroy'])->name('api.v1.evaluation-cycles.destroy');
             Route::post('/{id}/participations', [\App\Http\Controllers\Api\V1\EvaluationCycleController::class, 'enrollSchools'])->name('api.v1.evaluation-cycles.participations.store');
+            Route::get('/{id}/available-schools', [\App\Http\Controllers\Api\V1\EvaluationCycleController::class, 'availableSchools'])->name('api.v1.evaluation-cycles.available-schools');
         });
 
         // عمليات التقييم المدرسي مع العزل المؤسسي ورصد الدرجات (Evaluations)
@@ -301,6 +308,8 @@ Route::prefix('v1')->group(function () {
             Route::get('/{id}/export-excel', [\App\Http\Controllers\Api\V1\EvaluationController::class, 'exportExcel'])->name('api.v1.evaluations.export-excel');
             Route::get('/{id}/trend', [\App\Http\Controllers\Api\V1\EvaluationController::class, 'trend'])->name('api.v1.evaluations.trend');
             Route::get('/{id}/action-recommendations', [\App\Http\Controllers\Api\V1\EvaluationController::class, 'actionRecommendations'])->name('api.v1.evaluations.action-recommendations');
+            Route::post('/{id}/deficiency-notes', [\App\Http\Controllers\Api\V1\SupervisionController::class, 'saveDeficiencyNote'])->name('api.v1.evaluations.deficiency-notes.store');
+            Route::delete('/{id}/deficiency-notes/{indicatorId}', [\App\Http\Controllers\Api\V1\SupervisionController::class, 'deleteDeficiencyNote'])->name('api.v1.evaluations.deficiency-notes.delete');
         });
 
         // نتائج التقييم: الملاحظات (Evaluation Results)

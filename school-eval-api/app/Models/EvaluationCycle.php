@@ -43,8 +43,10 @@ class EvaluationCycle extends Model
         'name',
         'version_id',
         'academic_year',
+        'scope_governorate',
         'start_date',
         'end_date',
+        'max_completion_days',
         'status',
     ];
 
@@ -59,6 +61,7 @@ class EvaluationCycle extends Model
             'version_id' => 'integer',
             'start_date' => 'date',
             'end_date' => 'date',
+            'max_completion_days' => 'integer',
             'created_at' => 'datetime',
             'updated_at' => 'datetime',
         ];
@@ -87,6 +90,16 @@ class EvaluationCycle extends Model
      * @return BelongsTo
      */
     public function version(): BelongsTo
+    {
+        return $this->belongsTo(StandardVersion::class, 'version_id', 'version_id');
+    }
+
+    /**
+     * اسم بديل متطابق مع التسمية المعيارية (Alias for version).
+     *
+     * @return BelongsTo
+     */
+    public function standardVersion(): BelongsTo
     {
         return $this->belongsTo(StandardVersion::class, 'version_id', 'version_id');
     }

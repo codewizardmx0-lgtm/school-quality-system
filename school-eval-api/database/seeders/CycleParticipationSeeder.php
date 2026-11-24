@@ -34,8 +34,12 @@ class CycleParticipationSeeder extends Seeder
             return;
         }
 
-        // تسجيل مشاركة جميع المدارس الفعالة في الدورة التقييمية
-        $schools = School::where('status', 'Active')->get();
+        // تسجيل مشاركة المدارس الفعالة ضمن النطاق الجغرافي للدورة التقييمية
+        $schoolsQuery = School::where('status', 'Active');
+        if (!empty($cycle->scope_governorate)) {
+            $schoolsQuery->where('governorate', $cycle->scope_governorate);
+        }
+        $schools = $schoolsQuery->get();
 
         foreach ($schools as $school) {
             CycleParticipation::firstOrCreate(
@@ -44,6 +48,19 @@ class CycleParticipationSeeder extends Seeder
                     'school_id' => $school->school_id,
                 ]
             );
+        }
+
+        // ضمان مشاركة المدرستين المرجعيتين لاختبارات التكامل والتناظر
+        $benchmarkSchools = School::whereIn('identification_data', [
+            'SCH-AMANA-2026-001',
+            'SCH-TAIZ-2026-001',
+        ])->get();
+
+        foreach ($benchmarkSchools as $bSchool) {
+            CycleParticipation::firstOrCreate([
+                'cycle_id'  => $cycle->cycle_id,
+                'school_id' => $bSchool->school_id,
+            ]);
         }
     }
 }
