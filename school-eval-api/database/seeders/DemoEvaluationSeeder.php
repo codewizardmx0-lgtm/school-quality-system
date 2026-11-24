@@ -499,7 +499,7 @@ class DemoEvaluationSeeder extends Seeder
             'plan_id'        => $planQuality->plan_id,
             'author_user_id' => $principalFarouq->user_id,
             'reviewer_role'  => 'school_principal',
-            'text'           => 'تمت المراجعة الإدارية لخطة تحسين الجودة واعتماد مصفوفة الأهداف والإجراءات للمتابعة الفصلية.',
+            'text'           => 'تمت المراجعة الإدارية لخطة تحسين الجودة وإقرار مصفوفة الأهداف والإجراءات للمتابعة الفصلية.',
             'created_at'     => now()->subDays(2),
         ]);
 
@@ -602,7 +602,7 @@ class DemoEvaluationSeeder extends Seeder
             [
                 'user'  => $evaluatorFarouq,
                 'title' => 'ملاحظة توجيه داخلية من مدير المدرسة',
-                'msg'   => 'دوّن مدير المدرسة ملاحظة اعتماد داخلي: تم تدقيق شواهد المعيار الخامس والاعتماد مشروط باستكمال الفرضية.',
+                'msg'   => 'دوّن مدير المدرسة ملاحظة إقرار ومصادقة داخلية: تم تدقيق شواهد المعيار الخامس والمصادقة مشروطة باستكمال الفرضية.',
                 'type'  => 'reviewer_note_added',
                 'read'  => false,
                 'entity'=> 'evaluation',
@@ -618,7 +618,7 @@ class DemoEvaluationSeeder extends Seeder
             [
                 'user'  => $principalFarouq,
                 'title' => 'طلب استكمال شواهد وملاحظات من المشرف الوزاري',
-                'msg'   => 'أصدرت الإدارة العامة للاعتماد والجودة طلباً لاستكمال شواهد المؤشر 6-2-1 لمدرسة الفاروق.',
+                'msg'   => 'أصدرت الإدارة العامة لتقويم الجودة المدرسية طلباً لاستكمال شواهد المؤشر 6-2-1 لمدرسة الفاروق.',
                 'type'  => 'completion_requested',
                 'read'  => false,
                 'entity'=> 'completion_request',
