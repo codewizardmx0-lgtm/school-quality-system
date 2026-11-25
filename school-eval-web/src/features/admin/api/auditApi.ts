@@ -58,7 +58,10 @@ export const ACTION_NAME_MAP: Record<string, string> = {
  * Normalization helper to map raw Laravel backend AuditLog model
  * into the strongly typed AuditLogEntry expected by the Admin UI components.
  */
-function normalizeAuditLog(raw: any): AuditLogEntry {
+function normalizeAuditLog(rawInput: Record<string, unknown>): AuditLogEntry {
+  const raw = rawInput as Record<string, unknown> & {
+    user?: { user_id?: number; full_name?: string; username?: string; user_type?: string };
+  };
   const logId = Number(raw.logId ?? raw.log_id ?? 0);
   const actorUserId = Number(raw.actorUserId ?? raw.user_id ?? raw.user?.user_id ?? 0);
 
@@ -91,7 +94,8 @@ function normalizeAuditLog(raw: any): AuditLogEntry {
   const rawAction = String(raw.action ?? raw.eventType ?? 'عملية نظام');
   const eventType = ACTION_NAME_MAP[rawAction] || rawAction;
 
-  let eventCategory: 'normal' | 'sensitive' | 'breach' = raw.eventCategory ?? 'normal';
+  let eventCategory: 'normal' | 'sensitive' | 'breach' =
+    (raw.eventCategory as 'normal' | 'sensitive' | 'breach') ?? 'normal';
   if (!raw.eventCategory) {
     const actionStr = rawAction.toLowerCase();
     if (
@@ -123,13 +127,13 @@ function normalizeAuditLog(raw: any): AuditLogEntry {
   } else if (rawAction === 'auth.logout' && typeof descAr === 'string' && descAr.includes('تغيير كلمة المرور')) {
     descAr = actorName ? `تسجيل خروج نظامي للمستخدم (${actorName}) من الحساب` : 'تسجيل خروج نظامي من الحساب';
   }
-  const description = descAr || `عملية [${eventType}] موثقة في سجل النظام`;
+  const description = String(descAr || `عملية [${eventType}] موثقة في سجل النظام`);
 
   const ipAddress = String(raw.ipAddress ?? raw.ip_address ?? '127.0.0.1');
   const location = String(raw.location ?? 'صنعاء، اليمن');
   const deviceInfo = String(raw.deviceInfo ?? raw.user_agent ?? 'متصفح ويب موثوق');
   const securityStatus: 'verified' | 'blocked' =
-    raw.securityStatus ?? (eventCategory === 'breach' ? 'blocked' : 'verified');
+    (raw.securityStatus as 'verified' | 'blocked') ?? (eventCategory === 'breach' ? 'blocked' : 'verified');
 
   const digitalHash = String(
     raw.digitalHash ??
@@ -140,9 +144,9 @@ function normalizeAuditLog(raw: any): AuditLogEntry {
     logId,
     timestamp,
     actorUserId,
-    actorName,
-    actorRole,
-    actorRoleCode,
+    actorName: String(actorName ?? ''),
+    actorRole: String(actorRole ?? ''),
+    actorRoleCode: String(actorRoleCode ?? ''),
     action: rawAction,
     eventType,
     eventCategory,
@@ -161,7 +165,7 @@ export const auditApi = {
    * Fetch audit logs stream with filtering and pagination
    */
   async getAuditLogs(params?: AuditQueryParams): Promise<ApiResponse<AuditLogEntry[]>> {
-    const response = await get<any[]>('/audit-logs', { params });
+    const response = await get<Array<Record<string, unknown>>>('/audit-logs', { params });
     if (response && response.data && Array.isArray(response.data)) {
       return {
         ...response,

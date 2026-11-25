@@ -53,7 +53,7 @@ export const LinkEvaluatorModal: React.FC<LinkEvaluatorModalProps> = ({
 
   useEffect(() => {
     if (!isOpen) return;
-    loadUsers();
+    void Promise.resolve().then(() => loadUsers());
   }, [isOpen]);
 
   const currentEvaluators = useMemo(() => {
@@ -99,8 +99,9 @@ export const LinkEvaluatorModal: React.FC<LinkEvaluatorModalProps> = ({
       setSelectedUserId('');
       loadUsers();
       onSuccess();
-    } catch (err: any) {
-      const msg = err?.errors?.userId?.[0] || err?.message || 'فشل إسناد المقيّم للمدرسة';
+    } catch (err: unknown) {
+      const apiErr = err as { errors?: { userId?: string[] }; message?: string };
+      const msg = apiErr?.errors?.userId?.[0] || apiErr?.message || 'فشل إسناد المقيّم للمدرسة';
       setError(msg);
       addToast('error', msg);
     } finally {
@@ -118,8 +119,9 @@ export const LinkEvaluatorModal: React.FC<LinkEvaluatorModalProps> = ({
       addToast('info', res.message || `تم فك ارتباط المقيّم "${evaluatorName}" بنجاح`);
       loadUsers();
       onSuccess();
-    } catch (err: any) {
-      const msg = err?.errors?.userId?.[0] || err?.message || 'فشل فك ارتباط المقيّم';
+    } catch (err: unknown) {
+      const apiErr = err as { errors?: { userId?: string[] }; message?: string };
+      const msg = apiErr?.errors?.userId?.[0] || apiErr?.message || 'فشل فك ارتباط المقيّم';
       addToast('error', msg);
     } finally {
       setLoading(false);

@@ -48,11 +48,13 @@ export const EditEvidenceMetadataModal: React.FC<EditEvidenceMetadataModalProps>
 
   useEffect(() => {
     if (evidence) {
-      setTitle(evidence.title || '');
-      setDocumentType(evidence.documentType || 'evidence');
-      setDescription(evidence.description || '');
-      setJustification(evidence.justification || '');
-      setError(null);
+      void Promise.resolve().then(() => {
+        setTitle(evidence.title || '');
+        setDocumentType(evidence.documentType || 'evidence');
+        setDescription(evidence.description || '');
+        setJustification(evidence.justification || '');
+        setError(null);
+      });
     }
   }, [evidence]);
 
@@ -77,9 +79,10 @@ export const EditEvidenceMetadataModal: React.FC<EditEvidenceMetadataModalProps>
         linkId: evidence.linkId,
       });
       onClose();
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const apiErr = err as { response?: { data?: { message?: string } } };
       console.error('Failed to update evidence metadata:', err);
-      setError(err?.response?.data?.message || 'تعذر حفظ بيانات الشاهد، يرجى المحاولة مرة أخرى.');
+      setError(apiErr?.response?.data?.message || 'تعذر حفظ بيانات الشاهد، يرجى المحاولة مرة أخرى.');
     } finally {
       setIsSaving(false);
     }

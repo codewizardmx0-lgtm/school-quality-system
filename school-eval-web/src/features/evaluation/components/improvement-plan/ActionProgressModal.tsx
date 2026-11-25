@@ -31,15 +31,17 @@ export const ActionProgressModal: React.FC<ActionProgressModalProps> = ({
 
   useEffect(() => {
     if (action) {
-      setTitle(action.title);
-      setLeader(action.leader || '');
-      setStartDate(action.startDate || '');
-      setDueDate(action.dueDate || '');
-      setStatus(action.status);
-      setPriority(action.priority || 'High');
-      setTargetScore(action.targetScore || 3);
-      setCompletionPercentage(action.completionPercentage);
-      setProgressDescription(action.progressDescription);
+      void Promise.resolve().then(() => {
+        setTitle(action.title);
+        setLeader(action.leader || '');
+        setStartDate(action.startDate || '');
+        setDueDate(action.dueDate || '');
+        setStatus(action.status);
+        setPriority(action.priority || 'High');
+        setTargetScore(action.targetScore || 3);
+        setCompletionPercentage(action.completionPercentage);
+        setProgressDescription(action.progressDescription);
+      });
     }
   }, [action]);
 

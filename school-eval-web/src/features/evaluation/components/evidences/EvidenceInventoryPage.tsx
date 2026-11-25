@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   CheckCircle2,
   AlertTriangle,
@@ -30,6 +30,16 @@ interface EvidenceInventoryPageProps {
   onNavigate?: (screen: EvaluatorScreen, param?: number) => void;
   readOnly?: boolean;
 }
+
+type InventoryIndicatorExt = EvidenceInventoryStandard['indicators'][number] & {
+  coveredRequirementIds?: number[];
+  requirements?: Array<{
+    requirementId: number;
+    title: string;
+    isCovered: boolean;
+    coveringLinks?: Array<{ title: string }>;
+  }>;
+};
 
 export const EvidenceInventoryPage: React.FC<EvidenceInventoryPageProps> = ({
   onSuccessToast,
@@ -66,7 +76,12 @@ export const EvidenceInventoryPage: React.FC<EvidenceInventoryPageProps> = ({
     return sortDir === 'asc' ? <ArrowUp size={12} color="#059669" /> : <ArrowDown size={12} color="#059669" />;
   };
 
-  const fetchInventory = async () => {
+  const onErrorToastRef = useRef(onErrorToast);
+  useEffect(() => {
+    onErrorToastRef.current = onErrorToast;
+  }, [onErrorToast]);
+
+  const fetchInventory = useCallback(async () => {
     setIsLoading(true);
     try {
       const res = await evaluatorApi.getEvidenceInventory();
@@ -79,15 +94,15 @@ export const EvidenceInventoryPage: React.FC<EvidenceInventoryPageProps> = ({
       setExpandedStandards(initialExpanded);
     } catch (err) {
       console.error('Failed to load evidence inventory:', err);
-      onErrorToast?.('فشل تحميل بيانات جرد الشواهد.');
+      onErrorToastRef.current?.('فشل تحميل بيانات جرد الشواهد.');
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
-    fetchInventory();
-  }, []);
+    void Promise.resolve().then(() => fetchInventory());
+  }, [fetchInventory]);
 
   const toggleStandard = (id: number) => {
     setExpandedStandards((prev) => ({ ...prev, [id]: !prev[id] }));
@@ -489,13 +504,13 @@ export const EvidenceInventoryPage: React.FC<EvidenceInventoryPageProps> = ({
               return sortDir === 'asc' ? comp : -comp;
             }
             if (sortKey === 'coverage') {
-              const getCovered = (item: any) =>
+              const getCovered = (item: InventoryIndicatorExt) =>
                 Array.isArray(item.coveredRequirementIds)
                   ? item.coveredRequirementIds.length
                   : Array.isArray(item.requirements)
-                  ? item.requirements.filter((r: any) => r.isCovered).length
+                  ? item.requirements.filter((r) => r.isCovered).length
                   : 0;
-              const diff = getCovered(a) - getCovered(b);
+              const diff = getCovered(a as InventoryIndicatorExt) - getCovered(b as InventoryIndicatorExt);
               return sortDir === 'asc' ? diff : -diff;
             }
             if (sortKey === 'status') {
@@ -680,35 +695,39 @@ export const EvidenceInventoryPage: React.FC<EvidenceInventoryPageProps> = ({
                             )}
 
                             {/* تفصيل متطلبات المؤشر والشواهد المغطية لكل متطلب */}
-                            {Array.isArray((ind as any).requirements) && (ind as any).requirements.length > 0 && (
-                              <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                                {(ind as any).requirements.map((req: any) => (
-                                  <div
-                                    key={req.requirementId}
-                                    style={{
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                      gap: '6px',
-                                      fontSize: '11px',
-                                      padding: '2px 6px',
-                                      borderRadius: '4px',
-                                      backgroundColor: req.isCovered ? '#F0FDF4' : '#FEF2F2',
-                                      border: `1px solid ${req.isCovered ? '#BBF7D0' : '#FECACA'}`,
-                                    }}
-                                  >
-                                    <span style={{ color: req.isCovered ? '#15803D' : '#DC2626', fontWeight: 700 }}>
-                                      {req.isCovered ? '✓' : '✗'}
-                                    </span>
-                                    <span style={{ fontWeight: 600, color: '#1E293B' }}>{req.title}:</span>
-                                    <span style={{ color: req.isCovered ? '#166534' : '#991B1B' }}>
-                                      {req.isCovered && req.coveringLinks && req.coveringLinks.length > 0
-                                        ? `يغطيه: ${req.coveringLinks.map((cl: any) => cl.title).join('، ')}`
-                                        : 'غير مستوفى بشاهد معتمد'}
-                                    </span>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
+                            {(() => {
+                              const extInd = ind as InventoryIndicatorExt;
+                              if (!Array.isArray(extInd.requirements) || extInd.requirements.length === 0) return null;
+                              return (
+                                <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                                  {extInd.requirements.map((req) => (
+                                    <div
+                                      key={req.requirementId}
+                                      style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '6px',
+                                        fontSize: '11px',
+                                        padding: '2px 6px',
+                                        borderRadius: '4px',
+                                        backgroundColor: req.isCovered ? '#F0FDF4' : '#FEF2F2',
+                                        border: `1px solid ${req.isCovered ? '#BBF7D0' : '#FECACA'}`,
+                                      }}
+                                    >
+                                      <span style={{ color: req.isCovered ? '#15803D' : '#DC2626', fontWeight: 700 }}>
+                                        {req.isCovered ? '✓' : '✗'}
+                                      </span>
+                                      <span style={{ fontWeight: 600, color: '#1E293B' }}>{req.title}:</span>
+                                      <span style={{ color: req.isCovered ? '#166534' : '#991B1B' }}>
+                                        {req.isCovered && req.coveringLinks && req.coveringLinks.length > 0
+                                          ? `يغطيه: ${req.coveringLinks.map((cl) => cl.title).join('، ')}`
+                                          : 'غير مستوفى بشاهد معتمد'}
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              );
+                            })()}
 
                             {onNavigate && (
                               <button
@@ -737,10 +756,11 @@ export const EvidenceInventoryPage: React.FC<EvidenceInventoryPageProps> = ({
                           </td>
                           <td style={{ padding: '12px 8px', textAlign: 'center' }}>
                             {(() => {
-                              const coveredCount = Array.isArray((ind as any).coveredRequirementIds)
-                                ? (ind as any).coveredRequirementIds.length
-                                : (Array.isArray((ind as any).requirements)
-                                    ? (ind as any).requirements.filter((r: any) => r.isCovered).length
+                              const extInd = ind as InventoryIndicatorExt;
+                              const coveredCount = Array.isArray(extInd.coveredRequirementIds)
+                                ? extInd.coveredRequirementIds.length
+                                : (Array.isArray(extInd.requirements)
+                                    ? extInd.requirements.filter((r) => r.isCovered).length
                                     : 0);
                               const reqCount = ind.mandatoryRequiredCount ?? 0;
                               const missingCount = Math.max(0, reqCount - coveredCount);

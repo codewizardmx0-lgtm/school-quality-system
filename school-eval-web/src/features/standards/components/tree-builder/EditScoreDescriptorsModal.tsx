@@ -13,7 +13,7 @@ interface EditScoreDescriptorsModalProps {
   indicatorCode: string;
   indicatorName: string;
   descriptors?: ScoreDescriptor[];
-  onSave: (descriptors: UpdateScoreDescriptorItem[]) => Promise<any>;
+  onSave: (descriptors: UpdateScoreDescriptorItem[]) => Promise<unknown>;
 }
 
 const defaultLevelTemplates = [
@@ -42,16 +42,18 @@ export const EditScoreDescriptorsModal: React.FC<EditScoreDescriptorsModalProps>
 
   useEffect(() => {
     if (isOpen) {
-      const texts: Record<number, string> = { 3: '', 2: '', 1: '', 0: '' };
-      descriptors.forEach((d) => {
-        const val = d.scoreValue !== undefined ? d.scoreValue : d.scoreLevelId;
-        if (val !== undefined && [0, 1, 2, 3].includes(val)) {
-          texts[val] = d.description || '';
-        }
+      void Promise.resolve().then(() => {
+        const texts: Record<number, string> = { 3: '', 2: '', 1: '', 0: '' };
+        descriptors.forEach((d) => {
+          const val = d.scoreValue !== undefined ? d.scoreValue : d.scoreLevelId;
+          if (val !== undefined && [0, 1, 2, 3].includes(val)) {
+            texts[val] = d.description || '';
+          }
+        });
+        setLevelTexts(texts);
+        setError(null);
+        setIsSubmitting(false);
       });
-      setLevelTexts(texts);
-      setError(null);
-      setIsSubmitting(false);
     }
   }, [isOpen, descriptors]);
 
@@ -80,8 +82,8 @@ export const EditScoreDescriptorsModal: React.FC<EditScoreDescriptorsModalProps>
     try {
       await onSave(payload);
       onClose();
-    } catch (err: any) {
-      setError(err?.message || 'فشل تحديث واصفات سلم التقدير للمؤشر.');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'فشل تحديث واصفات سلم التقدير للمؤشر.');
     } finally {
       setIsSubmitting(false);
     }

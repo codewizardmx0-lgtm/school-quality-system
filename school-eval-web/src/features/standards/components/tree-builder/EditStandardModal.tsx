@@ -11,7 +11,7 @@ interface EditStandardModalProps {
   isOpen: boolean;
   standard: StandardNode | null;
   onClose: () => void;
-  onSubmit: (standardId: number, payload: UpdateStandardPayload) => Promise<any>;
+  onSubmit: (standardId: number, payload: UpdateStandardPayload) => Promise<unknown>;
 }
 
 export const EditStandardModal: React.FC<EditStandardModalProps> = ({
@@ -29,11 +29,13 @@ export const EditStandardModal: React.FC<EditStandardModalProps> = ({
 
   useEffect(() => {
     if (standard) {
-      setCode(standard.code || '');
-      setName(standard.name || '');
-      setDescription(standard.description || '');
-      setWeight(standard.weight ?? '');
-      setError(null);
+      void Promise.resolve().then(() => {
+        setCode(standard.code || '');
+        setName(standard.name || '');
+        setDescription(standard.description || '');
+        setWeight(standard.weight ?? '');
+        setError(null);
+      });
     }
   }, [standard]);
 
@@ -56,8 +58,8 @@ export const EditStandardModal: React.FC<EditStandardModalProps> = ({
         weight: weight !== '' ? Number(weight) : undefined,
       });
       onClose();
-    } catch (err: any) {
-      setError(err?.message || 'تعذر تحديث بيانات المعيار الرئيسي.');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'تعذر تحديث بيانات المعيار الرئيسي.');
     } finally {
       setIsSubmitting(false);
     }

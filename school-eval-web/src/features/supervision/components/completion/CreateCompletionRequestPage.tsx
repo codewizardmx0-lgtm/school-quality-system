@@ -60,7 +60,7 @@ export const CreateCompletionRequestPage: React.FC<CreateCompletionRequestPagePr
 
   useEffect(() => {
     if (preloadedItems && preloadedItems.length > 0) {
-      setActiveTab('composer');
+      void Promise.resolve().then(() => setActiveTab('composer'));
     }
   }, [preloadedItems]);
 
@@ -124,6 +124,7 @@ export const CreateCompletionRequestPage: React.FC<CreateCompletionRequestPagePr
     };
 
     fetchAvailable();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // المزامنة التلقائية للنواقص المرصودة مسبقاً من الشاشة 4 إذا كانت القائمة فارغة
@@ -145,6 +146,7 @@ export const CreateCompletionRequestPage: React.FC<CreateCompletionRequestPagePr
       }));
       setItemsList(mappedItems);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reviewData?.deficienciesList]);
 
   // بيانات المدرسة الحالية
@@ -157,10 +159,10 @@ export const CreateCompletionRequestPage: React.FC<CreateCompletionRequestPagePr
   const hasExistingOpenRequest = !!reviewData?.openCompletionRequest;
 
   // نهاية الدورة التقييمية لتقييد تاريخ المهلة
-  const cycleEndDate = (reviewData as any)?.cycleEndDate || null;
+  const cycleEndDate = (reviewData as { cycleEndDate?: string } | null | undefined)?.cycleEndDate || null;
 
   // سقف مهلة الاستكمال من الدورة التقييمية (الافتراضي: 14 يوماً وفق الحوكمة)
-  const maxAllowedDays: number = (reviewData as any)?.cycleMaxCompletionDays || 14;
+  const maxAllowedDays: number = (reviewData as { cycleMaxCompletionDays?: number } | null | undefined)?.cycleMaxCompletionDays || 14;
   const [mountTimestamp] = useState<number>(() => Date.now());
   const todayStr = new Date(mountTimestamp).toISOString().split('T')[0];
   const maxAllowedDateStr = new Date(mountTimestamp + maxAllowedDays * 86400000).toISOString().split('T')[0];

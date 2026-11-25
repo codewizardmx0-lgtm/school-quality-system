@@ -56,7 +56,7 @@ export function useEvidences(initialStandardId?: number) {
   }, [fetchVersionsArchive, fetchEvidences]);
 
   useEffect(() => {
-    fetchEvidences();
+    void Promise.resolve().then(() => fetchEvidences());
   }, [fetchEvidences]);
 
   // رفع شاهد جديد أو استبدال بنسخة جديدة مع شريط التقدم

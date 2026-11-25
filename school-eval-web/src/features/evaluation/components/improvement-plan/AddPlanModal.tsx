@@ -2,13 +2,19 @@ import React, { useState, useEffect } from 'react';
 import type { PlanType, ImprovementAreaBrief, CreateImprovementPlanPayload } from '../../api/evaluationTypes';
 import { FolderPlus, X, Check, Target, Calendar } from 'lucide-react';
 
+const DEFAULT_PLAN_TITLES: Record<PlanType, string> = {
+  QualityImprovement: 'خطة تحسين الجودة المدرسية الشاملة 2026/2027',
+  StaffProfessionalDevelopment: 'خطة التطوير المهني والتربوي للكوادر التعليمية',
+  AnnualOperational: 'الخطة التشغيلية السنوية للأنشطة والبرامج المدرسية',
+};
+
 interface AddPlanModalProps {
   isOpen: boolean;
   onClose: () => void;
   availableAreas?: ImprovementAreaBrief[];
   defaultPlanType?: PlanType;
   existingActivePlanTypes?: PlanType[];
-  onCreatePlan: (payload: CreateImprovementPlanPayload) => Promise<any>;
+  onCreatePlan: (payload: CreateImprovementPlanPayload) => Promise<unknown>;
   isSubmitting?: boolean;
 }
 
@@ -32,22 +38,18 @@ export const AddPlanModal: React.FC<AddPlanModalProps> = ({
   const [selectedAreaIds, setSelectedAreaIds] = useState<number[]>([]);
   const [error, setError] = useState<string | null>(null);
 
-  const defaultTitles: Record<PlanType, string> = {
-    QualityImprovement: 'خطة تحسين الجودة المدرسية الشاملة 2026/2027',
-    StaffProfessionalDevelopment: 'خطة التطوير المهني والتربوي للكوادر التعليمية',
-    AnnualOperational: 'الخطة التشغيلية السنوية للأنشطة والبرامج المدرسية',
-  };
-
   useEffect(() => {
     if (isOpen) {
-      setPlanType(defaultPlanType);
-      setTitle(defaultTitles[defaultPlanType]);
-      setStartDate(new Date().toISOString().split('T')[0]);
-      const d = new Date();
-      d.setMonth(d.getMonth() + 6);
-      setEndDate(d.toISOString().split('T')[0]);
-      setSelectedAreaIds(availableAreas.map((a) => a.areaId));
-      setError(null);
+      void Promise.resolve().then(() => {
+        setPlanType(defaultPlanType);
+        setTitle(DEFAULT_PLAN_TITLES[defaultPlanType]);
+        setStartDate(new Date().toISOString().split('T')[0]);
+        const d = new Date();
+        d.setMonth(d.getMonth() + 6);
+        setEndDate(d.toISOString().split('T')[0]);
+        setSelectedAreaIds(availableAreas.map((a) => a.areaId));
+        setError(null);
+      });
     }
   }, [isOpen, defaultPlanType, availableAreas]);
 
@@ -55,8 +57,8 @@ export const AddPlanModal: React.FC<AddPlanModalProps> = ({
 
   const handlePlanTypeChange = (newType: PlanType) => {
     setPlanType(newType);
-    if (!title || Object.values(defaultTitles).includes(title)) {
-      setTitle(defaultTitles[newType]);
+    if (!title || Object.values(DEFAULT_PLAN_TITLES).includes(title)) {
+      setTitle(DEFAULT_PLAN_TITLES[newType]);
     }
   };
 
@@ -95,8 +97,9 @@ export const AddPlanModal: React.FC<AddPlanModalProps> = ({
         areaIds: selectedAreaIds,
       });
       onClose();
-    } catch (err: any) {
-      setError(err?.response?.data?.message || 'تعذر إنشاء خطة التحسين. يرجى التحقق من المدخلات.');
+    } catch (err: unknown) {
+      const apiErr = err as { response?: { data?: { message?: string } } };
+      setError(apiErr?.response?.data?.message || 'تعذر إنشاء خطة التحسين. يرجى التحقق من المدخلات.');
     }
   };
 

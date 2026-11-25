@@ -495,7 +495,7 @@ export interface SubmissionReviewData {
     documents: SupervisionVaultDocument[];
     stats: SupervisionVaultStats;
   };
-  evidenceInventory?: any;
+  evidenceInventory?: unknown;
   planDetails?: SupervisionPlanDetails | null;
   plans?: SupervisionPlanDetails[];
   allPlans?: SupervisionPlanDetails[];

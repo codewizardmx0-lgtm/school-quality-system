@@ -76,7 +76,7 @@ export const RegisterSchoolModal: React.FC<RegisterSchoolModalProps> = ({
   // 1. Load Governorates on open
   useEffect(() => {
     if (!isOpen) return;
-    setIsCodeCustom(false);
+    void Promise.resolve().then(() => setIsCodeCustom(false));
     schoolsApi
       .getGovernorates()
       .then((res) => {
@@ -103,9 +103,10 @@ export const RegisterSchoolModal: React.FC<RegisterSchoolModalProps> = ({
       } else {
         addToast('error', 'تعذر الحصول على كود مقترح من الخادم.');
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const apiErr = err as { message?: string };
       console.error('Failed to suggest school code:', err);
-      addToast('error', err?.message || 'تعذر توليد كود تلقائي، يمكنك إدخاله يدوياً.');
+      addToast('error', apiErr?.message || 'تعذر توليد كود تلقائي، يمكنك إدخاله يدوياً.');
     } finally {
       setIsSuggestingCode(false);
     }
@@ -153,15 +154,16 @@ export const RegisterSchoolModal: React.FC<RegisterSchoolModalProps> = ({
       addToast('success', `تم تسجيل مدرسة "${form.schoolName}" بنجاح في النظام`);
       onSuccess();
       onClose();
-    } catch (err: any) {
-      if (err?.errors) {
+    } catch (err: unknown) {
+      const apiErr = err as { errors?: Record<string, unknown>; message?: string };
+      if (apiErr?.errors) {
         const mappedErrors: Record<string, string> = {};
-        Object.entries(err.errors).forEach(([field, msgs]) => {
+        Object.entries(apiErr.errors).forEach(([field, msgs]) => {
           mappedErrors[field] = Array.isArray(msgs) ? (msgs as string[])[0] : String(msgs);
         });
         setErrors(mappedErrors);
       } else {
-        addToast('error', err?.message || 'فشل تسجيل المدرسة');
+        addToast('error', apiErr?.message || 'فشل تسجيل المدرسة');
       }
     } finally {
       setLoading(false);
@@ -337,7 +339,7 @@ export const RegisterSchoolModal: React.FC<RegisterSchoolModalProps> = ({
               <select
                 style={inputStyle()}
                 value={form.schoolType}
-                onChange={(e) => handleChange('schoolType', e.target.value as any)}
+                onChange={(e) => handleChange('schoolType', e.target.value as 'government' | 'private')}
               >
                 <option value="government">حكومية عامة</option>
                 <option value="private">خاصة / أهلية</option>

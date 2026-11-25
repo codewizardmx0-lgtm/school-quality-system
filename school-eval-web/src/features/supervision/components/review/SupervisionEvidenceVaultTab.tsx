@@ -52,7 +52,7 @@ interface SupervisionEvidenceVaultTabProps {
     documents: SupervisionVaultDocument[];
     stats: SupervisionVaultStats;
   };
-  evidenceInventory?: any;
+  evidenceInventory?: unknown;
   standards?: SupervisionStandardItem[];
 }
 

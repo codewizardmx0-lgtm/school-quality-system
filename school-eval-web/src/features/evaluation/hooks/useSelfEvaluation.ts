@@ -57,13 +57,11 @@ export function useSelfEvaluation(
       cachedTreeData = data;
       setTreeData(data);
 
-      if (!selectedStandardId && data.standards.length > 0) {
-        setSelectedStandardId(data.standards[0].standardId);
-      }
-      if (!selectedIndicatorId && data.standards.length > 0) {
+      if (data.standards.length > 0) {
+        setSelectedStandardId((prev) => prev ?? data.standards[0].standardId);
         const firstInd = data.standards[0]?.subStandards[0]?.indicators[0];
         if (firstInd) {
-          setSelectedIndicatorId(firstInd.indicatorId);
+          setSelectedIndicatorId((prev) => prev ?? firstInd.indicatorId);
         }
       }
     } catch (err) {
@@ -71,11 +69,11 @@ export function useSelfEvaluation(
     } finally {
       setIsLoadingTree(false);
     }
-  }, [selectedStandardId, selectedIndicatorId]);
+  }, []);
 
   useEffect(() => {
-    loadTree();
-  }, []);
+    void Promise.resolve().then(() => loadTree());
+  }, [loadTree]);
 
   // قائمة مسطحة بكافة مؤشرات المعايير الوطنية لتسهيل التنقل والبحث
   const allIndicators = useMemo(() => {
@@ -104,15 +102,18 @@ export function useSelfEvaluation(
   }, [selectedIndicatorId, allIndicators]);
 
   useEffect(() => {
-    if (initialIndicatorId && initialIndicatorId !== selectedIndicatorId) {
-      setSelectedIndicatorId(initialIndicatorId);
+    if (initialIndicatorId) {
+      void Promise.resolve().then(() =>
+        setSelectedIndicatorId((prev) => (prev !== initialIndicatorId ? initialIndicatorId : prev))
+      );
     }
   }, [initialIndicatorId]);
 
   // مزامنة المعيار الرئيسي عند تغير المؤشر
   useEffect(() => {
-    if (currentIndicatorInfo?.standard?.standardId && selectedStandardId !== currentIndicatorInfo.standard.standardId) {
-      setSelectedStandardId(currentIndicatorInfo.standard.standardId);
+    const stdId = currentIndicatorInfo?.standard?.standardId;
+    if (stdId && selectedStandardId !== stdId) {
+      void Promise.resolve().then(() => setSelectedStandardId(stdId));
     }
   }, [currentIndicatorInfo, selectedStandardId]);
 
@@ -148,7 +149,7 @@ export function useSelfEvaluation(
 
   useEffect(() => {
     if (selectedIndicatorId) {
-      loadIndicatorResult(selectedIndicatorId);
+      void Promise.resolve().then(() => loadIndicatorResult(selectedIndicatorId));
     }
   }, [selectedIndicatorId, loadIndicatorResult]);
 
@@ -214,13 +215,14 @@ export function useSelfEvaluation(
         // تحديث الشجرة لتعكس الدرجة فوراً في لوحة المعايير
         loadTree();
         setTimeout(() => setSaveSuccessMessage(null), 3000);
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error('Server save error:', err);
         setSaveStatus('error');
         setLastFailedPayload(sanitizedPayload);
+        const errObj = err as { response?: { data?: { message?: string } }; code?: string };
         const errMsg =
-          err?.response?.data?.message ||
-          (err?.code === 'ERR_NETWORK' || !navigator.onLine
+          errObj?.response?.data?.message ||
+          (errObj?.code === 'ERR_NETWORK' || !navigator.onLine
             ? 'انقطع الاتصال بالخادم. يرجى التحقق من الشبكة ثم الضغط على "إعادة المحاولة".'
             : 'تعذر الحفظ على الخادم، يرجى إعادة المحاولة.');
         setSaveSuccessMessage(errMsg);

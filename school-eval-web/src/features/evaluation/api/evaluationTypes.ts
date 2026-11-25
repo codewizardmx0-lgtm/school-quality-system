@@ -795,7 +795,7 @@ export interface IndicatorMetricsContextItem {
   suggested_level: number | null;
   badge: string;
   message: string;
-  raw_data?: Record<string, any>;
+  raw_data?: Record<string, unknown>;
 }
 
 export interface IndicatorsContextResponse {

@@ -12,7 +12,7 @@ interface AddSubStandardModalProps {
   onClose: () => void;
   standardName: string;
   standardId: number;
-  onSubmit: (stdId: number, payload: CreateSubStandardPayload) => Promise<any>;
+  onSubmit: (stdId: number, payload: CreateSubStandardPayload) => Promise<unknown>;
 }
 
 export const AddSubStandardModal: React.FC<AddSubStandardModalProps> = ({
@@ -55,8 +55,8 @@ export const AddSubStandardModal: React.FC<AddSubStandardModalProps> = ({
         description: description.trim() || undefined,
       });
       handleClose();
-    } catch (err: any) {
-      setError(err?.message || 'فشل إضافة المعيار الفرعي.');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'فشل إضافة المعيار الفرعي.');
     } finally {
       setIsSubmitting(false);
     }

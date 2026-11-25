@@ -50,9 +50,9 @@ export const ReportsHubPage: React.FC<ReportsHubPageProps> = ({ onNavigate }) =>
       await exportFn();
       setSuccessMessage(`تم تصدير وتحميل ${name} بنجاح.`);
       setTimeout(() => setSuccessMessage(null), 4000);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
-      setErrorMessage(err.message || `تعذر تصدير ${name}. يرجى التحقق من الصلاحيات والمحاولة لاحقاً.`);
+      setErrorMessage(err instanceof Error ? err.message : `تعذر تصدير ${name}. يرجى التحقق من الصلاحيات والمحاولة لاحقاً.`);
     } finally {
       setDownloadingId(null);
     }

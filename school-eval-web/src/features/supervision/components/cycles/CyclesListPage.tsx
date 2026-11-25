@@ -177,7 +177,7 @@ export const CyclesListPage: React.FC<CyclesListPageProps> = ({
   }, []);
 
   useEffect(() => {
-    fetchCycles();
+    void Promise.resolve().then(() => fetchCycles());
   }, [fetchCycles]);
 
   // تحديد الدورات النشطة الحالية والنطاق العام

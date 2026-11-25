@@ -5,6 +5,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { supervisionApi } from '../api/supervisionApi';
+import { extractApiErrorMessage } from '../../../api/apiTypes';
 import type { SupervisionDashboardData } from '../api/supervisionTypes';
 
 export function useSupervisionDashboard(cycleId?: number) {
@@ -23,15 +24,15 @@ export function useSupervisionDashboard(cycleId?: number) {
     try {
       const result = await supervisionApi.getDashboard(cycleId);
       setData(result);
-    } catch (err: any) {
-      setError(err?.message || 'تعذر استرجاع بيانات لوحة المتابعة الإشرافية.');
+    } catch (err: unknown) {
+      setError(extractApiErrorMessage(err, 'تعذر استرجاع بيانات لوحة المتابعة الإشرافية.'));
     } finally {
       setIsLoading(false);
     }
   }, [cycleId]);
 
   useEffect(() => {
-    fetchDashboard();
+    void Promise.resolve().then(() => fetchDashboard());
   }, [fetchDashboard]);
 
   // تصفية المدارس بحسب مصطلحات البحث والفلاتر
@@ -61,7 +62,7 @@ export function useSupervisionDashboard(cycleId?: number) {
 
       return matchesSearch && matchesStatus && matchesStage;
     });
-  }, [data?.schools, searchTerm, statusFilter, stageFilter]);
+  }, [data, searchTerm, statusFilter, stageFilter]);
 
   return {
     dashboardData: data,

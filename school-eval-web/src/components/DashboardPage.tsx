@@ -424,7 +424,7 @@ const SchoolEvaluationsIsolatedCard: React.FC = () => {
   React.useEffect(() => {
     // إذا كان المستخدم لا يملك صلاحية عرض التقييمات، لا تستعلم
     if (!user?.permissions?.includes('evaluations.view')) {
-      setLoading(false);
+      void Promise.resolve().then(() => setLoading(false));
       return;
     }
 

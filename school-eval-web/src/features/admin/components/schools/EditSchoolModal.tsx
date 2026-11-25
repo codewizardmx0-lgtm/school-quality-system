@@ -52,19 +52,21 @@ export const EditSchoolModal: React.FC<EditSchoolModalProps> = ({
   useEffect(() => {
     if (school && isOpen) {
       const govId = school.governorateId || 1;
-      setSelectedGovId(govId);
-      setForm({
-        schoolName: school.schoolName || '',
-        schoolCode: school.schoolCode || '',
-        schoolType: school.schoolType || 'government',
-        educationalStage: school.educationalStage || 'ثانوي (10-12)',
-        directorate: school.directorate || school.educationalDistrict || (initialDirectorates[0]?.directorateName ?? 'مديرية التحرير'),
-        directorateId: school.directorateId || 1,
-        governorate: school.governorate || 'أمانة العاصمة',
-        governorateId: govId,
-        status: school.status || 'Active',
+      void Promise.resolve().then(() => {
+        setSelectedGovId(govId);
+        setForm({
+          schoolName: school.schoolName || '',
+          schoolCode: school.schoolCode || '',
+          schoolType: school.schoolType || 'government',
+          educationalStage: school.educationalStage || 'ثانوي (10-12)',
+          directorate: school.directorate || school.educationalDistrict || (initialDirectorates[0]?.directorateName ?? 'مديرية التحرير'),
+          directorateId: school.directorateId || 1,
+          governorate: school.governorate || 'أمانة العاصمة',
+          governorateId: govId,
+          status: school.status || 'Active',
+        });
+        setErrors({});
       });
-      setErrors({});
 
       // Load directorates for this governorate
       schoolsApi.getDirectorates(govId).then((res) => {
@@ -118,7 +120,7 @@ export const EditSchoolModal: React.FC<EditSchoolModalProps> = ({
 
   if (!isOpen || !school) return null;
 
-  const handleChange = (field: string, value: any) => {
+  const handleChange = (field: string, value: string | number) => {
     setForm((prev) => ({ ...prev, [field]: value }));
     setErrors((prev) => ({ ...prev, [field]: '' }));
   };
@@ -160,15 +162,16 @@ export const EditSchoolModal: React.FC<EditSchoolModalProps> = ({
       addToast('success', `تم تحديث بيانات مدرسة "${form.schoolName}" بنجاح.`);
       onSuccess();
       onClose();
-    } catch (err: any) {
-      if (err?.errors) {
+    } catch (err: unknown) {
+      const apiErr = err as { errors?: Record<string, unknown>; message?: string };
+      if (apiErr?.errors) {
         const mappedErrors: Record<string, string> = {};
-        Object.entries(err.errors).forEach(([field, msgs]) => {
+        Object.entries(apiErr.errors).forEach(([field, msgs]) => {
           mappedErrors[field] = Array.isArray(msgs) ? (msgs as string[])[0] : String(msgs);
         });
         setErrors(mappedErrors);
       } else {
-        addToast('error', err?.message || 'فشل تحديث بيانات المدرسة.');
+        addToast('error', apiErr?.message || 'فشل تحديث بيانات المدرسة.');
       }
     } finally {
       setLoading(false);

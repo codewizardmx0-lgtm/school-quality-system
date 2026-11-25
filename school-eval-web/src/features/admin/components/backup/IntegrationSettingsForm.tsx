@@ -33,11 +33,13 @@ export const IntegrationSettingsForm: React.FC<IntegrationSettingsFormProps> = (
 
   React.useEffect(() => {
     if (settings) {
-      setForm({
-        aiEngine: { ...DEFAULT_SETTINGS.aiEngine, ...settings.aiEngine },
-        cloudStorage: { ...DEFAULT_SETTINGS.cloudStorage, ...settings.cloudStorage },
-        smtp: { ...DEFAULT_SETTINGS.smtp, ...settings.smtp },
-        maintenanceMode: { ...DEFAULT_SETTINGS.maintenanceMode, ...settings.maintenanceMode },
+      void Promise.resolve().then(() => {
+        setForm({
+          aiEngine: { ...DEFAULT_SETTINGS.aiEngine, ...settings.aiEngine },
+          cloudStorage: { ...DEFAULT_SETTINGS.cloudStorage, ...settings.cloudStorage },
+          smtp: { ...DEFAULT_SETTINGS.smtp, ...settings.smtp },
+          maintenanceMode: { ...DEFAULT_SETTINGS.maintenanceMode, ...settings.maintenanceMode },
+        });
       });
     }
   }, [settings]);

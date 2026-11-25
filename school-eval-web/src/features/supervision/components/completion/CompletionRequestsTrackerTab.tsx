@@ -55,15 +55,15 @@ export const CompletionRequestsTrackerTab: React.FC<CompletionRequestsTrackerTab
     try {
       const res = await supervisionApi.getCompletionRequestsTracker();
       setData(res);
-    } catch (err: any) {
-      setError(err?.message || 'تعذر تحميل سجل طلبات الاستكمال.');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'تعذر تحميل سجل طلبات الاستكمال.');
     } finally {
       setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchData();
+    void Promise.resolve().then(() => fetchData());
   }, []);
 
   const summary: CompletionTrackerSummary = data?.summary || {
@@ -95,7 +95,7 @@ export const CompletionRequestsTrackerTab: React.FC<CompletionRequestsTrackerTab
 
       return true;
     });
-  }, [data?.requests, activeFilter, searchQuery]);
+  }, [data, activeFilter, searchQuery]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>

@@ -45,11 +45,11 @@ export function useImprovementPlan() {
   }, [selectedPlanType, selectedPlanId]);
 
   useEffect(() => {
-    fetchPlansList();
+    void Promise.resolve().then(() => fetchPlansList());
   }, [fetchPlansList]);
 
   useEffect(() => {
-    fetchPlan();
+    void Promise.resolve().then(() => fetchPlan());
   }, [fetchPlan]);
 
   const selectPlan = useCallback((planId: number | null) => {

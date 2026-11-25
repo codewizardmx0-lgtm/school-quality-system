@@ -67,18 +67,20 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
 
   useEffect(() => {
     if (isOpen && user) {
-      setForm({
-        username: user.username || '',
-        fullName: user.fullName || '',
-        email: user.email || '',
-        userType: user.userType || 'school',
-        roleId: user.roleId || 2,
-        schoolId: user.schoolId ?? null,
-        directorateId: user.directorateId ?? null,
-        governorate: user.governorate ?? null,
-        status: user.status || 'Active',
+      void Promise.resolve().then(() => {
+        setForm({
+          username: user.username || '',
+          fullName: user.fullName || '',
+          email: user.email || '',
+          userType: user.userType || 'school',
+          roleId: user.roleId || 2,
+          schoolId: user.schoolId ?? null,
+          directorateId: user.directorateId ?? null,
+          governorate: user.governorate ?? null,
+          status: user.status || 'Active',
+        });
+        setErrors({});
       });
-      setErrors({});
     }
   }, [isOpen, user]);
 
@@ -124,8 +126,9 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
     const cleanGov = normalizedGov.replace('محافظة', '').trim();
 
     return directorates.filter((d) => {
-      if (!d.governorate && !(d as any).governorateName) return false;
-      const dGov = (d.governorate || (d as any).governorateName || '').trim().toLowerCase();
+      const extDir = d as Directorate & { governorateName?: string };
+      if (!extDir.governorate && !extDir.governorateName) return false;
+      const dGov = (extDir.governorate || extDir.governorateName || '').trim().toLowerCase();
       const cleanDGov = dGov.replace('محافظة', '').trim();
       return (
         dGov === normalizedGov ||
@@ -176,12 +179,15 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
 
   if (!isOpen || !user) return null;
 
-  const schoolOptions: SearchableOption[] = schools.map((s) => ({
-    value: s.schoolId,
-    label: s.schoolName,
-    code: s.schoolCode,
-    sublabel: (s as any).educationalDistrict || (s as any).directorate,
-  }));
+  const schoolOptions: SearchableOption[] = schools.map((s) => {
+    const extSchool = s as { schoolId: number; schoolName: string; schoolCode: string; educationalDistrict?: string; directorate?: string };
+    return {
+      value: extSchool.schoolId,
+      label: extSchool.schoolName,
+      code: extSchool.schoolCode,
+      sublabel: extSchool.educationalDistrict || extSchool.directorate,
+    };
+  });
 
   const filteredRoles = roles.filter((r) => {
     const rName = r?.roleName || '';
@@ -257,12 +263,13 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
       addToast('success', `تم تحديث بيانات المستخدم "${form.fullName}" بنجاح`);
       onSuccess();
       onClose();
-    } catch (err: any) {
-      if (err?.errors) {
+    } catch (err: unknown) {
+      const apiErr = err as { errors?: Record<string, unknown>; message?: string };
+      if (apiErr?.errors) {
         const mappedErrors: Record<string, string> = {};
         const unmappedMessages: string[] = [];
-        Object.entries(err.errors).forEach(([field, msgs]) => {
-          const msg = Array.isArray(msgs) ? (msgs as string[])[0] : String(msgs);
+        Object.entries(apiErr.errors).forEach(([field, msgs]) => {
+          const msg = Array.isArray(msgs) ? String(msgs[0]) : String(msgs);
           mappedErrors[field] = msg;
           if (!['fullName', 'username', 'email', 'password', 'schoolId', 'directorateId', 'governorate', 'roleId', 'status'].includes(field)) {
             unmappedMessages.push(msg);
@@ -271,11 +278,11 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
         setErrors(mappedErrors);
         if (unmappedMessages.length > 0) {
           addToast('error', unmappedMessages.join(' • '));
-        } else if (err?.message) {
-          addToast('error', err.message);
+        } else if (apiErr?.message) {
+          addToast('error', apiErr.message);
         }
       } else {
-        addToast('error', err?.message || 'فشل تحديث بيانات المستخدم');
+        addToast('error', apiErr?.message || 'فشل تحديث بيانات المستخدم');
       }
     } finally {
       setLoading(false);

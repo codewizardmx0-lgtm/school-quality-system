@@ -91,8 +91,8 @@ export const ExtendDeadlineModal: React.FC<ExtendDeadlineModalProps> = ({
       );
       onSuccess();
       onClose();
-    } catch (err: any) {
-      setErrorMessage(err?.message || 'تعذر تمديد مهلة طلب الاستكمال.');
+    } catch (err: unknown) {
+      setErrorMessage(err instanceof Error ? err.message : 'تعذر تمديد مهلة طلب الاستكمال.');
     } finally {
       setIsSubmitting(false);
     }

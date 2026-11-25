@@ -116,8 +116,8 @@ export const HistoricalMatrixTable: React.FC<HistoricalMatrixTableProps> = ({
   const sortedDeltas = useMemo(() => {
     const list = [...effectiveStandardsDeltas];
     return list.sort((a, b) => {
-      const valA: any = a[sortKey];
-      const valB: any = b[sortKey];
+      const valA: unknown = a[sortKey];
+      const valB: unknown = b[sortKey];
 
       if (typeof valA === 'number' && typeof valB === 'number') {
         return sortDirection === 'asc' ? valA - valB : valB - valA;

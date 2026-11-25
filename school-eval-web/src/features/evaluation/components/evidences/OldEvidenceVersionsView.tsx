@@ -84,9 +84,10 @@ export const OldEvidenceVersionsView: React.FC<OldEvidenceVersionsViewProps> = (
     try {
       setPruningId(ver.versionId);
       await onPruneFile(ver.versionId);
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const apiErr = err as { response?: { data?: { message?: string } } };
       console.error('Failed to prune version file:', err);
-      alert(err?.response?.data?.message || 'تعذر شطب الملف الفيزيائي.');
+      alert(apiErr?.response?.data?.message || 'تعذر شطب الملف الفيزيائي.');
     } finally {
       setPruningId(null);
     }
@@ -343,7 +344,7 @@ export const OldEvidenceVersionsView: React.FC<OldEvidenceVersionsViewProps> = (
           {/* Filter by versions count */}
           <select
             value={versionCountFilter}
-            onChange={(e) => setVersionCountFilter(e.target.value as any)}
+            onChange={(e) => setVersionCountFilter(e.target.value as '1' | '2' | '3' | 'all' | '4+')}
             style={{
               padding: '9px 14px',
               borderRadius: '8px',

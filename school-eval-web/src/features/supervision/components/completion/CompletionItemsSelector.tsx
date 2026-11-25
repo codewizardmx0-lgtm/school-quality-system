@@ -14,7 +14,7 @@ interface CompletionItemsSelectorProps {
   items: PreloadedCompletionItem[];
   onNavigateToStandardsTree: () => void;
   onRemoveItem: (indicatorId: number) => void;
-  onUpdateItem: (indicatorId: number, field: keyof PreloadedCompletionItem, value: any) => void;
+  onUpdateItem: <K extends keyof PreloadedCompletionItem>(indicatorId: number, field: K, value: PreloadedCompletionItem[K]) => void;
 }
 
 export const CompletionItemsSelector: React.FC<CompletionItemsSelectorProps> = ({

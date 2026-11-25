@@ -33,6 +33,7 @@ import type {
 } from '../../api/standardsTypes';
 import { EditScoreDescriptorsModal } from './EditScoreDescriptorsModal';
 import { VerificationToolsManagerModal } from './VerificationToolsManagerModal';
+import { extractApiErrorMessage } from '../../../../api/apiTypes';
 import { standardsApi } from '../../api/standardsApi';
 
 interface IndicatorEditorModalProps {
@@ -43,12 +44,12 @@ interface IndicatorEditorModalProps {
   isDraft?: boolean;
   isSaving: boolean;
   onClose: () => void;
-  onSave: (id: number, payload: UpdateIndicatorPayload) => Promise<any>;
-  onDelete?: (id: number) => Promise<any>;
-  onAddEvidenceRequirement?: (indicatorId: number, payload: SaveEvidenceRequirementPayload) => Promise<any>;
-  onUpdateEvidenceRequirement?: (indicatorId: number, reqId: number, payload: SaveEvidenceRequirementPayload) => Promise<any>;
-  onDeleteEvidenceRequirement?: (indicatorId: number, reqId: number) => Promise<any>;
-  onUpdateScoreDescriptors?: (indicatorId: number, descriptors: UpdateScoreDescriptorItem[]) => Promise<any>;
+  onSave: (id: number, payload: UpdateIndicatorPayload) => Promise<unknown>;
+  onDelete?: (id: number) => Promise<unknown>;
+  onAddEvidenceRequirement?: (indicatorId: number, payload: SaveEvidenceRequirementPayload) => Promise<unknown>;
+  onUpdateEvidenceRequirement?: (indicatorId: number, reqId: number, payload: SaveEvidenceRequirementPayload) => Promise<unknown>;
+  onDeleteEvidenceRequirement?: (indicatorId: number, reqId: number) => Promise<unknown>;
+  onUpdateScoreDescriptors?: (indicatorId: number, descriptors: UpdateScoreDescriptorItem[]) => Promise<unknown>;
 }
 
 const availableTools = [
@@ -113,7 +114,7 @@ export const IndicatorEditorModal: React.FC<IndicatorEditorModalProps> = ({
 
   useEffect(() => {
     if (isOpen) {
-      fetchDynamicTools();
+      void Promise.resolve().then(() => fetchDynamicTools());
     }
   }, [isOpen]);
 
@@ -145,23 +146,25 @@ export const IndicatorEditorModal: React.FC<IndicatorEditorModalProps> = ({
   // Initialize form when indicator changes or modal opens
   useEffect(() => {
     if (indicator && isOpen) {
-      setCode(indicator.code || '');
-      setName(indicator.name || '');
-      setWeight(indicator.weight !== undefined && indicator.weight !== null ? indicator.weight : '');
-      setRubricNotes(indicator.rubricNotes || indicator.description || '');
+      void Promise.resolve().then(() => {
+        setCode(indicator.code || '');
+        setName(indicator.name || '');
+        setWeight(indicator.weight !== undefined && indicator.weight !== null ? indicator.weight : '');
+        setRubricNotes(indicator.rubricNotes || indicator.description || '');
 
-      const tools = indicator.verificationTools || [];
-      if (tools.length === 0 && indicator.verificationMethod) {
-        setSelectedTools(indicator.verificationMethod.split(' • ').map((s) => s.trim()).filter(Boolean));
-      } else {
-        setSelectedTools(tools);
-      }
+        const tools = indicator.verificationTools || [];
+        if (tools.length === 0 && indicator.verificationMethod) {
+          setSelectedTools(indicator.verificationMethod.split(' • ').map((s) => s.trim()).filter(Boolean));
+        } else {
+          setSelectedTools(tools);
+        }
 
-      setError(null);
-      setSuccessMessage(null);
-      setShowDeleteConfirm(false);
-      setNewReqTitle('');
-      setEditingReqId(null);
+        setError(null);
+        setSuccessMessage(null);
+        setShowDeleteConfirm(false);
+        setNewReqTitle('');
+        setEditingReqId(null);
+      });
     }
   }, [indicator, isOpen]);
 
@@ -207,8 +210,8 @@ export const IndicatorEditorModal: React.FC<IndicatorEditorModalProps> = ({
       });
       setSuccessMessage('تم حفظ تعديلات المؤشر وأدوات التحقق بنجاح.');
       setTimeout(() => setSuccessMessage(null), 3000);
-    } catch (err: any) {
-      setError(err?.message || 'فشل حفظ تعديلات المؤشر.');
+    } catch (err: unknown) {
+      setError(extractApiErrorMessage(err, 'فشل حفظ تعديلات المؤشر.'));
     }
   };
 
@@ -218,8 +221,8 @@ export const IndicatorEditorModal: React.FC<IndicatorEditorModalProps> = ({
       await onDelete(indicator.indicatorId);
       setShowDeleteConfirm(false);
       onClose();
-    } catch (err: any) {
-      setError(err?.message || 'تعذر حذف المؤشر.');
+    } catch (err: unknown) {
+      setError(extractApiErrorMessage(err, 'تعذر حذف المؤشر.'));
     }
   };
 
@@ -234,8 +237,8 @@ export const IndicatorEditorModal: React.FC<IndicatorEditorModalProps> = ({
       });
       setNewReqTitle('');
       setNewReqRequired(true);
-    } catch (err: any) {
-      setError(err?.message || 'تعذر إضافة متطلب الشاهد.');
+    } catch (err: unknown) {
+      setError(extractApiErrorMessage(err, 'تعذر إضافة متطلب الشاهد.'));
     } finally {
       setIsAddingReq(false);
     }
@@ -256,8 +259,8 @@ export const IndicatorEditorModal: React.FC<IndicatorEditorModalProps> = ({
         required: editingReqRequired,
       });
       setEditingReqId(null);
-    } catch (err: any) {
-      setError(err?.message || 'تعذر تحديث متطلب الشاهد.');
+    } catch (err: unknown) {
+      setError(extractApiErrorMessage(err, 'تعذر تحديث متطلب الشاهد.'));
     }
   };
 
@@ -265,8 +268,8 @@ export const IndicatorEditorModal: React.FC<IndicatorEditorModalProps> = ({
     if (!isDraft || !onDeleteEvidenceRequirement) return;
     try {
       await onDeleteEvidenceRequirement(indicator.indicatorId, reqId);
-    } catch (err: any) {
-      setError(err?.message || 'تعذر حذف متطلب الشاهد.');
+    } catch (err: unknown) {
+      setError(extractApiErrorMessage(err, 'تعذر حذف متطلب الشاهد.'));
     }
   };
 

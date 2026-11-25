@@ -25,7 +25,7 @@ interface SupervisionImprovementPlanTabProps {
   planDetails?: SupervisionPlanDetails | null;
   plans?: SupervisionPlanDetails[];
   lowIndicatorsMatrix?: LowIndicatorMatrixItem[];
-  indicatorsAudit?: any[];
+  indicatorsAudit?: unknown[];
   onNavigateToIndicator?: (indicatorId: number) => void;
 }
 

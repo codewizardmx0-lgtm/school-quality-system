@@ -15,6 +15,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
+import type { PreloadedCompletionItem } from '../../api/supervisionTypes';
 import {
   Building2,
   ChevronRight,
@@ -44,7 +45,7 @@ interface ReviewSubmissionPageProps {
   onSelectSchool?: (schoolId: number, schoolName: string) => void;
   onNavigate: (
     screen: SupervisionScreenKey,
-    params?: { submissionId?: number; schoolId?: number; preloadedItems?: any[]; targetTab?: string }
+    params?: { submissionId?: number; schoolId?: number; preloadedItems?: PreloadedCompletionItem[]; targetTab?: string }
   ) => void;
 }
 
@@ -71,7 +72,7 @@ export const ReviewSubmissionPage: React.FC<ReviewSubmissionPageProps> = ({
 
   useEffect(() => {
     if (initialTab) {
-      setActiveTab(initialTab);
+      void Promise.resolve().then(() => setActiveTab(initialTab));
     }
   }, [initialTab]);
   const [targetIndicatorId, setTargetIndicatorId] = useState<number | null>(null);
@@ -90,8 +91,8 @@ export const ReviewSubmissionPage: React.FC<ReviewSubmissionPageProps> = ({
     setIsExportingPdf(true);
     try {
       await supervisionApi.exportEvaluationPdf(reviewData.evaluationId, reviewData.school?.schoolName);
-    } catch (e: any) {
-      alert(e?.message || 'تعذر تصدير تقرير التقييم PDF.');
+    } catch (e: unknown) {
+      alert(e instanceof Error ? e.message : 'تعذر تصدير تقرير التقييم PDF.');
     } finally {
       setIsExportingPdf(false);
     }
@@ -103,8 +104,8 @@ export const ReviewSubmissionPage: React.FC<ReviewSubmissionPageProps> = ({
     setIsExportingExcel(true);
     try {
       await supervisionApi.exportEvaluationExcel(reviewData.evaluationId, reviewData.school?.schoolName);
-    } catch (e: any) {
-      alert(e?.message || 'تعذر تصدير سجل التقييم Excel.');
+    } catch (e: unknown) {
+      alert(e instanceof Error ? e.message : 'تعذر تصدير سجل التقييم Excel.');
     } finally {
       setIsExportingExcel(false);
     }
@@ -118,6 +119,7 @@ export const ReviewSubmissionPage: React.FC<ReviewSubmissionPageProps> = ({
         reviewData.school.schoolName || 'مدرسة التقييم'
       );
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reviewData?.school?.schoolId, reviewData?.school?.schoolName, onSelectSchool]);
 
   // حالة عدم وجود أي مخرجات متاحة للمراجعة

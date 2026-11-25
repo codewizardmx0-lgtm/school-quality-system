@@ -49,7 +49,7 @@ export const SupervisionLayout: React.FC<SupervisionLayoutProps> = ({
   const [selectedSchoolId, setSelectedSchoolId] = useState<number | undefined>(undefined);
   const [selectedSchoolName, setSelectedSchoolName] = useState<string | undefined>(undefined);
   const [selectedCycleId, setSelectedCycleId] = useState<number | undefined>(undefined);
-  const [prefillCycleLaunch, setPrefillCycleLaunch] = useState<any | undefined>(undefined);
+  const [prefillCycleLaunch, setPrefillCycleLaunch] = useState<Record<string, unknown> | undefined>(undefined);
   const [selectedTargetTab, setSelectedTargetTab] = useState<string | undefined>(undefined);
   const [preloadedItems, setPreloadedItems] = useState<PreloadedCompletionItem[] | undefined>(
     undefined
@@ -87,7 +87,7 @@ export const SupervisionLayout: React.FC<SupervisionLayoutProps> = ({
     let isMounted = true;
     supervisionApi.getActiveStandardVersion()
       .then((ver) => {
-        const num = ver?.versionNumber || (ver as any)?.versionNo;
+        const num = ver?.versionNumber || (ver as { versionNo?: string } | null)?.versionNo;
         if (isMounted && num) {
           setActiveStandardVersion(num);
         }
@@ -123,6 +123,7 @@ export const SupervisionLayout: React.FC<SupervisionLayoutProps> = ({
     return () => {
       isMounted = false;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const navigateToScreen = (
@@ -133,7 +134,7 @@ export const SupervisionLayout: React.FC<SupervisionLayoutProps> = ({
       schoolId?: number;
       schoolName?: string;
       preloadedItems?: PreloadedCompletionItem[];
-      prefillCycleLaunch?: any;
+      prefillCycleLaunch?: Record<string, unknown>;
       targetTab?: string;
     }
   ) => {
@@ -211,7 +212,7 @@ export const SupervisionLayout: React.FC<SupervisionLayoutProps> = ({
           <ReviewSubmissionPage
             submissionId={selectedSubmissionId}
             schoolId={selectedSchoolId}
-            initialTab={selectedTargetTab === 'standards-tree' ? 'standards' : (selectedTargetTab as any)}
+            initialTab={selectedTargetTab === 'standards-tree' ? 'standards' : (selectedTargetTab as 'standards' | 'vault' | 'plan' | 'decision' | undefined)}
             onSelectSchool={(schoolId, schoolName) => {
               setSelectedSchoolId(schoolId);
               setSelectedSchoolName(schoolName);

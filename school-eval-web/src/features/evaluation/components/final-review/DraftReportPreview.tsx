@@ -35,8 +35,9 @@ export const DraftReportPreview: React.FC<DraftReportPreviewProps> = ({
         updatedAt: res.updatedAt,
       });
       setTimeout(() => setIsSaved(false), 3000);
-    } catch (err: any) {
-      alert('تعذر حفظ ملاحظات المراجعة: ' + (err?.response?.data?.message || err?.message));
+    } catch (err: unknown) {
+      const apiErr = err as { response?: { data?: { message?: string } }; message?: string };
+      alert('تعذر حفظ ملاحظات المراجعة: ' + (apiErr?.response?.data?.message || apiErr?.message));
     } finally {
       setIsSavingNote(false);
     }

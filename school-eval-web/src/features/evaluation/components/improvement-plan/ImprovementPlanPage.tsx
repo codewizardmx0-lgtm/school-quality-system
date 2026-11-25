@@ -101,7 +101,7 @@ export const ImprovementPlanPage: React.FC<ImprovementPlanPageProps> = ({
     if (!planData?.areas || planData.areas.length === 0) return [];
     const scheduledAreaIds = new Set((planData.actions || []).map((a) => a.areaId));
     return planData.areas.filter((area) => area.status === 'pending_action' || !scheduledAreaIds.has(area.areaId));
-  }, [planData?.areas, planData?.actions]);
+  }, [planData]);
 
   // قائمة خطط النوع المحدد بالتبويب فقط للسجل الماستر
   const tabPlansList = React.useMemo(() => {

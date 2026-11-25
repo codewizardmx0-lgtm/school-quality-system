@@ -19,10 +19,9 @@ import {
   Loader2,
   ShieldAlert,
   Sparkles,
-  Search,
-  X,
 } from 'lucide-react';
 import { ActiveVersionBadge } from './ActiveVersionBadge';
+import { CycleSchoolsSelectorCard } from './CycleSchoolsSelectorCard';
 import { supervisionApi } from '../../api/supervisionApi';
 import type {
   ActiveStandardVersion,
@@ -219,13 +218,15 @@ export const CycleFormTab: React.FC<CycleFormTabProps> = ({
   // في وضع الاستنساخ: تفعيل خيار التحديد اليدوي تلقائياً واسترجاع مدارس الدورة المستنسخة
   useEffect(() => {
     if (mode === 'clone') {
-      setEnrollAllSchools(false);
-      if (selectedCloneCycleId) {
-        const sourceCycle = cycles.find((c) => c.cycleId === selectedCloneCycleId);
-        if (sourceCycle?.participatingSchools && sourceCycle.participatingSchools.length > 0) {
-          setSelectedSchoolIds(sourceCycle.participatingSchools.map((s) => s.schoolId));
+      void Promise.resolve().then(() => {
+        setEnrollAllSchools(false);
+        if (selectedCloneCycleId) {
+          const sourceCycle = cycles.find((c) => c.cycleId === selectedCloneCycleId);
+          if (sourceCycle?.participatingSchools && sourceCycle.participatingSchools.length > 0) {
+            setSelectedSchoolIds(sourceCycle.participatingSchools.map((s) => s.schoolId));
+          }
         }
-      }
+      });
     }
   }, [mode, selectedCloneCycleId, cycles]);
 
@@ -234,12 +235,14 @@ export const CycleFormTab: React.FC<CycleFormTabProps> = ({
     if (mode === 'edit') {
       const target = cycles.find((c) => c.cycleId === currentEditCycleId) || activeCycle;
       if (target) {
-        setCycleTitle(target.name);
-        setAcademicYear(target.academicYear);
-        if (target.startDate) setStartDate(target.startDate.split('T')[0]);
-        if (target.endDate) setEndDate(target.endDate.split('T')[0]);
-        setTargetGovernorate(target.scopeGovernorate || 'كافة المحافظات');
-        if (target.maxCompletionDays) setCompletionDeadlineDays(target.maxCompletionDays);
+        void Promise.resolve().then(() => {
+          setCycleTitle(target.name);
+          setAcademicYear(target.academicYear);
+          if (target.startDate) setStartDate(target.startDate.split('T')[0]);
+          if (target.endDate) setEndDate(target.endDate.split('T')[0]);
+          setTargetGovernorate(target.scopeGovernorate || 'كافة المحافظات');
+          if (target.maxCompletionDays) setCompletionDeadlineDays(target.maxCompletionDays);
+        });
       }
     }
   }, [mode, currentEditCycleId, cycles, activeCycle]);
@@ -247,14 +250,16 @@ export const CycleFormTab: React.FC<CycleFormTabProps> = ({
   // الاستجابة لبيانات التهيئة المسبقة (Prefill) أو الاستنساخ
   useEffect(() => {
     if (prefillData) {
-      if (prefillData.academicYear) setAcademicYear(prefillData.academicYear);
-      if (prefillData.name) setCycleTitle(prefillData.name);
-      if (prefillData.startDate) setStartDate(prefillData.startDate);
-      if (prefillData.endDate) setEndDate(prefillData.endDate);
-      if (prefillData.schoolIds) {
-        setSelectedSchoolIds(prefillData.schoolIds);
-        setEnrollAllSchools(prefillData.enrollAllSchools ?? false);
-      }
+      void Promise.resolve().then(() => {
+        if (prefillData.academicYear) setAcademicYear(prefillData.academicYear);
+        if (prefillData.name) setCycleTitle(prefillData.name);
+        if (prefillData.startDate) setStartDate(prefillData.startDate);
+        if (prefillData.endDate) setEndDate(prefillData.endDate);
+        if (prefillData.schoolIds) {
+          setSelectedSchoolIds(prefillData.schoolIds);
+          setEnrollAllSchools(prefillData.enrollAllSchools ?? false);
+        }
+      });
     }
   }, [prefillData]);
 
@@ -264,8 +269,10 @@ export const CycleFormTab: React.FC<CycleFormTabProps> = ({
       if (activeCycles.length > 0 && targetGovernorate === 'كافة المحافظات') {
         const firstAvailable = ALL_GOVERNORATES.find((g) => !occupiedGovernorates.includes(g));
         if (firstAvailable) {
-          setTargetGovernorate(firstAvailable);
-          setCycleTitle(`دورة التقييم الذاتي للعام ${academicYear} - ${firstAvailable}`);
+          void Promise.resolve().then(() => {
+            setTargetGovernorate(firstAvailable);
+            setCycleTitle(`دورة التقييم الذاتي للعام ${academicYear} - ${firstAvailable}`);
+          });
         }
       }
     }
@@ -1144,258 +1151,20 @@ export const CycleFormTab: React.FC<CycleFormTabProps> = ({
               </div>
 
               {/* اختيار المدارس المستهدفة: الكل أو تحديد يدوي (الواجهة 28) */}
-              <div style={{ marginBottom: '20px' }}>
-                <label style={{ display: 'block', fontSize: '13px', fontWeight: 700, color: '#334155', marginBottom: '8px' }}>
-                  تسجيل المدارس المستهدفة بالدورة
-                </label>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '12px' }}>
-                  {/* الخيار الأول: كافة المدارس الفعّالة */}
-                  <label
-                    style={{
-                      display: 'flex',
-                      alignItems: 'flex-start',
-                      gap: '10px',
-                      padding: '12px 14px',
-                      borderRadius: '8px',
-                      border: enrollAllSchools ? '2px solid #2563EB' : '1px solid #CBD5E1',
-                      backgroundColor: enrollAllSchools ? '#EFF6FF' : '#FFFFFF',
-                      cursor: mode === 'edit' ? 'default' : 'pointer',
-                      transition: 'all 0.15s ease',
-                    }}
-                  >
-                    <input
-                      type="radio"
-                      name="school_enrollment_type"
-                      checked={enrollAllSchools}
-                      disabled={mode === 'edit'}
-                      onChange={() => setEnrollAllSchools(true)}
-                      style={{ marginTop: '2px', accentColor: '#2563EB' }}
-                    />
-                    <div>
-                      <span style={{ fontSize: '13px', fontWeight: 800, color: enrollAllSchools ? '#1E40AF' : '#0F172A' }}>
-                        كافة المدارس الفعّالة ضمن النطاق الجغرافي المختار
-                      </span>
-                      <p style={{ fontSize: '12px', color: '#64748B', margin: '3px 0 0 0' }}>
-                        تسجيل تلقائي لجميع المدارس الفعالة في ({targetGovernorate}) البالغ عددها ({availableSchools.length} مدرسة).
-                      </p>
-                    </div>
-                  </label>
-
-                  {/* الخيار الثاني: تحديد يدوي لمدارس معينة */}
-                  <label
-                    style={{
-                      display: 'flex',
-                      alignItems: 'flex-start',
-                      gap: '10px',
-                      padding: '12px 14px',
-                      borderRadius: '8px',
-                      border: !enrollAllSchools ? '2px solid #2563EB' : '1px solid #CBD5E1',
-                      backgroundColor: !enrollAllSchools ? '#EFF6FF' : '#FFFFFF',
-                      cursor: mode === 'edit' ? 'default' : 'pointer',
-                      transition: 'all 0.15s ease',
-                    }}
-                  >
-                    <input
-                      type="radio"
-                      name="school_enrollment_type"
-                      checked={!enrollAllSchools}
-                      disabled={mode === 'edit'}
-                      onChange={() => setEnrollAllSchools(false)}
-                      style={{ marginTop: '2px', accentColor: '#2563EB' }}
-                    />
-                    <div>
-                      <span style={{ fontSize: '13px', fontWeight: 800, color: !enrollAllSchools ? '#1E40AF' : '#0F172A' }}>
-                        تحديد يدوي لمدارس معينة
-                      </span>
-                      <p style={{ fontSize: '12px', color: '#64748B', margin: '3px 0 0 0' }}>
-                        اختيار مدارس محددة يدوياً من قائمة المدارس المتاحة للمشاركة في الدورة.
-                      </p>
-                    </div>
-                  </label>
-                </div>
-
-                {/* القائمة التفاعلية للمدارس عند التحديد اليدوي */}
-                {!enrollAllSchools && (
-                  <div
-                    style={{
-                      marginTop: '12px',
-                      padding: '16px',
-                      borderRadius: '10px',
-                      backgroundColor: '#F8FAFC',
-                      border: '1px solid #E2E8F0',
-                    }}
-                  >
-                    {/* شريط الأدوات: البحث وأزرار التحديد والعداد */}
-                    <div
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        flexWrap: 'wrap',
-                        gap: '10px',
-                        marginBottom: '12px',
-                      }}
-                    >
-                      <div
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '6px',
-                          backgroundColor: '#FFFFFF',
-                          border: '1px solid #CBD5E1',
-                          borderRadius: '6px',
-                          padding: '6px 10px',
-                          flex: 1,
-                          minWidth: '200px',
-                        }}
-                      >
-                        <Search size={14} color="#94A3B8" />
-                        <input
-                          type="text"
-                          placeholder="ابحث باسم المدرسة أو الكود الوزاري..."
-                          value={schoolSearchQuery}
-                          onChange={(e) => setSchoolSearchQuery(e.target.value)}
-                          style={{ border: 'none', outline: 'none', fontSize: '12px', width: '100%', color: '#0F172A' }}
-                        />
-                        {schoolSearchQuery && (
-                          <button
-                            type="button"
-                            onClick={() => setSchoolSearchQuery('')}
-                            style={{ border: 'none', backgroundColor: 'transparent', cursor: 'pointer', padding: 0 }}
-                          >
-                            <X size={12} color="#94A3B8" />
-                          </button>
-                        )}
-                      </div>
-
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const allFilteredIds = filteredAvailableSchools.map((s) => Number(s.schoolId || s.school_id || 0));
-                            setSelectedSchoolIds((prev) => Array.from(new Set([...prev, ...allFilteredIds])));
-                          }}
-                          style={{
-                            padding: '5px 10px',
-                            borderRadius: '6px',
-                            border: '1px solid #CBD5E1',
-                            backgroundColor: '#FFFFFF',
-                            fontSize: '11.5px',
-                            fontWeight: 700,
-                            color: '#2563EB',
-                            cursor: 'pointer',
-                          }}
-                        >
-                          تحديد الكل
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const filteredIds = new Set(filteredAvailableSchools.map((s) => Number(s.schoolId || s.school_id || 0)));
-                            setSelectedSchoolIds((prev) => prev.filter((id) => !filteredIds.has(id)));
-                          }}
-                          style={{
-                            padding: '5px 10px',
-                            borderRadius: '6px',
-                            border: '1px solid #CBD5E1',
-                            backgroundColor: '#FFFFFF',
-                            fontSize: '11.5px',
-                            fontWeight: 700,
-                            color: '#64748B',
-                            cursor: 'pointer',
-                          }}
-                        >
-                          إلغاء التحديد
-                        </button>
-
-                        <span
-                          style={{
-                            fontSize: '11.5px',
-                            fontWeight: 700,
-                            color: selectedSchoolIds.length > 0 ? '#1E40AF' : '#94A3B8',
-                            backgroundColor: selectedSchoolIds.length > 0 ? '#EFF6FF' : '#F1F5F9',
-                            padding: '4px 8px',
-                            borderRadius: '6px',
-                          }}
-                        >
-                          تم تحديد {selectedSchoolIds.length} من أصل {availableSchools.length} مدرسة
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* قائمة المدارس التفاعلية القابلة للاختيار */}
-                    {isLoadingSchools ? (
-                      <div style={{ padding: '24px', textAlign: 'center', color: '#64748B', fontSize: '12px' }}>
-                        <Loader2 size={18} className="animate-spin" style={{ margin: '0 auto 6px', color: '#2563EB' }} />
-                        جاري تحميل قائمة المدارس الفعّالة...
-                      </div>
-                    ) : filteredAvailableSchools.length === 0 ? (
-                      <div style={{ padding: '20px', textAlign: 'center', color: '#64748B', fontSize: '12.5px' }}>
-                        {schoolSearchQuery ? 'لا توجد مدارس مطابقة للبحث.' : 'لا توجد مدارس فعالة مسجلة ضمن هذا النطاق.'}
-                      </div>
-                    ) : (
-                      <div
-                        style={{
-                          maxHeight: '220px',
-                          overflowY: 'auto',
-                          display: 'flex',
-                          flexDirection: 'column',
-                          gap: '6px',
-                          paddingRight: '4px',
-                        }}
-                      >
-                        {filteredAvailableSchools.map((school) => {
-                          const sId = Number(school.schoolId || school.school_id || 0);
-                          const isChecked = selectedSchoolIds.includes(sId);
-                          return (
-                            <label
-                              key={sId}
-                              style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '10px',
-                                padding: '8px 12px',
-                                borderRadius: '6px',
-                                border: isChecked ? '1px solid #2563EB' : '1px solid #E2E8F0',
-                                backgroundColor: isChecked ? '#EFF6FF' : '#FFFFFF',
-                                cursor: 'pointer',
-                                fontSize: '12.5px',
-                                transition: 'all 0.1s ease',
-                              }}
-                            >
-                              <input
-                                type="checkbox"
-                                checked={isChecked}
-                                onChange={() => {
-                                  setSelectedSchoolIds((prev) =>
-                                    prev.includes(sId) ? prev.filter((id) => id !== sId) : [...prev, sId]
-                                  );
-                                }}
-                                style={{ accentColor: '#2563EB' }}
-                              />
-                              <span style={{ fontWeight: 700, color: '#0F172A' }}>
-                                {school.schoolName || school.school_name}
-                              </span>
-                              <span style={{ color: '#64748B', fontSize: '11.5px' }}>
-                                ({school.schoolCode || school.identification_data || school.identificationData})
-                              </span>
-                              <span style={{ marginRight: 'auto', color: '#64748B', fontSize: '11px' }}>
-                                {school.governorate} • {school.educationalDistrict || school.educational_district}
-                              </span>
-                            </label>
-                          );
-                        })}
-                      </div>
-                    )}
-
-                    {validationErrors.selectedSchools && (
-                      <span style={{ fontSize: '11px', color: '#EF4444', display: 'block', marginTop: '6px' }}>
-                        {validationErrors.selectedSchools}
-                      </span>
-                    )}
-                  </div>
-                )}
-              </div>
+              <CycleSchoolsSelectorCard
+                mode={mode}
+                targetGovernorate={targetGovernorate}
+                enrollAllSchools={enrollAllSchools}
+                onEnrollAllChange={setEnrollAllSchools}
+                availableSchools={availableSchools}
+                filteredAvailableSchools={filteredAvailableSchools}
+                selectedSchoolIds={selectedSchoolIds}
+                onSelectedSchoolIdsChange={setSelectedSchoolIds}
+                schoolSearchQuery={schoolSearchQuery}
+                onSchoolSearchChange={setSchoolSearchQuery}
+                isLoadingSchools={isLoadingSchools}
+                validationError={validationErrors.selectedSchools}
+              />
 
               {/* معاينة حجم النطاق المستهدف */}
               <div

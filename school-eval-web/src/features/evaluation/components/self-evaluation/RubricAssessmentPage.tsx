@@ -144,15 +144,17 @@ export const RubricAssessmentPage: React.FC<RubricAssessmentPageProps> = ({
 
   // تحديث أو تصفير بيانات الاستمارة المحلية فور تغير نتيجة المؤشر النشط لمنع تجمد البيانات القديمة
   useEffect(() => {
-    if (currentResult) {
-      setSelectedScore(currentResult.score ?? null);
-      setJustification(currentResult.justification || '');
-      setSelectedVerificationMethods(currentResult.verificationMethods || []);
-    } else {
-      setSelectedScore(null);
-      setJustification('');
-      setSelectedVerificationMethods([]);
-    }
+    void Promise.resolve().then(() => {
+      if (currentResult) {
+        setSelectedScore(currentResult.score ?? null);
+        setJustification(currentResult.justification || '');
+        setSelectedVerificationMethods(currentResult.verificationMethods || []);
+      } else {
+        setSelectedScore(null);
+        setJustification('');
+        setSelectedVerificationMethods([]);
+      }
+    });
   }, [currentResult]);
 
   // IMP-07: Fetch Indicators Quantitative Context once per evaluationId

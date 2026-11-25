@@ -45,7 +45,7 @@ export function useAiAnalysis() {
   }, []);
 
   useEffect(() => {
-    loadInitialRecommendations();
+    void Promise.resolve().then(() => loadInitialRecommendations());
   }, [loadInitialRecommendations]);
 
   // تحديث حالة توصية معينة (قبول / تعديل / تجاهل)

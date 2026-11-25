@@ -75,13 +75,13 @@ export function useSubmissionsReview(initialSubmissionId?: number) {
   }, [activeSubmissionId]);
 
   useEffect(() => {
-    loadAvailableSubmissions();
+    void Promise.resolve().then(() => loadAvailableSubmissions());
   }, [loadAvailableSubmissions]);
 
   // تحديث المعرف إذا تغير الـ prop من الخارج
   useEffect(() => {
     if (initialSubmissionId && initialSubmissionId !== activeSubmissionId) {
-      setActiveSubmissionId(initialSubmissionId);
+      void Promise.resolve().then(() => setActiveSubmissionId(initialSubmissionId));
     }
   }, [initialSubmissionId, activeSubmissionId]);
 
@@ -111,15 +111,16 @@ export function useSubmissionsReview(initialSubmissionId?: number) {
         }
       });
       setDefectiveItems(initialDefects);
-    } catch (err: any) {
-      setError(err?.message || 'تعذر تحميل مخرج التقييم للمراجعة.');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : undefined;
+      setError(msg || 'تعذر تحميل مخرج التقييم للمراجعة.');
     } finally {
       setIsLoading(false);
     }
   }, [activeSubmissionId]);
 
   useEffect(() => {
-    fetchReview();
+    void Promise.resolve().then(() => fetchReview());
   }, [fetchReview]);
 
   // 3. التبديل لمخرج مدرسة أخرى
@@ -175,8 +176,9 @@ export function useSubmissionsReview(initialSubmissionId?: number) {
           ),
         });
       }
-    } catch (err: any) {
-      setActionErrorMessage(err?.message || 'تعذر حفظ رصد النقص للمؤشر.');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : undefined;
+      setActionErrorMessage(msg || 'تعذر حفظ رصد النقص للمؤشر.');
     }
   };
 
@@ -210,8 +212,9 @@ export function useSubmissionsReview(initialSubmissionId?: number) {
           ),
         });
       }
-    } catch (err: any) {
-      setActionErrorMessage(err?.message || 'تعذر إلغاء رصد النقص عن المؤشر.');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : undefined;
+      setActionErrorMessage(msg || 'تعذر إلغاء رصد النقص عن المؤشر.');
     }
   };
 
@@ -252,8 +255,9 @@ export function useSubmissionsReview(initialSubmissionId?: number) {
           closedAt: new Date().toISOString(),
         });
       }
-    } catch (err: any) {
-      setActionErrorMessage(err?.message || 'تعذر إغلاق المراجعة الإشرافية.');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : undefined;
+      setActionErrorMessage(msg || 'تعذر إغلاق المراجعة الإشرافية.');
     } finally {
       setIsActionLoading(false);
     }
@@ -292,7 +296,7 @@ export function useSubmissionsReview(initialSubmissionId?: number) {
 
       return true;
     });
-  }, [data?.indicators, selectedStandardId, quickFilter, searchQuery, defectiveItems]);
+  }, [data, selectedStandardId, quickFilter, searchQuery, defectiveItems]);
 
   // قائمة المعايير الفريدة لاستعراضها في شريط التصفية
   const standardsList = useMemo(() => {
@@ -305,7 +309,7 @@ export function useSubmissionsReview(initialSubmissionId?: number) {
       }
     });
     return Array.from(map.entries()).map(([id, name]) => ({ id, name }));
-  }, [data?.indicators]);
+  }, [data]);
 
   return {
     reviewData: data,

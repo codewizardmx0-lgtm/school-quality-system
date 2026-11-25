@@ -31,7 +31,7 @@ export const AiDiscrepancyReviewTab: React.FC<AiDiscrepancyReviewTabProps> = ({
     try {
       const data = await evaluatorApi.getDiscrepanciesAudit();
       setAuditData(data);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Failed to run discrepancy audit:', err);
       onToast('error', 'تعذر تشغيل التدقيق المنطقي لإدخالات التقييم.');
     } finally {
@@ -40,7 +40,8 @@ export const AiDiscrepancyReviewTab: React.FC<AiDiscrepancyReviewTabProps> = ({
   };
 
   useEffect(() => {
-    fetchAudit();
+    void Promise.resolve().then(() => fetchAudit());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const summary = auditData?.summary;

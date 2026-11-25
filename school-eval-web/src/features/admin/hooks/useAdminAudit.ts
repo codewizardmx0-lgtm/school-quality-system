@@ -6,6 +6,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { auditApi } from '../api/auditApi';
 import { usersApi } from '../api/usersApi';
+import { extractApiErrorMessage } from '../../../api/apiTypes';
 
 
 import type { AuditLogEntry, BlockedIp, User } from '../types/admin.types';
@@ -155,7 +156,15 @@ export function useAdminAudit() {
       if (logsRes.data) {
         setLogs(logsRes.data);
         if (logsRes.meta) {
-          const m = logsRes.meta as any;
+          const m = logsRes.meta as {
+            currentPage?: number;
+            current_page?: number;
+            page?: number;
+            lastPage?: number;
+            last_page?: number;
+            total?: number;
+            stats?: typeof auditStats;
+          };
           setCurrentPage(m.currentPage ?? m.current_page ?? m.page ?? page);
           setTotalPages(m.lastPage ?? m.last_page ?? 1);
           setTotalCount(m.total ?? logsRes.data.length);
@@ -167,15 +176,15 @@ export function useAdminAudit() {
         }
       }
       if (ipsRes.data) setBlockedIps(ipsRes.data);
-    } catch (err: any) {
-      setError(err?.message || 'فشل في تحميل سجلات التدقيق الأمني');
+    } catch (err: unknown) {
+      setError(extractApiErrorMessage(err, 'فشل في تحميل سجلات التدقيق الأمني'));
     } finally {
       setLoading(false);
     }
   }, [selectedActions, actionType, actor, currentPage, rawUsers, searchQuery, timeScope]);
 
   useEffect(() => {
-    void fetchData();
+    void Promise.resolve().then(() => fetchData());
   }, [fetchData]);
 
   const unblockIp = useCallback(async (payload: { ip?: string; ipId?: number }): Promise<boolean> => {

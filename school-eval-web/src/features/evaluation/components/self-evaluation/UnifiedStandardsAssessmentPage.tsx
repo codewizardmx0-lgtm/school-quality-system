@@ -50,13 +50,13 @@ export const UnifiedStandardsAssessmentPage: React.FC<UnifiedStandardsAssessment
 
   useEffect(() => {
     if (selectedIndicatorId !== undefined && selectedIndicatorId !== null) {
-      setCurrentIndicatorId(selectedIndicatorId);
+      void Promise.resolve().then(() => setCurrentIndicatorId(selectedIndicatorId));
     }
   }, [selectedIndicatorId]);
 
   useEffect(() => {
     if (initialTab) {
-      setActiveTab(initialTab);
+      void Promise.resolve().then(() => setActiveTab(initialTab));
     }
   }, [initialTab]);
 

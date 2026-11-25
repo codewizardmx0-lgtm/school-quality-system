@@ -6,6 +6,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { standardsApi } from '../api/standardsApi';
+import { extractApiErrorMessage } from '../../../api/apiTypes';
 import type {
   DiffLogResponse,
   VersionLockPreconditions,
@@ -31,15 +32,15 @@ export function useVersionAuditLock(versionId?: number | string) {
       ]);
       setDiffData(diffRes);
       setPreconditions(preRes);
-    } catch (err: any) {
-      setError(err?.message || 'فشل تحميل بيانات التدقيق والشروط الحاكمة.');
+    } catch (err: unknown) {
+      setError(extractApiErrorMessage(err, 'فشل تحميل بيانات التدقيق والشروط الحاكمة.'));
     } finally {
       setIsLoading(false);
     }
   }, [versionId]);
 
   useEffect(() => {
-    fetchAuditData();
+    void Promise.resolve().then(() => fetchAuditData());
   }, [fetchAuditData]);
 
   // حالة الإصدار والإقرار
@@ -56,8 +57,8 @@ export function useVersionAuditLock(versionId?: number | string) {
       await standardsApi.lockVersion(versionId, payload);
       setIsLockedSuccessfully(true);
       await fetchAuditData();
-    } catch (err: any) {
-      setError(err?.message || 'تعذر إقرار وقفل وثيقة المعايير.');
+    } catch (err: unknown) {
+      setError(extractApiErrorMessage(err, 'تعذر إقرار وقفل وثيقة المعايير.'));
       throw err;
     } finally {
       setIsLocking(false);
@@ -70,8 +71,8 @@ export function useVersionAuditLock(versionId?: number | string) {
     try {
       const result = await standardsApi.exportPdfReport(versionId);
       return result;
-    } catch (err: any) {
-      setError(err?.message || 'تعذر تصدير تقرير الإقرار المعياري PDF.');
+    } catch (err: unknown) {
+      setError(extractApiErrorMessage(err, 'تعذر تصدير تقرير الإقرار المعياري PDF.'));
       throw err;
     }
   };

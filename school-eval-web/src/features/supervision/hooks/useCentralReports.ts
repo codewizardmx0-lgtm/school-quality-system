@@ -5,6 +5,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { supervisionApi } from '../api/supervisionApi';
+import { extractApiErrorMessage } from '../../../api/apiTypes';
 import type { AvailableCycleSummary, CentralReportsData, HistoricalComparisonData } from '../api/supervisionTypes';
 import {
   exportCentralStandardsMatrixToExcel,
@@ -74,8 +75,8 @@ export function useCentralReports(schoolId?: number) {
       if (selectedCycleId === undefined && result.activeCycleId) {
         setSelectedCycleId(result.activeCycleId);
       }
-    } catch (err: any) {
-      setAnalyticsError(err?.message || 'تعذر استرجاع مؤشرات التحليل المركزي.');
+    } catch (err: unknown) {
+      setAnalyticsError(extractApiErrorMessage(err, 'تعذر استرجاع مؤشرات التحليل المركزي.'));
     } finally {
       setIsLoadingAnalytics(false);
     }
@@ -97,19 +98,19 @@ export function useCentralReports(schoolId?: number) {
     try {
       const result = await supervisionApi.getHistoricalComparison(schoolId, baseCycle, compareCycle);
       setHistoricalData(result);
-    } catch (err: any) {
-      setHistoricalError(err?.message || 'تعذر استرجاع المقارنة التاريخية للمدرسة.');
+    } catch (err: unknown) {
+      setHistoricalError(extractApiErrorMessage(err, 'تعذر استرجاع المقارنة التاريخية للمدرسة.'));
     } finally {
       setIsLoadingHistorical(false);
     }
   }, [schoolId, baseCycle, compareCycle]);
 
   useEffect(() => {
-    fetchAnalytics();
+    void Promise.resolve().then(() => fetchAnalytics());
   }, [fetchAnalytics]);
 
   useEffect(() => {
-    fetchHistorical();
+    void Promise.resolve().then(() => fetchHistorical());
   }, [fetchHistorical]);
 
   // تصفية المعايير بحسب المستوى
@@ -119,7 +120,7 @@ export function useCentralReports(schoolId?: number) {
     return analyticsData.standardsMeans.filter(
       (item) => item.status === selectedBenchmarkFilter
     );
-  }, [analyticsData?.standardsMeans, selectedBenchmarkFilter]);
+  }, [analyticsData, selectedBenchmarkFilter]);
 
   // تصدير التحليلات المركزية إلى Excel (3 أوراق عمل RTL)
   const handleExportAnalyticsExcel = () => {

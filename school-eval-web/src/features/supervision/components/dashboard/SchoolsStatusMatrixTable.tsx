@@ -111,8 +111,8 @@ export const SchoolsStatusMatrixTable: React.FC<SchoolsStatusMatrixTableProps> =
   const sortedSchools = useMemo(() => {
     const list = [...schools];
     return list.sort((a, b) => {
-      let valA: any;
-      let valB: any;
+      let valA: string | number;
+      let valB: string | number;
 
       switch (sortKey) {
         case 'schoolName':

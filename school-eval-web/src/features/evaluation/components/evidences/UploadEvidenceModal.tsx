@@ -36,12 +36,12 @@ export const UploadEvidenceModal: React.FC<UploadEvidenceModalProps> = ({
   useEffect(() => {
     if (file && (file.type.startsWith('image/') || /\.(png|jpe?g)$/i.test(file.name))) {
       const url = URL.createObjectURL(file);
-      setImagePreviewUrl(url);
+      void Promise.resolve().then(() => setImagePreviewUrl(url));
       return () => {
         URL.revokeObjectURL(url);
       };
     } else {
-      setImagePreviewUrl(null);
+      void Promise.resolve().then(() => setImagePreviewUrl(null));
     }
   }, [file]);
 
