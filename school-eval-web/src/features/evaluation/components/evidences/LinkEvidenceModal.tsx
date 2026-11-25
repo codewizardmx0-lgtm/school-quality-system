@@ -55,7 +55,7 @@ export const LinkEvidenceModal: React.FC<LinkEvidenceModalProps> = ({
       setSelectedMultiIndicatorIds(initialIds);
 
       // تهيئة المتطلبات المحددة مسبقاً للشاهد
-      let initialCovered: number[] = [];
+      const initialCovered: number[] = [];
       const evAny = evidence as any;
       if (Array.isArray(evAny.coveredRequirements)) {
         initialCovered.push(...evAny.coveredRequirements);

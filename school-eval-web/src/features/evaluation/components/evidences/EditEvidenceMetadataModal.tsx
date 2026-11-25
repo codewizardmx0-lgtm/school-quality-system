@@ -39,12 +39,10 @@ export const EditEvidenceMetadataModal: React.FC<EditEvidenceMetadataModalProps>
   evidence,
   onSave,
 }) => {
-  if (!isOpen || !evidence) return null;
-
-  const [title, setTitle] = useState(evidence.title || '');
-  const [documentType, setDocumentType] = useState(evidence.documentType || 'evidence');
-  const [description, setDescription] = useState(evidence.description || '');
-  const [justification, setJustification] = useState(evidence.justification || '');
+  const [title, setTitle] = useState(evidence?.title || '');
+  const [documentType, setDocumentType] = useState(evidence?.documentType || 'evidence');
+  const [description, setDescription] = useState(evidence?.description || '');
+  const [justification, setJustification] = useState(evidence?.justification || '');
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -57,6 +55,8 @@ export const EditEvidenceMetadataModal: React.FC<EditEvidenceMetadataModalProps>
       setError(null);
     }
   }, [evidence]);
+
+  if (!isOpen || !evidence) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

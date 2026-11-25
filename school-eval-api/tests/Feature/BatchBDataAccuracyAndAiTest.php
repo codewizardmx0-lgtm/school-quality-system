@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Notification;
 use App\Models\User;
 use Database\Seeders\DemoEvaluationSeeder;
+use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Tests\TestCase;
 
 /**
@@ -12,6 +13,7 @@ use Tests\TestCase;
  */
 class BatchBDataAccuracyAndAiTest extends TestCase
 {
+    use DatabaseTransactions;
     /**
      * التحقق من دقة إحصاءات تغطية الشواهد (312 تغطية / 278 متطلباً / 20 ملفاً فعلياً) (الملاحظة 3)
      */

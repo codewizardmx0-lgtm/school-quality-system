@@ -128,9 +128,22 @@ export const CycleFormTab: React.FC<CycleFormTabProps> = ({
     'المرحلة الأساسية (1-9)',
     'المرحلة الثانوية (10-12)',
   ]);
+  interface CycleAvailableSchool {
+    schoolId?: number;
+    school_id?: number;
+    schoolName?: string;
+    school_name?: string;
+    schoolCode?: string;
+    identification_data?: string;
+    identificationData?: string;
+    governorate?: string;
+    educationalDistrict?: string;
+    educational_district?: string;
+    [key: string]: unknown;
+  }
   const [selectedSchoolIds, setSelectedSchoolIds] = useState<number[]>([]);
   const [enrollAllSchools, setEnrollAllSchools] = useState<boolean>(true);
-  const [availableSchools, setAvailableSchools] = useState<any[]>([]);
+  const [availableSchools, setAvailableSchools] = useState<CycleAvailableSchool[]>([]);
   const [isLoadingSchools, setIsLoadingSchools] = useState<boolean>(false);
   const [schoolSearchQuery, setSchoolSearchQuery] = useState<string>('');
 
@@ -158,7 +171,7 @@ export const CycleFormTab: React.FC<CycleFormTabProps> = ({
       try {
         const v = await supervisionApi.getActiveStandardVersion();
         if (isMounted) setActiveVersion(v);
-      } catch (e) {
+      } catch {
         // Fallback
       } finally {
         if (isMounted) setIsLoadingVersion(false);
@@ -179,9 +192,9 @@ export const CycleFormTab: React.FC<CycleFormTabProps> = ({
           targetGovernorate === 'كافة المحافظات' ? null : targetGovernorate
         );
         if (isMounted) {
-          setAvailableSchools(schools);
+          setAvailableSchools(schools as CycleAvailableSchool[]);
         }
-      } catch (e) {
+      } catch {
         if (isMounted) setAvailableSchools([]);
       } finally {
         if (isMounted) setIsLoadingSchools(false);
@@ -196,9 +209,9 @@ export const CycleFormTab: React.FC<CycleFormTabProps> = ({
   const filteredAvailableSchools = useMemo(() => {
     const q = schoolSearchQuery.trim().toLowerCase();
     if (!q) return availableSchools;
-    return availableSchools.filter((s: any) => {
-      const name = (s.schoolName || s.school_name || '').toLowerCase();
-      const code = (s.schoolCode || s.identification_data || s.identificationData || '').toLowerCase();
+    return availableSchools.filter((s) => {
+      const name = String(s.schoolName || s.school_name || '').toLowerCase();
+      const code = String(s.schoolCode || s.identification_data || s.identificationData || '').toLowerCase();
       return name.includes(q) || code.includes(q);
     });
   }, [availableSchools, schoolSearchQuery]);
@@ -210,7 +223,7 @@ export const CycleFormTab: React.FC<CycleFormTabProps> = ({
       if (selectedCloneCycleId) {
         const sourceCycle = cycles.find((c) => c.cycleId === selectedCloneCycleId);
         if (sourceCycle?.participatingSchools && sourceCycle.participatingSchools.length > 0) {
-          setSelectedSchoolIds(sourceCycle.participatingSchools.map((s: any) => s.schoolId || s.school_id));
+          setSelectedSchoolIds(sourceCycle.participatingSchools.map((s) => s.schoolId));
         }
       }
     }
@@ -282,7 +295,7 @@ export const CycleFormTab: React.FC<CycleFormTabProps> = ({
     // استنساخ المدارس: تفعيل وضع التحديد اليدوي تلقائياً وتحديد مدارس الدورة المستنسخة
     const schools = sourceCycle.participatingSchools || [];
     setEnrollAllSchools(false);
-    setSelectedSchoolIds(schools.map((s: any) => s.schoolId || s.school_id));
+    setSelectedSchoolIds(schools.map((s) => s.schoolId));
   };
 
   const toggleStage = (stage: string) => {
@@ -417,8 +430,9 @@ export const CycleFormTab: React.FC<CycleFormTabProps> = ({
           onSwitchToListTab();
         }, 1400);
       }
-    } catch (err: any) {
-      setSubmitError(err?.message || 'حدث خطأ أثناء معالجة الطلب. يرجى التحقق من المدخلات.');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : undefined;
+      setSubmitError(msg || 'حدث خطأ أثناء معالجة الطلب. يرجى التحقق من المدخلات.');
     } finally {
       setIsSubmitting(false);
     }
@@ -1258,7 +1272,7 @@ export const CycleFormTab: React.FC<CycleFormTabProps> = ({
                         <button
                           type="button"
                           onClick={() => {
-                            const allFilteredIds = filteredAvailableSchools.map((s: any) => s.schoolId || s.school_id);
+                            const allFilteredIds = filteredAvailableSchools.map((s) => Number(s.schoolId || s.school_id || 0));
                             setSelectedSchoolIds((prev) => Array.from(new Set([...prev, ...allFilteredIds])));
                           }}
                           style={{
@@ -1277,7 +1291,7 @@ export const CycleFormTab: React.FC<CycleFormTabProps> = ({
                         <button
                           type="button"
                           onClick={() => {
-                            const filteredIds = new Set(filteredAvailableSchools.map((s: any) => s.schoolId || s.school_id));
+                            const filteredIds = new Set(filteredAvailableSchools.map((s) => Number(s.schoolId || s.school_id || 0)));
                             setSelectedSchoolIds((prev) => prev.filter((id) => !filteredIds.has(id)));
                           }}
                           style={{
@@ -1330,8 +1344,8 @@ export const CycleFormTab: React.FC<CycleFormTabProps> = ({
                           paddingRight: '4px',
                         }}
                       >
-                        {filteredAvailableSchools.map((school: any) => {
-                          const sId = school.schoolId || school.school_id;
+                        {filteredAvailableSchools.map((school) => {
+                          const sId = Number(school.schoolId || school.school_id || 0);
                           const isChecked = selectedSchoolIds.includes(sId);
                           return (
                             <label

@@ -7,10 +7,12 @@ use App\Models\EvidenceLink;
 use App\Models\School;
 use App\Models\User;
 use Database\Seeders\DemoEvaluationSeeder;
+use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Tests\TestCase;
 
 class Batch1EvaluatorDataAndCycleTest extends TestCase
 {
+    use DatabaseTransactions;
     /**
      * التحقق من اكتمال رصد مدرسة الفاروق بنسبة 100% (109 مؤشرات و 109 روابط شواهد).
      */

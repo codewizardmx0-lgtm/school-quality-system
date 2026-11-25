@@ -125,7 +125,7 @@ export const AuditReviewHubPage: React.FC<AuditReviewHubPageProps> = ({
 
     // Sorting
     list.sort((a, b) => {
-      let comparison = 0;
+      let comparison: number;
       switch (sortKey) {
         case 'code':
           comparison = a.indicatorCode.localeCompare(b.indicatorCode, undefined, { numeric: true });

@@ -7,14 +7,17 @@
  * - التمرير حصري لمنطقة المحتوى الداخلية
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { Suspense, lazy, useState, useEffect } from 'react';
 import '../../styles/standards.css';
 import { StandardsSidebar, type StandardsScreenKey } from './StandardsSidebar';
 import { StandardsTopBar } from './StandardsTopBar';
-import { StandardsVersionsPage } from '../versions/StandardsVersionsPage';
-import { StandardVersionWorkspacePage, type WorkspaceTabKey } from '../workspace/StandardVersionWorkspacePage';
-import { StandardsDiffLogPage } from '../diff-log/StandardsDiffLogPage';
+import type { WorkspaceTabKey } from '../workspace/StandardVersionWorkspacePage';
+import { PortalLoader } from '../../../../components/ui/PortalLoader';
 import { useStandardsVersions } from '../../hooks/useStandardsVersions';
+
+const StandardsVersionsPage = lazy(() => import('../versions/StandardsVersionsPage').then((m) => ({ default: m.StandardsVersionsPage })));
+const StandardVersionWorkspacePage = lazy(() => import('../workspace/StandardVersionWorkspacePage').then((m) => ({ default: m.StandardVersionWorkspacePage })));
+const StandardsDiffLogPage = lazy(() => import('../diff-log/StandardsDiffLogPage').then((m) => ({ default: m.StandardsDiffLogPage })));
 
 interface StandardsLayoutProps {
   initialScreen?: StandardsScreenKey;
@@ -213,7 +216,9 @@ export const StandardsLayout: React.FC<StandardsLayoutProps> = ({
             padding: '28px 36px 64px',
           }}
         >
-          {renderScreen()}
+          <Suspense fallback={<PortalLoader inline />}>
+            {renderScreen()}
+          </Suspense>
         </main>
       </div>
     </div>

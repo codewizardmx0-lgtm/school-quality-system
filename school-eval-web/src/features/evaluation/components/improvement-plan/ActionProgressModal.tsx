@@ -19,17 +19,15 @@ export const ActionProgressModal: React.FC<ActionProgressModalProps> = ({
   isSubmitting = false,
   readOnly = false,
 }) => {
-  if (!isOpen || !action) return null;
-
-  const [title, setTitle] = useState<string>(action.title);
-  const [leader, setLeader] = useState<string>(action.leader || '');
-  const [startDate, setStartDate] = useState<string>(action.startDate || '');
-  const [dueDate, setDueDate] = useState<string>(action.dueDate || '');
-  const [status, setStatus] = useState<ActionStatus>(action.status);
-  const [priority, setPriority] = useState<PriorityLevel>(action.priority || 'High');
-  const [targetScore, setTargetScore] = useState<number>(action.targetScore || 3);
-  const [completionPercentage, setCompletionPercentage] = useState<number>(action.completionPercentage);
-  const [progressDescription, setProgressDescription] = useState<string>(action.progressDescription);
+  const [title, setTitle] = useState<string>(action?.title || '');
+  const [leader, setLeader] = useState<string>(action?.leader || '');
+  const [startDate, setStartDate] = useState<string>(action?.startDate || '');
+  const [dueDate, setDueDate] = useState<string>(action?.dueDate || '');
+  const [status, setStatus] = useState<ActionStatus>(action?.status || 'Pending');
+  const [priority, setPriority] = useState<PriorityLevel>(action?.priority || 'High');
+  const [targetScore, setTargetScore] = useState<number>(action?.targetScore || 3);
+  const [completionPercentage, setCompletionPercentage] = useState<number>(action?.completionPercentage ?? 0);
+  const [progressDescription, setProgressDescription] = useState<string>(action?.progressDescription || '');
 
   useEffect(() => {
     if (action) {
@@ -44,6 +42,8 @@ export const ActionProgressModal: React.FC<ActionProgressModalProps> = ({
       setProgressDescription(action.progressDescription);
     }
   }, [action]);
+
+  if (!isOpen || !action) return null;
 
   const handleClose = () => {
     if (isSubmitting) return;

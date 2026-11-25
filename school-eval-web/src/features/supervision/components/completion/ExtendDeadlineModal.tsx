@@ -25,10 +25,8 @@ export const ExtendDeadlineModal: React.FC<ExtendDeadlineModalProps> = ({
   onClose,
   onSuccess,
 }) => {
-  if (!request) return null;
-
-  const currentDeadline = request.deadline || new Date().toISOString().split('T')[0];
-  const cycleEndDate = request.cycleEndDate || null;
+  const currentDeadline = request?.deadline || new Date().toISOString().split('T')[0];
+  const cycleEndDate = request?.cycleEndDate || null;
 
   const [newDeadline, setNewDeadline] = useState<string>(() => {
     const d = new Date(currentDeadline);
@@ -43,6 +41,8 @@ export const ExtendDeadlineModal: React.FC<ExtendDeadlineModalProps> = ({
   const [reason, setReason] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  if (!request) return null;
 
   const handleAddDays = (days: number) => {
     const d = new Date(currentDeadline);

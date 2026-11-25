@@ -28,28 +28,34 @@ import type {
   VerificationTool,
 } from './standardsTypes';
 
+type RawRecord = Record<string, unknown>;
+
+const asRecord = (val: unknown): RawRecord =>
+  val && typeof val === 'object' ? (val as RawRecord) : {};
+
 // Helper to normalize backend envelope response
-const extractData = <T>(res: any): T => {
+const extractData = <T>(res: unknown): T => {
   if (res && typeof res === 'object' && 'data' in res) {
-    return res.data as T;
+    return (res as { data: T }).data;
   }
   return res as T;
 };
 
 // Normalizer to handle both camelCase and snake_case backend payloads safely
-export const normalizeStandardVersion = (v: any): StandardVersionSummary => {
-  if (!v || typeof v !== 'object') return v;
+export const normalizeStandardVersion = (input: unknown): StandardVersionSummary => {
+  if (!input || typeof input !== 'object') return input as StandardVersionSummary;
+  const v = input as RawRecord;
   return {
     versionId: Number(v.versionId ?? v.version_id ?? 1),
     versionNo: String(v.versionNo ?? v.version_no ?? '2026.1'),
-    issueDate: v.issueDate ?? v.issue_date,
-    issueYear: v.issueYear ?? v.issue_year,
-    sourceOrganization: v.sourceOrganization ?? v.source_organization,
-    sourceNumber: v.sourceNumber ?? v.source_number,
-    sourceDescription: v.sourceDescription ?? v.source_description,
-    status: v.status ?? 'Approved',
-    createdAt: v.createdAt ?? v.created_at,
-    updatedAt: v.updatedAt ?? v.updated_at,
+    issueDate: (v.issueDate ?? v.issue_date) as StandardVersionSummary['issueDate'],
+    issueYear: (v.issueYear ?? v.issue_year) as StandardVersionSummary['issueYear'],
+    sourceOrganization: (v.sourceOrganization ?? v.source_organization) as StandardVersionSummary['sourceOrganization'],
+    sourceNumber: (v.sourceNumber ?? v.source_number) as StandardVersionSummary['sourceNumber'],
+    sourceDescription: (v.sourceDescription ?? v.source_description) as StandardVersionSummary['sourceDescription'],
+    status: (v.status ?? 'Approved') as StandardVersionSummary['status'],
+    createdAt: (v.createdAt ?? v.created_at) as StandardVersionSummary['createdAt'],
+    updatedAt: (v.updatedAt ?? v.updated_at) as StandardVersionSummary['updatedAt'],
     standardsCount: Number(v.standardsCount ?? v.standards_count ?? 7),
     indicatorsCount: Number(v.indicatorsCount ?? v.indicators_count ?? 109),
     totalWeight: Number(v.totalWeight ?? v.total_weight ?? 100),
@@ -65,7 +71,7 @@ export const standardsApi = {
   async getVersions(status?: string): Promise<StandardVersionSummary[]> {
     const url = status ? `/standard-versions?status=${encodeURIComponent(status)}` : '/standard-versions';
     const res = await apiClient.get(url);
-    const data = extractData<any>(res);
+    const data = extractData<unknown>(res);
     if (!Array.isArray(data)) return [];
     return data.map(normalizeStandardVersion);
   },
@@ -82,33 +88,33 @@ export const standardsApi = {
         source_number: payload.source_number,
         source_description: payload.source_description,
       });
-      return normalizeStandardVersion(extractData<any>(res));
+      return normalizeStandardVersion(extractData<unknown>(res));
     }
 
     const res = await apiClient.post('/standard-versions', payload);
-    return normalizeStandardVersion(extractData<any>(res));
+    return normalizeStandardVersion(extractData<unknown>(res));
   },
 
   async duplicateVersion(sourceId: number | string, newVersionNo: string): Promise<StandardVersionSummary> {
     const res = await apiClient.post(`/standard-versions/${sourceId}/clone`, {
       version_no: newVersionNo,
     });
-    return normalizeStandardVersion(extractData<any>(res));
+    return normalizeStandardVersion(extractData<unknown>(res));
   },
 
-  async approveVersion(versionId: number | string): Promise<any> {
+  async approveVersion(versionId: number | string): Promise<RawRecord> {
     const res = await apiClient.post(`/standard-versions/${versionId}/approve`);
-    return extractData<any>(res);
+    return extractData<RawRecord>(res);
   },
 
-  async archiveVersion(versionId: number | string): Promise<any> {
+  async archiveVersion(versionId: number | string): Promise<RawRecord> {
     const res = await apiClient.post(`/standard-versions/${versionId}/archive`);
-    return extractData<any>(res);
+    return extractData<RawRecord>(res);
   },
 
-  async deleteVersion(versionId: number | string): Promise<any> {
+  async deleteVersion(versionId: number | string): Promise<RawRecord> {
     const res = await apiClient.delete(`/standard-versions/${versionId}`);
-    return extractData<any>(res);
+    return extractData<RawRecord>(res);
   },
 
   // ==========================================
@@ -116,57 +122,57 @@ export const standardsApi = {
   // ==========================================
   async getStandardsTree(versionId: number | string): Promise<StandardVersionDetail> {
     const res = await apiClient.get(`/standard-versions/${versionId}/tree`);
-    const data = extractData<any>(res);
+    const data = asRecord(extractData<unknown>(res));
     return {
-      versionId: Number(data?.versionId ?? data?.version_id ?? versionId),
-      versionNo: String(data?.versionNo ?? data?.version_no ?? data?.versionName ?? '2026.1'),
-      status: data?.status ?? 'Approved',
-      createdAt: data?.createdAt ?? data?.created_at,
-      standards: data?.standards || [],
+      versionId: Number(data.versionId ?? data.version_id ?? versionId),
+      versionNo: String(data.versionNo ?? data.version_no ?? data.versionName ?? '2026.1'),
+      status: (data.status ?? 'Approved') as StandardVersionDetail['status'],
+      createdAt: (data.createdAt ?? data.created_at) as StandardVersionDetail['createdAt'],
+      standards: (Array.isArray(data.standards) ? data.standards : []) as StandardVersionDetail['standards'],
     };
   },
 
   // المعايير الرئيسية (القرار 4: مرونة إضافة وتعديل وحذف المعيار الرئيسي)
-  async createStandard(versionId: number | string, payload: CreateStandardPayload): Promise<any> {
+  async createStandard(versionId: number | string, payload: CreateStandardPayload): Promise<RawRecord> {
     const res = await apiClient.post(`/standard-versions/${versionId}/standards`, payload);
-    return extractData<any>(res);
+    return extractData<RawRecord>(res);
   },
 
-  async updateStandard(standardId: number | string, payload: UpdateStandardPayload): Promise<any> {
+  async updateStandard(standardId: number | string, payload: UpdateStandardPayload): Promise<RawRecord> {
     const res = await apiClient.put(`/standards/${standardId}`, payload);
-    return extractData<any>(res);
+    return extractData<RawRecord>(res);
   },
 
-  async deleteStandard(standardId: number | string): Promise<any> {
+  async deleteStandard(standardId: number | string): Promise<RawRecord> {
     const res = await apiClient.delete(`/standards/${standardId}`);
-    return extractData<any>(res);
+    return extractData<RawRecord>(res);
   },
 
   // المعايير الفرعية / المجالات
-  async createSubStandard(versionId: number | string, stdId: number | string, payload: CreateSubStandardPayload): Promise<any> {
+  async createSubStandard(versionId: number | string, stdId: number | string, payload: CreateSubStandardPayload): Promise<RawRecord> {
     const res = await apiClient.post(`/standard-versions/${versionId}/standards/${stdId}/sub-standards`, payload);
-    return extractData<any>(res);
+    return extractData<RawRecord>(res);
   },
 
-  async updateSubStandard(subStandardId: number | string, payload: UpdateSubStandardPayload): Promise<any> {
+  async updateSubStandard(subStandardId: number | string, payload: UpdateSubStandardPayload): Promise<RawRecord> {
     const res = await apiClient.put(`/sub-standards/${subStandardId}`, payload);
-    return extractData<any>(res);
+    return extractData<RawRecord>(res);
   },
 
-  async deleteSubStandard(subStandardId: number | string): Promise<any> {
+  async deleteSubStandard(subStandardId: number | string): Promise<RawRecord> {
     const res = await apiClient.delete(`/sub-standards/${subStandardId}`);
-    return extractData<any>(res);
+    return extractData<RawRecord>(res);
   },
 
   // المؤشرات
-  async createIndicator(subStandardId: number | string, payload: CreateIndicatorPayload): Promise<any> {
+  async createIndicator(subStandardId: number | string, payload: CreateIndicatorPayload): Promise<RawRecord> {
     const res = await apiClient.post(`/sub-standards/${subStandardId}/indicators`, payload);
-    return extractData<any>(res);
+    return extractData<RawRecord>(res);
   },
 
-  async updateIndicator(id: number | string, payload: UpdateIndicatorPayload): Promise<any> {
+  async updateIndicator(id: number | string, payload: UpdateIndicatorPayload): Promise<RawRecord> {
     const res = await apiClient.put(`/indicators/${id}`, payload);
-    return extractData<any>(res);
+    return extractData<RawRecord>(res);
   },
 
   async deleteIndicator(id: number | string): Promise<void> {
@@ -207,10 +213,11 @@ export const standardsApi = {
   // ==========================================
   async getVerificationTools(): Promise<{ tools: VerificationTool[]; totalCount: number }> {
     const res = await apiClient.get('/verification-tools');
-    const data = extractData<any>(res);
+    const data = asRecord(extractData<unknown>(res));
+    const tools = (Array.isArray(data.tools) ? data.tools : []) as VerificationTool[];
     return {
-      tools: data?.tools || [],
-      totalCount: data?.totalCount || (data?.tools?.length ?? 0),
+      tools,
+      totalCount: Number(data.totalCount ?? tools.length),
     };
   },
 
@@ -228,26 +235,29 @@ export const standardsApi = {
   // ==========================================
   async getWeights(versionId: number | string): Promise<WeightsCalibrationResponse> {
     const res = await apiClient.get(`/standard-versions/${versionId}/weights`);
-    const raw = extractData<any>(res);
-    const rawStandards = raw?.standards || [];
-    const standards: StandardWeightItem[] = rawStandards.map((s: any) => ({
-      standardId: Number(s.standardId ?? s.standard_id),
-      code: s.code,
-      name: s.name,
+    const raw = asRecord(extractData<unknown>(res));
+    const rawStandards = Array.isArray(raw.standards) ? (raw.standards as RawRecord[]) : [];
+    const standards: StandardWeightItem[] = rawStandards.map((s) => ({
+      standardId: Number(s.standardId ?? s.standard_id ?? 0),
+      code: String(s.code ?? ''),
+      name: String(s.name ?? ''),
       weight: Number(s.weight ?? 0),
       subStandardsCount: Number(s.subStandardsCount ?? s.sub_standards_count ?? 0),
       indicatorsCount: Number(s.indicatorsCount ?? s.indicators_count ?? 0),
       subWeightPerIndicator: Number(s.subWeightPerIndicator ?? s.sub_weight_per_indicator ?? 0),
-      subStandards: (s.subStandards || s.sub_standards || []).map((sub: any) => ({
-        subStandardId: Number(sub.subStandardId ?? sub.sub_standard_id),
-        code: sub.code,
-        name: sub.name,
+      subStandards: (Array.isArray(s.subStandards ?? s.sub_standards)
+        ? ((s.subStandards ?? s.sub_standards) as RawRecord[])
+        : []
+      ).map((sub) => ({
+        subStandardId: Number(sub.subStandardId ?? sub.sub_standard_id ?? 0),
+        code: String(sub.code ?? ''),
+        name: String(sub.name ?? ''),
         weight: Number(sub.weight ?? 0),
         indicatorsCount: Number(sub.indicatorsCount ?? sub.indicators_count ?? 0),
-        indicators: (sub.indicators || []).map((ind: any) => ({
-          indicatorId: Number(ind.indicatorId ?? ind.indicator_id),
-          code: ind.code,
-          name: ind.name,
+        indicators: (Array.isArray(sub.indicators) ? (sub.indicators as RawRecord[]) : []).map((ind) => ({
+          indicatorId: Number(ind.indicatorId ?? ind.indicator_id ?? 0),
+          code: String(ind.code ?? ''),
+          name: String(ind.name ?? ''),
           weight: Number(ind.weight ?? 0),
         })),
       })),
@@ -256,10 +266,10 @@ export const standardsApi = {
     const totalWeight = standards.reduce((acc, s) => acc + s.weight, 0);
 
     return {
-      versionId: Number(raw?.versionId ?? raw?.version_id ?? versionId),
-      versionNo: String(raw?.versionNo ?? raw?.version_no ?? ''),
-      status: raw?.status,
-      isDraft: raw?.isDraft ?? raw?.is_draft ?? (raw?.status === 'Draft'),
+      versionId: Number(raw.versionId ?? raw.version_id ?? versionId),
+      versionNo: String(raw.versionNo ?? raw.version_no ?? ''),
+      status: raw.status as WeightsCalibrationResponse['status'],
+      isDraft: Boolean(raw.isDraft ?? raw.is_draft ?? raw.status === 'Draft'),
       totalWeight: Math.round(totalWeight * 100) / 100,
       isBalanced: Math.abs(totalWeight - 100.0) < 0.001,
       standards,
@@ -269,10 +279,10 @@ export const standardsApi = {
   async updateWeights(
     versionId: number | string,
     payload: UpdateWeightsPayload | Array<{ standard_id: number; weight: number }>
-  ): Promise<any> {
+  ): Promise<RawRecord> {
     const body = Array.isArray(payload) ? { standards_weights: payload } : payload;
     const res = await apiClient.put(`/standard-versions/${versionId}/weights`, body);
-    return extractData<any>(res);
+    return extractData<RawRecord>(res);
   },
 
   async getScoreLevels(versionId?: number | string): Promise<RubricLevelInfo[]> {
@@ -281,7 +291,7 @@ export const standardsApi = {
     return extractData<RubricLevelInfo[]>(res);
   },
 
-  async updateScoreLevels(versionId: number | string, levels: any[]): Promise<RubricLevelInfo[]> {
+  async updateScoreLevels(versionId: number | string, levels: Array<Partial<RubricLevelInfo> & RawRecord>): Promise<RubricLevelInfo[]> {
     const res = await apiClient.put(`/standard-versions/${versionId}/score-levels`, { levels });
     return extractData<RubricLevelInfo[]>(res);
   },
@@ -294,22 +304,23 @@ export const standardsApi = {
       ? `/standard-versions/${versionId}/diff-log?base_version_id=${baseVersionId}`
       : `/standard-versions/${versionId}/diff-log`;
     const res = await apiClient.get(url);
-    const raw = extractData<any>(res);
-    const rs = raw?.real_stats || raw?.realStats;
+    const raw = asRecord(extractData<unknown>(res));
+    const rsRaw = raw.real_stats || raw.realStats;
+    const rs = rsRaw && typeof rsRaw === 'object' ? (rsRaw as RawRecord) : null;
 
     return {
-      versionId: Number(raw?.versionId ?? raw?.version_id ?? versionId),
-      versionNo: String(raw?.versionNo ?? raw?.version_no ?? ''),
-      baselineVersionId: raw?.baselineVersionId ?? raw?.baseline_version_id ?? null,
-      baselineVersionNo: raw?.baselineVersionNo ?? raw?.baseline_version_no ?? rs?.previous_version_no ?? null,
-      hasBaseline: Boolean(raw?.hasBaseline ?? raw?.has_baseline ?? (raw?.baselineVersionNo && raw?.baselineVersionNo !== raw?.versionNo)),
-      status: raw?.status,
-      isDraft: raw?.isDraft ?? raw?.is_draft ?? (raw?.status === 'Draft'),
-      approvalCode: raw?.approvalCode ?? raw?.approval_code,
-      approverName: raw?.approverName ?? raw?.approver_name,
-      approvedAt: raw?.approvedAt ?? raw?.approved_at,
-      integrityHash: String(raw?.integrityHash ?? raw?.integrity_hash ?? ''),
-      releaseNotes: raw?.releaseNotes ?? raw?.release_notes ?? '',
+      versionId: Number(raw.versionId ?? raw.version_id ?? versionId),
+      versionNo: String(raw.versionNo ?? raw.version_no ?? ''),
+      baselineVersionId: (raw.baselineVersionId ?? raw.baseline_version_id ?? null) as number | null,
+      baselineVersionNo: (raw.baselineVersionNo ?? raw.baseline_version_no ?? rs?.previous_version_no ?? null) as string | null,
+      hasBaseline: Boolean(raw.hasBaseline ?? raw.has_baseline ?? (raw.baselineVersionNo && raw.baselineVersionNo !== raw.versionNo)),
+      status: raw.status as DiffLogResponse['status'],
+      isDraft: Boolean(raw.isDraft ?? raw.is_draft ?? raw.status === 'Draft'),
+      approvalCode: (raw.approvalCode ?? raw.approval_code) as string | undefined,
+      approverName: (raw.approverName ?? raw.approver_name) as string | undefined,
+      approvedAt: (raw.approvedAt ?? raw.approved_at) as string | undefined,
+      integrityHash: String(raw.integrityHash ?? raw.integrity_hash ?? ''),
+      releaseNotes: String(raw.releaseNotes ?? raw.release_notes ?? ''),
       realStats: rs ? {
         standardsCount: Number(rs.standardsCount ?? rs.standards_count ?? 0),
         baselineStandardsCount: Number(rs.baselineStandardsCount ?? rs.baseline_standards_count ?? 0),
@@ -324,13 +335,13 @@ export const standardsApi = {
         baselineTotalWeight: Number(rs.baselineTotalWeight ?? rs.baseline_total_weight ?? 100),
         isWeightBalanced: Boolean(rs.isWeightBalanced ?? rs.is_weight_balanced ?? rs.isBalanced),
         hasBaseline: Boolean(rs.hasBaseline ?? rs.has_baseline),
-        baselineVersionNo: rs.baselineVersionNo ?? rs.baseline_version_no ?? null,
+        baselineVersionNo: (rs.baselineVersionNo ?? rs.baseline_version_no ?? null) as string | null,
       } : undefined,
-      diffs: raw?.diffs || [],
-      standardsComparison: raw?.standardsComparison || raw?.standards_comparison || [],
-      indicatorsComparison: raw?.indicatorsComparison || raw?.indicators_comparison || [],
-      rubricsComparison: raw?.rubricsComparison || raw?.rubrics_comparison || [],
-      stats: raw?.stats || {
+      diffs: (Array.isArray(raw.diffs) ? raw.diffs : []) as DiffLogResponse['diffs'],
+      standardsComparison: (raw.standardsComparison || raw.standards_comparison || []) as DiffLogResponse['standardsComparison'],
+      indicatorsComparison: (raw.indicatorsComparison || raw.indicators_comparison || []) as DiffLogResponse['indicatorsComparison'],
+      rubricsComparison: (raw.rubricsComparison || raw.rubrics_comparison || []) as DiffLogResponse['rubricsComparison'],
+      stats: (raw.stats as DiffLogResponse['stats']) || {
         addedCount: 0,
         modifiedCount: 0,
         reweightedCount: 0,
@@ -341,22 +352,22 @@ export const standardsApi = {
 
   async getLockPreconditions(versionId: number | string): Promise<VersionLockPreconditions> {
     const res = await apiClient.get(`/standard-versions/${versionId}/lock-preconditions`);
-    const raw = extractData<any>(res);
+    const raw = asRecord(extractData<unknown>(res));
     return {
-      versionId: Number(raw?.versionId ?? raw?.version_id ?? versionId),
-      versionNo: String(raw?.versionNo ?? raw?.version_no ?? ''),
-      status: raw?.status,
-      isDraft: raw?.isDraft ?? raw?.is_draft ?? (raw?.status === 'Draft'),
-      approvalCode: raw?.approvalCode ?? raw?.approval_code,
-      passesAll: Boolean(raw?.passesAll ?? raw?.passes_all ?? false),
-      isScaleSupported: Boolean(raw?.isScaleSupported ?? raw?.is_scale_supported ?? true),
-      integrityHash: String(raw?.integrityHash ?? raw?.integrity_hash ?? ''),
-      totalWeight: Number(raw?.totalWeight ?? raw?.total_weight ?? 100),
-      indicatorsCount: Number(raw?.indicatorsCount ?? raw?.indicators_count ?? 0),
-      standardsCount: Number(raw?.standardsCount ?? raw?.standards_count ?? 0),
-      checks: (raw?.checks || []).map((c: any) => ({
+      versionId: Number(raw.versionId ?? raw.version_id ?? versionId),
+      versionNo: String(raw.versionNo ?? raw.version_no ?? ''),
+      status: raw.status as VersionLockPreconditions['status'],
+      isDraft: Boolean(raw.isDraft ?? raw.is_draft ?? raw.status === 'Draft'),
+      approvalCode: (raw.approvalCode ?? raw.approval_code) as string | undefined,
+      passesAll: Boolean(raw.passesAll ?? raw.passes_all ?? false),
+      isScaleSupported: Boolean(raw.isScaleSupported ?? raw.is_scale_supported ?? true),
+      integrityHash: String(raw.integrityHash ?? raw.integrity_hash ?? ''),
+      totalWeight: Number(raw.totalWeight ?? raw.total_weight ?? 100),
+      indicatorsCount: Number(raw.indicatorsCount ?? raw.indicators_count ?? 0),
+      standardsCount: Number(raw.standardsCount ?? raw.standards_count ?? 0),
+      checks: (Array.isArray(raw.checks) ? (raw.checks as RawRecord[]) : []).map((c) => ({
         id: Number(c.id),
-        key: c.key,
+        key: String(c.key ?? '') as VersionLockPreconditions['checks'][number]['key'],
         title: String(c.title),
         passed: Boolean(c.passed),
         details: String(c.details),
@@ -365,7 +376,7 @@ export const standardsApi = {
     };
   },
 
-  async lockVersion(versionId: number | string, payload: LockVersionPayload): Promise<any> {
+  async lockVersion(versionId: number | string, payload: LockVersionPayload): Promise<RawRecord> {
     const body = {
       approval_code: payload.approval_code ?? payload.approvalCode,
       legal_confirmation: payload.legal_confirmation ?? payload.legalConfirmation ?? true,
@@ -373,14 +384,16 @@ export const standardsApi = {
       action: payload.action ?? 'approve',
     };
     const res = await apiClient.post(`/standard-versions/${versionId}/lock`, body);
-    return extractData<any>(res);
+    return extractData<RawRecord>(res);
   },
 
   // ==========================================
   // 6. التصدير الرسمي
   // ==========================================
   async exportPdfReport(versionId: number | string): Promise<{ downloadUrl?: string; message?: string }> {
-    const baseURL = (import.meta as any).env?.VITE_API_BASE_URL || '/api/v1';
+    const baseURL =
+      (import.meta as unknown as { env?: Record<string, string | undefined> }).env?.VITE_API_BASE_URL ||
+      '/api/v1';
     const token =
       sessionStorage.getItem('school_eval_auth_token') ||
       localStorage.getItem('school_eval_auth_token');

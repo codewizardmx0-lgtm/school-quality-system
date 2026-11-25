@@ -161,8 +161,9 @@ export const CreateCompletionRequestPage: React.FC<CreateCompletionRequestPagePr
 
   // سقف مهلة الاستكمال من الدورة التقييمية (الافتراضي: 14 يوماً وفق الحوكمة)
   const maxAllowedDays: number = (reviewData as any)?.cycleMaxCompletionDays || 14;
-  const todayStr = new Date().toISOString().split('T')[0];
-  const maxAllowedDateStr = new Date(Date.now() + maxAllowedDays * 86400000).toISOString().split('T')[0];
+  const [mountTimestamp] = useState<number>(() => Date.now());
+  const todayStr = new Date(mountTimestamp).toISOString().split('T')[0];
+  const maxAllowedDateStr = new Date(mountTimestamp + maxAllowedDays * 86400000).toISOString().split('T')[0];
   const effectiveMaxDeadline = cycleEndDate
     ? (new Date(cycleEndDate) < new Date(maxAllowedDateStr) ? cycleEndDate.split('T')[0] : maxAllowedDateStr)
     : maxAllowedDateStr;

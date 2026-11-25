@@ -36,10 +36,20 @@ export function getStandardTimestamp(): string {
  * تصدير هيكل الشجرة المعيارية إلى مصنف Excel (.xlsx) مع الترويسة الوزارية الرسمية وبيانات الإصدار
  */
 export function exportStandardsTreeToExcel(
-  treeData: StandardVersionDetail | { versionName?: string; versionNo?: string; status?: string; standards: StandardNode[] },
+  treeData:
+    | StandardVersionDetail
+    | {
+        versionName?: string;
+        versionNo?: string;
+        status?: string;
+        issueDate?: string;
+        sourceNumber?: string;
+        sourceOrganization?: string;
+        standards: StandardNode[];
+      },
   metadata?: StandardsExportMetadata
 ): void {
-  const rows: Array<Record<string, any>> = [];
+  const rows: Array<Record<string, string | number>> = [];
 
   const standards = treeData.standards || [];
 
@@ -101,10 +111,11 @@ export function exportStandardsTreeToExcel(
     });
   });
 
+  const metaTree = treeData as Partial<StandardsExportMetadata>;
   // استخلاص بيانات الترويسة الرسمية (الملاحظة 10)
-  const versionNo = metadata?.versionNo || (treeData as any).versionNo || '2026.1';
-  const versionName = metadata?.versionName || (treeData as any).versionName || 'وثيقة المعايير الوطنية المطورة للتقويم المدرسي';
-  const rawStatus = (metadata?.status || (treeData as any).status || 'Draft').toLowerCase();
+  const versionNo = metadata?.versionNo || metaTree.versionNo || '2026.1';
+  const versionName = metadata?.versionName || metaTree.versionName || 'وثيقة المعايير الوطنية المطورة للتقويم المدرسي';
+  const rawStatus = (metadata?.status || metaTree.status || 'Draft').toLowerCase();
   const statusLabel =
     rawStatus === 'active'
       ? 'مُقرّ ونافذ حاكم للدورة الجارية'
@@ -113,9 +124,9 @@ export function exportStandardsTreeToExcel(
       : rawStatus === 'draft'
       ? 'مسودة قيد التطوير والمراجعة'
       : 'إصدار سابق مؤرشف';
-  const issueDate = metadata?.issueDate || (treeData as any).issueDate || new Date().toISOString().split('T')[0];
-  const sourceNumber = metadata?.sourceNumber || (treeData as any).sourceNumber || 'قرار وزاري رقم (14) لسنة 2026م';
-  const sourceOrg = metadata?.sourceOrganization || (treeData as any).sourceOrganization || 'وزارة التربية والتعليم والبحث العلمي';
+  const issueDate = metadata?.issueDate || metaTree.issueDate || new Date().toISOString().split('T')[0];
+  const sourceNumber = metadata?.sourceNumber || metaTree.sourceNumber || 'قرار وزاري رقم (14) لسنة 2026م';
+  const sourceOrg = metadata?.sourceOrganization || metaTree.sourceOrganization || 'وزارة التربية والتعليم والبحث العلمي';
   const exportTimestamp = new Date().toLocaleString('ar-YE', { dateStyle: 'full', timeStyle: 'short' });
 
   // أسطر الترويسة الوزارية الرسمية
@@ -165,7 +176,7 @@ export function exportWeightsTableToExcel(
   versionNo: string,
   metadata?: StandardsExportMetadata
 ): void {
-  const rows: Array<Record<string, any>> = weights.map((w, index) => ({
+  const rows: Array<Record<string, string | number>> = weights.map((w, index) => ({
     'الرقم': index + 1,
     'كود المعيار': w.code,
     'اسم المعيار الوطني': w.name,

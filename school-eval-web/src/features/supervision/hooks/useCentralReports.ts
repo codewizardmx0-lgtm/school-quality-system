@@ -5,7 +5,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { supervisionApi } from '../api/supervisionApi';
-import type { CentralReportsData, HistoricalComparisonData } from '../api/supervisionTypes';
+import type { AvailableCycleSummary, CentralReportsData, HistoricalComparisonData } from '../api/supervisionTypes';
 import {
   exportCentralStandardsMatrixToExcel,
   exportHistoricalComparisonToExcel,
@@ -35,7 +35,7 @@ export function useCentralReports(schoolId?: number) {
   const [historicalData, setHistoricalData] = useState<HistoricalComparisonData | null>(null);
   const [isLoadingHistorical, setIsLoadingHistorical] = useState<boolean>(false);
   const [historicalError, setHistoricalError] = useState<string | null>(null);
-  const [availableCycles, setAvailableCycles] = useState<any[]>([]);
+  const [availableCycles, setAvailableCycles] = useState<AvailableCycleSummary[]>([]);
 
   const [baseCycle, setBaseCycle] = useState<string>('2025/2026');
   const [compareCycle, setCompareCycle] = useState<string>('2024/2025');
@@ -47,13 +47,13 @@ export function useCentralReports(schoolId?: number) {
       if (isMounted && Array.isArray(cycles)) {
         setAvailableCycles(cycles);
         if (cycles.length > 0) {
-          const sorted = [...cycles].sort((a, b) => ((b.cycleId || b.id || 0) - (a.cycleId || a.id || 0)));
+          const sorted = [...cycles].sort((a, b) => Number(b.cycleId || b.id || 0) - Number(a.cycleId || a.id || 0));
           const c0 = sorted[0]?.academicYear || sorted[0]?.academic_year;
           // اختيار الدورة السابقة الأحدث حصراً التي تختلف عن الدورة الحالية
           const c1Item = sorted.find((c, idx) => idx > 0 && (c.academicYear || c.academic_year) !== c0);
           const c1 = c1Item?.academicYear || c1Item?.academic_year;
-          if (c0) setBaseCycle(c0);
-          if (c1) setCompareCycle(c1);
+          if (typeof c0 === 'string' && c0) setBaseCycle(c0);
+          if (typeof c1 === 'string' && c1) setCompareCycle(c1);
         }
       }
     }).catch(() => {});

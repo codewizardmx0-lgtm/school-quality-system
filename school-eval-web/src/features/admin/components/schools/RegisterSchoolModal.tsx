@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { X, School as SchoolIcon, RefreshCw } from 'lucide-react';
 import { theme } from '../../theme';
 import { schoolsApi } from '../../api/schoolsApi';
@@ -35,27 +35,9 @@ export const RegisterSchoolModal: React.FC<RegisterSchoolModalProps> = ({
   });
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
-
-  // 1. Load Governorates on open
-  useEffect(() => {
-    if (!isOpen) return;
-    setIsCodeCustom(false);
-    schoolsApi
-      .getGovernorates()
-      .then((res) => {
-        if (res.data && res.data.length > 0) {
-          setGovernorates(res.data);
-          const firstGov = res.data[0];
-          setSelectedGovId(firstGov.governorateId);
-          loadDirectoratesAndCode(firstGov.governorateId, firstGov.nameAr, false);
-        }
-      })
-      .catch((err) => console.warn('Failed to fetch governorates:', err));
-  }, [isOpen]);
-
   const [isSuggestingCode, setIsSuggestingCode] = useState(false);
 
-  const loadDirectoratesAndCode = async (govId: number, govName: string, userEditedCode: boolean) => {
+  const loadDirectoratesAndCode = useCallback(async (govId: number, govName: string, userEditedCode: boolean) => {
     try {
       const dirRes = await schoolsApi.getDirectorates(govId);
       const dirs = (dirRes && Array.isArray(dirRes.data)) ? dirRes.data : [];
@@ -89,7 +71,24 @@ export const RegisterSchoolModal: React.FC<RegisterSchoolModalProps> = ({
         console.warn('Failed to suggest school code:', err);
       }
     }
-  };
+  }, []);
+
+  // 1. Load Governorates on open
+  useEffect(() => {
+    if (!isOpen) return;
+    setIsCodeCustom(false);
+    schoolsApi
+      .getGovernorates()
+      .then((res) => {
+        if (res.data && res.data.length > 0) {
+          setGovernorates(res.data);
+          const firstGov = res.data[0];
+          setSelectedGovId(firstGov.governorateId);
+          loadDirectoratesAndCode(firstGov.governorateId, firstGov.nameAr, false);
+        }
+      })
+      .catch((err) => console.warn('Failed to fetch governorates:', err));
+  }, [isOpen, loadDirectoratesAndCode]);
 
   const handleRegenerateCode = async () => {
     setIsSuggestingCode(true);

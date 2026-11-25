@@ -36,21 +36,30 @@ export const InteractiveDonutChart: React.FC<InteractiveDonutChartProps> = ({
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
 
-  // حساب أقواس الدائرة لكل شريحة
-  let accumulatedAngle = 0;
-  const segmentsWithArcs = segments.map((seg) => {
+  // حساب أقواس الدائرة لكل شريحة بدون تعديل متغير خارجي أثناء التصيير
+  const segmentsWithArcs = segments.reduce<
+    Array<
+      DonutSegment & {
+        percentage: number;
+        strokeDasharray: string;
+        strokeDashoffset: number;
+        _nextAngle: number;
+      }
+    >
+  >((acc, seg) => {
+    const prevAngle = acc.length > 0 ? acc[acc.length - 1]._nextAngle : 0;
     const fraction = total > 0 ? seg.value / total : 0;
     const strokeDasharray = `${fraction * circumference} ${circumference}`;
-    const strokeDashoffset = -accumulatedAngle * circumference;
-    accumulatedAngle += fraction;
-
-    return {
+    const strokeDashoffset = -prevAngle * circumference;
+    acc.push({
       ...seg,
       percentage: total > 0 ? Math.round(fraction * 100) : 0,
       strokeDasharray,
       strokeDashoffset,
-    };
-  });
+      _nextAngle: prevAngle + fraction,
+    });
+    return acc;
+  }, []);
 
   const activeSegment = segmentsWithArcs.find((s) => s.id === activeSegmentId);
 

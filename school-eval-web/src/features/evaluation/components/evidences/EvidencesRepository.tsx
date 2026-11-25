@@ -3,6 +3,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useEvidences } from '../../hooks/useEvidences';
 import { evaluatorApi } from '../../api/evaluatorApi';
 import { EvidenceCard } from './EvidenceCard';
+import { EvidenceVaultStatsCards } from './EvidenceVaultStatsCards';
 import { LinkEvidenceModal } from './LinkEvidenceModal';
 import { EditEvidenceMetadataModal } from './EditEvidenceMetadataModal';
 import { EvidenceInventoryPage } from './EvidenceInventoryPage';
@@ -12,14 +13,12 @@ import { UploadEvidenceModal } from './UploadEvidenceModal';
 import { DocumentVersionsModal } from './DocumentVersionsModal';
 import { OldEvidenceVersionsView } from './OldEvidenceVersionsView';
 import { useAuth } from '../../../auth/AuthContext';
+import { extractApiErrorMessage } from '../../../../api/apiTypes';
 import { designTokens } from '../../../../styles/designTokens';
 import type { EvidenceItem, EvaluatorScreen } from '../../api/evaluationTypes';
 import {
   FolderLock,
   Lock,
-  CheckCircle2,
-  AlertTriangle,
-  HardDrive,
   UploadCloud,
   Search,
   Download,
@@ -271,7 +270,7 @@ export const EvidencesRepository: React.FC<EvidencesRepositoryProps> = ({
 
       // 6. Replacement / Flagged filter
       if (needsReplacementOnly) {
-        const needsRep = Boolean((item as any).needsReplacement || item.versionNumber > 1);
+        const needsRep = Boolean(item.needsReplacement || item.versionNumber > 1);
         if (!needsRep) return false;
       }
 
@@ -298,7 +297,7 @@ export const EvidencesRepository: React.FC<EvidencesRepositoryProps> = ({
 
   const sortedEvidences = React.useMemo(() => {
     return [...filteredEvidences].sort((a, b) => {
-      let comparison = 0;
+      let comparison: number;
       if (sortField === 'title') {
         comparison = a.title.localeCompare(b.title, 'ar');
       } else if (sortField === 'version') {
@@ -358,10 +357,9 @@ export const EvidencesRepository: React.FC<EvidencesRepositoryProps> = ({
       await evaluatorApi.deleteUnlinkedDocument(evidence.documentId);
       addToast('success', `تم حذف الشاهد «${evidence.title}» نهائياً بنجاح.`);
       await fetchEvidences();
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Failed to delete unlinked evidence:', err);
-      const msg = err?.response?.data?.message || err?.message || 'فشل حذف الشاهد.';
-      addToast('error', msg);
+      addToast('error', extractApiErrorMessage(err, 'فشل حذف الشاهد.'));
     }
   };
 
@@ -540,169 +538,11 @@ export const EvidencesRepository: React.FC<EvidencesRepositoryProps> = ({
         <>
 
       {/* 1. Four Vault Stat Cards */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
-          gap: '16px',
-        }}
-      >
-        {/* Card 1: إجمالي وثائق الشواهد المودعة */}
-        <div
-          style={{
-            backgroundColor: '#FFFFFF',
-            borderRadius: '12px',
-            padding: '20px',
-            border: '1px solid #E2E8F0',
-            boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: '12.5px', fontWeight: 700, color: '#64748B' }}>
-              إجمالي وثائق الشواهد المودعة
-            </span>
-            <div
-              style={{
-                width: '36px',
-                height: '36px',
-                borderRadius: '8px',
-                backgroundColor: '#ECFDF5',
-                color: '#059669',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              <FolderLock size={18} />
-            </div>
-          </div>
-          <div style={{ fontSize: '28px', fontWeight: 900, color: '#0F172A', marginTop: '10px' }}>
-            {stats.totalEvidences}{' '}
-            <span style={{ fontSize: '13px', fontWeight: 600, color: '#64748B' }}>وثيقة</span>
-          </div>
-          <div style={{ fontSize: '11.5px', color: '#059669', marginTop: '4px', fontWeight: 600 }}>
-            تغطي {coveredIndicators} من أصل {totalIndicators} مؤشراً معيارياً ({Math.min(100, Math.round((coveredIndicators / totalIndicators) * 100))}%)
-          </div>
-        </div>
-
-        {/* Card 2: شواهد مطابقة ومعتمدة داخلياً */}
-        <div
-          style={{
-            backgroundColor: '#FFFFFF',
-            borderRadius: '12px',
-            padding: '20px',
-            border: '1px solid #E2E8F0',
-            boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: '12.5px', fontWeight: 700, color: '#64748B' }}>
-              شواهد مطابقة ومعتمدة داخلياً
-            </span>
-            <div
-              style={{
-                width: '36px',
-                height: '36px',
-                borderRadius: '8px',
-                backgroundColor: '#ECFDF5',
-                color: '#10B981',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              <CheckCircle2 size={18} />
-            </div>
-          </div>
-          <div style={{ fontSize: '28px', fontWeight: 900, color: '#059669', marginTop: '10px' }}>
-            {stats.compliantEvidences}{' '}
-            <span style={{ fontSize: '13px', fontWeight: 600, color: '#64748B' }}>وثيقة</span>
-          </div>
-          <div style={{ fontSize: '11.5px', color: '#059669', marginTop: '4px', fontWeight: 600 }}>
-            مستوفية لشروط التوثيق
-          </div>
-        </div>
-
-        {/* Card 3: شواهد تتطلب استبدال / استكمال */}
-        <div
-          style={{
-            backgroundColor: '#FFFFFF',
-            borderRadius: '12px',
-            padding: '20px',
-            border: '1px solid #E2E8F0',
-            boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: '12.5px', fontWeight: 700, color: '#64748B' }}>
-              شواهد تتطلب استبدال / استكمال
-            </span>
-            <div
-              style={{
-                width: '36px',
-                height: '36px',
-                borderRadius: '8px',
-                backgroundColor: '#FFFBEB',
-                color: '#D97706',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              <AlertTriangle size={18} />
-            </div>
-          </div>
-          <div style={{ fontSize: '28px', fontWeight: 900, color: '#D97706', marginTop: '10px' }}>
-            {stats.needsReplacement}{' '}
-            <span style={{ fontSize: '13px', fontWeight: 600, color: '#64748B' }}>
-              {stats.needsReplacement === 1 ? 'وثيقة' : stats.needsReplacement === 2 ? 'وثيقتان' : 'وثائق'}
-            </span>
-          </div>
-          <div style={{ fontSize: '11.5px', color: '#B45309', marginTop: '4px', fontWeight: 600 }}>
-            بحاجة لتحديث النسخة أو اعتمادها
-          </div>
-        </div>
-
-        {/* Card 4: المساحة التخزينية للمستودع */}
-        <div
-          style={{
-            backgroundColor: '#FFFFFF',
-            borderRadius: '12px',
-            padding: '20px',
-            border: '1px solid #E2E8F0',
-            boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: '12.5px', fontWeight: 700, color: '#64748B' }}>
-              المساحة التخزينية للمستودع
-            </span>
-            <div
-              style={{
-                width: '36px',
-                height: '36px',
-                borderRadius: '8px',
-                backgroundColor: '#EFF6FF',
-                color: '#2563EB',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              <HardDrive size={18} />
-            </div>
-          </div>
-          <div style={{ fontSize: '28px', fontWeight: 900, color: '#0F172A', marginTop: '10px' }}>
-            {stats.storageUsedMb}{' '}
-            <span style={{ fontSize: '13px', fontWeight: 600, color: '#64748B' }}>
-              MB من {stats.storageLimitMb} MB
-            </span>
-          </div>
-          <div style={{ height: '6px', backgroundColor: '#F1F5F9', borderRadius: '4px', overflow: 'hidden', marginTop: '8px' }}>
-            <div style={{ height: '100%', width: `${stats.storagePercentage}%`, backgroundColor: '#2563EB', borderRadius: '4px' }} />
-          </div>
-        </div>
-      </div>
+      <EvidenceVaultStatsCards
+        stats={stats}
+        coveredIndicators={coveredIndicators}
+        totalIndicators={totalIndicators}
+      />
 
       {/* 2. Controls & Filter Bar */}
       <div

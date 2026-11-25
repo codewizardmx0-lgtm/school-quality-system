@@ -1,19 +1,22 @@
-import React, { useState, useEffect } from 'react';
+import React, { Suspense, lazy, useState, useEffect } from 'react';
 import { useAuth } from './features/auth/AuthContext';
 import { LoginPage } from './features/auth/LoginPage';
-import { ResetPasswordPage } from './features/auth/ResetPasswordPage';
 import { Sidebar } from './components/Sidebar';
 import { TopNavbar } from './components/TopNavbar';
-import { DashboardPage } from './components/DashboardPage';
-import { MaintenancePage } from './components/MaintenancePage';
-import { AdminLayout } from './features/admin';
-import type { AdminScreen } from './features/admin';
-import { EvaluatorLayout } from './features/evaluation';
-import type { EvaluatorScreen } from './features/evaluation';
-import { StandardsLayout, type StandardsScreenKey } from './features/standards';
-import { SupervisionLayout, type SupervisionScreenKey } from './features/supervision';
+import { PortalLoader } from './components/ui/PortalLoader';
+import type { AdminScreen } from './features/admin/types/admin.types';
+import type { EvaluatorScreen } from './features/evaluation/api/evaluationTypes';
+import type { StandardsScreenKey } from './features/standards/components/layout/StandardsSidebar';
+import type { SupervisionScreenKey } from './features/supervision/api/supervisionTypes';
 import { theme } from './styles/theme';
-import { Loader2 } from 'lucide-react';
+
+const ResetPasswordPage = lazy(() => import('./features/auth/ResetPasswordPage').then((m) => ({ default: m.ResetPasswordPage })));
+const DashboardPage = lazy(() => import('./components/DashboardPage').then((m) => ({ default: m.DashboardPage })));
+const MaintenancePage = lazy(() => import('./components/MaintenancePage').then((m) => ({ default: m.MaintenancePage })));
+const AdminLayout = lazy(() => import('./features/admin/components/layout/AdminLayout').then((m) => ({ default: m.AdminLayout })));
+const EvaluatorLayout = lazy(() => import('./features/evaluation/components/layout/EvaluatorLayout').then((m) => ({ default: m.EvaluatorLayout })));
+const StandardsLayout = lazy(() => import('./features/standards/components/layout/StandardsLayout').then((m) => ({ default: m.StandardsLayout })));
+const SupervisionLayout = lazy(() => import('./features/supervision/components/layout/SupervisionLayout').then((m) => ({ default: m.SupervisionLayout })));
 
 export const AppContent: React.FC = () => {
   const { user, isAuthenticated, isLoading, logout } = useAuth();
@@ -45,45 +48,20 @@ export const AppContent: React.FC = () => {
   }, []);
 
   if (isLoading) {
-    return (
-      <div
-        style={{
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          height: '100vh',
-          backgroundColor: theme.colors.neutral[50],
-          gap: theme.spacing[4],
-        }}
-      >
-        <Loader2
-          size={36}
-          className="animate-spin"
-          style={{ color: theme.colors.primary[600] }}
-        />
-        <span
-          style={{
-            fontSize: theme.typography.fontSizes.base,
-            color: theme.colors.neutral[500],
-            fontFamily: theme.typography.fontFamily.sans,
-          }}
-        >
-          جاري التحميل...
-        </span>
-      </div>
-    );
+    return <PortalLoader />;
   }
 
   if (!isAuthenticated) {
     if (currentPath === '/reset-password' || currentPath.startsWith('/reset-password')) {
       return (
-        <ResetPasswordPage
-          onNavigateToLogin={() => {
-            window.history.pushState({}, '', '/');
-            setCurrentPath('/');
-          }}
-        />
+        <Suspense fallback={<PortalLoader />}>
+          <ResetPasswordPage
+            onNavigateToLogin={() => {
+              window.history.pushState({}, '', '/');
+              setCurrentPath('/');
+            }}
+          />
+        </Suspense>
       );
     }
     return (
@@ -133,17 +111,6 @@ export const AppContent: React.FC = () => {
     'submissions': 'submissions',
   };
 
-  // 0. إذا كان المسار يبدأ بـ /supervision/*
-  if (currentPath.startsWith('/supervision')) {
-    const screen = getSupervisionScreenFromPath(currentPath);
-    return <SupervisionLayout initialScreen={screen} onLogout={logout} />;
-  }
-
-  // 0.5 إذا تم اختيار أحد تبويبات الإشراف الوزاري صراحة
-  if (supervisionTabMap[activeTab]) {
-    return <SupervisionLayout initialScreen={supervisionTabMap[activeTab]} onLogout={logout} />;
-  }
-
   // خريطة مسارات /standards/*
   const getStandardsScreenFromPath = (path: string): StandardsScreenKey => {
     if (path.includes('/tree') || path.includes('/standards-tree')) return 'tree';
@@ -159,25 +126,6 @@ export const AppContent: React.FC = () => {
     'standards-weights': 'weights',
     'standards-audit': 'audit-lock',
   };
-
-  // 0. إذا كان المسار يبدأ بـ /standards/*
-  if (currentPath.startsWith('/standards')) {
-    const screen = getStandardsScreenFromPath(currentPath);
-    return <StandardsLayout initialScreen={screen} onLogout={logout} />;
-  }
-
-  // في حال تفعيل وضع الصيانة، يُمنع المستخدمون العاديون وتُعرض صفحة الصيانة مع زر إعادة المحاولة
-  if (isMaintenanceMode && !isAdmin) {
-    return (
-      <MaintenancePage
-        message={maintenanceMessage}
-        onRetry={() => {
-          setIsMaintenanceMode(false);
-          window.location.reload();
-        }}
-      />
-    );
-  }
 
   // خريطة مسارات /school/* إلى شاشات EvaluatorScreen
   const getEvaluatorScreenFromPath = (path: string): EvaluatorScreen => {
@@ -207,61 +155,6 @@ export const AppContent: React.FC = () => {
     'reports': 'reports',
     'historical': 'historical',
   };
-
-  // 1. إذا كان المسار يبدأ بـ /school/*
-  if (currentPath.startsWith('/school')) {
-    const screen = getEvaluatorScreenFromPath(currentPath);
-    return <EvaluatorLayout initialScreen={screen} onLogout={logout} />;
-  }
-
-  // 2. إذا كان المستخدم مسؤول إدارة المرجعية والمعايير، يتم توجيهه مباشرة إلى جناحه المتكامل
-  if (isStandardsManager && activeTab !== 'admin-suite' && !evaluatorTabMap[activeTab]) {
-    const screen = standardsTabMap[activeTab] || 'versions';
-    return <StandardsLayout initialScreen={screen} onLogout={logout} />;
-  }
-
-  // 2.5 إذا تم اختيار أحد تبويبات المعايير صراحة
-  if (standardsTabMap[activeTab]) {
-    return <StandardsLayout initialScreen={standardsTabMap[activeTab]} onLogout={logout} />;
-  }
-
-  // 3. إذا كان المستخدم مسؤول نظام، يتم توجيهه مباشرة إلى بوابة مسؤول النظام المركزية
-  if (isAdmin && activeTab !== 'evaluator-suite' && !evaluatorTabMap[activeTab]) {
-    return <AdminLayout onLogout={logout} />;
-  }
-
-  // 3. إذا كان التبويب هو بوابة إدارة النظام المركزية (منصة ارتقاء) أو شاشات الإدارة للمخولين
-  if (activeTab === 'admin-suite' || activeTab === 'schools' || activeTab === 'users') {
-    const screenMap: Record<string, AdminScreen> = {
-      schools: 'schools',
-      users: 'users',
-      'admin-suite': 'dashboard',
-    };
-    return (
-      <AdminLayout
-        initialScreen={screenMap[activeTab] || 'dashboard'}
-        onLogout={logout}
-      />
-    );
-  }
-
-
-
-  // 4. إذا كان المستخدم مستخدم مدرسة، يتم توجيهه إلى بوابة مستخدم التقييم المدرسي المعتمدة (ارتقاء)
-  if (isSchoolUser) {
-    const screen = evaluatorTabMap[activeTab] || 'dashboard';
-    return <EvaluatorLayout initialScreen={screen} onLogout={logout} />;
-  }
-
-  // 5. إذا كان التبويب يخص شاشات التقييم الذاتي
-  if (evaluatorTabMap[activeTab]) {
-    return <EvaluatorLayout initialScreen={evaluatorTabMap[activeTab]} onLogout={logout} />;
-  }
-
-  // 5.5 إذا كان المستخدم مشرفاً وزارياً، يتم توجيهه إلى بوابة الإشراف والمتابعة الوزارية
-  if (isMinistrySupervisor && activeTab !== 'admin-suite' && !evaluatorTabMap[activeTab] && !standardsTabMap[activeTab]) {
-    return <SupervisionLayout initialScreen="dashboard" onLogout={logout} />;
-  }
 
   // اختيار المحتوى بحسب التبويب النشط ودور المستخدم
   const renderMainContent = () => {
@@ -293,26 +186,117 @@ export const AppContent: React.FC = () => {
     );
   };
 
-  return (
-    <div
-      style={{
-        display: 'flex',
-        minHeight: '100vh',
-        width: '100%',
-        maxWidth: '100%',
-        overflowX: 'hidden',
-        direction: 'rtl',
-        fontFamily: theme.typography.fontFamily.sans,
-        backgroundColor: theme.colors.neutral[50],
-      }}
-    >
-      <Sidebar activeTab={activeTab} onSelectTab={setActiveTab} />
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, overflowX: 'hidden' }}>
-        <TopNavbar />
-        <main style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', minWidth: 0 }}>
-          {renderMainContent()}
-        </main>
+  const renderAuthenticatedPortal = () => {
+    // 0. إذا كان المسار يبدأ بـ /supervision/*
+    if (currentPath.startsWith('/supervision')) {
+      const screen = getSupervisionScreenFromPath(currentPath);
+      return <SupervisionLayout initialScreen={screen} onLogout={logout} />;
+    }
+
+    // 0.5 إذا تم اختيار أحد تبويبات الإشراف الوزاري صراحة
+    if (supervisionTabMap[activeTab]) {
+      return <SupervisionLayout initialScreen={supervisionTabMap[activeTab]} onLogout={logout} />;
+    }
+
+    // 0. إذا كان المسار يبدأ بـ /standards/*
+    if (currentPath.startsWith('/standards')) {
+      const screen = getStandardsScreenFromPath(currentPath);
+      return <StandardsLayout initialScreen={screen} onLogout={logout} />;
+    }
+
+    // في حال تفعيل وضع الصيانة، يُمنع المستخدمون العاديون وتُعرض صفحة الصيانة مع زر إعادة المحاولة
+    if (isMaintenanceMode && !isAdmin) {
+      return (
+        <MaintenancePage
+          message={maintenanceMessage}
+          onRetry={() => {
+            setIsMaintenanceMode(false);
+            window.location.reload();
+          }}
+        />
+      );
+    }
+
+    // 1. إذا كان المسار يبدأ بـ /school/*
+    if (currentPath.startsWith('/school')) {
+      const screen = getEvaluatorScreenFromPath(currentPath);
+      return <EvaluatorLayout initialScreen={screen} onLogout={logout} />;
+    }
+
+    // 2. إذا كان المستخدم مسؤول إدارة المرجعية والمعايير، يتم توجيهه مباشرة إلى جناحه المتكامل
+    if (isStandardsManager && activeTab !== 'admin-suite' && !evaluatorTabMap[activeTab]) {
+      const screen = standardsTabMap[activeTab] || 'versions';
+      return <StandardsLayout initialScreen={screen} onLogout={logout} />;
+    }
+
+    // 2.5 إذا تم اختيار أحد تبويبات المعايير صراحة
+    if (standardsTabMap[activeTab]) {
+      return <StandardsLayout initialScreen={standardsTabMap[activeTab]} onLogout={logout} />;
+    }
+
+    // 3. إذا كان المستخدم مسؤول نظام، يتم توجيهه مباشرة إلى بوابة مسؤول النظام المركزية
+    if (isAdmin && activeTab !== 'evaluator-suite' && !evaluatorTabMap[activeTab]) {
+      return <AdminLayout onLogout={logout} />;
+    }
+
+    // 3. إذا كان التبويب هو بوابة إدارة النظام المركزية (منصة ارتقاء) أو شاشات الإدارة للمخولين
+    if (activeTab === 'admin-suite' || activeTab === 'schools' || activeTab === 'users') {
+      const screenMap: Record<string, AdminScreen> = {
+        schools: 'schools',
+        users: 'users',
+        'admin-suite': 'dashboard',
+      };
+      return (
+        <AdminLayout
+          initialScreen={screenMap[activeTab] || 'dashboard'}
+          onLogout={logout}
+        />
+      );
+    }
+
+    // 4. إذا كان المستخدم مستخدم مدرسة، يتم توجيهه إلى بوابة مستخدم التقييم المدرسي المعتمدة (ارتقاء)
+    if (isSchoolUser) {
+      const screen = evaluatorTabMap[activeTab] || 'dashboard';
+      return <EvaluatorLayout initialScreen={screen} onLogout={logout} />;
+    }
+
+    // 5. إذا كان التبويب يخص شاشات التقييم الذاتي
+    if (evaluatorTabMap[activeTab]) {
+      return <EvaluatorLayout initialScreen={evaluatorTabMap[activeTab]} onLogout={logout} />;
+    }
+
+    // 5.5 إذا كان المستخدم مشرفاً وزارياً، يتم توجيهه إلى بوابة الإشراف والمتابعة الوزارية
+    if (isMinistrySupervisor && activeTab !== 'admin-suite' && !evaluatorTabMap[activeTab] && !standardsTabMap[activeTab]) {
+      return <SupervisionLayout initialScreen="dashboard" onLogout={logout} />;
+    }
+
+    return (
+      <div
+        style={{
+          display: 'flex',
+          minHeight: '100vh',
+          width: '100%',
+          maxWidth: '100%',
+          overflowX: 'hidden',
+          direction: 'rtl',
+          fontFamily: theme.typography.fontFamily.sans,
+          backgroundColor: theme.colors.neutral[50],
+        }}
+      >
+        <Sidebar activeTab={activeTab} onSelectTab={setActiveTab} />
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, overflowX: 'hidden' }}>
+          <TopNavbar />
+          <main style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', minWidth: 0 }}>
+            {renderMainContent()}
+          </main>
+        </div>
       </div>
-    </div>
+    );
+  };
+
+  return (
+    <Suspense fallback={<PortalLoader />}>
+      {renderAuthenticatedPortal()}
+    </Suspense>
   );
 };

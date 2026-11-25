@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Evaluation;
 use App\Models\School;
 use App\Models\User;
+use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Tests\TestCase;
 
 /**
@@ -15,6 +16,7 @@ use Tests\TestCase;
  */
 class BatchFMetricsAndCatalogTest extends TestCase
 {
+    use DatabaseTransactions;
     public function test_active_standards_tree_includes_evaluation_id(): void
     {
         $evaluator = User::where('username', 'quality_farouq')->firstOrFail();

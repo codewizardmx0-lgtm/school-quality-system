@@ -132,7 +132,7 @@ export const StandardsVersionsPage: React.FC<StandardsVersionsPageProps> = ({
   };
 
   const filteredAndSortedVersions = useMemo(() => {
-    let list = versions.filter((v) => {
+    const list = versions.filter((v) => {
       // Status filter
       if (filterStatus !== 'all' && v.status?.toLowerCase() !== filterStatus.toLowerCase()) {
         return false;

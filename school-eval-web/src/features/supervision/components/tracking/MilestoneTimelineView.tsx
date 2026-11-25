@@ -44,7 +44,7 @@ export const MilestoneTimelineView: React.FC<MilestoneTimelineViewProps> = ({
 
   // تصفية وفرز الأحداث
   const filteredAndSortedMilestones = useMemo(() => {
-    let list = milestones.filter((item) => {
+    const list = milestones.filter((item) => {
       // 1. تصفية نوع المحطة
       if (selectedType !== 'all') {
         if (selectedType === 'submission' && item.eventType !== 'submission') return false;

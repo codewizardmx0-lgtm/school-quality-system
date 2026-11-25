@@ -62,12 +62,12 @@ export const HistoricalComparisonPage: React.FC<HistoricalComparisonPageProps> =
   useEffect(() => {
     if (cyclesList && cyclesList.length > 1) {
       if (!compareCycle || compareCycle === baseCycle) {
-        const priorCycle = cyclesList.find((c: any) => {
-          const y = c.academicYear || c.academic_year || c.name;
+        const priorCycle = cyclesList.find((c) => {
+          const y = String(c.academicYear || c.academic_year || c.name || '');
           return y && y !== baseCycle;
         });
         if (priorCycle) {
-          const priorYear = priorCycle.academicYear || priorCycle.academic_year || priorCycle.name;
+          const priorYear = String(priorCycle.academicYear || priorCycle.academic_year || priorCycle.name || '');
           setCompareCycle(priorYear);
         }
       }
@@ -78,12 +78,12 @@ export const HistoricalComparisonPage: React.FC<HistoricalComparisonPageProps> =
   const handleBaseCycleChange = (newBase: string) => {
     setBaseCycle(newBase);
     if (compareCycle === newBase) {
-      const remaining = cyclesList.filter((c: any) => {
-        const y = c.academicYear || c.academic_year || c.name;
+      const remaining = cyclesList.filter((c) => {
+        const y = String(c.academicYear || c.academic_year || c.name || '');
         return y && y !== newBase;
       });
       if (remaining.length > 0) {
-        const fallback = remaining[0].academicYear || remaining[0].academic_year || remaining[0].name;
+        const fallback = String(remaining[0].academicYear || remaining[0].academic_year || remaining[0].name || '');
         setCompareCycle(fallback);
       }
     }
@@ -221,12 +221,12 @@ export const HistoricalComparisonPage: React.FC<HistoricalComparisonPageProps> =
                 }}
               >
                 {cyclesList && cyclesList.length > 0 ? (
-                  cyclesList.map((c: any, i: number) => {
-                    const year = c.academicYear || c.academic_year;
-                    const name = c.name || `دورة ${year}`;
+                  cyclesList.map((c, i: number) => {
+                    const year = String(c.academicYear || c.academic_year || '');
+                    const name = String(c.name || `دورة ${year}`);
                     const val = year || name;
                     return (
-                      <option key={c.cycleId || c.id || i} value={val}>
+                      <option key={Number(c.cycleId || c.id || i)} value={val}>
                         {name} {year ? `(${year})` : ''}
                       </option>
                     );
@@ -259,14 +259,14 @@ export const HistoricalComparisonPage: React.FC<HistoricalComparisonPageProps> =
                 disabled={isSingleCycle || cyclesList.length <= 1}
               >
                 {cyclesList && cyclesList.length > 0 ? (
-                  cyclesList.map((c: any, i: number) => {
-                    const year = c.academicYear || c.academic_year;
-                    const name = c.name || `دورة ${year}`;
+                  cyclesList.map((c, i: number) => {
+                    const year = String(c.academicYear || c.academic_year || '');
+                    const name = String(c.name || `دورة ${year}`);
                     const val = year || name;
                     const isSelectedAsBase = val === baseCycle;
                     return (
                       <option
-                        key={c.cycleId || c.id || i}
+                        key={Number(c.cycleId || c.id || i)}
                         value={val}
                         disabled={isSelectedAsBase}
                       >

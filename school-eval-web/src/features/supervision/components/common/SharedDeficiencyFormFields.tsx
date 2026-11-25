@@ -8,13 +8,13 @@
 import React from 'react';
 import { KeyRound } from 'lucide-react';
 
-export interface UnlockPermissionOption {
+interface UnlockPermissionOption {
   key: string;
   label: string;
   description: string;
 }
 
-export const UNLOCK_PERMISSION_OPTIONS: UnlockPermissionOption[] = [
+const UNLOCK_PERMISSION_OPTIONS: UnlockPermissionOption[] = [
   {
     key: 'upload_replace_evidence',
     label: 'رفع / استبدال وثائق الشواهد الميدانية',
@@ -37,7 +37,7 @@ export const UNLOCK_PERMISSION_OPTIONS: UnlockPermissionOption[] = [
   },
 ];
 
-export const DEFICIENCY_CATEGORIES: string[] = [
+const DEFICIENCY_CATEGORIES: string[] = [
   'شاهد غير كافٍ أو مفقود',
   'مبرر التقدير غير مقنع أو سطحي',
   'شاهد غير مطابق للأداة المقررة',

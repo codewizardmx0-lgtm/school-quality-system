@@ -24,8 +24,6 @@ export const UploadEvidenceModal: React.FC<UploadEvidenceModalProps> = ({
   isUploading = false,
   uploadProgress = 0,
 }) => {
-  if (!isOpen) return null;
-
   const [file, setFile] = useState<File | null>(null);
   const [title, setTitle] = useState<string>(initialTitle);
   const [notes, setNotes] = useState<string>('');
@@ -46,6 +44,8 @@ export const UploadEvidenceModal: React.FC<UploadEvidenceModalProps> = ({
       setImagePreviewUrl(null);
     }
   }, [file]);
+
+  if (!isOpen) return null;
 
   const isReplacing = !!documentIdToReplace;
 

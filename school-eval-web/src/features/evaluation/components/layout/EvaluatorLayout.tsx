@@ -1,25 +1,27 @@
-import React, { useState, useEffect } from 'react';
+import React, { Suspense, lazy, useState, useEffect } from 'react';
 import { EvaluatorSidebar } from './EvaluatorSidebar';
 import { EvaluatorTopBar } from './EvaluatorTopBar';
-import { EvaluatorDashboard } from '../dashboard/EvaluatorDashboard';
-import { UnifiedStandardsAssessmentPage } from '../self-evaluation/UnifiedStandardsAssessmentPage';
-import { EvidencesRepository } from '../evidences/EvidencesRepository';
-import { GapAnalysisPage } from '../ai-assistant/GapAnalysisPage';
-import { ImprovementPlanPage } from '../improvement-plan/ImprovementPlanPage';
-import { InternalReviewPage } from '../final-review/InternalReviewPage';
-import { HandleCompletionPage } from '../completion-request/HandleCompletionPage';
-import { NotificationsCenter } from '../notifications/NotificationsCenter';
-import { ReportsHubPage } from '../reports/ReportsHubPage';
-import { HistoricalPerformancePage } from '../historical/HistoricalPerformancePage';
-import { AuditReviewHubPage } from '../audit-hub/AuditReviewHubPage';
-import { ChangePasswordModal } from '../../../auth/ChangePasswordModal';
-import { ProfileModal } from '../../../auth/ProfileModal';
 import { useAuth } from '../../../auth/AuthContext';
 import { ToastNotification } from '../../../admin/components/common/ToastNotification';
 import { useToast } from '../../../admin/components/common/useToast';
+import { PortalLoader } from '../../../../components/ui/PortalLoader';
 import type { EvaluatorScreen, EvaluatorSchoolInfo, EvaluationCycleArchiveItem } from '../../api/evaluationTypes';
 import { evaluatorApi } from '../../api/evaluatorApi';
 import { ShieldAlert, AlertTriangle, ArrowLeft, History } from 'lucide-react';
+
+const EvaluatorDashboard = lazy(() => import('../dashboard/EvaluatorDashboard').then((m) => ({ default: m.EvaluatorDashboard })));
+const UnifiedStandardsAssessmentPage = lazy(() => import('../self-evaluation/UnifiedStandardsAssessmentPage').then((m) => ({ default: m.UnifiedStandardsAssessmentPage })));
+const EvidencesRepository = lazy(() => import('../evidences/EvidencesRepository').then((m) => ({ default: m.EvidencesRepository })));
+const GapAnalysisPage = lazy(() => import('../ai-assistant/GapAnalysisPage').then((m) => ({ default: m.GapAnalysisPage })));
+const ImprovementPlanPage = lazy(() => import('../improvement-plan/ImprovementPlanPage').then((m) => ({ default: m.ImprovementPlanPage })));
+const InternalReviewPage = lazy(() => import('../final-review/InternalReviewPage').then((m) => ({ default: m.InternalReviewPage })));
+const HandleCompletionPage = lazy(() => import('../completion-request/HandleCompletionPage').then((m) => ({ default: m.HandleCompletionPage })));
+const NotificationsCenter = lazy(() => import('../notifications/NotificationsCenter').then((m) => ({ default: m.NotificationsCenter })));
+const ReportsHubPage = lazy(() => import('../reports/ReportsHubPage').then((m) => ({ default: m.ReportsHubPage })));
+const HistoricalPerformancePage = lazy(() => import('../historical/HistoricalPerformancePage').then((m) => ({ default: m.HistoricalPerformancePage })));
+const AuditReviewHubPage = lazy(() => import('../audit-hub/AuditReviewHubPage').then((m) => ({ default: m.AuditReviewHubPage })));
+const ChangePasswordModal = lazy(() => import('../../../auth/ChangePasswordModal').then((m) => ({ default: m.ChangePasswordModal })));
+const ProfileModal = lazy(() => import('../../../auth/ProfileModal').then((m) => ({ default: m.ProfileModal })));
 
 interface EvaluatorLayoutProps {
   initialScreen?: EvaluatorScreen;
@@ -557,27 +559,33 @@ export const EvaluatorLayout: React.FC<EvaluatorLayoutProps> = ({
           )}
 
           <div key={selectedArchiveEvalId ?? 'current'}>
-            {renderScreenContent()}
+            <Suspense fallback={<PortalLoader inline />}>
+              {renderScreenContent()}
+            </Suspense>
           </div>
         </main>
       </div>
 
       {/* Change Password Modal */}
       {isChangePasswordOpen && (
-        <ChangePasswordModal
-          isOpen={isChangePasswordOpen}
-          onClose={() => setIsChangePasswordOpen(false)}
-          addToast={addToast}
-        />
+        <Suspense fallback={null}>
+          <ChangePasswordModal
+            isOpen={isChangePasswordOpen}
+            onClose={() => setIsChangePasswordOpen(false)}
+            addToast={addToast}
+          />
+        </Suspense>
       )}
 
       {/* Profile Modal */}
       {isProfileModalOpen && (
-        <ProfileModal
-          isOpen={isProfileModalOpen}
-          onClose={() => setIsProfileModalOpen(false)}
-          addToast={addToast}
-        />
+        <Suspense fallback={null}>
+          <ProfileModal
+            isOpen={isProfileModalOpen}
+            onClose={() => setIsProfileModalOpen(false)}
+            addToast={addToast}
+          />
+        </Suspense>
       )}
 
       {/* Global Toast Notification Container */}

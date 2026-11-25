@@ -4,10 +4,12 @@ namespace Tests\Feature;
 
 use App\Models\School;
 use App\Models\User;
+use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Tests\TestCase;
 
 class EvaluatorSuiteFeatureTest extends TestCase
 {
+    use DatabaseTransactions;
     /**
      * Test dashboard stats endpoint
      */

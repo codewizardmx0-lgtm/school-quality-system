@@ -61,8 +61,9 @@ export function exportToExcel(
   const ws = XLSX.utils.aoa_to_sheet(wsData);
 
   // ضبط اتجاه الورقة ليكون RTL متوافقاً مع اللغة العربية في Microsoft Excel
-  (ws as any)['!dir'] = 'rtl';
-  (ws as any)['!views'] = [{ RTL: true }];
+  const rtlWs = ws as XLSX.WorkSheet & { '!dir'?: string; '!views'?: Array<{ RTL: boolean }> };
+  rtlWs['!dir'] = 'rtl';
+  rtlWs['!views'] = [{ RTL: true }];
 
   // ضبط أبعاد الأعمدة تلقائياً لمنع تداخل النصوص والقص
   const colWidths = headers.map((h, i) => {
@@ -75,8 +76,8 @@ export function exportToExcel(
   });
   ws['!cols'] = colWidths;
 
-  const wb = XLSX.utils.book_new();
-  (wb as any).Workbook = { Views: [{ RTL: true }] };
+  const wb = XLSX.utils.book_new() as XLSX.WorkBook & { Workbook?: { Views: Array<{ RTL: boolean }> } };
+  wb.Workbook = { Views: [{ RTL: true }] };
   XLSX.utils.book_append_sheet(wb, ws, sheetName || 'البيانات');
 
   const safeFilename = filename.endsWith('.xlsx')
@@ -100,8 +101,8 @@ export function exportMultiSheetExcel(
   sheets: ExcelSheetConfig[],
   metadata?: ExcelSchoolMetadata
 ): void {
-  const wb = XLSX.utils.book_new();
-  (wb as any).Workbook = { Views: [{ RTL: true }] };
+  const wb = XLSX.utils.book_new() as XLSX.WorkBook & { Workbook?: { Views: Array<{ RTL: boolean }> } };
+  wb.Workbook = { Views: [{ RTL: true }] };
 
   sheets.forEach((sheetConfig, index) => {
     const wsData: (string | number)[][] = [];
@@ -122,9 +123,9 @@ export function exportMultiSheetExcel(
     wsData.push(sheetConfig.headers);
     sheetConfig.rows.forEach((row) => wsData.push(row.map((cell) => cell ?? '')));
 
-    const ws = XLSX.utils.aoa_to_sheet(wsData);
-    (ws as any)['!dir'] = 'rtl';
-    (ws as any)['!views'] = [{ RTL: true }];
+    const ws = XLSX.utils.aoa_to_sheet(wsData) as XLSX.WorkSheet & { '!dir'?: string; '!views'?: Array<{ RTL: boolean }> };
+    ws['!dir'] = 'rtl';
+    ws['!views'] = [{ RTL: true }];
 
     const colWidths = sheetConfig.headers.map((h, i) => {
       let maxLen = h.length;

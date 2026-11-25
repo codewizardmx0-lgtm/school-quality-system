@@ -14,6 +14,7 @@ use App\Models\SchoolDocument;
 use App\Models\User;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Tests\TestCase;
 
 /**
@@ -26,6 +27,7 @@ use Tests\TestCase;
  */
 class BatchEImprovementPlansAndArchiveTest extends TestCase
 {
+    use DatabaseTransactions;
     public function test_multi_link_and_unlinked_repository_state(): void
     {
         Storage::fake('local');
@@ -188,24 +190,26 @@ class BatchEImprovementPlansAndArchiveTest extends TestCase
             'status' => 'Completed',
         ]);
 
-        // قراءة لوحة التحكم للدورة المؤرشفة تنجح (200)
-        $dashRes = $this->actingAs($evaluator, 'sanctum')
-            ->withHeaders(['X-Evaluation-Id' => (string) $archivedEval->evaluation_id])
-            ->getJson('/api/v1/evaluator/dashboard-stats');
-        $dashRes->assertStatus(200)
-            ->assertJsonPath('data.schoolInfo.academicYear', '2024/2025');
+        try {
+            // قراءة لوحة التحكم للدورة المؤرشفة تنجح (200)
+            $dashRes = $this->actingAs($evaluator, 'sanctum')
+                ->withHeaders(['X-Evaluation-Id' => (string) $archivedEval->evaluation_id])
+                ->getJson('/api/v1/evaluator/dashboard-stats');
+            $dashRes->assertStatus(200)
+                ->assertJsonPath('data.schoolInfo.academicYear', '2024/2025');
 
-        // محاولة التعديل على الدورة المؤرشفة تُرفض بحظر القراءة فقط (422)
-        $editRes = $this->actingAs($evaluator, 'sanctum')
-            ->withHeaders(['X-Evaluation-Id' => (string) $archivedEval->evaluation_id])
-            ->postJson('/api/v1/evaluation-results', [
-                'indicatorId' => $firstInd['indicatorId'],
-                'score' => 3,
-            ]);
-        $editRes->assertStatus(422);
-
-        // تنظيف الأرشيف الاختباري
-        $archivedEval->delete();
-        $closedCycle->delete();
+            // محاولة التعديل على الدورة المؤرشفة تُرفض بحظر القراءة فقط (422)
+            $editRes = $this->actingAs($evaluator, 'sanctum')
+                ->withHeaders(['X-Evaluation-Id' => (string) $archivedEval->evaluation_id])
+                ->postJson('/api/v1/evaluation-results', [
+                    'indicatorId' => $firstInd['indicatorId'],
+                    'score' => 3,
+                ]);
+            $editRes->assertStatus(422);
+        } finally {
+            // تنظيف الأرشيف الاختباري دائماً
+            $archivedEval->delete();
+            $closedCycle->delete();
+        }
     }
 }

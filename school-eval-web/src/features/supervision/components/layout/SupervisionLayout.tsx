@@ -10,20 +10,22 @@
  * - ثيم الأزرق الملكي (#2563EB / #1D4ED8)
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { Suspense, lazy, useState, useEffect } from 'react';
 import { SupervisionSidebar } from './SupervisionSidebar';
 import { SupervisionTopBar } from './SupervisionTopBar';
 import { SchoolContextBar } from './SchoolContextBar';
-import { SupervisionDashboardPage } from '../dashboard/SupervisionDashboardPage';
-import { CyclesListPage } from '../cycles/CyclesListPage';
-import { ReviewSubmissionPage } from '../review/ReviewSubmissionPage';
-import { CreateCompletionRequestPage } from '../completion/CreateCompletionRequestPage';
-import { SchoolTrackingLogPage } from '../tracking/SchoolTrackingLogPage';
-import { CentralReportsPage } from '../reports/CentralReportsPage';
-import { HistoricalComparisonPage } from '../reports/HistoricalComparisonPage';
 import { SupervisionErrorBoundary } from '../common/SupervisionErrorBoundary';
+import { PortalLoader } from '../../../../components/ui/PortalLoader';
 import { useAuth } from '../../../../features/auth/AuthContext';
 import { supervisionApi } from '../../api/supervisionApi';
+
+const SupervisionDashboardPage = lazy(() => import('../dashboard/SupervisionDashboardPage').then((m) => ({ default: m.SupervisionDashboardPage })));
+const CyclesListPage = lazy(() => import('../cycles/CyclesListPage').then((m) => ({ default: m.CyclesListPage })));
+const ReviewSubmissionPage = lazy(() => import('../review/ReviewSubmissionPage').then((m) => ({ default: m.ReviewSubmissionPage })));
+const CreateCompletionRequestPage = lazy(() => import('../completion/CreateCompletionRequestPage').then((m) => ({ default: m.CreateCompletionRequestPage })));
+const SchoolTrackingLogPage = lazy(() => import('../tracking/SchoolTrackingLogPage').then((m) => ({ default: m.SchoolTrackingLogPage })));
+const CentralReportsPage = lazy(() => import('../reports/CentralReportsPage').then((m) => ({ default: m.CentralReportsPage })));
+const HistoricalComparisonPage = lazy(() => import('../reports/HistoricalComparisonPage').then((m) => ({ default: m.HistoricalComparisonPage })));
 import type {
   SupervisionScreenKey,
   PreloadedCompletionItem,
@@ -356,7 +358,9 @@ export const SupervisionLayout: React.FC<SupervisionLayoutProps> = ({
           }}
         >
           <SupervisionErrorBoundary onNavigateHome={() => navigateToScreen('dashboard')}>
-            {renderCurrentScreen()}
+            <Suspense fallback={<PortalLoader inline />}>
+              {renderCurrentScreen()}
+            </Suspense>
           </SupervisionErrorBoundary>
         </main>
       </div>

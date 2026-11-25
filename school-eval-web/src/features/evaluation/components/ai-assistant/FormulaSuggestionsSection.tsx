@@ -17,7 +17,8 @@ import {
 } from 'lucide-react';
 import { evaluatorApi } from '../../api/evaluatorApi';
 import type { ImprovementSuggestion, PriorityLevel } from '../../api/evaluationTypes';
-import { AdoptSuggestionModal, getRecommendedPlanType } from './AdoptSuggestionModal';
+import { AdoptSuggestionModal } from './AdoptSuggestionModal';
+import { getRecommendedPlanType } from '../../utils/planRecommendation';
 import { getScoreLevelColor } from '../../../../styles/designTokens';
 
 interface FormulaSuggestionsSectionProps {

@@ -106,17 +106,13 @@ export const StandardVersionWorkspacePage: React.FC<StandardVersionWorkspacePage
   };
 
   const handleCreateDraftSuccess = async (payload: any) => {
-    try {
-      const created = await createDraft(payload);
-      await refetchVersions();
-      if (created?.versionId) {
-        setSelectedVersionId(created.versionId);
-      }
-      setIsCreateDraftOpen(false);
-      setActiveTab('tree');
-    } catch (err) {
-      throw err;
+    const created = await createDraft(payload);
+    await refetchVersions();
+    if (created?.versionId) {
+      setSelectedVersionId(created.versionId);
     }
+    setIsCreateDraftOpen(false);
+    setActiveTab('tree');
   };
 
   return (

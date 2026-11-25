@@ -22,22 +22,20 @@ import {
   Copy,
   BarChart3,
   X,
-  Plus,
-  Check,
   Loader2,
   Edit3,
   Lock,
   Archive,
   RefreshCw,
   AlertTriangle,
-  FileSpreadsheet,
   PlusCircle,
 } from 'lucide-react';
 import { supervisionApi } from '../../api/supervisionApi';
 import { useAuth } from '../../../auth/AuthContext';
 import { EmptySupervisionState } from '../common/EmptySupervisionState';
 import { CycleFormTab, type FormMode } from './CycleFormTab';
-import { exportCycleParticipatingSchoolsToExcel } from '../../utils/supervisionExportUtils';
+import { ParticipatingSchoolsModal } from './ParticipatingSchoolsModal';
+import { CloseCycleModal } from './CloseCycleModal';
 import type {
   SupervisionScreenKey,
   CycleLaunchPayload,
@@ -80,13 +78,6 @@ const calculateDaysRemaining = (end?: string): number => {
   const now = new Date().getTime();
   if (isNaN(e)) return 0;
   return Math.max(0, Math.ceil((e - now) / (1000 * 60 * 60 * 24)));
-};
-
-const formatEnrolledDate = (dateStr?: string): string => {
-  if (!dateStr) return 'غير محدد';
-  const d = new Date(dateStr);
-  if (isNaN(d.getTime())) return 'غير محدد';
-  return d.toLocaleDateString('ar-YE', { year: 'numeric', month: 'short', day: 'numeric' });
 };
 
 export const CyclesListPage: React.FC<CyclesListPageProps> = ({
@@ -133,34 +124,41 @@ export const CyclesListPage: React.FC<CyclesListPageProps> = ({
     setError(null);
     try {
       const data = await supervisionApi.getEvaluationCycles();
-      const normalized: EvaluationCycleItem[] = (Array.isArray(data) ? data : []).map((c: any) => ({
-        cycleId: c.cycleId ?? c.cycle_id ?? c.id,
-        academicYear: c.academicYear ?? c.academic_year ?? 'غير محدد',
-        name: c.name ?? `دورة التقييم الذاتي للعام ${c.academicYear ?? c.academic_year}`,
-        scopeGovernorate: c.scopeGovernorate ?? c.scope_governorate ?? null,
-        startDate: c.startDate ?? c.start_date ?? '',
-        endDate: c.endDate ?? c.end_date ?? '',
-        status: (c.status === 'Active' ? 'Active' : 'Closed') as 'Active' | 'Closed',
-        participationsCount: c.participationsCount ?? c.participations_count ?? 0,
-        evaluationsCount: c.evaluationsCount ?? c.evaluations_count ?? 0,
-        maxCompletionDays: c.maxCompletionDays ?? c.max_completion_days ?? 14,
-        version: c.version
-          ? {
-              versionId: c.version.versionId ?? c.version.version_id,
-              versionName: c.version.versionName ?? c.version.version_name ?? 'الإصدار المعتمد',
-              versionNumber: c.version.versionNumber ?? c.version.version_number ?? '1.0.0',
-            }
-          : undefined,
-        participatingSchools: (c.participatingSchools ?? []).map((s: any) => ({
-          schoolId: s.schoolId ?? s.school_id,
-          schoolName: s.schoolName ?? s.school_name,
-          schoolCode: s.schoolCode ?? s.school_code,
-          stage: s.stage ?? s.educational_stage,
-          governorate: s.governorate,
-          district: s.district ?? s.educational_district,
-          enrolledAt: s.enrolledAt ?? s.created_at,
-        })),
-      }));
+      type RawRecord = Record<string, unknown>;
+      const mapSchools = (schoolsList: unknown): EvaluationCycleItem['participatingSchools'] =>
+        (Array.isArray(schoolsList) ? (schoolsList as RawRecord[]) : []).map((s) => ({
+          schoolId: Number(s.schoolId ?? s.school_id ?? 0),
+          schoolName: String(s.schoolName ?? s.school_name ?? ''),
+          schoolCode: String(s.schoolCode ?? s.school_code ?? ''),
+          stage: (s.stage ?? s.educational_stage) as string | undefined,
+          governorate: s.governorate as string | undefined,
+          district: (s.district ?? s.educational_district) as string | undefined,
+          enrolledAt: (s.enrolledAt ?? s.created_at) as string | undefined,
+        }));
+
+      const normalized: EvaluationCycleItem[] = (Array.isArray(data) ? (data as RawRecord[]) : []).map((c) => {
+        const ver = (c.version && typeof c.version === 'object' ? c.version : null) as RawRecord | null;
+        return {
+          cycleId: Number(c.cycleId ?? c.cycle_id ?? c.id ?? 0),
+          academicYear: String(c.academicYear ?? c.academic_year ?? 'غير محدد'),
+          name: String(c.name ?? `دورة التقييم الذاتي للعام ${c.academicYear ?? c.academic_year ?? ''}`),
+          scopeGovernorate: (c.scopeGovernorate ?? c.scope_governorate ?? null) as string | null,
+          startDate: String(c.startDate ?? c.start_date ?? ''),
+          endDate: String(c.endDate ?? c.end_date ?? ''),
+          status: (c.status === 'Active' ? 'Active' : 'Closed') as 'Active' | 'Closed',
+          participationsCount: Number(c.participationsCount ?? c.participations_count ?? 0),
+          evaluationsCount: Number(c.evaluationsCount ?? c.evaluations_count ?? 0),
+          maxCompletionDays: Number(c.maxCompletionDays ?? c.max_completion_days ?? 14),
+          version: ver
+            ? {
+                versionId: Number(ver.versionId ?? ver.version_id ?? 0),
+                versionName: String(ver.versionName ?? ver.version_name ?? 'الإصدار المعتمد'),
+                versionNumber: String(ver.versionNumber ?? ver.version_number ?? '1.0.0'),
+              }
+            : undefined,
+          participatingSchools: mapSchools(c.participatingSchools),
+        };
+      });
 
       // فرز: الدورة النشطة أولاً، ثم الأحدث تاريخاً
       normalized.sort((a, b) => {
@@ -170,8 +168,9 @@ export const CyclesListPage: React.FC<CyclesListPageProps> = ({
       });
 
       setCycles(normalized);
-    } catch (err: any) {
-      setError(err?.message || 'تعذر تحميل سجل الدورات التقييمية من الخادم.');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : undefined;
+      setError(msg || 'تعذر تحميل سجل الدورات التقييمية من الخادم.');
     } finally {
       setIsLoading(false);
     }
@@ -259,8 +258,9 @@ export const CyclesListPage: React.FC<CyclesListPageProps> = ({
       const schools = await supervisionApi.getAvailableSchoolsForCycle(selectedCycleForSchools.cycleId);
       setAvailableSchools(schools);
       setIsEnrollingOpen(true);
-    } catch (err: any) {
-      setEnrollErrorMessage(err?.message || 'تعذر استرجاع المدارس المتاحة للإلحاق.');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : undefined;
+      setEnrollErrorMessage(msg || 'تعذر استرجاع المدارس المتاحة للإلحاق.');
     } finally {
       setIsLoadingAvailableSchools(false);
     }
@@ -280,29 +280,37 @@ export const CyclesListPage: React.FC<CyclesListPageProps> = ({
       setIsEnrollingOpen(false);
 
       await fetchCycles();
-      const updatedList = await supervisionApi.getEvaluationCycles();
-      const updatedCycle = updatedList.find((c: any) => (c.cycleId ?? c.id) === selectedCycleForSchools.cycleId);
+      const updatedList = (await supervisionApi.getEvaluationCycles()) as Array<Record<string, unknown>>;
+      const updatedCycle = updatedList.find(
+        (c) => Number(c.cycleId ?? c.id ?? 0) === selectedCycleForSchools.cycleId
+      );
       if (updatedCycle) {
+        const schoolsArr = Array.isArray(updatedCycle.participatingSchools)
+          ? (updatedCycle.participatingSchools as Array<Record<string, unknown>>)
+          : [];
         setSelectedCycleForSchools((prev: EvaluationCycleItem | null) =>
           prev
             ? {
                 ...prev,
-                participationsCount: updatedCycle.participationsCount ?? updatedCycle.participations_count,
-                participatingSchools: (updatedCycle.participatingSchools ?? []).map((s: any) => ({
-                  schoolId: s.schoolId ?? s.school_id,
-                  schoolName: s.schoolName ?? s.school_name,
-                  schoolCode: s.schoolCode ?? s.school_code,
-                  stage: s.stage ?? s.educational_stage,
-                  governorate: s.governorate,
-                  district: s.district ?? s.educational_district,
-                  enrolledAt: s.enrolledAt ?? s.created_at,
+                participationsCount: Number(
+                  updatedCycle.participationsCount ?? updatedCycle.participations_count ?? prev.participationsCount
+                ),
+                participatingSchools: schoolsArr.map((s) => ({
+                  schoolId: Number(s.schoolId ?? s.school_id ?? 0),
+                  schoolName: String(s.schoolName ?? s.school_name ?? ''),
+                  schoolCode: String(s.schoolCode ?? s.school_code ?? ''),
+                  stage: (s.stage ?? s.educational_stage) as string | undefined,
+                  governorate: s.governorate as string | undefined,
+                  district: (s.district ?? s.educational_district) as string | undefined,
+                  enrolledAt: (s.enrolledAt ?? s.created_at) as string | undefined,
                 })),
               }
             : null
         );
       }
-    } catch (err: any) {
-      setEnrollErrorMessage(err?.message || 'تعذر إلحاق المدارس بالدورة.');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : undefined;
+      setEnrollErrorMessage(msg || 'تعذر إلحاق المدارس بالدورة.');
     } finally {
       setIsSubmittingEnrollment(false);
     }
@@ -331,8 +339,9 @@ export const CyclesListPage: React.FC<CyclesListPageProps> = ({
         setCycleToClose(null);
         setCloseSuccessMessage(null);
       }, 1500);
-    } catch (err: any) {
-      setCloseErrorMessage(err?.message || 'فشل إغلاق الدورة التقييمية.');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : undefined;
+      setCloseErrorMessage(msg || 'فشل إغلاق الدورة التقييمية.');
     } finally {
       setIsClosingCycle(false);
     }
@@ -1175,483 +1184,38 @@ export const CyclesListPage: React.FC<CyclesListPageProps> = ({
         />
       )}
 
-      {/* ========================================================================= */}
-      {/* نافذة استعراض وإلحاق المدارس المشاركة (Participating Schools Modal)       */}
-      {/* ========================================================================= */}
-      {selectedCycleForSchools && (
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            backgroundColor: 'rgba(15, 23, 42, 0.65)',
-            backdropFilter: 'blur(3px)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 100,
-            padding: '20px',
-          }}
-        >
-          <div
-            style={{
-              backgroundColor: '#FFFFFF',
-              borderRadius: '16px',
-              maxWidth: '820px',
-              width: '100%',
-              maxHeight: '90vh',
-              display: 'flex',
-              flexDirection: 'column',
-              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
-              overflow: 'hidden',
-            }}
-          >
-            {/* ترويسة النافذة */}
-            <div
-              style={{
-                padding: '18px 24px',
-                borderBottom: '1px solid #E2E8F0',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-              }}
-            >
-              <div>
-                <h3 style={{ fontSize: '16px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
-                  المدارس المشاركة في: {selectedCycleForSchools.name}
-                </h3>
-                <p style={{ fontSize: '12px', color: '#64748B', margin: '3px 0 0 0' }}>
-                  العام الدراسي: {selectedCycleForSchools.academicYear} • الحالة: {selectedCycleForSchools.status === 'Active' ? 'نشطة جارية' : 'مؤرشفة'}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setSelectedCycleForSchools(null)}
-                style={{
-                  width: '32px',
-                  height: '32px',
-                  borderRadius: '8px',
-                  border: '1px solid #E2E8F0',
-                  backgroundColor: '#FFFFFF',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: '#64748B',
-                }}
-              >
-                <X size={18} />
-              </button>
-            </div>
+      {/* نافذة استعراض وإلحاق المدارس المشاركة */}
+      <ParticipatingSchoolsModal
+        cycle={selectedCycleForSchools}
+        modalSearchTerm={modalSearchTerm}
+        onModalSearchChange={setModalSearchTerm}
+        filteredModalSchools={filteredModalSchools}
+        isEnrollingOpen={isEnrollingOpen}
+        isLoadingAvailableSchools={isLoadingAvailableSchools}
+        availableSchools={availableSchools}
+        selectedSchoolIdsToEnroll={selectedSchoolIdsToEnroll}
+        onToggleEnrollSchoolId={(schoolId) =>
+          setSelectedSchoolIdsToEnroll((prev) =>
+            prev.includes(schoolId) ? prev.filter((id) => id !== schoolId) : [...prev, schoolId]
+          )
+        }
+        isSubmittingEnrollment={isSubmittingEnrollment}
+        enrollSuccessMessage={enrollSuccessMessage}
+        enrollErrorMessage={enrollErrorMessage}
+        onClose={() => setSelectedCycleForSchools(null)}
+        onToggleEnrollSection={handleToggleEnrollSection}
+        onConfirmEnrollment={handleConfirmEnrollment}
+      />
 
-            {/* رسائل التنبيهات في المودال */}
-            {enrollSuccessMessage && (
-              <div style={{ margin: '12px 24px 0', padding: '10px 14px', borderRadius: '8px', backgroundColor: '#ECFDF5', color: '#065F46', fontSize: '12.5px', fontWeight: 700 }}>
-                {enrollSuccessMessage}
-              </div>
-            )}
-            {enrollErrorMessage && (
-              <div style={{ margin: '12px 24px 0', padding: '10px 14px', borderRadius: '8px', backgroundColor: '#FEF2F2', color: '#991B1B', fontSize: '12.5px', fontWeight: 700 }}>
-                {enrollErrorMessage}
-              </div>
-            )}
-
-            {/* شريط الأدوات في المودال */}
-            <div
-              style={{
-                padding: '14px 24px',
-                backgroundColor: '#F8FAFC',
-                borderBottom: '1px solid #E2E8F0',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                flexWrap: 'wrap',
-                gap: '12px',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: '220px', maxWidth: '320px', backgroundColor: '#FFFFFF', padding: '6px 12px', borderRadius: '8px', border: '1px solid #CBD5E1' }}>
-                <Search size={14} color="#94A3B8" />
-                <input
-                  type="text"
-                  placeholder="ابحث باسم المدرسة أو الكود..."
-                  value={modalSearchTerm}
-                  onChange={(e) => setModalSearchTerm(e.target.value)}
-                  style={{ border: 'none', outline: 'none', fontSize: '12px', width: '100%', color: '#0F172A' }}
-                />
-              </div>
-
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                {/* زر تصدير كشف المدارس Excel */}
-                <button
-                  type="button"
-                  onClick={() =>
-                    exportCycleParticipatingSchoolsToExcel(
-                      selectedCycleForSchools.name,
-                      selectedCycleForSchools.academicYear,
-                      filteredModalSchools
-                    )
-                  }
-                  disabled={filteredModalSchools.length === 0}
-                  title="تصدير كشف المدارس المشاركة في الدورة إلى جدول Excel (.xlsx)"
-                  style={{
-                    padding: '7px 14px',
-                    borderRadius: '8px',
-                    fontSize: '12px',
-                    fontWeight: 700,
-                    cursor: filteredModalSchools.length === 0 ? 'not-allowed' : 'pointer',
-                    backgroundColor: '#FFFFFF',
-                    color: filteredModalSchools.length === 0 ? '#94A3B8' : '#059669',
-                    border: filteredModalSchools.length === 0 ? '1px solid #E2E8F0' : '1px solid #A7F3D0',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    transition: 'all 0.15s ease',
-                  }}
-                  onMouseEnter={(e) => {
-                    if (filteredModalSchools.length > 0) {
-                      e.currentTarget.style.backgroundColor = '#ECFDF5';
-                      e.currentTarget.style.borderColor = '#059669';
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    if (filteredModalSchools.length > 0) {
-                      e.currentTarget.style.backgroundColor = '#FFFFFF';
-                      e.currentTarget.style.borderColor = '#A7F3D0';
-                    }
-                  }}
-                >
-                  <FileSpreadsheet size={15} />
-                  <span>تصدير كشف المدارس (Excel)</span>
-                </button>
-
-                {/* زر إلحاق مدارس إضافية للدورة النشطة */}
-                {selectedCycleForSchools.status === 'Active' && (
-                  <button
-                    type="button"
-                    onClick={handleToggleEnrollSection}
-                    style={{
-                      padding: '7px 14px',
-                      borderRadius: '8px',
-                      fontSize: '12px',
-                      fontWeight: 700,
-                      cursor: 'pointer',
-                      backgroundColor: isEnrollingOpen ? '#F1F5F9' : '#2563EB',
-                      color: isEnrollingOpen ? '#475569' : '#FFFFFF',
-                      border: 'none',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '6px',
-                    }}
-                  >
-                    <Plus size={14} />
-                    <span>{isEnrollingOpen ? 'إلغاء الإلحاق' : 'إلحاق مدارس إضافية بالدورة'}</span>
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {/* قسم إلحاق المدارس المفتوح */}
-            {isEnrollingOpen && (
-              <div style={{ padding: '16px 24px', backgroundColor: '#EFF6FF', borderBottom: '1px solid #BFDBFE' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
-                  <span style={{ fontSize: '13px', fontWeight: 800, color: '#1E40AF' }}>
-                    اختر المدارس المتاحة للتسجيل في الدورة:
-                  </span>
-                  <button
-                    type="button"
-                    onClick={handleConfirmEnrollment}
-                    disabled={selectedSchoolIdsToEnroll.length === 0 || isSubmittingEnrollment}
-                    style={{
-                      padding: '6px 14px',
-                      borderRadius: '6px',
-                      fontSize: '12px',
-                      fontWeight: 700,
-                      backgroundColor: selectedSchoolIdsToEnroll.length === 0 ? '#94A3B8' : '#2563EB',
-                      color: '#FFFFFF',
-                      border: 'none',
-                      cursor: selectedSchoolIdsToEnroll.length === 0 || isSubmittingEnrollment ? 'not-allowed' : 'pointer',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '6px',
-                    }}
-                  >
-                    {isSubmittingEnrollment ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
-                    <span>تسجيل المدارس المحددة ({selectedSchoolIdsToEnroll.length})</span>
-                  </button>
-                </div>
-
-                {isLoadingAvailableSchools ? (
-                  <div style={{ padding: '16px', textAlign: 'center', color: '#64748B', fontSize: '12px' }}>
-                    <Loader2 size={16} className="animate-spin" style={{ margin: '0 auto 6px' }} />
-                    جاري تحميل المدارس المتاحة...
-                  </div>
-                ) : availableSchools.length === 0 ? (
-                  <div style={{ fontSize: '12px', color: '#64748B', padding: '10px 0' }}>
-                    كافة المدارس النشطة مسجلة بالفعل في هذه الدورة.
-                  </div>
-                ) : (
-                  <div style={{ maxHeight: '140px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    {availableSchools.map((s) => {
-                      const isChecked = selectedSchoolIdsToEnroll.includes(s.schoolId);
-                      return (
-                        <label
-                          key={s.schoolId}
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '10px',
-                            padding: '6px 10px',
-                            backgroundColor: '#FFFFFF',
-                            borderRadius: '6px',
-                            border: isChecked ? '1px solid #2563EB' : '1px solid #E2E8F0',
-                            fontSize: '12px',
-                            cursor: 'pointer',
-                          }}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={isChecked}
-                            onChange={() => {
-                              setSelectedSchoolIdsToEnroll((prev) =>
-                                prev.includes(s.schoolId) ? prev.filter((id) => id !== s.schoolId) : [...prev, s.schoolId]
-                              );
-                            }}
-                          />
-                          <span style={{ fontWeight: 700, color: '#0F172A' }}>{s.schoolName}</span>
-                          <span style={{ color: '#64748B' }}>({s.schoolCode})</span>
-                          <span style={{ marginRight: 'auto', color: '#64748B', fontSize: '11px' }}>
-                            {s.governorate} • {s.stage}
-                          </span>
-                        </label>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* جدول المدارس المشاركة */}
-            <div style={{ flex: 1, overflowY: 'auto', padding: '16px 24px' }}>
-              {(() => {
-                const schools = filteredModalSchools;
-
-                if (schools.length === 0) {
-                  return (
-                    <div style={{ padding: '30px', textAlign: 'center', color: '#64748B', fontSize: '13px' }}>
-                      {modalSearchTerm ? 'لا توجد مدارس مطابقة للبحث داخل الدورة.' : 'لا توجد مدارس ملحقة بهذه الدورة بعد.'}
-                    </div>
-                  );
-                }
-
-                return (
-                  <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'right', fontSize: '12.5px' }}>
-                    <thead>
-                      <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0', color: '#475569' }}>
-                        <th style={{ padding: '8px 12px', fontWeight: 800 }}>#</th>
-                        <th style={{ padding: '8px 12px', fontWeight: 800 }}>رمز المدرسة</th>
-                        <th style={{ padding: '8px 12px', fontWeight: 800 }}>اسم المدرسة</th>
-                        <th style={{ padding: '8px 12px', fontWeight: 800 }}>المحافظة / المديرية</th>
-                        <th style={{ padding: '8px 12px', fontWeight: 800 }}>المرحلة</th>
-                        <th style={{ padding: '8px 12px', fontWeight: 800 }}>تاريخ الإلحاق</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {schools.map((s: ParticipatingSchoolItem, idx: number) => (
-                        <tr key={s.schoolId} style={{ borderBottom: '1px solid #F1F5F9' }}>
-                          <td style={{ padding: '10px 12px', color: '#64748B' }}>{idx + 1}</td>
-                          <td style={{ padding: '10px 12px', fontWeight: 700, color: '#1E293B', fontFamily: 'monospace' }}>
-                            {s.schoolCode}
-                          </td>
-                          <td style={{ padding: '10px 12px', fontWeight: 700, color: '#0F172A' }}>{s.schoolName}</td>
-                          <td style={{ padding: '10px 12px', color: '#64748B' }}>
-                            {s.governorate} {s.district ? `• ${s.district}` : ''}
-                          </td>
-                          <td style={{ padding: '10px 12px', color: '#64748B' }}>{s.stage || 'أساسي/ثانوي'}</td>
-                          <td style={{ padding: '10px 12px', color: '#64748B' }}>{formatEnrolledDate(s.enrolledAt)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                );
-              })()}
-            </div>
-
-            {/* تذييل المودال */}
-            <div
-              style={{
-                padding: '14px 24px',
-                borderTop: '1px solid #E2E8F0',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                backgroundColor: '#F8FAFC',
-              }}
-            >
-              <span style={{ fontSize: '12px', color: '#64748B' }}>
-                إجمالي المدارس: <strong>{selectedCycleForSchools.participatingSchools?.length || 0}</strong> مدرسة
-              </span>
-              <button
-                type="button"
-                onClick={() => setSelectedCycleForSchools(null)}
-                style={{
-                  padding: '7px 18px',
-                  borderRadius: '6px',
-                  backgroundColor: '#FFFFFF',
-                  border: '1px solid #CBD5E1',
-                  color: '#475569',
-                  fontSize: '12.5px',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                }}
-              >
-                إغلاق
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ========================================================================= */}
-      {/* نافذة تأكيد إغلاق الدورة التقييمية (Close Cycle Confirmation Modal)        */}
-      {/* ========================================================================= */}
-      {cycleToClose && (
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            backgroundColor: 'rgba(15, 23, 42, 0.7)',
-            backdropFilter: 'blur(3px)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 110,
-            padding: '20px',
-          }}
-        >
-          <div
-            style={{
-              backgroundColor: '#FFFFFF',
-              borderRadius: '16px',
-              maxWidth: '560px',
-              width: '100%',
-              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
-              overflow: 'hidden',
-            }}
-          >
-            <div style={{ padding: '24px 24px 16px', display: 'flex', alignItems: 'flex-start', gap: '14px' }}>
-              <div
-                style={{
-                  width: '44px',
-                  height: '44px',
-                  borderRadius: '12px',
-                  backgroundColor: '#FEF2F2',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: '#DC2626',
-                  flexShrink: 0,
-                }}
-              >
-                <Lock size={22} />
-              </div>
-              <div>
-                <h3 style={{ fontSize: '17px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
-                  تأكيد إغلاق وأرشفة الدورة التقييمية
-                </h3>
-                <p style={{ fontSize: '13px', color: '#64748B', marginTop: '6px', margin: 0 }}>
-                  «{cycleToClose.name}» (العام الدراسي {cycleToClose.academicYear})
-                </p>
-              </div>
-            </div>
-
-            <div style={{ padding: '0 24px 20px', fontSize: '13px', color: '#475569', lineHeight: 1.6 }}>
-              <div
-                style={{
-                  backgroundColor: '#FFFBEB',
-                  border: '1px solid #FDE68A',
-                  borderRadius: '10px',
-                  padding: '14px',
-                  marginBottom: '16px',
-                  color: '#92400E',
-                  fontSize: '12.5px',
-                }}
-              >
-                <strong>الآثار النظامية للإغلاق (FR-SUP-01 / BR-GEN-05):</strong>
-                <ul style={{ margin: '6px 0 0', paddingRight: '20px' }}>
-                  <li>تُؤرشف سجلات كافة المدارس غير المكتملة بحالتها الراهنة (مسودة، مرفوعة، قيد التدقيق، طلب استكمال) كسجل تاريخي دون ترحيلها تلقائياً.</li>
-                  <li>تتوقف بوابتا مقيم ومدير المدرسة عن قبول أي رصد جديد أو رفع مخرجات لتلك الدورة.</li>
-                  <li>تظل المخرجات المكتملة متاحة للقراءة والتقارير ومتابعة خطط التحسين المدرسية.</li>
-                  <li>يتم تحويل حالة الدورة إلى مغلقة ومؤرشفة (<code style={{ fontWeight: 700 }}>Closed</code>) وتسجيل العملية في سجل التدقيق.</li>
-                </ul>
-              </div>
-
-              {closeSuccessMessage && (
-                <div style={{ padding: '10px 14px', borderRadius: '8px', backgroundColor: '#ECFDF5', color: '#065F46', fontWeight: 700, marginBottom: '12px' }}>
-                  {closeSuccessMessage}
-                </div>
-              )}
-
-              {closeErrorMessage && (
-                <div style={{ padding: '10px 14px', borderRadius: '8px', backgroundColor: '#FEF2F2', color: '#991B1B', fontWeight: 700, marginBottom: '12px' }}>
-                  {closeErrorMessage}
-                </div>
-              )}
-            </div>
-
-            <div
-              style={{
-                padding: '16px 24px',
-                backgroundColor: '#F8FAFC',
-                borderTop: '1px solid #E2E8F0',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'flex-end',
-                gap: '10px',
-              }}
-            >
-              <button
-                type="button"
-                onClick={() => setCycleToClose(null)}
-                disabled={isClosingCycle}
-                style={{
-                  padding: '8px 18px',
-                  borderRadius: '8px',
-                  backgroundColor: '#FFFFFF',
-                  border: '1px solid #CBD5E1',
-                  color: '#475569',
-                  fontSize: '13px',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                }}
-              >
-                إلغاء التراجع
-              </button>
-
-              <button
-                type="button"
-                onClick={handleConfirmCloseCycle}
-                disabled={isClosingCycle}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  padding: '8px 20px',
-                  borderRadius: '8px',
-                  backgroundColor: isClosingCycle ? '#94A3B8' : '#DC2626',
-                  color: '#FFFFFF',
-                  border: 'none',
-                  fontSize: '13px',
-                  fontWeight: 700,
-                  cursor: isClosingCycle ? 'not-allowed' : 'pointer',
-                  boxShadow: '0 2px 6px rgba(220, 38, 38, 0.25)',
-                }}
-              >
-                {isClosingCycle && <Loader2 size={15} className="animate-spin" />}
-                <span>تأكيد إغلاق وأرشفة الدورة</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* نافذة تأكيد إغلاق الدورة التقييمية */}
+      <CloseCycleModal
+        cycle={cycleToClose}
+        isClosingCycle={isClosingCycle}
+        closeSuccessMessage={closeSuccessMessage}
+        closeErrorMessage={closeErrorMessage}
+        onCancel={() => setCycleToClose(null)}
+        onConfirm={handleConfirmCloseCycle}
+      />
     </div>
   );
 };

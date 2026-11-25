@@ -14,13 +14,13 @@ export const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({
   onClose,
   onNavigateToReset,
 }) => {
-  if (!isOpen) return null;
-
   const [email, setEmail] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [devResetToken, setDevResetToken] = useState<string | null>(null);
+
+  if (!isOpen) return null;
 
   const handleClose = () => {
     if (isLoading) return;
