@@ -1,4 +1,8 @@
+import { existsSync } from 'node:fs';
 import { defineConfig, devices } from '@playwright/test';
+
+const localChromePath = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
+const useLocalChrome = !process.env.CI && process.platform === 'win32' && existsSync(localChromePath);
 
 export default defineConfig({
   testDir: './e2e',
@@ -15,7 +19,10 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
+      use: {
+        ...devices['Desktop Chrome'],
+        ...(useLocalChrome ? { launchOptions: { executablePath: localChromePath } } : {}),
+      },
     },
   ],
   webServer: {
