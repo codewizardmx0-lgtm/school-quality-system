@@ -3,6 +3,19 @@
  * Unified API Response & Error Types according to conventions.md (§3, §4, §8)
  */
 
+export type JsonRecord = Record<string, unknown>;
+
+/** استخلاص رسالة الخطأ من كائن الخطأ بشكل آمن بدون any */
+export function extractApiErrorMessage(err: unknown, fallback: string): string {
+  if (err && typeof err === 'object') {
+    const rec = err as { response?: { data?: { message?: unknown } }; message?: unknown };
+    const apiMsg = rec.response?.data?.message;
+    if (typeof apiMsg === 'string' && apiMsg.trim()) return apiMsg;
+    if (typeof rec.message === 'string' && rec.message.trim()) return rec.message;
+  }
+  return fallback;
+}
+
 export interface PaginationMeta {
   page?: number;
   perPage?: number;

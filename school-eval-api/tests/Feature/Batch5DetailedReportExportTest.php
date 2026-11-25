@@ -6,6 +6,7 @@ use App\Models\Evaluation;
 use App\Models\User;
 use App\Services\EvaluationReportService;
 use Illuminate\Support\Facades\View;
+use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Tests\TestCase;
 
 /**
@@ -13,6 +14,7 @@ use Tests\TestCase;
  */
 class Batch5DetailedReportExportTest extends TestCase
 {
+    use DatabaseTransactions;
     /**
      * التحقق من امتلاء كافة رموز وأسماء المعايير والمؤشرات وأدوات التحقق في بيانات وقالب التقرير المفصل
      */

@@ -17,6 +17,8 @@ export interface UsersQueryParams {
   userType?: string;
 }
 
+type RawRecord = Record<string, unknown>;
+
 export const usersApi = {
   /**
    * Fetch users list with query conventions (camelCase query params)
@@ -25,29 +27,33 @@ export const usersApi = {
     const response = await get<User[]>('/users', { params });
     if (response && response.data) {
       // Normalize role and school fields
-      const normalized = (response.data as unknown[]).map((u: any) => {
-        const firstRole = Array.isArray(u.roles) && u.roles.length > 0 ? u.roles[0] : null;
+      const normalized = (response.data as unknown[]).map((rawUser) => {
+        const u = (rawUser && typeof rawUser === 'object' ? rawUser : {}) as RawRecord;
+        const rolesArr = Array.isArray(u.roles) ? (u.roles as RawRecord[]) : [];
+        const firstRole = rolesArr.length > 0 ? rolesArr[0] : null;
+        const schoolObj = (u.school && typeof u.school === 'object' ? u.school : null) as RawRecord | null;
+        const userType = (u.userType ?? u.user_type ?? 'school') as User['userType'];
         return {
-          userId: u.userId ?? u.user_id,
-          username: u.username ?? '',
-          fullName: u.fullName ?? u.full_name ?? '',
-          email: u.email ?? '',
-          userType: u.userType ?? u.user_type ?? 'school',
-          status: u.status ?? 'Active',
-          roleId: u.roleId ?? firstRole?.roleId ?? 1,
-          roleName: u.roleName ?? firstRole?.roleName ?? '',
-          roleNameAr: u.roleNameAr ?? firstRole?.roleNameAr ?? '',
-          roleCode: u.roleCode ?? (u.userType === 'system' ? 'SYS' : u.userType === 'ministry' ? 'B2' : 'S1'),
-          schoolId: u.schoolId ?? u.school?.schoolId ?? null,
-          schoolName: u.schoolName ?? u.school?.schoolName ?? null,
-          schoolCode: u.schoolCode ?? null,
-          directorateId: u.directorateId ?? null,
-          directorate: u.directorate ?? null,
-          governorate: u.governorate ?? null,
-          lastActivity: u.lastActivity ?? u.updatedAt ?? new Date().toISOString(),
-          isOnline: u.isOnline ?? false,
-          createdAt: u.createdAt ?? new Date().toISOString(),
-          updatedAt: u.updatedAt ?? new Date().toISOString(),
+          userId: Number(u.userId ?? u.user_id ?? 0),
+          username: String(u.username ?? ''),
+          fullName: String(u.fullName ?? u.full_name ?? ''),
+          email: String(u.email ?? ''),
+          userType,
+          status: (u.status ?? 'Active') as User['status'],
+          roleId: Number(u.roleId ?? firstRole?.roleId ?? 1),
+          roleName: String(u.roleName ?? firstRole?.roleName ?? ''),
+          roleNameAr: String(u.roleNameAr ?? firstRole?.roleNameAr ?? ''),
+          roleCode: String(u.roleCode ?? (userType === 'system' ? 'SYS' : userType === 'ministry' ? 'B2' : 'S1')),
+          schoolId: (u.schoolId ?? schoolObj?.schoolId ?? null) as number | null,
+          schoolName: (u.schoolName ?? schoolObj?.schoolName ?? null) as string | null,
+          schoolCode: (u.schoolCode ?? null) as string | null,
+          directorateId: (u.directorateId ?? null) as number | null,
+          directorate: (u.directorate ?? null) as string | null,
+          governorate: (u.governorate ?? null) as string | null,
+          lastActivity: String(u.lastActivity ?? u.updatedAt ?? new Date().toISOString()),
+          isOnline: Boolean(u.isOnline ?? false),
+          createdAt: String(u.createdAt ?? new Date().toISOString()),
+          updatedAt: String(u.updatedAt ?? new Date().toISOString()),
         } as User;
       });
       return {
@@ -124,51 +130,63 @@ export const usersApi = {
   async getUsersMeta(): Promise<ApiResponse<{
     roles: Role[];
     schools: Array<{ schoolId: number; schoolName: string; schoolCode: string; educationalDistrict?: string }>;
-    ministries: any[];
+    ministries: unknown[];
     governorates?: Governorate[];
     directorates?: Directorate[];
   }>> {
     try {
       const res = await get<{
-        roles: any[];
-        schools: any[];
-        ministries: any[];
-        governorates?: any[];
-        directorates?: any[];
+        roles: RawRecord[];
+        schools: RawRecord[];
+        ministries: unknown[];
+        governorates?: RawRecord[];
+        directorates?: RawRecord[];
       }>('/users/meta');
 
       if (res && res.data) {
         return {
           ...res,
           data: {
-            roles: (res.data.roles || []).map((r: any) => ({
-              roleId: r.roleId ?? r.role_id,
-              roleName: r.roleName ?? r.role_name,
-              description: r.description ?? '',
-              userType: (r.roleName === 'admin' ? 'system' : r.roleName?.includes('school') ? 'school' : 'ministry') as any,
-              roleCode: r.roleName === 'admin' ? 'SYS' : r.roleName === 'school_evaluator' ? 'S1' : r.roleName === 'school_principal' ? 'S2' : 'B2',
-            })),
-            schools: (res.data.schools || []).map((s: any) => ({
-              schoolId: s.schoolId ?? s.school_id,
-              schoolName: s.schoolName ?? s.school_name,
-              schoolCode: s.schoolCode ?? `SCH-${s.schoolId ?? s.school_id}`,
-              educationalDistrict: s.educationalDistrict ?? s.educational_district ?? '',
+            roles: (res.data.roles || []).map((r) => {
+              const roleName = String(r.roleName ?? r.role_name ?? '');
+              const derivedUserType: Role['userType'] =
+                roleName === 'admin' ? 'system' : roleName.includes('school') ? 'school' : 'ministry';
+              return {
+                roleId: Number(r.roleId ?? r.role_id ?? 0),
+                roleName,
+                description: String(r.description ?? ''),
+                userType: derivedUserType,
+                roleCode:
+                  roleName === 'admin'
+                    ? 'SYS'
+                    : roleName === 'school_evaluator'
+                      ? 'S1'
+                      : roleName === 'school_principal'
+                        ? 'S2'
+                        : 'B2',
+              };
+            }),
+            schools: (res.data.schools || []).map((s) => ({
+              schoolId: Number(s.schoolId ?? s.school_id ?? 0),
+              schoolName: String(s.schoolName ?? s.school_name ?? ''),
+              schoolCode: String(s.schoolCode ?? `SCH-${s.schoolId ?? s.school_id ?? ''}`),
+              educationalDistrict: String(s.educationalDistrict ?? s.educational_district ?? ''),
             })),
             ministries: res.data.ministries || [],
-            governorates: (res.data.governorates || []).map((g: any) => ({
-              governorateId: g.governorateId ?? g.governorate_id,
-              nameAr: g.nameAr ?? g.name_ar,
-              nameEn: g.nameEn ?? g.name_en ?? '',
-              code: g.code ?? '',
+            governorates: (res.data.governorates || []).map((g) => ({
+              governorateId: Number(g.governorateId ?? g.governorate_id ?? 0),
+              nameAr: String(g.nameAr ?? g.name_ar ?? ''),
+              nameEn: String(g.nameEn ?? g.name_en ?? ''),
+              code: String(g.code ?? ''),
             })),
-            directorates: (res.data.directorates || []).map((d: any) => ({
-              directorateId: d.directorateId ?? d.directorate_id,
-              directorateName: d.directorateName ?? d.directorate_name ?? d.name_ar,
-              governorateId: d.governorateId ?? d.governorate_id,
-              governorate: d.governorate ?? d.governorate_name ?? '',
-              schoolCount: d.schoolCount ?? 0,
-              isActive: d.isActive ?? true,
-              createdAt: d.createdAt ?? '',
+            directorates: (res.data.directorates || []).map((d) => ({
+              directorateId: Number(d.directorateId ?? d.directorate_id ?? 0),
+              directorateName: String(d.directorateName ?? d.directorate_name ?? d.name_ar ?? ''),
+              governorateId: Number(d.governorateId ?? d.governorate_id ?? 0),
+              governorate: String(d.governorate ?? d.governorate_name ?? ''),
+              schoolCount: Number(d.schoolCount ?? 0),
+              isActive: Boolean(d.isActive ?? true),
+              createdAt: String(d.createdAt ?? ''),
             })),
           },
         };

@@ -33,7 +33,7 @@ import { SYSTEM_SHORT_NAME } from '../../constants/systemConstants';
 interface UniversalNotificationsDrawerProps {
   isOpen: boolean;
   onClose: () => void;
-  onNavigate?: (screen: string, param?: any) => void;
+  onNavigate?: (screen: string, param?: unknown) => void;
 }
 
 type NotificationTab = 'all' | 'unread' | 'completion' | 'supervision' | 'standards' | 'system';

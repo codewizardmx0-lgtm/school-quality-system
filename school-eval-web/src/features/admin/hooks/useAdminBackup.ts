@@ -5,6 +5,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { backupApi } from '../api/backupApi';
+import { extractApiErrorMessage } from '../../../api/apiTypes';
 import type { BackupRecord, SystemSettings } from '../types/admin.types';
 
 export function useAdminBackup() {
@@ -23,15 +24,15 @@ export function useAdminBackup() {
       ]);
       if (backupsRes.data) setBackups(backupsRes.data);
       if (settingsRes.data) setSettings(settingsRes.data);
-    } catch (err: any) {
-      setError(err?.message || 'فشل في تحميل بيانات النسخ الاحتياطية وإعدادات النظام');
+    } catch (err: unknown) {
+      setError(extractApiErrorMessage(err, 'فشل في تحميل بيانات النسخ الاحتياطية وإعدادات النظام'));
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    void fetchData();
+    void Promise.resolve().then(() => fetchData());
   }, [fetchData]);
 
   const triggerBackup = useCallback(async (backupType: string): Promise<BackupRecord> => {

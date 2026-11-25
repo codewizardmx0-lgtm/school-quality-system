@@ -57,8 +57,8 @@ export const SupervisionDecisionTab: React.FC<SupervisionDecisionTabProps> = ({
       await supervisionApi.closeEvaluation(evaluationId, closureNotes);
       setShowConfirmModal(false);
       onDecisionSuccess?.();
-    } catch (e: any) {
-      setClosureError(e?.message || 'تعذر إكمال المراجعة الإشرافية. يرجى مراجعة الاشتراطات.');
+    } catch (e: unknown) {
+      setClosureError(e instanceof Error ? e.message : 'تعذر إكمال المراجعة الإشرافية. يرجى مراجعة الاشتراطات.');
     } finally {
       setIsSubmittingClosure(false);
     }

@@ -4,26 +4,20 @@ import {
   Users,
   ShieldCheck,
   Database,
-  ArrowLeft,
-  Sparkles,
-  Cloud,
-  Mail,
-  Lock,
   UserPlus,
   PlusCircle,
   MapPin,
   RefreshCw,
   FileDown,
-  UserCheck,
   AlertTriangle,
   Server,
-  Activity,
 } from 'lucide-react';
-import { theme } from '../../theme';
 import { useAdminDashboard } from '../../hooks/useAdminDashboard';
-import { formatRelativeArabic } from '../../utils/dateUtils';
 import { schoolsApi } from '../../api/schoolsApi';
 import type { AdminScreen, School, BackupRecord } from '../../types/admin.types';
+import { AdminUrgentSchoolsWidget } from './AdminUrgentSchoolsWidget';
+import { AdminSystemHealthWidget } from './AdminSystemHealthWidget';
+import { AdminAuditStreamCard } from './AdminAuditStreamCard';
 
 // Modals for Zero Dead Buttons
 import { TriggerBackupModal } from '../backup/TriggerBackupModal';
@@ -37,6 +31,12 @@ interface AdminDashboardProps {
   onNavigate: (screen: AdminScreen) => void;
   addToast: (type: 'success' | 'error' | 'warning' | 'info', msg: string) => void;
 }
+
+const hasPrincipal = (s: School): boolean => Boolean(s.principal?.userId || s.principal?.fullName);
+const hasEvaluator = (s: School): boolean =>
+  Boolean((s.evaluators && s.evaluators.length > 0) || (s.evaluatorName && s.evaluatorName.trim() !== ''));
+const isCompleteSchool = (s: School): boolean => hasPrincipal(s) && hasEvaluator(s);
+const isIncompleteSchool = (s: School): boolean => !isCompleteSchool(s);
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate, addToast }) => {
   const {
@@ -67,11 +67,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate, addT
   const [selectedSchoolForPrincipal, setSelectedSchoolForPrincipal] = useState<School | null>(null);
 
   // Incomplete schools: missing principal OR evaluator
-  const hasPrincipal = (s: School) => Boolean(s.principal?.userId || s.principal?.fullName);
-  const hasEvaluator = (s: School) => Boolean((s.evaluators && s.evaluators.length > 0) || (s.evaluatorName && s.evaluatorName.trim() !== ''));
-  const isCompleteSchool = (s: School) => hasPrincipal(s) && hasEvaluator(s);
-  const isIncompleteSchool = (s: School) => !isCompleteSchool(s);
-
   const incompleteSchools = useMemo(() => {
     return schools.filter(isIncompleteSchool);
   }, [schools]);
@@ -109,9 +104,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate, addT
     try {
       await schoolsApi.downloadExecutivePdf();
       addToast('success', 'تم استخراج وتنزيل التقرير التنفيذي الشامل (PDF) بنجاح');
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Failed to export executive PDF report:', err);
-      addToast('error', err?.message || 'فشل في استخراج التقرير التنفيذي، يرجى المحاولة لاحقاً.');
+      const message = err instanceof Error ? err.message : undefined;
+      addToast('error', message || 'فشل في استخراج التقرير التنفيذي، يرجى المحاولة لاحقاً.');
     } finally {
       setIsExportingPdf(false);
     }
@@ -538,24 +534,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate, addT
             </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '10px', marginBottom: '8px' }}>
-            <span style={{ fontSize: '1.75rem', fontWeight: 800, color: '#0B0F19' }}>ميزة مستقبلية
+            <span style={{ fontSize: '1.75rem', fontWeight: 800, color: '#0B0F19' }}>
+              {stats?.infrastructureStatus === 'operational' ? 'تعمل بكفاءة' : 'تتطلب متابعة'}
             </span>
             <span
               style={{
                 fontSize: '0.75rem',
                 fontWeight: 700,
-                color: '#DC2626',
-                backgroundColor: '#FEF2F2',
-                border: '1px solid #FECACA',
+                color: stats?.infrastructureStatus === 'operational' ? '#059669' : '#DC2626',
+                backgroundColor: stats?.infrastructureStatus === 'operational' ? '#ECFDF5' : '#FEF2F2',
+                border: stats?.infrastructureStatus === 'operational' ? '1px solid #A7F3D0' : '1px solid #FECACA',
                 padding: '2px 8px',
                 borderRadius: '6px',
               }}
             >
-              غير مفعلة حالياً
+              {stats?.systemHealthDetails ? `${stats.systemHealthDetails.databaseLatencyMs} ms` : 'فحص حي'}
             </span>
           </div>
-          <div style={{ fontSize: '0.8rem', color: '#94A3B8' }}>
-            خدمات النسخ الاحتياطي السحابي قيد الإعداد
+          <div style={{ fontSize: '0.8rem', color: '#64748B' }}>
+            التخزين المحلي: {stats?.systemHealthDetails?.storageUsedMb ?? 0} MB • ملفات النسخ: {stats?.systemHealthDetails?.backupFilesCount ?? 0}
           </div>
         </div>
       </div>
@@ -778,715 +775,29 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate, addT
         }}
       >
         {/* Right Widget: المدارس التي تتطلب إجراءات ربط فورية */}
-        <div
-          style={{
-            backgroundColor: '#fff',
-            borderRadius: '16px',
-            border: '1px solid #E2E8F0',
-            padding: '24px',
-            boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
-            display: 'flex',
-            flexDirection: 'column',
-          }}
-        >
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              marginBottom: '20px',
-              paddingBottom: '14px',
-              borderBottom: '1px solid #F1F5F9',
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <div
-                style={{
-                  width: '36px',
-                  height: '36px',
-                  borderRadius: '8px',
-                  backgroundColor: '#FEF3C7',
-                  color: '#D97706',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-              >
-                <AlertTriangle size={18} />
-              </div>
-              <div>
-                <h3 style={{ fontSize: '1rem', fontWeight: 700, color: '#0B0F19', margin: 0 }}>
-                  المدارس التي تتطلب إجراءات ربط فورية
-                </h3>
-                <span style={{ fontSize: '0.75rem', color: '#64748B' }}>
-                  مدارس مسجلة بدون منسق جودة وتقييم رسمي
-                </span>
-              </div>
-            </div>
-            <span
-              style={{
-                fontSize: '0.75rem',
-                fontWeight: 700,
-                color: '#D97706',
-                backgroundColor: '#FFFBEB',
-                border: '1px solid #FDE68A',
-                padding: '3px 10px',
-                borderRadius: '9999px',
-              }}
-            >
-              {incompleteSchools.length} مدارس بانتظار الإجراءات
-            </span>
-          </div>
+        <AdminUrgentSchoolsWidget
+          schoolsCount={schools.length}
+          loading={loading}
+          incompleteSchoolsCount={incompleteSchools.length}
+          filteredUrgentSchools={filteredUrgentSchools}
+          urgentSearch={urgentSearch}
+          onUrgentSearchChange={setUrgentSearch}
+          hasPrincipal={hasPrincipal}
+          hasEvaluator={hasEvaluator}
+          onOpenPrincipalModal={handleOpenPrincipalModal}
+          onOpenLinkModal={handleOpenLinkModal}
+          onNavigateSchools={() => onNavigate('schools')}
+        />
 
-          {/* Urgent Schools Search Filter */}
-          <div style={{ marginBottom: '12px' }}>
-            <input
-              type="text"
-              placeholder="ابحث في المدارس العاجلة بالاسم أو الكود..."
-              value={urgentSearch}
-              onChange={(e) => setUrgentSearch(e.target.value)}
-              style={{
-                width: '100%',
-                padding: '8px 12px',
-                borderRadius: '8px',
-                border: '1px solid #E2E8F0',
-                fontSize: '0.8rem',
-                outline: 'none',
-                boxSizing: 'border-box',
-                backgroundColor: '#F8FAFC',
-              }}
-            />
-          </div>
-
-          {/* List of incomplete schools with max-height and scroll */}
-          <div style={{ flex: 1, maxHeight: '380px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '16px', paddingRight: '2px' }}>
-            {filteredUrgentSchools.length === 0 ? (
-              <div
-                style={{
-                  padding: '32px 16px',
-                  textAlign: 'center',
-                  color: '#059669',
-                  backgroundColor: '#ECFDF5',
-                  borderRadius: '12px',
-                  fontSize: '0.875rem',
-                  fontWeight: 600,
-                }}
-              >
-                {urgentSearch.trim() ? 'لا توجد مدارس مطابقة لبحثك' : '✓ جميع المدارس المسجلة مكتملة ولها مدير ومقيّم رسمي بنجاح'}
-              </div>
-            ) : (
-              filteredUrgentSchools.map((school: School) => {
-                const missingPrincipal = !hasPrincipal(school);
-                const missingEvaluator = !hasEvaluator(school);
-
-                return (
-                  <div
-                    key={school.schoolId}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      padding: '12px 14px',
-                      borderRadius: '12px',
-                      backgroundColor: '#F8FAFC',
-                      border: '1px solid #E2E8F0',
-                      transition: 'all 0.15s ease',
-                      flexWrap: 'wrap',
-                      gap: '10px',
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                      <div
-                        style={{
-                          width: '36px',
-                          height: '36px',
-                          borderRadius: '8px',
-                          backgroundColor: '#fff',
-                          border: '1px solid #E2E8F0',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          color: '#475569',
-                        }}
-                      >
-                        <SchoolIcon size={18} />
-                      </div>
-                      <div>
-                        <div style={{ fontSize: '0.875rem', fontWeight: 700, color: '#0B0F19' }}>
-                          {school.schoolName}
-                        </div>
-                        <div style={{ fontSize: '0.75rem', color: '#64748B', display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
-                          <span>{school.directorate}</span>
-                          <span>•</span>
-                          <span>{school.educationalStage}</span>
-                          <span>•</span>
-                          {missingPrincipal && missingEvaluator ? (
-                            <span style={{ color: '#DC2626', backgroundColor: '#FEF2F2', padding: '1px 6px', borderRadius: '4px', fontWeight: 700 }}>
-                              بدون مدير ومقيّم
-                            </span>
-                          ) : missingPrincipal ? (
-                            <span style={{ color: '#D97706', backgroundColor: '#FFFBEB', padding: '1px 6px', borderRadius: '4px', fontWeight: 700 }}>
-                              بدون مدير
-                            </span>
-                          ) : (
-                            <span style={{ color: '#2563EB', backgroundColor: '#EFF6FF', padding: '1px 6px', borderRadius: '4px', fontWeight: 700 }}>
-                              بدون مقيّم
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      {missingPrincipal && (
-                        <button
-                          onClick={() => handleOpenPrincipalModal(school)}
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '4px',
-                            padding: '6px 10px',
-                            borderRadius: '8px',
-                            backgroundColor: '#059669',
-                            border: 'none',
-                            color: '#fff',
-                            fontSize: '0.75rem',
-                            fontWeight: 700,
-                            cursor: 'pointer',
-                            transition: 'background-color 0.15s',
-                          }}
-                          onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#047857')}
-                          onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#059669')}
-                        >
-                          <UserCheck size={13} />
-                          <span>إسناد مدير</span>
-                        </button>
-                      )}
-                      {missingEvaluator && (
-                        <button
-                          onClick={() => handleOpenLinkModal(school)}
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '4px',
-                            padding: '6px 10px',
-                            borderRadius: '8px',
-                            backgroundColor: '#4F46E5',
-                            border: 'none',
-                            color: '#fff',
-                            fontSize: '0.75rem',
-                            fontWeight: 700,
-                            cursor: 'pointer',
-                            transition: 'background-color 0.15s',
-                          }}
-                          onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#4338CA')}
-                          onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#4F46E5')}
-                        >
-                          <UserCheck size={13} />
-                          <span>إسناد مقيّم</span>
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                );
-              })
-            )}
-          </div>
-
-          {/* Directory Link */}
-          <button
-            onClick={() => onNavigate('schools')}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '6px',
-              padding: '11px',
-              borderRadius: '10px',
-              backgroundColor: '#fff',
-              border: '1px solid #CBD5E1',
-              color: '#4F46E5',
-              fontSize: '0.85rem',
-              fontWeight: 700,
-              cursor: 'pointer',
-              transition: 'all 0.15s',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = '#EEF2FF';
-              e.currentTarget.style.borderColor = '#A5B4FC';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = '#fff';
-              e.currentTarget.style.borderColor = '#CBD5E1';
-            }}
-          >
-            <span>عرض كافة المدارس والمديريات ({loading ? '...' : schools.length})</span>
-            <ArrowLeft size={16} />
-          </button>
-        </div>
-
-        {/* Left Widget: سلامة الخدمات والذكاء الاصطناعي */}
-        <div
-          style={{
-            backgroundColor: '#fff',
-            borderRadius: '16px',
-            border: '1px solid #E2E8F0',
-            padding: '24px',
-            boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
-            display: 'flex',
-            flexDirection: 'column',
-          }}
-        >
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              marginBottom: '20px',
-              paddingBottom: '14px',
-              borderBottom: '1px solid #F1F5F9',
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <div
-                style={{
-                  width: '36px',
-                  height: '36px',
-                  borderRadius: '8px',
-                  backgroundColor: '#EEF2FF',
-                  color: '#4F46E5',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-              >
-                <Activity size={18} />
-              </div>
-              <div>
-                <h3 style={{ fontSize: '1rem', fontWeight: 700, color: '#0B0F19', margin: 0 }}>
-                  سلامة الخدمات والذكاء الاصطناعي
-                </h3>
-                <span style={{ fontSize: '0.75rem', color: '#64748B' }}>
-                  مراقبة حية لصحة الخدمات والخوادم الطرفية
-                </span>
-              </div>
-            </div>
-            <span
-              style={{
-                fontSize: '0.75rem',
-                fontWeight: 700,
-                color: '#DC2626',
-                backgroundColor: '#FEF2F2',
-                border: '1px solid #FECACA',
-                padding: '3px 10px',
-                borderRadius: '9999px',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '5px',
-              }}
-            >
-              <AlertTriangle size={12} /> متوقفة مؤقتاً / قيد التهيئة
-            </span>
-          </div>
-
-          {/* 4 Health Status Cards */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', flex: 1 }}>
-            {/* Service 1: محرك الذكاء الاصطناعي */}
-            <div
-              style={{
-                padding: '14px 16px',
-                borderRadius: '12px',
-                backgroundColor: '#F8FAFC',
-                border: '1px solid #E2E8F0',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <div
-                  style={{
-                    width: '34px',
-                    height: '34px',
-                    borderRadius: '8px',
-                    backgroundColor: '#EEF2FF',
-                    color: '#4F46E5',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}
-                >
-                  <Sparkles size={16} />
-                </div>
-                <div>
-                  <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#0B0F19' }}>
-                    محرك الذكاء الاصطناعي (Artaqa-Assist v2.4)
-                  </div>
-                  <div style={{ fontSize: '0.75rem', color: '#DC2626', fontWeight: 600 }}>
-                    قيد التهيئة البرمجية • غير متصل
-                  </div>
-                </div>
-              </div>
-              <span
-                style={{
-                  fontSize: '0.7rem',
-                  fontWeight: 700,
-                  color: '#059669',
-                  backgroundColor: '#ECFDF5',
-                  padding: '3px 8px',
-                  borderRadius: '6px',
-                }}
-              >
-                ميزة مستقبلية
-              </span>
-            </div>
-
-            {/* Service 2: مستودع الشواهد السحابي */}
-            <div
-              style={{
-                padding: '14px 16px',
-                borderRadius: '12px',
-                backgroundColor: '#F8FAFC',
-                border: '1px solid #E2E8F0',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '8px',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <div
-                    style={{
-                      width: '34px',
-                      height: '34px',
-                      borderRadius: '8px',
-                      backgroundColor: '#EFF6FF',
-                      color: '#2563EB',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                    }}
-                  >
-                    <Cloud size={16} />
-                  </div>
-                  <div>
-                    <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#0B0F19' }}>
-                      مستودع الشواهد السحابي (S3 Storage)
-                    </div>
-                    <div style={{ fontSize: '0.75rem', color: '#64748B' }}>
-                      تخزين محلي مؤقت • التخزين السحابي غير مفعل
-                    </div>
-                  </div>
-                </div>
-                <span
-                  style={{
-                    fontSize: '0.7rem',
-                    fontWeight: 700,
-                    color: '#2563EB',
-                    backgroundColor: '#EFF6FF',
-                    padding: '3px 8px',
-                    borderRadius: '6px',
-                  }}
-                >
-                  تجريبي محلي
-                </span>
-              </div>
-              {/* Storage progress bar */}
-              <div
-                style={{
-                  height: '6px',
-                  width: '100%',
-                  borderRadius: '9999px',
-                  backgroundColor: '#E2E8F0',
-                  overflow: 'hidden',
-                }}
-              >
-                <div
-                  style={{
-                    height: '100%',
-                    width: '8.5%',
-                    backgroundColor: '#2563EB',
-                    borderRadius: '9999px',
-                  }}
-                />
-              </div>
-            </div>
-
-            {/* Service 3: خادم البريد والإشعارات */}
-            <div
-              style={{
-                padding: '14px 16px',
-                borderRadius: '12px',
-                backgroundColor: '#F8FAFC',
-                border: '1px solid #E2E8F0',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <div
-                  style={{
-                    width: '34px',
-                    height: '34px',
-                    borderRadius: '8px',
-                    backgroundColor: '#FDF4FF',
-                    color: '#C026D3',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}
-                >
-                  <Mail size={16} />
-                </div>
-                <div>
-                  <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#0B0F19' }}>
-                    خادم البريد والإشعارات (SMTP Gateway)
-                  </div>
-                  <div style={{ fontSize: '0.75rem', color: '#DC2626', fontWeight: 600 }}>
-                    خدمة البريد SMTP غير مفعلة في البيئة الحالية
-                  </div>
-                </div>
-              </div>
-              <span
-                style={{
-                  fontSize: '0.7rem',
-                  fontWeight: 700,
-                  color: '#059669',
-                  backgroundColor: '#ECFDF5',
-                  padding: '3px 8px',
-                  borderRadius: '6px',
-                }}
-              >
-                غير مفعل
-              </span>
-            </div>
-
-            {/* Service 4: الجدار الناري والتشفير */}
-            <div
-              style={{
-                padding: '14px 16px',
-                borderRadius: '12px',
-                backgroundColor: '#F8FAFC',
-                border: '1px solid #E2E8F0',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <div
-                  style={{
-                    width: '34px',
-                    height: '34px',
-                    borderRadius: '8px',
-                    backgroundColor: '#ECFDF5',
-                    color: '#059669',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}
-                >
-                  <Lock size={16} />
-                </div>
-                <div>
-                  <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#0B0F19' }}>
-                    الجدار الناري والتشفير الرقمي
-                  </div>
-                  <div style={{ fontSize: '0.75rem', color: '#64748B' }}>
-                    TLS 1.3 نشط ومؤمّن • حماية الهجمات فعالة
-                  </div>
-                </div>
-              </div>
-              <span
-                style={{
-                  fontSize: '0.7rem',
-                  fontWeight: 700,
-                  color: '#059669',
-                  backgroundColor: '#ECFDF5',
-                  padding: '3px 8px',
-                  borderRadius: '6px',
-                }}
-              >
-                حماية أساسية
-              </span>
-            </div>
-          </div>
-        </div>
+        {/* Left Widget: سلامة الخدمات والبنية التحتية الحية */}
+        <AdminSystemHealthWidget stats={stats} />
       </div>
 
       {/* 5. Recent Security & Audit Stream (آخر العمليات المنفذة) */}
-      <div
-        style={{
-          backgroundColor: '#fff',
-          borderRadius: '16px',
-          border: '1px solid #E2E8F0',
-          padding: '24px',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
-        }}
-      >
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            marginBottom: '20px',
-            paddingBottom: '14px',
-            borderBottom: '1px solid #F1F5F9',
-            flexWrap: 'wrap',
-            gap: '12px',
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <div
-              style={{
-                width: '36px',
-                height: '36px',
-                borderRadius: '8px',
-                backgroundColor: '#ECFDF5',
-                color: '#059669',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              <ShieldCheck size={18} />
-            </div>
-            <div>
-              <h3 style={{ fontSize: '1rem', fontWeight: 700, color: '#0B0F19', margin: 0 }}>
-                سجل العمليات والتدقيق الأمني اللحظي
-              </h3>
-              <span style={{ fontSize: '0.75rem', color: '#64748B' }}>
-                تدفق غير قابل للتعديل مع بصمات التشفير التلقائية
-              </span>
-            </div>
-          </div>
-
-          <button
-            onClick={() => onNavigate('audit')}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '8px 14px',
-              borderRadius: '8px',
-              backgroundColor: '#F8FAFC',
-              border: '1px solid #CBD5E1',
-              color: '#4F46E5',
-              fontSize: '0.8rem',
-              fontWeight: 700,
-              cursor: 'pointer',
-              transition: 'all 0.15s ease',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = '#EEF2FF';
-              e.currentTarget.style.borderColor = '#A5B4FC';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = '#F8FAFC';
-              e.currentTarget.style.borderColor = '#CBD5E1';
-            }}
-          >
-            <span>الانتقال إلى سجل التدقيق الكامل</span>
-            <ArrowLeft size={14} />
-          </button>
-        </div>
-
-        {/* Audit stream items */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          {auditLogs.map((log) => {
-            const isBreach = log.eventCategory === 'breach';
-            const isSensitive = log.eventCategory === 'sensitive';
-            const badgeBg = isBreach ? '#FEF2F2' : isSensitive ? '#FEF3C7' : '#F1F5F9';
-            const badgeColor = isBreach ? '#EF4444' : isSensitive ? '#D97706' : '#475569';
-            const badgeBorder = isBreach ? '#FECACA' : isSensitive ? '#FDE68A' : '#E2E8F0';
-            const badgeLabel = isBreach ? 'حظر أمني' : isSensitive ? 'عملية حساسة' : 'عادي';
-
-            return (
-              <div
-                key={log.logId}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  padding: '14px 16px',
-                  borderRadius: '12px',
-                  backgroundColor: '#F8FAFC',
-                  border: '1px solid #E2E8F0',
-                  gap: '16px',
-                  flexWrap: 'wrap',
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0, flex: '1 1 200px' }}>
-                  <div
-                    style={{
-                      width: '40px',
-                      height: '40px',
-                      borderRadius: '50%',
-                      backgroundColor: '#EEF2FF',
-                      color: '#4F46E5',
-                      fontWeight: 800,
-                      fontSize: '0.85rem',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      flexShrink: 0,
-                    }}
-                  >
-                    {log.actorName?.slice(0, 2) ?? 'AD'}
-                  </div>
-                  <div>
-                    <div style={{ fontSize: '0.875rem', fontWeight: 700, color: '#0B0F19' }}>
-                      {log.description}
-                    </div>
-                    <div style={{ fontSize: '0.75rem', color: '#64748B', display: 'flex', gap: '8px', marginTop: '2px' }}>
-                      <span style={{ fontWeight: 600 }}>{log.actorName}</span>
-                      <span>•</span>
-                      <span>IP: {log.ipAddress}</span>
-                      <span>•</span>
-                      <span>{formatRelativeArabic(log.timestamp || new Date().toISOString())}</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  {/* Cryptographic Hash Badge */}
-                  <div
-                    style={{
-                      fontFamily: theme.typography.fontFamily.mono,
-                      fontSize: '0.7rem',
-                      color: '#64748B',
-                      backgroundColor: '#fff',
-                      padding: '4px 10px',
-                      borderRadius: '6px',
-                      border: '1px solid #E2E8F0',
-                      letterSpacing: '0.02em',
-                    }}
-                    title={`البصمة التشفيرية الكاملة: ${log.digitalHash}`}
-                  >
-                    SHA256: {(log.digitalHash || '00000000').substring(0, 10)}...
-                  </div>
-
-                  {/* Severity Badge */}
-                  <span
-                    style={{
-                      fontSize: '0.75rem',
-                      fontWeight: 700,
-                      backgroundColor: badgeBg,
-                      color: badgeColor,
-                      border: `1px solid ${badgeBorder}`,
-                      padding: '3px 10px',
-                      borderRadius: '6px',
-                    }}
-                  >
-                    {badgeLabel}
-                  </span>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
+      <AdminAuditStreamCard
+        auditLogs={auditLogs}
+        onNavigateAudit={() => onNavigate('audit')}
+      />
 
       {/* Zero Dead Buttons Modals */}
       <TriggerBackupModal

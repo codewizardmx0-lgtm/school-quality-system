@@ -39,12 +39,12 @@ interface IndicatorEditorPanelProps {
   isDraft?: boolean;
   isSaving: boolean;
   saveStatus: 'idle' | 'saving' | 'saved' | 'error';
-  onSave: (id: number, payload: UpdateIndicatorPayload) => Promise<any>;
-  onDelete: (id: number) => Promise<any>;
-  onAddEvidenceRequirement?: (indicatorId: number, payload: SaveEvidenceRequirementPayload) => Promise<any>;
-  onUpdateEvidenceRequirement?: (indicatorId: number, reqId: number, payload: SaveEvidenceRequirementPayload) => Promise<any>;
-  onDeleteEvidenceRequirement?: (indicatorId: number, reqId: number) => Promise<any>;
-  onUpdateScoreDescriptors?: (indicatorId: number, descriptors: UpdateScoreDescriptorItem[]) => Promise<any>;
+  onSave: (id: number, payload: UpdateIndicatorPayload) => Promise<unknown>;
+  onDelete: (id: number) => Promise<unknown>;
+  onAddEvidenceRequirement?: (indicatorId: number, payload: SaveEvidenceRequirementPayload) => Promise<unknown>;
+  onUpdateEvidenceRequirement?: (indicatorId: number, reqId: number, payload: SaveEvidenceRequirementPayload) => Promise<unknown>;
+  onDeleteEvidenceRequirement?: (indicatorId: number, reqId: number) => Promise<unknown>;
+  onUpdateScoreDescriptors?: (indicatorId: number, descriptors: UpdateScoreDescriptorItem[]) => Promise<unknown>;
 }
 
 const availableTools = [
@@ -103,7 +103,8 @@ export const IndicatorEditorPanel: React.FC<IndicatorEditorPanelProps> = ({
   const [editingReqRequired, setEditingReqRequired] = useState(true);
 
   useEffect(() => {
-    if (indicator) {
+    if (!indicator) return;
+    void Promise.resolve().then(() => {
       setCode(indicator.code || '');
       setName(indicator.name || '');
       setRubricNotes(indicator.rubricNotes || indicator.description || '');
@@ -117,7 +118,7 @@ export const IndicatorEditorPanel: React.FC<IndicatorEditorPanelProps> = ({
       setShowDeleteConfirm(false);
       setNewReqTitle('');
       setEditingReqId(null);
-    }
+    });
   }, [indicator]);
 
   if (!indicator) {

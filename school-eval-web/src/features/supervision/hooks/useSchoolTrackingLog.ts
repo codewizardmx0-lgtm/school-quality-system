@@ -5,6 +5,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { supervisionApi } from '../api/supervisionApi';
+import { extractApiErrorMessage } from '../../../api/apiTypes';
 import { exportTrackingLogToExcel } from '../utils/supervisionExportUtils';
 import type {
   SchoolTrackingLogData,
@@ -31,15 +32,15 @@ export function useSchoolTrackingLog(schoolId?: number) {
     try {
       const result = await supervisionApi.getSchoolTrackingLog(schoolId);
       setData(result);
-    } catch (err: any) {
-      setError(err?.message || 'تعذر استرجاع سجل متابعة المدرسة.');
+    } catch (err: unknown) {
+      setError(extractApiErrorMessage(err, 'تعذر استرجاع سجل متابعة المدرسة.'));
     } finally {
       setIsLoading(false);
     }
   }, [schoolId]);
 
   useEffect(() => {
-    fetchLog();
+    void Promise.resolve().then(() => fetchLog());
   }, [fetchLog]);
 
   // حفظ مذكرة إشرافية جديدة
@@ -117,8 +118,8 @@ export function useSchoolTrackingLog(schoolId?: number) {
 
       setMemoSuccess(true);
       return true;
-    } catch (err: any) {
-      setMemoError(err?.message || 'تعذر حفظ المذكرة الإشرافية.');
+    } catch (err: unknown) {
+      setMemoError(extractApiErrorMessage(err, 'تعذر حفظ المذكرة الإشرافية.'));
       return false;
     } finally {
       setIsAddingMemo(false);

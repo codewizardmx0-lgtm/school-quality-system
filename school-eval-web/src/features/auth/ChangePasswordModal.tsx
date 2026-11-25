@@ -72,8 +72,13 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({
       setNewPassword('');
       setNewPasswordConfirmation('');
       onClose();
-    } catch (err: any) {
-      const backendErrors = err?.response?.data?.errors || err?.errors;
+    } catch (err: unknown) {
+      const apiErr = err as {
+        response?: { data?: { errors?: Record<string, string[]>; message?: string } };
+        errors?: Record<string, string[]>;
+        message?: string;
+      };
+      const backendErrors = apiErr?.response?.data?.errors || apiErr?.errors;
       if (backendErrors) {
         const mapped: Record<string, string> = {};
         if (backendErrors.current_password || backendErrors.currentPassword) {
@@ -87,7 +92,7 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({
         }
         setErrors(mapped);
       } else {
-        const msg = err?.response?.data?.message || err?.message || 'فشل تغيير كلمة المرور. يرجى التحقق من صحة كلمة المرور الحالية.';
+        const msg = apiErr?.response?.data?.message || apiErr?.message || 'فشل تغيير كلمة المرور. يرجى التحقق من صحة كلمة المرور الحالية.';
         setErrors({ currentPassword: msg });
         addToast('error', msg);
       }

@@ -307,7 +307,7 @@ export const PendingIndicatorsTable: React.FC<PendingIndicatorsTableProps> = ({
               <Filter size={14} color="#64748B" />
               <select
                 value={filterType}
-                onChange={(e) => setFilterType(e.target.value as any)}
+                onChange={(e) => setFilterType(e.target.value as 'all' | 'unscored' | 'missing-evidence')}
                 style={{
                   padding: '6px 10px',
                   borderRadius: '8px',

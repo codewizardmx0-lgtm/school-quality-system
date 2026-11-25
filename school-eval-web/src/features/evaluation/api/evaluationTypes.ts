@@ -325,6 +325,7 @@ export interface EvidenceItem {
   uploadedBy: string;
   verificationStatus: VerificationTagStatus;
   verificationStatusArabic: string;
+  needsReplacement?: boolean;
 }
 
 export interface EvidencesRepositoryResponse {
@@ -794,7 +795,7 @@ export interface IndicatorMetricsContextItem {
   suggested_level: number | null;
   badge: string;
   message: string;
-  raw_data?: Record<string, any>;
+  raw_data?: Record<string, unknown>;
 }
 
 export interface IndicatorsContextResponse {

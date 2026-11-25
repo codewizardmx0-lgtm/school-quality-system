@@ -96,8 +96,8 @@ export const StandardsDiffLogPage: React.FC<StandardsDiffLogPageProps> = ({
             }
           }
         }
-      } catch (err: any) {
-        if (isMounted) setError(err?.message || 'تعذر تحميل قائمة الإصدارات.');
+      } catch (err: unknown) {
+        if (isMounted) setError(err instanceof Error ? err.message : 'تعذر تحميل قائمة الإصدارات.');
       } finally {
         if (isMounted) setIsVersionsLoading(false);
       }
@@ -106,6 +106,7 @@ export const StandardsDiffLogPage: React.FC<StandardsDiffLogPageProps> = ({
     return () => {
       isMounted = false;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // 2. جلب سجل الفروقات عند تغيير الإصدارين
@@ -116,8 +117,8 @@ export const StandardsDiffLogPage: React.FC<StandardsDiffLogPageProps> = ({
     try {
       const data = await standardsApi.getDiffLog(targetVersionId, baseVersionId);
       setDiffData(data);
-    } catch (err: any) {
-      setError(err?.message || 'فشل جلب بيانات سجل الفروقات من الخادم.');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'فشل جلب بيانات سجل الفروقات من الخادم.');
     } finally {
       setIsLoadingDiff(false);
     }
@@ -125,7 +126,7 @@ export const StandardsDiffLogPage: React.FC<StandardsDiffLogPageProps> = ({
 
   useEffect(() => {
     if (targetVersionId) {
-      fetchDiff();
+      void Promise.resolve().then(() => fetchDiff());
     }
   }, [fetchDiff, targetVersionId, baseVersionId]);
 

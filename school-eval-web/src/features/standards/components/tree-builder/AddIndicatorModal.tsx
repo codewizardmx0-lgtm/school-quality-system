@@ -12,7 +12,7 @@ interface AddIndicatorModalProps {
   onClose: () => void;
   subStandardName: string;
   subStandardId: number;
-  onSubmit: (subId: number, payload: CreateIndicatorPayload) => Promise<any>;
+  onSubmit: (subId: number, payload: CreateIndicatorPayload) => Promise<unknown>;
 }
 
 export const AddIndicatorModal: React.FC<AddIndicatorModalProps> = ({
@@ -58,8 +58,8 @@ export const AddIndicatorModal: React.FC<AddIndicatorModalProps> = ({
         verification_method: verificationMethod,
       });
       handleClose();
-    } catch (err: any) {
-      setError(err?.message || 'فشل إضافة المؤشر.');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'فشل إضافة المؤشر.');
     } finally {
       setIsSubmitting(false);
     }

@@ -24,7 +24,7 @@ interface EvaluatorTopBarProps {
   schoolInfo?: EvaluatorSchoolInfo | null;
   hasOpenCompletionRequest?: boolean;
   onOpenCompletionRequest?: () => void;
-  onNavigate: (screen: EvaluatorScreen, param?: any) => void;
+  onNavigate: (screen: EvaluatorScreen, param?: number, fromHub?: boolean) => void;
   isLocked?: boolean;
   isMobile?: boolean;
   onOpenMobile?: () => void;
@@ -590,7 +590,7 @@ export const EvaluatorTopBar: React.FC<EvaluatorTopBarProps> = ({
       <UniversalNotificationsDrawer
         isOpen={isNotificationsDrawerOpen}
         onClose={() => setIsNotificationsDrawerOpen(false)}
-        onNavigate={(screen, param) => onNavigate(screen as EvaluatorScreen, param)}
+        onNavigate={(screen, param) => onNavigate(screen as EvaluatorScreen, typeof param === 'number' ? param : undefined)}
       />
     </header>
   );

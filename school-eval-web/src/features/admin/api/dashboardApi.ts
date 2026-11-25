@@ -24,6 +24,24 @@ export interface AdminDashboardStats {
     aiEngine: string;
     smtp: string;
   };
+  systemHealthDetails?: {
+    databaseStatus: 'operational' | 'degraded';
+    databaseLatencyMs: number;
+    databaseEngine: string;
+    storageUsedMb: number;
+    storageLimitMb: number;
+    storageUsagePercent: number;
+    backupFilesCount: number;
+    cloudStorageEnabled: boolean;
+    cloudEndpoint: string;
+    aiEnabled: boolean;
+    aiModel: string;
+    aiStatus: string;
+    smtpEnabled: boolean;
+    smtpHost: string;
+    smtpPort: number;
+    firewallEnabled: boolean;
+  };
 }
 
 export const dashboardApi = {

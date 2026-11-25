@@ -27,6 +27,7 @@ import { EditSchoolModal } from './EditSchoolModal';
 import { exportToExcel, formatExportFilename } from '../../utils/exportUtils';
 import { UserCheck, FileSpreadsheet } from 'lucide-react';
 import { schoolsApi } from '../../api/schoolsApi';
+import { extractApiErrorMessage } from '../../../../api/apiTypes';
 import { AddDirectorateModal } from './AddDirectorateModal';
 import { useAdminSchools } from '../../hooks/useAdminSchools';
 
@@ -93,8 +94,8 @@ export const SchoolsDirectory: React.FC<SchoolsDirectoryProps> = ({ onNavigate, 
       const res = await schoolsApi.toggleSchoolStatus(school.schoolId);
       addToast('success', res?.message || 'تم تحديث حالة المدرسة بنجاح');
       await fetchData();
-    } catch (err: any) {
-      addToast('error', err?.message || 'تعذر تحديث حالة المدرسة');
+    } catch (err: unknown) {
+      addToast('error', extractApiErrorMessage(err, 'تعذر تحديث حالة المدرسة'));
     }
   };
 
@@ -106,8 +107,8 @@ export const SchoolsDirectory: React.FC<SchoolsDirectoryProps> = ({ onNavigate, 
       addToast('success', res?.message || `تم حذف مدرسة (${deletingSchool.schoolName}) بنجاح`);
       setDeletingSchool(null);
       await fetchData();
-    } catch (err: any) {
-      addToast('error', err?.message || 'لا يمكن حذف المدرسة لأنها مرتبطة بسجلات أو مستخدمين');
+    } catch (err: unknown) {
+      addToast('error', extractApiErrorMessage(err, 'لا يمكن حذف المدرسة لأنها مرتبطة بسجلات أو مستخدمين'));
     } finally {
       setIsDeletingSchool(false);
     }
@@ -125,11 +126,12 @@ export const SchoolsDirectory: React.FC<SchoolsDirectoryProps> = ({ onNavigate, 
         setSelectedDirectorateId(null);
       }
       await fetchData();
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const apiErr = err as { response?: { data?: { message?: string } }; errors?: { directorate?: string[] }; message?: string };
       const errorMsg =
-        err?.response?.data?.message ||
-        err?.errors?.directorate?.[0] ||
-        err?.message ||
+        apiErr?.response?.data?.message ||
+        apiErr?.errors?.directorate?.[0] ||
+        apiErr?.message ||
         'لا يمكن حذف المديرية لأنها مرتبطة بمدارس';
       addToast('error', errorMsg);
     } finally {
@@ -178,7 +180,7 @@ export const SchoolsDirectory: React.FC<SchoolsDirectoryProps> = ({ onNavigate, 
         schoolEvaluators.map((e) => e.fullName || e.username).join('، ') ||
         s.evaluatorName ||
         'غير مسند';
-      const princName = schoolPrincipal?.fullName || (schoolPrincipal as any)?.username || 'غير مسند';
+      const princName = schoolPrincipal?.fullName || (schoolPrincipal as { username?: string } | undefined)?.username || 'غير مسند';
       const isReady = (schoolEvaluators.length > 0 || (s.evaluators && s.evaluators.length > 0) || !!s.evaluatorName) && !!schoolPrincipal;
 
       return [
@@ -703,7 +705,7 @@ export const SchoolsDirectory: React.FC<SchoolsDirectoryProps> = ({ onNavigate, 
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
                               <div>
                                 <span style={{ fontSize: theme.typography.fontSizes.sm, fontWeight: 700, color: '#065F46', display: 'block' }}>
-                                  {schoolPrincipal.fullName || (schoolPrincipal as any).username}
+                                  {schoolPrincipal.fullName || (schoolPrincipal as { username?: string }).username}
                                 </span>
                                 <span style={{ fontSize: '0.7rem', color: theme.colors.neutral[400] }}>
                                   {schoolPrincipal.email}

@@ -23,7 +23,7 @@ export function useFinalSubmission() {
   }, []);
 
   useEffect(() => {
-    fetchPreflight();
+    void Promise.resolve().then(() => fetchPreflight());
   }, [fetchPreflight]);
 
   const submitFinalLock = useCallback(

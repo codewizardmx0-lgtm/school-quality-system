@@ -15,7 +15,7 @@ interface CreateDraftModalProps {
   onClose: () => void;
   activeVersions: StandardVersionSummary[];
   initialCloneId?: number;
-  onSubmit: (payload: CreateDraftPayload) => Promise<any>;
+  onSubmit: (payload: CreateDraftPayload) => Promise<unknown>;
 }
 
 export const CreateDraftModal: React.FC<CreateDraftModalProps> = ({
@@ -64,8 +64,8 @@ export const CreateDraftModal: React.FC<CreateDraftModalProps> = ({
         clone_from_version_id: cloneFromId,
       });
       handleClose();
-    } catch (err: any) {
-      setError(err?.message || 'تعذر إنشاء المسودة، يرجى المحاولة لاحقاً.');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'تعذر إنشاء المسودة، يرجى المحاولة لاحقاً.');
     } finally {
       setIsSubmitting(false);
     }

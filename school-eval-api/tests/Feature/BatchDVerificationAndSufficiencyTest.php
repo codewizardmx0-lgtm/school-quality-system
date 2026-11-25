@@ -13,6 +13,7 @@ use App\Models\User;
 use App\Services\EvidenceSufficiencyService;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Tests\TestCase;
 
 /**
@@ -24,6 +25,7 @@ use Tests\TestCase;
  */
 class BatchDVerificationAndSufficiencyTest extends TestCase
 {
+    use DatabaseTransactions;
     public function test_active_standards_tree_returns_dynamic_verification_methods_per_indicator(): void
     {
         $evaluator = User::where('username', 'quality_farouq')->firstOrFail();

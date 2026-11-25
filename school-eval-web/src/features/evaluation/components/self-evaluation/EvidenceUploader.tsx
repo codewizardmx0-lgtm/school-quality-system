@@ -63,10 +63,12 @@ export const EvidenceUploader: React.FC<EvidenceUploaderProps> = ({
   const activeTemplate = selectedTemplate || matchedTemplate;
 
   useEffect(() => {
-    setSelectedUploadReqIds([]);
-    setErrorMessage(null);
-    setSelectedTemplate(null);
-    setIsCopied(false);
+    void Promise.resolve().then(() => {
+      setSelectedUploadReqIds([]);
+      setErrorMessage(null);
+      setSelectedTemplate(null);
+      setIsCopied(false);
+    });
   }, [indicatorId, indicatorCode]);
 
   const handleToggleUploadReq = (reqId: number) => {
@@ -85,8 +87,9 @@ export const EvidenceUploader: React.FC<EvidenceUploaderProps> = ({
     setErrorMessage(null);
     try {
       await onUpdateCoveredRequirements(link.linkId, next);
-    } catch (err: any) {
-      setErrorMessage(err?.response?.data?.message || 'تعذر تحديث المتطلبات المغطاة للشاهد.');
+    } catch (err: unknown) {
+      const apiErr = err as { response?: { data?: { message?: string } } };
+      setErrorMessage(apiErr?.response?.data?.message || 'تعذر تحديث المتطلبات المغطاة للشاهد.');
     } finally {
       setUpdatingReqLinkId(null);
     }
@@ -165,8 +168,9 @@ export const EvidenceUploader: React.FC<EvidenceUploaderProps> = ({
     setUnlinkingId(linkId);
     try {
       await onUnlinkEvidence(linkId);
-    } catch (err: any) {
-      setErrorMessage(err?.response?.data?.message || 'تعذر فك ارتباط الشاهد.');
+    } catch (err: unknown) {
+      const apiErr = err as { response?: { data?: { message?: string } } };
+      setErrorMessage(apiErr?.response?.data?.message || 'تعذر فك ارتباط الشاهد.');
     } finally {
       setUnlinkingId(null);
     }

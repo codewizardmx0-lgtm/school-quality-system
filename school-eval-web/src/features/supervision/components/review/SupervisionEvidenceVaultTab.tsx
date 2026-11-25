@@ -22,7 +22,7 @@ import type {
 import { supervisionApi } from '../../api/supervisionApi';
 
 // معجم تعريب تصنيفات الوثائق الرسمية
-export const translateDocType = (type?: string): string => {
+const translateDocType = (type?: string): string => {
   if (!type) return 'وثيقة أخرى';
   const map: Record<string, string> = {
     plan: 'خطة تشغيلية / إجرائية',
@@ -52,7 +52,7 @@ interface SupervisionEvidenceVaultTabProps {
     documents: SupervisionVaultDocument[];
     stats: SupervisionVaultStats;
   };
-  evidenceInventory?: any;
+  evidenceInventory?: unknown;
   standards?: SupervisionStandardItem[];
 }
 
@@ -67,7 +67,7 @@ export const SupervisionEvidenceVaultTab: React.FC<SupervisionEvidenceVaultTabPr
   const [selectedFormat, setSelectedFormat] = useState<string>('all');
   const [collapsedInventoryStandards, setCollapsedInventoryStandards] = useState<Record<number, boolean>>({});
 
-  const documents = vault?.documents || [];
+  const documents = useMemo(() => vault?.documents || [], [vault?.documents]);
   const stats = vault?.stats || {
     totalDocuments: documents.length,
     totalLinks: 0,

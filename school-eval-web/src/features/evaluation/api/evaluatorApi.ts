@@ -5,6 +5,7 @@
  */
 
 import { get, post, put, patch, del, apiClient } from '../../../api/apiClient';
+import type { JsonRecord } from '../../../api/apiTypes';
 import type {
   EvaluatorDashboardData,
   StandardsTreeData,
@@ -215,7 +216,28 @@ export const evaluatorApi = {
       downloadUrl: string;
     }>;
   }> {
-    const response = await get<any>(`/evidences/documents/${documentId}/versions`);
+    type DocumentVersionsResponse = {
+      document: {
+        id: number;
+        title: string;
+        documentType: string;
+        description?: string;
+        totalVersions: number;
+      };
+      versions: Array<{
+        versionId: number;
+        documentId: number;
+        versionNo: number;
+        isCurrent: boolean;
+        fileName: string;
+        fileSize: number;
+        mimeType: string;
+        notes?: string;
+        createdAt: string;
+        downloadUrl: string;
+      }>;
+    };
+    const response = await get<DocumentVersionsResponse>(`/evidences/documents/${documentId}/versions`);
     return response.data!;
   },
 
@@ -311,8 +333,10 @@ export const evaluatorApi = {
    * 10.c POST /api/v1/evaluator/improvement-plans/{id}/clone-version
    * Smart version cloning (v1 -> v2) upon supervisor completion request
    */
-  async clonePlanVersion(planId: number): Promise<any> {
-    const response = await post<any>(`/evaluator/improvement-plans/${planId}/clone-version`);
+  async clonePlanVersion(planId: number): Promise<{ data?: { planId?: number; planType?: PlanType } } & JsonRecord> {
+    const response = await post<{ data?: { planId?: number; planType?: PlanType } } & JsonRecord>(
+      `/evaluator/improvement-plans/${planId}/clone-version`
+    );
     return response.data!;
   },
 
@@ -344,8 +368,8 @@ export const evaluatorApi = {
    * 11.c POST /api/v1/evaluator/improvement-plans/{id}/review-notes
    * Add an internal review note to the plan
    */
-  async createPlanReviewNote(planId: number, text: string): Promise<any> {
-    const response = await post<any>(`/evaluator/improvement-plans/${planId}/review-notes`, { text });
+  async createPlanReviewNote(planId: number, text: string): Promise<JsonRecord> {
+    const response = await post<JsonRecord>(`/evaluator/improvement-plans/${planId}/review-notes`, { text });
     return response.data!;
   },
 
@@ -727,19 +751,29 @@ export const evaluatorApi = {
     if (standardCode) params.sub_standard_code = standardCode;
     if (planType) params.plan_type = planType;
 
-    const response = await get<any>('/improvement-plans/action-catalog', { params });
+    const response = await get<unknown>('/improvement-plans/action-catalog', { params });
     const raw = response.data;
-    const items = Array.isArray(raw) ? raw : (raw?.data || []);
+    const items = (
+      Array.isArray(raw)
+        ? raw
+        : raw && typeof raw === 'object' && Array.isArray((raw as { data?: unknown }).data)
+          ? (raw as { data: unknown[] }).data
+          : []
+    ) as JsonRecord[];
 
-    return items.map((item: any) => ({
-      catalog_id: item.catalog_id || item.catalogId || item.id,
-      sub_standard_code: item.sub_standard_code || item.standardCode || '',
-      plan_type: item.plan_type || item.planType || 'QualityImprovement',
-      title: item.title || item.action_title || '',
-      description: item.description || item.suggested_responsible_description || '',
-      target_score: item.target_score || item.defaultTarget || 3,
-      timeframe: item.suggested_duration_days ? `${item.suggested_duration_days} يوم` : (item.timeframe || item.defaultTimeframe || 'فصل دراسي'),
-      responsible_role: item.suggested_responsible_description || item.responsible_role || 'فريق التحسين المدرسي',
+    return items.map((item) => ({
+      catalog_id: Number(item.catalog_id || item.catalogId || item.id || 0),
+      sub_standard_code: String(item.sub_standard_code || item.standardCode || ''),
+      plan_type: (item.plan_type || item.planType || 'QualityImprovement') as PlanType,
+      title: String(item.title || item.action_title || ''),
+      description: String(item.description || item.suggested_responsible_description || ''),
+      target_score: Number(item.target_score || item.defaultTarget || 3),
+      timeframe: item.suggested_duration_days
+        ? `${String(item.suggested_duration_days)} يوم`
+        : String(item.timeframe || item.defaultTimeframe || 'فصل دراسي'),
+      responsible_role: String(
+        item.suggested_responsible_description || item.responsible_role || 'فريق التحسين المدرسي'
+      ),
     }));
   },
 
@@ -751,35 +785,41 @@ export const evaluatorApi = {
     const params: Record<string, number> = {};
     if (targetScore) params.target_score = targetScore;
 
-    const res = await get<any>('/evaluator/improvement-suggestions', { params });
+    const res = await get<unknown>('/evaluator/improvement-suggestions', { params });
     const raw = res?.data;
-    const suggestions = Array.isArray(raw) ? raw : (raw?.suggestions || []);
+    const rawObj = raw && typeof raw === 'object' ? (raw as JsonRecord) : {};
+    const suggestions = (
+      Array.isArray(raw) ? raw : Array.isArray(rawObj.suggestions) ? rawObj.suggestions : []
+    ) as JsonRecord[];
 
-    return suggestions.map((s: any) => {
-      const score = s.currentScore !== undefined ? s.currentScore : (s.score ?? 1);
-      const target = s.targetScore ?? raw?.targetScore ?? 3;
-      const gap = s.gap ?? (target - score);
+    return suggestions.map((s) => {
+      const score = Number(s.currentScore !== undefined ? s.currentScore : s.score ?? 1);
+      const target = Number(s.targetScore ?? rawObj.targetScore ?? 3);
+      const gap = Number(s.gap ?? target - score);
       const priority = (s.priority || s.suggestedPriority || (score <= 1 ? 'High' : 'Medium')) as PriorityLevel;
+      const resultId = Number(s.resultId || s.result_id || s.indicatorId || 0);
+      const indicatorId = Number(s.indicatorId || s.indicator_id || s.resultId || 0);
+      const indicatorTitle = s.indicatorName || s.indicator_name || s.indicatorTitle;
 
       return {
-        resultId: s.resultId || s.result_id || s.indicatorId,
-        indicatorId: s.indicatorId || s.indicator_id || s.resultId,
-        indicatorCode: s.indicatorCode || s.indicator_code || 'IND-GAP',
-        indicatorName: s.indicatorName || s.indicator_name || s.indicatorTitle || `مؤشر فجوة #${s.indicatorId || s.resultId}`,
-        standardCode: s.standardCode || s.standard_code || '',
-        standardName: s.standardName || s.standard_name || 'المعايير الوطنية',
+        resultId,
+        indicatorId,
+        indicatorCode: String(s.indicatorCode || s.indicator_code || 'IND-GAP'),
+        indicatorName: String(indicatorTitle || `مؤشر فجوة #${indicatorId}`),
+        standardCode: String(s.standardCode || s.standard_code || ''),
+        standardName: String(s.standardName || s.standard_name || 'المعايير الوطنية'),
         score,
         targetScore: target,
         gap,
         suggestedPriority: priority,
         priorityLabel: priority === 'High' ? 'أولوية قصوى (فجوة حرجة)' : 'أولوية متوسطة',
-        suggestedName: s.suggestedName || s.name || `تحسين أداء: ${s.indicatorName || s.indicatorTitle || 'المؤشر'}`,
+        suggestedName: String(s.suggestedName || s.name || `تحسين أداء: ${String(indicatorTitle || 'المؤشر')}`),
         isAdopted: Boolean(s.isAdopted || s.isAlreadyAdopted),
         isPreviouslyAdopted: Boolean(s.isPreviouslyAdopted),
-        adoptedAreaId: s.adoptedAreaId || s.area_id || null,
-        adoptedPlan: s.adoptedPlan || null,
+        adoptedAreaId: (s.adoptedAreaId || s.area_id || null) as number | null,
+        adoptedPlan: (s.adoptedPlan || null) as ImprovementSuggestion['adoptedPlan'],
         isExcluded: Boolean(s.isExcluded),
-        excludedAt: s.excludedAt || null,
+        excludedAt: (s.excludedAt || null) as string | null,
       };
     });
   },
@@ -805,8 +845,8 @@ export const evaluatorApi = {
    * Deterministic Discrepancy Auditor for early inconsistency detection (AI Audit Tab)
    */
   async getDiscrepanciesAudit(): Promise<DiscrepancyAuditResponse> {
-    const response = await get<any>('/evaluator/discrepancies/audit');
-    return response.data;
+    const response = await get<DiscrepancyAuditResponse>('/evaluator/discrepancies/audit');
+    return response.data!;
   },
 
   /**
@@ -884,9 +924,11 @@ export const evaluatorApi = {
   async getNotifications(isRead?: boolean): Promise<EvaluatorNotificationItem[]> {
     const params: Record<string, boolean> = {};
     if (isRead !== undefined) params.is_read = isRead;
-    const response = await get<EvaluatorNotificationItem[]>('/notifications', { params });
+    const response = await get<EvaluatorNotificationItem[] | { data?: EvaluatorNotificationItem[] }>('/notifications', {
+      params,
+    });
     const raw = response.data;
-    return Array.isArray(raw) ? raw : (raw as any)?.data || [];
+    return Array.isArray(raw) ? raw : raw?.data || [];
   },
 
   /**
@@ -938,22 +980,23 @@ export const evaluatorApi = {
    * List all evaluation cycles/dossiers of the school for archive viewing (IMP-06)
    */
   async getSchoolEvaluations(): Promise<EvaluationCycleArchiveItem[]> {
-    const response = await get<any>('/evaluations');
+    const response = await get<JsonRecord[]>('/evaluations');
     const items = Array.isArray(response.data) ? response.data : [];
-    return items.map((ev: any) => {
-      const cycleStatus = ev.cycle?.status || 'Active';
-      const evaluationStatus = ev.status || 'InProgress';
+    return items.map((ev) => {
+      const cycle = (ev.cycle && typeof ev.cycle === 'object' ? ev.cycle : {}) as JsonRecord;
+      const cycleStatus = String(cycle.status || 'Active');
+      const evaluationStatus = String(ev.status || 'InProgress');
       const isLocked =
         ['Submitted', 'UnderReview', 'Completed'].includes(evaluationStatus) ||
         cycleStatus === 'Closed';
       return {
-        evaluationId: ev.evaluationId || ev.evaluation_id,
-        cycleId: ev.cycleId || ev.cycle_id || ev.cycle?.cycleId || ev.cycle?.cycle_id || 1,
-        academicYear: ev.cycle?.academicYear || ev.cycle?.academic_year || ev.academicYear || '2026/2027',
+        evaluationId: Number(ev.evaluationId || ev.evaluation_id || 0),
+        cycleId: Number(ev.cycleId || ev.cycle_id || cycle.cycleId || cycle.cycle_id || 1),
+        academicYear: String(cycle.academicYear || cycle.academic_year || ev.academicYear || '2026/2027'),
         cycleStatus,
         evaluationStatus,
         isLocked,
-        createdAt: ev.createdAt || ev.created_at,
+        createdAt: String(ev.createdAt || ev.created_at || ''),
       };
     });
   },
@@ -963,7 +1006,7 @@ export const evaluatorApi = {
    * Fetch school quantitative metrics context for indicators (IMP-07 / GAP-EV-08)
    */
   async getIndicatorsContext(evaluationId: number): Promise<IndicatorsContextResponse> {
-    const response = await get<any>(`/evaluations/${evaluationId}/indicators-context`);
+    const response = await get<Partial<IndicatorsContextResponse>>(`/evaluations/${evaluationId}/indicators-context`);
     const raw = response.data || {};
     return {
       evaluationId,
@@ -979,9 +1022,10 @@ export const evaluatorApi = {
    * Fetch action catalog recommendations for weak indicators 0/1 (IMP-08 / GAP-EV-09)
    */
   async getActionRecommendations(evaluationId: number, indicatorCode: string): Promise<ActionRecommendationsResponse> {
-    const response = await get<any>(`/evaluations/${evaluationId}/action-recommendations`, {
-      params: { indicator_code: indicatorCode },
-    });
+    const response = await get<Partial<ActionRecommendationsResponse>>(
+      `/evaluations/${evaluationId}/action-recommendations`,
+      { params: { indicator_code: indicatorCode } }
+    );
     const raw = response.data || {};
     return {
       is_weak: Boolean(raw.is_weak),
@@ -1016,8 +1060,8 @@ export const evaluatorApi = {
    * 36. POST /api/v1/evaluator/audit-hub/indicators/{indicatorId}/review-note
    * Add a quick administrative review note from the Audit Hub
    */
-  async addAuditIndicatorReviewNote(indicatorId: number, text: string): Promise<any> {
-    const response = await post<any>(`/evaluator/audit-hub/indicators/${indicatorId}/review-note`, { text });
+  async addAuditIndicatorReviewNote(indicatorId: number, text: string): Promise<JsonRecord> {
+    const response = await post<JsonRecord>(`/evaluator/audit-hub/indicators/${indicatorId}/review-note`, { text });
     return response.data!;
   },
 };

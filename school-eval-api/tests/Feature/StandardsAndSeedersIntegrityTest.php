@@ -20,6 +20,7 @@ use App\Models\User;
 use App\Models\UserRole;
 use App\Models\VerificationTool;
 use Database\Seeders\DatabaseSeeder;
+use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Illuminate\Support\Facades\Hash;
 use Tests\TestCase;
 
@@ -45,6 +46,8 @@ use Tests\TestCase;
  */
 class StandardsAndSeedersIntegrityTest extends TestCase
 {
+    use DatabaseTransactions;
+
     /**
      * تشغيل الـ Seeders مرة واحدة فقط لكامل فئة الاختبار لتحقيق زمن استجابة سريع.
      */

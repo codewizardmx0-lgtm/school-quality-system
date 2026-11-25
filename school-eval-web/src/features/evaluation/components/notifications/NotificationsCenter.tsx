@@ -62,7 +62,7 @@ export const NotificationsCenter: React.FC<NotificationsCenterProps> = ({
   }, []);
 
   useEffect(() => {
-    fetchNotifications();
+    void Promise.resolve().then(() => fetchNotifications());
   }, [fetchNotifications]);
 
   const markAllAsRead = async () => {
@@ -163,8 +163,12 @@ export const NotificationsCenter: React.FC<NotificationsCenterProps> = ({
       }
       if (sortBy === 'priority') {
         const catWeight: Record<string, number> = { completion: 3, improvement: 2, procedural: 2, general: 1 };
-        const pA = (a as any).priority ? ((a as any).priority === 'high' ? 3 : 2) : (catWeight[classifyNotification(a)] || 1);
-        const pB = (b as any).priority ? ((b as any).priority === 'high' ? 3 : 2) : (catWeight[classifyNotification(b)] || 1);
+        const getPriority = (item: EvaluatorNotificationItem): number => {
+          const ext = item as EvaluatorNotificationItem & { priority?: string };
+          return ext.priority ? (ext.priority === 'high' ? 3 : 2) : (catWeight[classifyNotification(item)] || 1);
+        };
+        const pA = getPriority(a);
+        const pB = getPriority(b);
         if (pB !== pA) return pB - pA;
         return (b.createdAt || '').localeCompare(a.createdAt || '');
       }
@@ -449,7 +453,7 @@ export const NotificationsCenter: React.FC<NotificationsCenterProps> = ({
           <span style={{ fontSize: '12px', color: '#64748B', fontWeight: 600 }}>ترتيب حسب:</span>
           <select
             value={sortBy}
-            onChange={(e) => setSortBy(e.target.value as any)}
+            onChange={(e) => setSortBy(e.target.value as 'newest' | 'oldest' | 'priority')}
             style={{
               padding: '6px 10px',
               borderRadius: '8px',

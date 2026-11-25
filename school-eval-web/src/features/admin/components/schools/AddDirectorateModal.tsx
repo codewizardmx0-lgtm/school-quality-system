@@ -39,20 +39,22 @@ export const AddDirectorateModal: React.FC<AddDirectorateModalProps> = ({
   }, []);
 
   useEffect(() => {
-    if (directorateToEdit) {
-      setForm({
-        directorateName: directorateToEdit.directorateName,
-        governorate: directorateToEdit.governorate || 'أمانة العاصمة',
-        governorateId: directorateToEdit.governorateId || 1,
-      });
-    } else {
-      setForm({
-        directorateName: '',
-        governorate: 'أمانة العاصمة',
-        governorateId: 1,
-      });
-    }
-    setError('');
+    void Promise.resolve().then(() => {
+      if (directorateToEdit) {
+        setForm({
+          directorateName: directorateToEdit.directorateName,
+          governorate: directorateToEdit.governorate || 'أمانة العاصمة',
+          governorateId: directorateToEdit.governorateId || 1,
+        });
+      } else {
+        setForm({
+          directorateName: '',
+          governorate: 'أمانة العاصمة',
+          governorateId: 1,
+        });
+      }
+      setError('');
+    });
   }, [directorateToEdit, isOpen]);
 
   if (!isOpen) return null;
@@ -74,13 +76,14 @@ export const AddDirectorateModal: React.FC<AddDirectorateModalProps> = ({
       }
       onSuccess();
       onClose();
-    } catch (err: any) {
-      if (err?.errors) {
-        const firstError = Object.values(err.errors)[0];
-        setError(Array.isArray(firstError) ? firstError[0] : String(firstError));
+    } catch (err: unknown) {
+      const apiErr = err as { errors?: Record<string, unknown>; message?: string };
+      if (apiErr?.errors) {
+        const firstError = Object.values(apiErr.errors)[0];
+        setError(Array.isArray(firstError) ? String(firstError[0]) : String(firstError));
       } else {
-        setError(err?.message || (isEditing ? 'فشل تعديل المديرية' : 'فشل إضافة المديرية'));
-        addToast('error', err?.message || (isEditing ? 'فشل تعديل المديرية' : 'فشل في إضافة المديرية، يرجى المحاولة لاحقاً'));
+        setError(apiErr?.message || (isEditing ? 'فشل تعديل المديرية' : 'فشل إضافة المديرية'));
+        addToast('error', apiErr?.message || (isEditing ? 'فشل تعديل المديرية' : 'فشل في إضافة المديرية، يرجى المحاولة لاحقاً'));
       }
     } finally {
       setLoading(false);

@@ -5,6 +5,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { standardsApi } from '../api/standardsApi';
+import { extractApiErrorMessage } from '../../../api/apiTypes';
 import type { StandardVersionSummary, CreateDraftPayload } from '../api/standardsTypes';
 
 export function useStandardsVersions() {
@@ -22,15 +23,15 @@ export function useStandardsVersions() {
       setVersions(data);
       const active = data.find((v) => v.status === 'Active' || v.status === 'active') || data[0] || null;
       setActiveVersion(active);
-    } catch (err: any) {
-      setError(err?.message || 'تعذر تحميل قائمة الإصدارات المعيارية من الخادم.');
+    } catch (err: unknown) {
+      setError(extractApiErrorMessage(err, 'تعذر تحميل قائمة الإصدارات المعيارية من الخادم.'));
     } finally {
       setIsLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    fetchVersions();
+    void Promise.resolve().then(() => fetchVersions());
   }, [fetchVersions]);
 
   const createDraft = async (payload: CreateDraftPayload): Promise<StandardVersionSummary> => {
@@ -40,8 +41,8 @@ export function useStandardsVersions() {
       const newVersion = await standardsApi.createDraftVersion(payload);
       await fetchVersions();
       return newVersion;
-    } catch (err: any) {
-      const msg = err?.message || 'حدث خطأ أثناء إنشاء مسودة الإصدار.';
+    } catch (err: unknown) {
+      const msg = extractApiErrorMessage(err, 'حدث خطأ أثناء إنشاء مسودة الإصدار.');
       setError(msg);
       throw err;
     } finally {
@@ -56,8 +57,8 @@ export function useStandardsVersions() {
       const duplicated = await standardsApi.duplicateVersion(sourceId, newVersionNo);
       await fetchVersions();
       return duplicated;
-    } catch (err: any) {
-      const msg = err?.message || 'فشل استنساخ مسودة الإصدار المعياري.';
+    } catch (err: unknown) {
+      const msg = extractApiErrorMessage(err, 'فشل استنساخ مسودة الإصدار المعياري.');
       setError(msg);
       throw err;
     } finally {
@@ -71,8 +72,8 @@ export function useStandardsVersions() {
     try {
       await standardsApi.deleteVersion(versionId);
       await fetchVersions();
-    } catch (err: any) {
-      const msg = err?.message || 'فشل حذف مسودة الإصدار المعياري.';
+    } catch (err: unknown) {
+      const msg = extractApiErrorMessage(err, 'فشل حذف مسودة الإصدار المعياري.');
       setError(msg);
       throw err;
     } finally {

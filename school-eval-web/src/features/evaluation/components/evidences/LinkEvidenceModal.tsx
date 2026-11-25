@@ -46,29 +46,34 @@ export const LinkEvidenceModal: React.FC<LinkEvidenceModalProps> = ({
         setStandardsTree(tree);
       });
       // Reset state
-      setMode(initialMode);
-      setSearchTerm('');
-      setSelectedSingleIndicatorId(null);
-      const initialIds = evidence.linkedIndicators && evidence.linkedIndicators.length > 0
-        ? evidence.linkedIndicators.map((l) => l.indicatorId)
-        : (evidence.indicatorId ? [evidence.indicatorId] : []);
-      setSelectedMultiIndicatorIds(initialIds);
+      void Promise.resolve().then(() => {
+        setMode(initialMode);
+        setSearchTerm('');
+        setSelectedSingleIndicatorId(null);
+        const initialIds = evidence.linkedIndicators && evidence.linkedIndicators.length > 0
+          ? evidence.linkedIndicators.map((l) => l.indicatorId)
+          : (evidence.indicatorId ? [evidence.indicatorId] : []);
+        setSelectedMultiIndicatorIds(initialIds);
 
-      // تهيئة المتطلبات المحددة مسبقاً للشاهد
-      let initialCovered: number[] = [];
-      const evAny = evidence as any;
-      if (Array.isArray(evAny.coveredRequirements)) {
-        initialCovered.push(...evAny.coveredRequirements);
-      }
-      if (Array.isArray(evAny.linkedIndicators)) {
-        evAny.linkedIndicators.forEach((link: any) => {
-          if (Array.isArray(link.coveredRequirements)) {
-            initialCovered.push(...link.coveredRequirements);
-          }
-        });
-      }
-      setSelectedCoveredReqIds(Array.from(new Set(initialCovered)));
-      setJustification('');
+        // تهيئة المتطلبات المحددة مسبقاً للشاهد
+        const initialCovered: number[] = [];
+        const evTyped = evidence as unknown as {
+          coveredRequirements?: number[];
+          linkedIndicators?: Array<{ coveredRequirements?: number[] }>;
+        };
+        if (Array.isArray(evTyped.coveredRequirements)) {
+          initialCovered.push(...evTyped.coveredRequirements);
+        }
+        if (Array.isArray(evTyped.linkedIndicators)) {
+          evTyped.linkedIndicators.forEach((link) => {
+            if (Array.isArray(link.coveredRequirements)) {
+              initialCovered.push(...link.coveredRequirements);
+            }
+          });
+        }
+        setSelectedCoveredReqIds(Array.from(new Set(initialCovered)));
+        setJustification('');
+      });
     }
   }, [isOpen, initialMode, evidence]);
 
@@ -248,8 +253,9 @@ export const LinkEvidenceModal: React.FC<LinkEvidenceModalProps> = ({
         onSuccess(`تم فك ارتباط الشاهد "${evidence.title}" من هذا المؤشر وبقي محفوظاً في مستودع المدرسة.`);
         onClose();
       }
-    } catch (err: any) {
-      const msg = err?.response?.data?.message || (err as Error)?.message || 'فشلت عملية تحديث ارتباط الشاهد.';
+    } catch (err: unknown) {
+      const apiErr = err as { response?: { data?: { message?: string } } };
+      const msg = apiErr?.response?.data?.message || (err as Error)?.message || 'فشلت عملية تحديث ارتباط الشاهد.';
       onError(msg);
     } finally {
       setIsSubmitting(false);

@@ -10,7 +10,7 @@ import type { CreateStandardPayload } from '../../api/standardsTypes';
 interface AddStandardModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (payload: CreateStandardPayload) => Promise<any>;
+  onSubmit: (payload: CreateStandardPayload) => Promise<unknown>;
 }
 
 export const AddStandardModal: React.FC<AddStandardModalProps> = ({
@@ -54,8 +54,8 @@ export const AddStandardModal: React.FC<AddStandardModalProps> = ({
         weight: weight !== '' ? Number(weight) : 0,
       });
       handleClose();
-    } catch (err: any) {
-      setError(err?.message || 'فشل إضافة المعيار الرئيسي.');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'فشل إضافة المعيار الرئيسي.');
     } finally {
       setIsSubmitting(false);
     }

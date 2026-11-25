@@ -49,7 +49,7 @@ export const VersionAuditLockPage: React.FC<VersionAuditLockPageProps> = ({
 
   useEffect(() => {
     if (isLockedSuccessfully) {
-      setIsLockModalOpen(true);
+      void Promise.resolve().then(() => setIsLockModalOpen(true));
     }
   }, [isLockedSuccessfully]);
 

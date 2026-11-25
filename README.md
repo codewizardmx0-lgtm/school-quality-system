@@ -8,10 +8,9 @@
 
 ```
 school-quality-system/
-├── school-eval-api/       # الباك إند: Laravel 11 API مع Sanctum و MySQL
-├── school-eval-web/       # الفرونت إند: تطبيق React 19 (Vite + TypeScript + TailwindCSS)
-├── frontend-prototype/    # نموذج أولي تفاعلي للتحقق من تسلسل العمليات وتكامل الـ API (الشرائح 1-10)
-└── docs/                  # التوثيق المعماري، الأدلة، وتوثيق الشرائح (Slices) والأرشيف
+├── school-eval-api/       # الباك إند: Laravel 13 API مع Sanctum و MySQL
+├── school-eval-web/       # الفرونت إند: تطبيق React 19 (Vite + TypeScript)
+└── docs/                  # التوثيق المعماري، الأدلة، الوثيقة المرجعية، وتوثيق الشرائح والأرشيف
 ```
 
 ---
@@ -22,7 +21,7 @@ school-quality-system/
 |---|---|---|---|
 | [`v0.6.0`](https://github.com/codewizardmx0-lgtm/school-quality-system/releases/tag/v0.6.0) | اكتمال الشرائح 1 إلى 6 الأساسية | 112 اختبارًا ناجحًا (100%) | [`docs/slices/README.md`](docs/slices/README.md) |
 | [`v0.9.0`](https://github.com/codewizardmx0-lgtm/school-quality-system/releases/tag/v0.9.0) | اكتمال الشرائح 7 و 8 و 9 وتصدير التقارير | 208 اختبارات ناجحة (100%) | [`docs/slices/slice9_reports_export.md`](docs/slices/slice9_reports_export.md) |
-| [`v1.0.0-slices-1-to-10`](https://github.com/codewizardmx0-lgtm/school-quality-system/releases/tag/v1.0.0-slices-1-to-10) | اكتمال دورات التقييم، بدء التقييم الذاتي، الإشعارات، واستعادة الحسابات | **223 اختبارًا ناجحًا (100%)** | [`docs/slices/slice10_cycles_notifications.md`](docs/slices/slice10_cycles_notifications.md) |
+| [`v1.0.0`](https://github.com/codewizardmx0-lgtm/school-quality-system/releases/tag/v1.0.0) | الإطلاق الرسمي الشامل لكافة البوابات الخمس والنسخ الاحتياطي الحقيقي وتطهير الحوكمة | **515 اختبارًا ناجحًا (100%)** | [`docs/requirements-implementation-matrix.md`](docs/requirements-implementation-matrix.md) |
 
 ---
 
@@ -35,7 +34,7 @@ school-quality-system/
 | **الشريحة 2** | **التقييم الذاتي والشواهد** | شجرة المعايير، رصد الدرجات (0-3)، إدارة نسخ الشواهد (is_current)، وقفل التعديل التنافسي. | [`docs/slices/slice2_evaluation_evidence.md`](docs/slices/slice2_evaluation_evidence.md) |
 | **الشريحة 3** | **خطط وإجراءات التحسين** | توليد مقترحات التحسين ديناميكياً، إدارة خطط ومجالات التحسين، تتبع التأخر، وتدوين الملاحظات. | [`docs/slices/slice3_improvement_plans.md`](docs/slices/slice3_improvement_plans.md) |
 | **الشريحة 4** | **التقارير والتحليلات واللوحة** | حساب النتيجة الموزونة بالأوزان السبعة، ملخص الشواهد والخطط، لوحة المعلومات، وتصدير JSON. | [`docs/slices/slice4_reports_analytics.md`](docs/slices/slice4_reports_analytics.md) |
-| **الشريحة 4.1** | **إنهاء وتسليم التقييم الذاتي** | فحص استيفاء الـ 109 مؤشرات والحد الأدنى للشواهد، تجميد Snapshot، وقفل التعديل (BR-SCH-03). | [`gaps.md`](gaps.md) |
+| **الشريحة 4.1** | **إنهاء وتسليم التقييم الذاتي** | فحص استيفاء الـ 109 مؤشرات والحد الأدنى للشواهد، تجميد Snapshot، وقفل التعديل (BR-SCH-03). | [`docs/backend-gaps.md`](docs/backend-gaps.md) |
 | **الشريحة 5** | **تنظيم الشواهد وتصنيفها** | تصنيف الشواهد، ربط الشاهد بعدة مؤشرات، دورة تدقيق الشاهد (Draft/Completed/Audited)، وحصر النواقص. | [`docs/slices/slice5_evidence_organization.md`](docs/slices/slice5_evidence_organization.md) |
 | **الشريحة 6** | **إدارة المدرسة وسياق المؤشرات** | الملف التعريفي، الكادر، الطلاب، المرافق، والسياق الاسترشادي الحسابي اللحظي للـ 109 مؤشرات. | [`docs/slices/slice6_school_profile.md`](docs/slices/slice6_school_profile.md) |
 | **الشريحة 7** | **إدارة المعايير والإصدارات** | دورة حياة الإصدارات (Draft/Approved/Archived)، ضبط الأوزان النسبية (100%)، واستنساخ المعايير. | [`docs/slices/slice7_standards_management.md`](docs/slices/slice7_standards_management.md) |
@@ -103,8 +102,8 @@ npm run dev
 
 ### 6. أوامر الصيانة الدورية
 - **مسح الكاش وإعادة التهيئة:** `cd school-eval-api && php artisan optimize:clear`
-- **فحص بناء تطبيق الويب:** `cd school-eval-web && npm run build`
-- **تشغيل الاختبارات الآلية:** `cd school-eval-api && php artisan test`
+- **فحص بناء تطبيق الويب واختباراته:** `cd school-eval-web && npm run build && npm test`
+- **تشغيل اختبارات الخلفية الآلية:** `cd school-eval-api && php artisan test`
 
 ---
 
@@ -116,9 +115,8 @@ php artisan test
 ```
 
 **النتيجة الفعلية لحزمة الاختبارات الآلية (Ground Truth):**
-- **223 اختبارًا ناجحًا بنسبة 100% (Passed)**
-- **9,111 تأكيدًا برمجيًا (Assertions)**
-- **0 إخفاقات / 0 أخطاء (0 Failures, 0 Errors)**
+- **الواجهة الخلفية (`PHPUnit`):** **516 اختباراً ناجحاً بنسبة 100% (Passed)** — **14,468 تأكيداً برمجياً (Assertions)** (0 إخفاقات، 0 أخطاء).
+- **الواجهة الأمامية (`Vitest`):** **12 اختباراً ناجحاً بنسبة 100% (Passed)** عبر ملفّي اختبار (`utils.test.ts` و`portalComponents.test.tsx`).
 
 ---
 
@@ -138,7 +136,7 @@ php artisan test
 
 > [!NOTE]
 > **التوسعات الإحصائية (النمط ب من خارطة السياقات):**
-> مؤشرات الأداء الإحصائية الإضافية التي تتطلب جداول تجميعية موسعة (مثل نتائج الاختبارات الوزارية المجمعة، وساعات التدريب، ونسب الغياب السلوكي) مصنفة ومؤجلة كتوسعات هندسية لما بعد الإصدار v1.0 وفق [`docs/indicator-context-roadmap.md`](docs/indicator-context-roadmap.md).
+> مؤشرات الأداء الإحصائية الإضافية التي تتطلب جداول تجميعية موسعة (مثل نتائج الاختبارات الوزارية المجمعة، وساعات التدريب، ونسب الغياب السلوكي) مصنفة ومؤجلة كتوسعات هندسية لما بعد الإصدار v1.0 وفق [`docs/archive/indicator-context-roadmap.md`](docs/archive/indicator-context-roadmap.md).
 
 ---
 
@@ -147,7 +145,8 @@ php artisan test
 الهيكل التوثيقي المعتمد للمشروع منظم وفق مبدأ المصدر المرجعي الموحد (Single Source of Truth):
 
 ### 1. الوثائق التأسيسية والمعمارية (Core Specs & Guidelines)
-- [`gaps.md`](gaps.md): سجل الفجوات والانحرافات التقنية وقرارات التصميم وحالة الإغلاق (26 فجوة مستوفاة وموثقة).
+- [`docs/backend-gaps.md`](docs/backend-gaps.md): سجل الفجوات والانحرافات التقنية للخلفية وقرارات التصميم وحالة الإغلاق.
+- [`docs/frontend-gaps.md`](docs/frontend-gaps.md): سجل فجوات الواجهات وتوحيد البوابات الخمس.
 - [`docs/slices_roadmap.md`](docs/slices_roadmap.md): خارطة طريق الشرائح الهندسية لجميع الشرائح من 1 إلى 12.
 - [`docs/project_master_reference.md`](docs/project_master_reference.md): المرجع المعماري الشامل لبنية النظام، الفاعلين، ومصفوفة الصلاحيات.
 - [`docs/conventions.md`](docs/conventions.md): معايير البرمجة والتسمية، وقواعد الأمان، واستراتيجية الاختبارات.
@@ -173,17 +172,14 @@ php artisan test
 - [`docs/api/reports_analytics_endpoints.md`](docs/api/reports_analytics_endpoints.md): مرجع نقاط نهاية التقارير، التحليلات، التصدير (PDF/Excel)، والدورات، والإشعارات.
 
 ### 4. سياق المؤشرات وقواعد البيانات والمعايير الوطنية (Data Layer & Standards)
-- [`docs/indicator-context-roadmap.md`](docs/indicator-context-roadmap.md): خارطة السياق الاسترشادي للـ 109 مؤشرات وتصنيفها الحسابي والمستقبلي.
+- [`docs/archive/indicator-context-roadmap.md`](docs/archive/indicator-context-roadmap.md): خارطة السياق الاسترشادي للـ 109 مؤشرات وتصنيفها الحسابي والمستقبلي.
 - [`docs/models_guide.md`](docs/models_guide.md): دليل نماذج البيانات (40 نموذج Eloquent) والعلاقات والسمات والقواعد.
-- [`docs/migrations_guide.md`](docs/migrations_guide.md): دليل تهيئة وتنفيذ هجرات قاعدة البيانات (40 جدولاً).
+- [`docs/migrations_guide.md`](docs/migrations_guide.md): دليل تهيئة وتنفيذ هجرات قاعدة البيانات.
 - [`docs/المعايير/معايير_الاعتماد_المستخرجة.md`](docs/المعايير/معايير_الاعتماد_المستخرجة.md): الوثيقة المرجعية الرسمية المستخرجة للمجالات والمعايير والـ 109 مؤشرات وواصفاتها.
 - [`docs/chapter4/chapter4_system_design.md`](docs/chapter4/chapter4_system_design.md): التصميم الهندسي التفصيلي للفصل الرابع المتوافق مع الواقع البرمجي.
 
-### 5. النموذج التفاعلي وأدلة التحقق (Prototypes & Verification)
-- [`frontend-prototype/README.md`](frontend-prototype/README.md): دليل النموذج الأولي التفاعلي وهيكله وطريقة تشغيله.
-- [`frontend-prototype/verification-guide.md`](frontend-prototype/verification-guide.md): دليل التحقق السريع لسيناريوهات الفحص عبر النموذج الأولي لكافة الشرائح 1-10.
-
-### 6. الأرشيف التاريخي وتقارير المراجعة (Historical Archive)
+### 5. الأرشيف التاريخي وأدلة التحقق (Historical Archive & Verification)
+- [`docs/archive/prototype/verification-guide.md`](docs/archive/prototype/verification-guide.md): دليل التحقق السريع المؤرشف لسيناريوهات الفحص التفاعلي.
 - [`docs/archive/chapter4/`](docs/archive/chapter4/): مسودات وسجلات المزامنة التاريخية للتصميم الهندسي قبل التوحيد.
 - [`docs/archive/seeders/`](docs/archive/seeders/): تقارير التدقيق والتنفيذ الأولية للبيانات المعيارية والـ Seeders.
 - [`docs/archive/reports/`](docs/archive/reports/): تقارير فحص واختبار النماذج والبيانات الأولية.

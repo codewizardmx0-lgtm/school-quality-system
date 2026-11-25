@@ -31,28 +31,31 @@ export const schoolsApi = {
     const response = await get<School[]>('/schools', { params });
     if (response && response.data) {
       // Normalize fields from backend SchoolResource
-      const normalized = (response.data as unknown[]).map((s: any) => ({
-        schoolId: s.schoolId ?? s.school_id,
-        schoolCode: s.schoolCode ?? s.identificationData ?? `SCH-${s.schoolId ?? s.school_id}`,
-        schoolName: s.schoolName ?? s.school_name ?? '',
-        schoolType: s.schoolType ?? (s.school_type === 'private' ? 'private' : 'government'),
-        educationalStage: s.educationalStage ?? s.educational_stage ?? '',
-        governorateId: s.governorateId ?? s.governorate_id ?? 1,
-        directorateId: s.directorateId ?? s.directorate_id ?? null,
-        directorate: s.directorate ?? s.educationalDistrict ?? s.educational_district ?? '',
-        educationalDistrict: s.educationalDistrict ?? s.educational_district ?? s.directorate ?? '',
-        governorate: s.governorate ?? 'أمانة العاصمة',
-        status: s.status ?? 'Active',
-        // Principal & Evaluator details from SchoolResource
-        principal: s.principal ?? null,
-        evaluators: s.evaluators ?? [],
-        evaluatorUserId: s.evaluatorUserId ?? s.evaluators?.[0]?.userId ?? null,
-        evaluatorName: s.evaluatorName ?? s.evaluators?.[0]?.fullName ?? null,
-        evaluatorEmail: s.evaluatorEmail ?? s.evaluators?.[0]?.email ?? null,
-        isLinked: Boolean(s.isLinked || s.evaluatorUserId || s.principal || (s.evaluators && s.evaluators.length > 0)),
-        createdAt: s.createdAt ?? new Date().toISOString(),
-        updatedAt: s.updatedAt ?? new Date().toISOString(),
-      } as School));
+      const normalized = (response.data as unknown as Array<Record<string, unknown>>).map((s) => {
+        const evaluators = (Array.isArray(s.evaluators) ? s.evaluators : []) as Array<{ userId?: number; fullName?: string }>;
+        return {
+          schoolId: Number(s.schoolId ?? s.school_id ?? 0),
+          schoolCode: String(s.schoolCode ?? s.identificationData ?? `SCH-${String(s.schoolId ?? s.school_id ?? '')}`),
+          schoolName: String(s.schoolName ?? s.school_name ?? ''),
+          schoolType: (s.schoolType ?? (s.school_type === 'private' ? 'private' : 'government')) as School['schoolType'],
+          educationalStage: String(s.educationalStage ?? s.educational_stage ?? ''),
+          governorateId: Number(s.governorateId ?? s.governorate_id ?? 1),
+          directorateId: (s.directorateId ?? s.directorate_id ?? null) as number | null,
+          directorate: String(s.directorate ?? s.educationalDistrict ?? s.educational_district ?? ''),
+          educationalDistrict: String(s.educationalDistrict ?? s.educational_district ?? s.directorate ?? ''),
+          governorate: String(s.governorate ?? 'أمانة العاصمة'),
+          status: (s.status ?? 'Active') as School['status'],
+          // Principal & Evaluator details from SchoolResource
+          principal: (s.principal ?? null) as School['principal'],
+          evaluators: evaluators as School['evaluators'],
+          evaluatorUserId: (s.evaluatorUserId ?? evaluators[0]?.userId ?? null) as number | null,
+          evaluatorName: (s.evaluatorName ?? evaluators[0]?.fullName ?? null) as string | null,
+          evaluatorEmail: (s.evaluatorEmail ?? (evaluators[0] as { email?: string | null } | undefined)?.email ?? null) as string | null,
+          isLinked: Boolean(s.isLinked || s.evaluatorUserId || s.principal || evaluators.length > 0),
+          createdAt: String(s.createdAt ?? new Date().toISOString()),
+          updatedAt: String(s.updatedAt ?? new Date().toISOString()),
+        } as School;
+      });
       return {
         ...response,
         data: normalized,

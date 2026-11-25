@@ -78,9 +78,11 @@ export const SupervisionStandardsTreeTab: React.FC<SupervisionStandardsTreeTabPr
       for (const sub of std.subStandards) {
         const found = sub.indicators.some((ind) => ind.indicatorId === targetIndicatorId);
         if (found) {
-          setExpandedStandards((prev) => ({ ...prev, [std.standardId]: true }));
-          setExpandedSubStandards((prev) => ({ ...prev, [sub.subStandardId]: true }));
-          setExpandedIndicators((prev) => ({ ...prev, [targetIndicatorId]: true }));
+          void Promise.resolve().then(() => {
+            setExpandedStandards((prev) => ({ ...prev, [std.standardId]: true }));
+            setExpandedSubStandards((prev) => ({ ...prev, [sub.subStandardId]: true }));
+            setExpandedIndicators((prev) => ({ ...prev, [targetIndicatorId]: true }));
+          });
 
           setTimeout(() => {
             const el = document.getElementById(`indicator-${targetIndicatorId}`);
@@ -214,8 +216,8 @@ export const SupervisionStandardsTreeTab: React.FC<SupervisionStandardsTreeTabPr
       }, 2505);
 
       onDeficiencyUpdated?.();
-    } catch (e: any) {
-      alert(e?.message || 'تعذر حفظ رصد النقص. يرجى المحاولة لاحقاً.');
+    } catch (e: unknown) {
+      alert(e instanceof Error ? e.message : 'تعذر حفظ رصد النقص. يرجى المحاولة لاحقاً.');
     } finally {
       setSavingDeficiency((prev) => ({ ...prev, [indId]: false }));
     }
@@ -1355,8 +1357,8 @@ export const SupervisionStandardsTreeTab: React.FC<SupervisionStandardsTreeTabPr
                                                         try {
                                                           await supervisionApi.deleteDeficiencyNote(submissionId || evaluationId, ind.indicatorId);
                                                           onDeficiencyUpdated?.();
-                                                        } catch (e: any) {
-                                                          alert(e?.message || 'تعذر إلغاء رصد النقص.');
+                                                        } catch (e: unknown) {
+                                                          alert(e instanceof Error ? e.message : 'تعذر إلغاء رصد النقص.');
                                                         } finally {
                                                           setSavingDeficiency((prev) => ({ ...prev, [ind.indicatorId]: false }));
                                                         }

@@ -7,6 +7,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { schoolsApi } from '../api/schoolsApi';
 import { usersApi } from '../api/usersApi';
+import { extractApiErrorMessage } from '../../../api/apiTypes';
 import type { School, Directorate, Governorate, User, RegisterSchoolDto, AddDirectorateDto } from '../types/admin.types';
 
 export function useAdminSchools() {
@@ -43,15 +44,15 @@ export function useAdminSchools() {
       if (dirRes.data) setDirectorates(dirRes.data);
       if (usersRes.data) setUsers(usersRes.data);
       if (govRes.data) setGovernorates(govRes.data);
-    } catch (err: any) {
-      setError(err?.message || 'فشل في تحميل بيانات المدارس والمديريات');
+    } catch (err: unknown) {
+      setError(extractApiErrorMessage(err, 'فشل في تحميل بيانات المدارس والمديريات'));
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    void fetchData();
+    void Promise.resolve().then(() => fetchData());
   }, [fetchData]);
 
   const registerSchool = useCallback(async (dto: RegisterSchoolDto): Promise<School> => {

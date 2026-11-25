@@ -28,7 +28,8 @@ import {
   AlertTriangle,
   Loader2,
 } from 'lucide-react';
-import type { StandardVersionSummary } from '../../api/standardsTypes';
+import type { StandardVersionSummary, CreateDraftPayload } from '../../api/standardsTypes';
+import { extractApiErrorMessage } from '../../../../api/apiTypes';
 import { standardsApi } from '../../api/standardsApi';
 import { CreateDraftModal } from './CreateDraftModal';
 import { VersionRuleCallout } from './VersionRuleCallout';
@@ -40,9 +41,9 @@ interface StandardsVersionsPageProps {
   isLoading: boolean;
   error: string | null;
   onRefresh: () => void;
-  onCreateDraft: (payload: any) => Promise<any>;
-  onDuplicateVersion?: (sourceId: number, newNo: string) => Promise<any>;
-  onDeleteVersion?: (versionId: number) => Promise<any>;
+  onCreateDraft: (payload: CreateDraftPayload) => Promise<unknown>;
+  onDuplicateVersion?: (sourceId: number, newNo: string) => Promise<unknown>;
+  onDeleteVersion?: (versionId: number) => Promise<unknown>;
   onNavigateToTree: (versionId?: number) => void;
   onNavigateToWeights: (versionId?: number) => void;
   onNavigateToLock: (versionId?: number) => void;
@@ -90,8 +91,8 @@ export const StandardsVersionsPage: React.FC<StandardsVersionsPageProps> = ({
         onRefresh();
       }
       setDeleteTargetVersion(null);
-    } catch (err: any) {
-      setDeleteError(err?.message || 'حدث خطأ أثناء حذف مسودة الإصدار.');
+    } catch (err: unknown) {
+      setDeleteError(extractApiErrorMessage(err, 'حدث خطأ أثناء حذف مسودة الإصدار.'));
     } finally {
       setIsDeleting(false);
     }
@@ -132,7 +133,7 @@ export const StandardsVersionsPage: React.FC<StandardsVersionsPageProps> = ({
   };
 
   const filteredAndSortedVersions = useMemo(() => {
-    let list = versions.filter((v) => {
+    const list = versions.filter((v) => {
       // Status filter
       if (filterStatus !== 'all' && v.status?.toLowerCase() !== filterStatus.toLowerCase()) {
         return false;
@@ -152,8 +153,8 @@ export const StandardsVersionsPage: React.FC<StandardsVersionsPageProps> = ({
     });
 
     return list.sort((a, b) => {
-      let valA: any;
-      let valB: any;
+      let valA: string | number;
+      let valB: string | number;
 
       switch (sortKey) {
         case 'versionNo':

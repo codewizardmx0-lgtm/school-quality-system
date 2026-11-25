@@ -12,7 +12,7 @@ interface EditSubStandardModalProps {
   subStandard: SubStandardNode | null;
   standardName?: string;
   onClose: () => void;
-  onSubmit: (subStandardId: number, payload: UpdateSubStandardPayload) => Promise<any>;
+  onSubmit: (subStandardId: number, payload: UpdateSubStandardPayload) => Promise<unknown>;
 }
 
 export const EditSubStandardModal: React.FC<EditSubStandardModalProps> = ({
@@ -31,11 +31,13 @@ export const EditSubStandardModal: React.FC<EditSubStandardModalProps> = ({
 
   useEffect(() => {
     if (subStandard) {
-      setCode(subStandard.code || '');
-      setName(subStandard.name || '');
-      setDescription(subStandard.description || '');
-      setWeight(subStandard.weight !== undefined && subStandard.weight !== null ? subStandard.weight : '');
-      setError(null);
+      void Promise.resolve().then(() => {
+        setCode(subStandard.code || '');
+        setName(subStandard.name || '');
+        setDescription(subStandard.description || '');
+        setWeight(subStandard.weight !== undefined && subStandard.weight !== null ? subStandard.weight : '');
+        setError(null);
+      });
     }
   }, [subStandard]);
 
@@ -58,8 +60,8 @@ export const EditSubStandardModal: React.FC<EditSubStandardModalProps> = ({
         weight: weight !== '' ? Number(weight) : undefined,
       });
       onClose();
-    } catch (err: any) {
-      setError(err?.message || 'تعذر تحديث بيانات المعيار الفرعي.');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'تعذر تحديث بيانات المعيار الفرعي.');
     } finally {
       setIsSubmitting(false);
     }

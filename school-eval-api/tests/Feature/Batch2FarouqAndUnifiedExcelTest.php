@@ -10,11 +10,12 @@ use App\Models\Report;
 use App\Models\School;
 use App\Models\SchoolDocument;
 use App\Models\User;
-use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Tests\TestCase;
 
 class Batch2FarouqAndUnifiedExcelTest extends TestCase
 {
+    use DatabaseTransactions;
     public function test_farouq_45_documents_and_all_requirements_covered(): void
     {
         $schoolFarouq = School::where('identification_data', 'SCH-TAIZ-2026-001')->firstOrFail();

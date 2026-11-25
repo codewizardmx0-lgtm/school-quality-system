@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Target,
   CheckCircle2,
@@ -17,7 +17,9 @@ import {
 } from 'lucide-react';
 import { evaluatorApi } from '../../api/evaluatorApi';
 import type { ImprovementSuggestion, PriorityLevel } from '../../api/evaluationTypes';
-import { AdoptSuggestionModal, getRecommendedPlanType } from './AdoptSuggestionModal';
+import { AdoptSuggestionModal } from './AdoptSuggestionModal';
+import { getRecommendedPlanType } from '../../utils/planRecommendation';
+import { extractApiErrorMessage } from '../../../../api/apiTypes';
 import { getScoreLevelColor } from '../../../../styles/designTokens';
 
 interface FormulaSuggestionsSectionProps {
@@ -77,22 +79,27 @@ export const FormulaSuggestionsSection: React.FC<FormulaSuggestionsSectionProps>
     );
   };
 
-  const fetchSuggestions = async (scoreTarget: number = targetScore) => {
+  const onToastRef = useRef(onToast);
+  useEffect(() => {
+    onToastRef.current = onToast;
+  }, [onToast]);
+
+  const fetchSuggestions = useCallback(async (scoreTarget: number = targetScore) => {
     setIsLoading(true);
     try {
       const data = await evaluatorApi.getImprovementSuggestions(scoreTarget);
       setSuggestions(data);
     } catch (err) {
       console.error('Failed to load improvement suggestions:', err);
-      onToast('error', 'تعذر تحميل مقترحات التحسين الحسابية.');
+      onToastRef.current('error', 'تعذر تحميل مقترحات التحسين الحسابية.');
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [targetScore]);
 
   useEffect(() => {
-    fetchSuggestions(targetScore);
-  }, [targetScore]);
+    void Promise.resolve().then(() => fetchSuggestions(targetScore));
+  }, [fetchSuggestions, targetScore]);
 
   const handleToggleTargetScore = (newScore: 1 | 2 | 3) => {
     if (newScore === targetScore) return;
@@ -267,9 +274,8 @@ export const FormulaSuggestionsSection: React.FC<FormulaSuggestionsSectionProps>
       await evaluatorApi.deleteImprovementArea(sugg.adoptedAreaId);
       onToast('success', 'تم إلغاء تبني المقترح وحذفه من إجراءات التحسين بنجاح.');
       await fetchSuggestions(targetScore);
-    } catch (err: any) {
-      const errMsg = err?.response?.data?.message || err?.message || 'تعذر إلغاء تبني إجراء التحسين.';
-      onToast('error', errMsg);
+    } catch (err: unknown) {
+      onToast('error', extractApiErrorMessage(err, 'تعذر إلغاء تبني إجراء التحسين.'));
     } finally {
       setIsUnadopting(null);
     }
@@ -303,9 +309,8 @@ export const FormulaSuggestionsSection: React.FC<FormulaSuggestionsSectionProps>
       await evaluatorApi.excludeSuggestion(sugg.resultId);
       onToast('success', 'تم استبعاد المقترح من قائمة العمل بنجاح.');
       await fetchSuggestions(targetScore);
-    } catch (err: any) {
-      const errMsg = err?.response?.data?.message || err?.message || 'تعذر استبعاد المقترح.';
-      onToast('error', errMsg);
+    } catch (err: unknown) {
+      onToast('error', extractApiErrorMessage(err, 'تعذر استبعاد المقترح.'));
     } finally {
       setIsExcluding(null);
     }
@@ -318,9 +323,8 @@ export const FormulaSuggestionsSection: React.FC<FormulaSuggestionsSectionProps>
       await evaluatorApi.restoreSuggestion(sugg.resultId);
       onToast('success', 'تمت استعادة المقترح وإعادته لقائمة الاقتراحات النشطة بنجاح.');
       await fetchSuggestions(targetScore);
-    } catch (err: any) {
-      const errMsg = err?.response?.data?.message || err?.message || 'تعذر استعادة المقترح.';
-      onToast('error', errMsg);
+    } catch (err: unknown) {
+      onToast('error', extractApiErrorMessage(err, 'تعذر استعادة المقترح.'));
     } finally {
       setIsExcluding(null);
     }
@@ -532,7 +536,7 @@ export const FormulaSuggestionsSection: React.FC<FormulaSuggestionsSectionProps>
           {/* Unified Filter 1: Score & Priority Breakdown */}
           <select
             value={scorePriorityFilter}
-            onChange={(e) => setScorePriorityFilter(e.target.value as any)}
+            onChange={(e) => setScorePriorityFilter(e.target.value as 'all' | 'score_0' | 'score_1' | 'score_2' | 'score_3')}
             style={{
               padding: '8px 12px',
               borderRadius: '8px',
@@ -555,7 +559,7 @@ export const FormulaSuggestionsSection: React.FC<FormulaSuggestionsSectionProps>
           {/* Unified Filter 2: Adoption Status */}
           <select
             value={adoptionFilter}
-            onChange={(e) => setAdoptionFilter(e.target.value as any)}
+            onChange={(e) => setAdoptionFilter(e.target.value as 'all' | 'unadopted' | 'adopted')}
             style={{
               padding: '8px 12px',
               borderRadius: '8px',
@@ -576,7 +580,7 @@ export const FormulaSuggestionsSection: React.FC<FormulaSuggestionsSectionProps>
           {/* Unified Filter 3: Exclusion Filter */}
           <select
             value={exclusionFilter}
-            onChange={(e) => setExclusionFilter(e.target.value as any)}
+            onChange={(e) => setExclusionFilter(e.target.value as 'active' | 'excluded' | 'all')}
             style={{
               padding: '8px 12px',
               borderRadius: '8px',
@@ -620,7 +624,11 @@ export const FormulaSuggestionsSection: React.FC<FormulaSuggestionsSectionProps>
           {/* Recommended Plan Type Filter */}
           <select
             value={planTypeFilter}
-            onChange={(e) => setPlanTypeFilter(e.target.value as any)}
+            onChange={(e) =>
+              setPlanTypeFilter(
+                e.target.value as 'all' | 'QualityImprovement' | 'StaffProfessionalDevelopment' | 'AnnualOperational'
+              )
+            }
             style={{
               padding: '8px 12px',
               borderRadius: '8px',
@@ -646,7 +654,7 @@ export const FormulaSuggestionsSection: React.FC<FormulaSuggestionsSectionProps>
             <select
               value={sortBy}
               onChange={(e) => {
-                const val = e.target.value as any;
+                const val = e.target.value as 'gap_desc' | 'gap_asc' | 'code' | 'priority';
                 setSortBy(val);
                 if (val === 'gap_desc') {
                   setSortField('gap');
