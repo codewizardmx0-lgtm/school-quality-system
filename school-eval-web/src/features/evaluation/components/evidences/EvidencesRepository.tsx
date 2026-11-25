@@ -2,7 +2,8 @@ import { exportMultiSheetExcel, formatExportFilename } from '../../../admin/util
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useEvidences } from '../../hooks/useEvidences';
 import { evaluatorApi } from '../../api/evaluatorApi';
-import { EvidenceCard } from './EvidenceCard';
+import { EvidencePresentationSection } from './EvidencePresentationSection';
+import { EvidenceVaultStatsCards } from './EvidenceVaultStatsCards';
 import { LinkEvidenceModal } from './LinkEvidenceModal';
 import { EditEvidenceMetadataModal } from './EditEvidenceMetadataModal';
 import { EvidenceInventoryPage } from './EvidenceInventoryPage';
@@ -12,30 +13,21 @@ import { UploadEvidenceModal } from './UploadEvidenceModal';
 import { DocumentVersionsModal } from './DocumentVersionsModal';
 import { OldEvidenceVersionsView } from './OldEvidenceVersionsView';
 import { useAuth } from '../../../auth/AuthContext';
-import { designTokens } from '../../../../styles/designTokens';
+import { extractApiErrorMessage } from '../../../../api/apiTypes';
 import type { EvidenceItem, EvaluatorScreen } from '../../api/evaluationTypes';
 import {
   FolderLock,
   Lock,
-  CheckCircle2,
-  AlertTriangle,
-  HardDrive,
   UploadCloud,
   Search,
   Download,
   FileText,
-  Trash2,
   Table as TableIcon,
   LayoutGrid,
-  Link2,
-  Pencil,
   RefreshCw,
   RotateCcw,
-  ExternalLink,
   History,
   ArrowUpDown,
-  ArrowUp,
-  ArrowDown,
   Filter,
   ChevronDown,
   X,
@@ -271,7 +263,7 @@ export const EvidencesRepository: React.FC<EvidencesRepositoryProps> = ({
 
       // 6. Replacement / Flagged filter
       if (needsReplacementOnly) {
-        const needsRep = Boolean((item as any).needsReplacement || item.versionNumber > 1);
+        const needsRep = Boolean(item.needsReplacement || item.versionNumber > 1);
         if (!needsRep) return false;
       }
 
@@ -298,7 +290,7 @@ export const EvidencesRepository: React.FC<EvidencesRepositoryProps> = ({
 
   const sortedEvidences = React.useMemo(() => {
     return [...filteredEvidences].sort((a, b) => {
-      let comparison = 0;
+      let comparison: number;
       if (sortField === 'title') {
         comparison = a.title.localeCompare(b.title, 'ar');
       } else if (sortField === 'version') {
@@ -358,10 +350,9 @@ export const EvidencesRepository: React.FC<EvidencesRepositoryProps> = ({
       await evaluatorApi.deleteUnlinkedDocument(evidence.documentId);
       addToast('success', `تم حذف الشاهد «${evidence.title}» نهائياً بنجاح.`);
       await fetchEvidences();
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Failed to delete unlinked evidence:', err);
-      const msg = err?.response?.data?.message || err?.message || 'فشل حذف الشاهد.';
-      addToast('error', msg);
+      addToast('error', extractApiErrorMessage(err, 'فشل حذف الشاهد.'));
     }
   };
 
@@ -540,169 +531,11 @@ export const EvidencesRepository: React.FC<EvidencesRepositoryProps> = ({
         <>
 
       {/* 1. Four Vault Stat Cards */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
-          gap: '16px',
-        }}
-      >
-        {/* Card 1: إجمالي وثائق الشواهد المودعة */}
-        <div
-          style={{
-            backgroundColor: '#FFFFFF',
-            borderRadius: '12px',
-            padding: '20px',
-            border: '1px solid #E2E8F0',
-            boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: '12.5px', fontWeight: 700, color: '#64748B' }}>
-              إجمالي وثائق الشواهد المودعة
-            </span>
-            <div
-              style={{
-                width: '36px',
-                height: '36px',
-                borderRadius: '8px',
-                backgroundColor: '#ECFDF5',
-                color: '#059669',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              <FolderLock size={18} />
-            </div>
-          </div>
-          <div style={{ fontSize: '28px', fontWeight: 900, color: '#0F172A', marginTop: '10px' }}>
-            {stats.totalEvidences}{' '}
-            <span style={{ fontSize: '13px', fontWeight: 600, color: '#64748B' }}>وثيقة</span>
-          </div>
-          <div style={{ fontSize: '11.5px', color: '#059669', marginTop: '4px', fontWeight: 600 }}>
-            تغطي {coveredIndicators} من أصل {totalIndicators} مؤشراً معيارياً ({Math.min(100, Math.round((coveredIndicators / totalIndicators) * 100))}%)
-          </div>
-        </div>
-
-        {/* Card 2: شواهد مطابقة ومعتمدة داخلياً */}
-        <div
-          style={{
-            backgroundColor: '#FFFFFF',
-            borderRadius: '12px',
-            padding: '20px',
-            border: '1px solid #E2E8F0',
-            boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: '12.5px', fontWeight: 700, color: '#64748B' }}>
-              شواهد مطابقة ومعتمدة داخلياً
-            </span>
-            <div
-              style={{
-                width: '36px',
-                height: '36px',
-                borderRadius: '8px',
-                backgroundColor: '#ECFDF5',
-                color: '#10B981',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              <CheckCircle2 size={18} />
-            </div>
-          </div>
-          <div style={{ fontSize: '28px', fontWeight: 900, color: '#059669', marginTop: '10px' }}>
-            {stats.compliantEvidences}{' '}
-            <span style={{ fontSize: '13px', fontWeight: 600, color: '#64748B' }}>وثيقة</span>
-          </div>
-          <div style={{ fontSize: '11.5px', color: '#059669', marginTop: '4px', fontWeight: 600 }}>
-            مستوفية لشروط التوثيق
-          </div>
-        </div>
-
-        {/* Card 3: شواهد تتطلب استبدال / استكمال */}
-        <div
-          style={{
-            backgroundColor: '#FFFFFF',
-            borderRadius: '12px',
-            padding: '20px',
-            border: '1px solid #E2E8F0',
-            boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: '12.5px', fontWeight: 700, color: '#64748B' }}>
-              شواهد تتطلب استبدال / استكمال
-            </span>
-            <div
-              style={{
-                width: '36px',
-                height: '36px',
-                borderRadius: '8px',
-                backgroundColor: '#FFFBEB',
-                color: '#D97706',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              <AlertTriangle size={18} />
-            </div>
-          </div>
-          <div style={{ fontSize: '28px', fontWeight: 900, color: '#D97706', marginTop: '10px' }}>
-            {stats.needsReplacement}{' '}
-            <span style={{ fontSize: '13px', fontWeight: 600, color: '#64748B' }}>
-              {stats.needsReplacement === 1 ? 'وثيقة' : stats.needsReplacement === 2 ? 'وثيقتان' : 'وثائق'}
-            </span>
-          </div>
-          <div style={{ fontSize: '11.5px', color: '#B45309', marginTop: '4px', fontWeight: 600 }}>
-            بحاجة لتحديث النسخة أو اعتمادها
-          </div>
-        </div>
-
-        {/* Card 4: المساحة التخزينية للمستودع */}
-        <div
-          style={{
-            backgroundColor: '#FFFFFF',
-            borderRadius: '12px',
-            padding: '20px',
-            border: '1px solid #E2E8F0',
-            boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: '12.5px', fontWeight: 700, color: '#64748B' }}>
-              المساحة التخزينية للمستودع
-            </span>
-            <div
-              style={{
-                width: '36px',
-                height: '36px',
-                borderRadius: '8px',
-                backgroundColor: '#EFF6FF',
-                color: '#2563EB',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              <HardDrive size={18} />
-            </div>
-          </div>
-          <div style={{ fontSize: '28px', fontWeight: 900, color: '#0F172A', marginTop: '10px' }}>
-            {stats.storageUsedMb}{' '}
-            <span style={{ fontSize: '13px', fontWeight: 600, color: '#64748B' }}>
-              MB من {stats.storageLimitMb} MB
-            </span>
-          </div>
-          <div style={{ height: '6px', backgroundColor: '#F1F5F9', borderRadius: '4px', overflow: 'hidden', marginTop: '8px' }}>
-            <div style={{ height: '100%', width: `${stats.storagePercentage}%`, backgroundColor: '#2563EB', borderRadius: '4px' }} />
-          </div>
-        </div>
-      </div>
+      <EvidenceVaultStatsCards
+        stats={stats}
+        coveredIndicators={coveredIndicators}
+        totalIndicators={totalIndicators}
+      />
 
       {/* 2. Controls & Filter Bar */}
       <div
@@ -1378,384 +1211,22 @@ export const EvidencesRepository: React.FC<EvidencesRepositoryProps> = ({
       </div>
 
       {/* 3. Evidences Presentation (Table or Grid) */}
-      {viewMode === 'table' ? (
-        <div
-          style={{
-            backgroundColor: '#FFFFFF',
-            borderRadius: '14px',
-            border: '1px solid #E2E8F0',
-            overflow: 'hidden',
-            boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
-          }}
-        >
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ minWidth: '920px', width: '100%', borderCollapse: 'collapse', textAlign: 'right' }}>
-              <thead>
-                <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '2px solid #F1F5F9' }}>
-                  <th
-                    onClick={() => handleSort('title')}
-                    style={{
-                      padding: '12px 16px',
-                      fontSize: '12px',
-                      fontWeight: 700,
-                      color: sortField === 'title' ? '#059669' : '#475569',
-                      cursor: 'pointer',
-                      userSelect: 'none',
-                    }}
-                    title="ترتيب أبجدي حسب عنوان الشاهد"
-                  >
-                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
-                      <span>عنوان الشاهد</span>
-                      {sortField === 'title' ? (
-                        sortDirection === 'asc' ? <ArrowUp size={13} color="#059669" /> : <ArrowDown size={13} color="#059669" />
-                      ) : (
-                        <ArrowUpDown size={12} color="#94A3B8" />
-                      )}
-                    </div>
-                  </th>
-
-                  <th
-                    onClick={() => handleSort('standard')}
-                    style={{
-                      padding: '12px 16px',
-                      fontSize: '12px',
-                      fontWeight: 700,
-                      color: sortField === 'standard' ? '#059669' : '#475569',
-                      cursor: 'pointer',
-                      userSelect: 'none',
-                    }}
-                    title="ترتيب معياري حسب تسلسل المعايير"
-                  >
-                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
-                      <span>المعيار الوطني</span>
-                      {sortField === 'standard' ? (
-                        sortDirection === 'asc' ? <ArrowUp size={13} color="#059669" /> : <ArrowDown size={13} color="#059669" />
-                      ) : (
-                        <ArrowUpDown size={12} color="#94A3B8" />
-                      )}
-                    </div>
-                  </th>
-
-                  <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: 700, color: '#475569' }}>
-                    المؤشر
-                  </th>
-
-                  <th
-                    onClick={() => handleSort('version')}
-                    style={{
-                      padding: '12px 16px',
-                      fontSize: '12px',
-                      fontWeight: 700,
-                      color: sortField === 'version' ? '#059669' : '#475569',
-                      cursor: 'pointer',
-                      userSelect: 'none',
-                    }}
-                    title="فرز حسب رقم الإصدار"
-                  >
-                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
-                      <span>الإصدار</span>
-                      {sortField === 'version' ? (
-                        sortDirection === 'asc' ? <ArrowUp size={13} color="#059669" /> : <ArrowDown size={13} color="#059669" />
-                      ) : (
-                        <ArrowUpDown size={12} color="#94A3B8" />
-                      )}
-                    </div>
-                  </th>
-
-                  <th
-                    onClick={() => handleSort('size')}
-                    style={{
-                      padding: '12px 16px',
-                      fontSize: '12px',
-                      fontWeight: 700,
-                      color: sortField === 'size' ? '#059669' : '#475569',
-                      cursor: 'pointer',
-                      userSelect: 'none',
-                    }}
-                    title="فرز حسب حجم الملف"
-                  >
-                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
-                      <span>الحجم والصيغة</span>
-                      {sortField === 'size' ? (
-                        sortDirection === 'asc' ? <ArrowUp size={13} color="#059669" /> : <ArrowDown size={13} color="#059669" />
-                      ) : (
-                        <ArrowUpDown size={12} color="#94A3B8" />
-                      )}
-                    </div>
-                  </th>
-
-                  <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: 700, color: '#475569' }}>
-                    نوع الوثيقة
-                  </th>
-
-                  <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: 700, color: '#475569', textAlign: 'center' }}>
-                    الإجراءات
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-              {filteredEvidences.length === 0 ? (
-                <tr>
-                  <td colSpan={7} style={{ padding: '48px 20px', textAlign: 'center', color: '#64748B' }}>
-                    <div style={{ fontSize: '15px', fontWeight: 700, color: '#0F172A', marginBottom: '6px' }}>
-                      لا توجد شواهد مطابقة لمعايير البحث والتصفية
-                    </div>
-                    <div style={{ fontSize: '12.5px' }}>
-                      يمكنك تعديل كلمات البحث أو تصفية المعايير لإظهار المزيد من الوثائق.
-                    </div>
-                  </td>
-                </tr>
-              ) : (
-                sortedEvidences.map((ev) => (
-                
-                  <tr
-                    key={ev.id}
-                    style={{ borderBottom: '1px solid #F1F5F9', transition: 'background-color 0.15s' }}
-                    onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#F8FAFC')}
-                    onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
-                  >
-                    <td style={{ padding: '14px 16px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <div
-                          style={{
-                            width: '32px',
-                            height: '32px',
-                            borderRadius: '6px',
-                            backgroundColor: '#EFF6FF',
-                            color: '#2563EB',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            flexShrink: 0,
-                          }}
-                        >
-                          <FileText size={16} />
-                        </div>
-                        <div>
-                          <div style={{ fontSize: '13px', fontWeight: 700, color: '#0F172A' }}>{ev.title}</div>
-                          <div style={{ fontSize: '11px', color: '#64748B' }}>{ev.fileName}</div>
-                        </div>
-                      </div>
-                    </td>
-                    <td style={{ padding: '14px 16px', fontSize: '12.5px', color: '#334155' }}>
-                      {(() => {
-                        const uniqueStds: { code: string; name: string }[] = [];
-                        const seenCodes = new Set<string>();
-                        if (ev.linkedIndicators && ev.linkedIndicators.length > 0) {
-                          for (const li of ev.linkedIndicators) {
-                            if (li.standardCode && !seenCodes.has(li.standardCode)) {
-                              seenCodes.add(li.standardCode);
-                              uniqueStds.push({ code: li.standardCode, name: li.standardName || '' });
-                            }
-                          }
-                        }
-                        if (uniqueStds.length === 0 && ev.standardCode && !seenCodes.has(ev.standardCode)) {
-                          uniqueStds.push({ code: ev.standardCode, name: ev.standardName || '' });
-                        }
-
-                        if (uniqueStds.length === 0 || ev.isUnlinked) {
-                          return (
-                            <span style={{ fontSize: '11.5px', fontWeight: 700, color: '#B45309', backgroundColor: '#FFFBEB', border: '1px solid #FDE68A', padding: '3px 8px', borderRadius: '6px' }}>
-                              غير مرتبط بأي مؤشر
-                            </span>
-                          );
-                        }
-
-                        return (
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                            {uniqueStds.map((std, sIdx) => (
-                              <div key={sIdx} style={{ fontSize: '12px' }}>
-                                <span style={{ fontWeight: 700, color: '#059669' }}>{std.code}:</span> {std.name}
-                              </div>
-                            ))}
-                          </div>
-                        );
-                      })()}
-                    </td>
-                    <td style={{ padding: '14px 16px' }}>
-                      {ev.isUnlinked || (!ev.indicatorId && (!ev.linkedIndicators || ev.linkedIndicators.length === 0)) ? (
-                        <span style={{ fontSize: '11px', fontWeight: 700, color: '#B45309', backgroundColor: '#FEF3C7', padding: '2px 6px', borderRadius: '4px' }}>
-                          بانتظار الربط
-                        </span>
-                      ) : (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                          {(ev.linkedIndicators && ev.linkedIndicators.length > 0
-                            ? ev.linkedIndicators
-                            : [{ indicatorId: ev.indicatorId, indicatorCode: ev.indicatorCode, indicatorTitle: ev.indicatorTitle }]
-                          ).map((li, idx) => (
-                            <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                              {onNavigate && li.indicatorId ? (
-                                <button
-                                  type="button"
-                                  onClick={() => onNavigate('rubric-assessment', li.indicatorId)}
-                                  style={{
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    gap: '3px',
-                                    padding: '2px 7px',
-                                    borderRadius: '5px',
-                                    backgroundColor: '#EFF6FF',
-                                    border: '1px solid #BFDBFE',
-                                    color: '#1D4ED8',
-                                    fontSize: '11px',
-                                    fontWeight: 800,
-                                    whiteSpace: 'nowrap',
-                                    cursor: 'pointer',
-                                    transition: 'all 0.15s ease',
-                                  }}
-                                  title={`الانتقال المباشر لتقييم المؤشر ${li.indicatorCode} ↗`}
-                                >
-                                  <span>{li.indicatorCode}</span>
-                                  <ExternalLink size={10} />
-                                </button>
-                              ) : (
-                                <span style={{ fontSize: '11px', fontWeight: 800, color: '#2563EB', backgroundColor: '#EFF6FF', padding: '2px 6px', borderRadius: '4px', whiteSpace: 'nowrap' }}>
-                                  {li.indicatorCode}
-                                </span>
-                              )}
-                              {li.indicatorTitle && (
-                                <span style={{ fontSize: '11.5px', color: '#334155', maxWidth: '240px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={li.indicatorTitle}>
-                                  {li.indicatorTitle}
-                                </span>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </td>
-                    <td style={{ padding: '14px 16px' }}>
-                      <span style={{ fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: '12px', backgroundColor: '#F1F5F9', color: '#475569' }}>
-                        v{ev.versionNumber}
-                      </span>
-                    </td>
-                    <td style={{ padding: '14px 16px', fontSize: '12px', color: '#64748B' }}>
-                      {ev.formattedSize}
-                    </td>
-                    <td style={{ padding: '14px 16px' }}>
-                      {(() => {
-                        const typeMap: Record<string, { label: string; bg: string; text: string; border: string }> = {
-                          minutes: { label: 'محضر اجتماع', bg: '#EFF6FF', text: '#1D4ED8', border: '#BFDBFE' },
-                          plan: { label: 'خطة عمل', bg: '#ECFDF5', text: '#047857', border: '#A7F3D0' },
-                          record: { label: 'سجل رسمي', bg: '#F5F3FF', text: '#6D28D9', border: '#DDD6FE' },
-                          report: { label: 'تقرير وإحصائية', bg: '#FFFBEB', text: '#B45309', border: '#FDE68A' },
-                          board: { label: 'لوحة إعلانات', bg: '#FDF2F8', text: '#BE185D', border: '#FBCFE8' },
-                          image: { label: 'صورة فوتوغرافية', bg: '#F0FDFA', text: '#0F766E', border: '#99F6E4' },
-                          evidence: { label: 'شاهد توثيقي', bg: '#F8FAFC', text: '#334155', border: '#CBD5E1' },
-                          other: { label: 'أخرى / عام', bg: '#F8FAFC', text: '#475569', border: '#E2E8F0' },
-                        };
-                        const conf = typeMap[ev.documentType || 'other'] || typeMap.other;
-                        return (
-                          <span
-                            style={{
-                              fontSize: '11px',
-                              fontWeight: 700,
-                              padding: '3px 8px',
-                              borderRadius: '6px',
-                              backgroundColor: conf.bg,
-                              color: conf.text,
-                              border: `1px solid ${conf.border}`,
-                              whiteSpace: 'nowrap',
-                            }}
-                          >
-                            {conf.label}
-                          </span>
-                        );
-                      })()}
-                    </td>
-                    <td style={{ padding: '14px 16px', textAlign: 'center' }}>
-                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', justifyContent: 'center' }}>
-                        {/* 1. Download */}
-                        <button
-                          onClick={() => handleDownloadEvidence(ev)}
-                          style={designTokens.buttons.iconAction}
-                          title="تحميل الشاهد"
-                        >
-                          <Download size={15} color="#059669" />
-                        </button>
-
-                        {/* 2. Manage Links */}
-                        {!readOnly && (
-                          <button
-                            onClick={() => handleOpenLinkModal(ev)}
-                            style={designTokens.buttons.iconAction}
-                            title="إدارة علاقات الشاهد وربطه بالمؤشرات"
-                          >
-                            <Link2 size={15} color="#2563EB" />
-                          </button>
-                        )}
-
-                        {/* 3. Edit Metadata */}
-                        {!readOnly && (
-                          <button
-                            onClick={() => handleOpenEditMetadata(ev)}
-                            style={designTokens.buttons.iconAction}
-                            title="تعديل بيانات الشاهد والنوع والوصف"
-                          >
-                            <Pencil size={15} color="#475569" />
-                          </button>
-                        )}
-
-                        {/* 4. Replace File */}
-                        {!readOnly && (
-                          <button
-                            onClick={() => handleOpenUpload(ev.documentId)}
-                            style={designTokens.buttons.iconAction}
-                            title="رفع نسخة بديلة دون حذف النسخ السابقة"
-                          >
-                            <RefreshCw size={15} color="#D97706" />
-                          </button>
-                        )}
-
-                        {/* 5. Version History */}
-                        <button
-                          onClick={() => setVersionsModalEvidence(ev)}
-                          style={designTokens.buttons.iconAction}
-                          title="استعراض سجل الإصدارات التاريخية للشاهد"
-                        >
-                          <History size={15} color="#4F46E5" />
-                        </button>
-
-                        {/* 6. Delete (Unlinked only) */}
-                        {!readOnly && (ev.isUnlinked || !ev.linkedIndicators || ev.linkedIndicators.length === 0) && (
-                          <button
-                            onClick={() => handleDeleteUnlinked(ev)}
-                            style={{
-                              ...designTokens.buttons.iconAction,
-                              backgroundColor: '#FEF2F2',
-                              borderColor: '#FECACA',
-                            }}
-                            title="حذف هذا الشاهد غير المرتبط نهائياً من مستودع المدرسة"
-                          >
-                            <Trash2 size={15} color="#DC2626" />
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-            </table>
-          </div>
-        </div>
-      ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '16px' }}>
-          {sortedEvidences.map((ev) => (
-            <EvidenceCard
-              key={ev.id}
-              evidence={ev}
-              onReplaceVersion={(docId) => handleOpenUpload(docId)}
-              onDownload={handleDownloadEvidence}
-              readOnly={readOnly}
-              onManageLinks={handleOpenLinkModal}
-              onEditMetadata={handleOpenEditMetadata}
-              onViewVersions={(evidence) => setVersionsModalEvidence(evidence)}
-              onDeleteUnlinked={handleDeleteUnlinked}
-              onNavigate={onNavigate}
-            />
-          ))}
-        </div>
-      )}
+      <EvidencePresentationSection
+        viewMode={viewMode}
+        filteredEvidences={filteredEvidences}
+        sortedEvidences={sortedEvidences}
+        sortField={sortField}
+        sortDirection={sortDirection}
+        onSort={handleSort}
+        readOnly={readOnly}
+        onNavigate={onNavigate}
+        onDownload={handleDownloadEvidence}
+        onManageLinks={handleOpenLinkModal}
+        onEditMetadata={handleOpenEditMetadata}
+        onReplaceVersion={(docId) => handleOpenUpload(docId)}
+        onViewVersions={(evidence) => setVersionsModalEvidence(evidence)}
+        onDeleteUnlinked={handleDeleteUnlinked}
+      />
 
         </>
       )}

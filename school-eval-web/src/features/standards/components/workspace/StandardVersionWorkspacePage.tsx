@@ -57,11 +57,13 @@ export const StandardVersionWorkspacePage: React.FC<StandardVersionWorkspacePage
 
   // Sync selectedVersionId when activeVersion loads if not yet set
   useEffect(() => {
-    if (!selectedVersionId && activeVersion) {
-      setSelectedVersionId(activeVersion.versionId);
-    } else if (!selectedVersionId && versions.length > 0) {
-      setSelectedVersionId(versions[0].versionId);
-    }
+    void Promise.resolve().then(() => {
+      if (!selectedVersionId && activeVersion) {
+        setSelectedVersionId(activeVersion.versionId);
+      } else if (!selectedVersionId && versions.length > 0) {
+        setSelectedVersionId(versions[0].versionId);
+      }
+    });
   }, [activeVersion, versions, selectedVersionId]);
 
   // Find currently selected version details
@@ -105,18 +107,14 @@ export const StandardVersionWorkspacePage: React.FC<StandardVersionWorkspacePage
     onNavigateToVersions();
   };
 
-  const handleCreateDraftSuccess = async (payload: any) => {
-    try {
-      const created = await createDraft(payload);
-      await refetchVersions();
-      if (created?.versionId) {
-        setSelectedVersionId(created.versionId);
-      }
-      setIsCreateDraftOpen(false);
-      setActiveTab('tree');
-    } catch (err) {
-      throw err;
+  const handleCreateDraftSuccess = async (payload: Parameters<typeof createDraft>[0]) => {
+    const created = await createDraft(payload);
+    await refetchVersions();
+    if (created?.versionId) {
+      setSelectedVersionId(created.versionId);
     }
+    setIsCreateDraftOpen(false);
+    setActiveTab('tree');
   };
 
   return (

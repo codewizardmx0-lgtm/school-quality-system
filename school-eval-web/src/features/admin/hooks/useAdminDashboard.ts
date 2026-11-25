@@ -7,6 +7,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { dashboardApi, type AdminDashboardStats } from '../api/dashboardApi';
 import { schoolsApi } from '../api/schoolsApi';
 import { auditApi } from '../api/auditApi';
+import { extractApiErrorMessage } from '../../../api/apiTypes';
 import type { School, AuditLogEntry } from '../types/admin.types';
 
 export function useAdminDashboard() {
@@ -29,15 +30,15 @@ export function useAdminDashboard() {
       if (statsRes.data) setStats(statsRes.data);
       if (schoolsRes.data) setSchools(schoolsRes.data);
       if (logsRes.data) setAuditLogs(logsRes.data);
-    } catch (err: any) {
-      setError(err?.message || 'فشل في تحميل بيانات لوحة القيادة');
+    } catch (err: unknown) {
+      setError(extractApiErrorMessage(err, 'فشل في تحميل بيانات لوحة القيادة'));
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    void fetchData();
+    void Promise.resolve().then(() => fetchData());
   }, [fetchData]);
 
   return {

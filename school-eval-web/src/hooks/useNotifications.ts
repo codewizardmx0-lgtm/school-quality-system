@@ -50,9 +50,9 @@ export function useNotifications(autoFetch: boolean = true): UseNotificationsRes
       if (isReadFilter !== undefined) {
         params.is_read = isReadFilter;
       }
-      const res = await get<AppNotificationItem[]>('/notifications', { params });
+      const res = await get<AppNotificationItem[] | { data?: AppNotificationItem[] }>('/notifications', { params });
       const rawData = res.data;
-      const items = Array.isArray(rawData) ? rawData : (rawData as any)?.data || [];
+      const items = Array.isArray(rawData) ? rawData : rawData?.data || [];
       setNotifications(items);
 
       // Re-sync unread count
@@ -89,8 +89,10 @@ export function useNotifications(autoFetch: boolean = true): UseNotificationsRes
 
   useEffect(() => {
     if (autoFetch) {
-      fetchUnreadCount();
-      fetchNotifications();
+      void Promise.resolve().then(() => {
+        void fetchUnreadCount();
+        void fetchNotifications();
+      });
     }
   }, [autoFetch, fetchUnreadCount, fetchNotifications]);
 

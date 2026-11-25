@@ -80,8 +80,9 @@ export const UsersManagement: React.FC<UsersManagementProps> = ({ onNavigate, ad
       const updated = await toggleUserStatus(toggleConfirmUser.userId);
       const action = updated.status === 'Active' ? 'تنشيط' : 'تعطيل';
       addToast('success', `تم ${action} حساب ${updated.fullName} بنجاح`);
-    } catch (err: any) {
-      addToast('error', err?.message || 'حدث خطأ أثناء تغيير حالة الحساب');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : undefined;
+      addToast('error', message || 'حدث خطأ أثناء تغيير حالة الحساب');
     } finally {
       setToggleLoading(false);
       setToggleConfirmUser(null);

@@ -21,6 +21,7 @@ import {
   BookOpen,
 } from 'lucide-react';
 import { evaluatorApi } from '../../api/evaluatorApi';
+import { extractApiErrorMessage } from '../../../../api/apiTypes';
 import type {
   AuditHubData,
   AuditHubIndicator,
@@ -72,15 +73,15 @@ export const AuditReviewHubPage: React.FC<AuditReviewHubPageProps> = ({
     try {
       const res = await evaluatorApi.getAuditHub();
       setData(res);
-    } catch (err: any) {
-      setError(err?.message || 'تعذر تحميل بيانات مركز التدقيق والمراجعة.');
+    } catch (err: unknown) {
+      setError(extractApiErrorMessage(err, 'تعذر تحميل بيانات مركز التدقيق والمراجعة.'));
     } finally {
       setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchHubData();
+    void Promise.resolve().then(() => fetchHubData());
   }, []);
 
   // Filter and Sort Indicators
@@ -125,7 +126,7 @@ export const AuditReviewHubPage: React.FC<AuditReviewHubPageProps> = ({
 
     // Sorting
     list.sort((a, b) => {
-      let comparison = 0;
+      let comparison: number;
       switch (sortKey) {
         case 'code':
           comparison = a.indicatorCode.localeCompare(b.indicatorCode, undefined, { numeric: true });
@@ -158,7 +159,7 @@ export const AuditReviewHubPage: React.FC<AuditReviewHubPageProps> = ({
     });
 
     return list;
-  }, [data?.indicators, searchTerm, selectedStandard, selectedReviewStatus, selectedScore, sortKey, sortDirection]);
+  }, [data, searchTerm, selectedStandard, selectedReviewStatus, selectedScore, sortKey, sortDirection]);
 
   const handleSort = (key: IndicatorSortKey) => {
     if (sortKey === key) {
@@ -199,8 +200,8 @@ export const AuditReviewHubPage: React.FC<AuditReviewHubPageProps> = ({
         setQuickReviewNoteText('');
         setNoteSuccessMessage(null);
       }, 900);
-    } catch (err: any) {
-      setNoteErrorMessage(err?.response?.data?.message || err?.message || 'حدث خطأ أثناء حفظ الملاحظة.');
+    } catch (err: unknown) {
+      setNoteErrorMessage(extractApiErrorMessage(err, 'حدث خطأ أثناء حفظ الملاحظة.'));
     } finally {
       setIsSubmittingNote(false);
     }
@@ -613,7 +614,7 @@ export const AuditReviewHubPage: React.FC<AuditReviewHubPageProps> = ({
               {/* Review Status Filter */}
               <select
                 value={selectedReviewStatus}
-                onChange={(e) => setSelectedReviewStatus(e.target.value as any)}
+                onChange={(e) => setSelectedReviewStatus(e.target.value as 'all' | 'reviewed' | 'pending')}
                 style={{
                   padding: '8px 12px',
                   borderRadius: '8px',

@@ -5,6 +5,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { usersApi, type UsersQueryParams } from '../api/usersApi';
+import { extractApiErrorMessage } from '../../../api/apiTypes';
 import type { User, Role, CreateUserDto, EditUserDto } from '../types/admin.types';
 import { formatRoleNameAr } from '../utils/roleUtils';
 
@@ -25,7 +26,7 @@ export function useAdminUsers() {
       if (res.data) {
         setRoles(res.data);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.warn('Failed to fetch roles:', err);
     }
   }, []);
@@ -38,16 +39,18 @@ export function useAdminUsers() {
       if (res.data) {
         setUsers(res.data);
       }
-    } catch (err: any) {
-      setError(err?.message || 'فشل في تحميل قائمة المستخدمين');
+    } catch (err: unknown) {
+      setError(extractApiErrorMessage(err, 'فشل في تحميل قائمة المستخدمين'));
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    void fetchUsers();
-    void fetchRoles();
+    void Promise.resolve().then(() => {
+      void fetchUsers();
+      void fetchRoles();
+    });
   }, [fetchUsers, fetchRoles]);
 
   const createUser = useCallback(async (dto: CreateUserDto): Promise<User> => {

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { evaluatorApi } from '../api/evaluatorApi';
+import { extractApiErrorMessage } from '../../../api/apiTypes';
 import type { HistoricalTrendData } from '../api/evaluationTypes';
 
 export function useHistoricalTrend() {
@@ -13,16 +14,16 @@ export function useHistoricalTrend() {
     try {
       const data = await evaluatorApi.getHistoricalTrend();
       setTrendData(data);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Failed to load historical trend:', err);
-      setError(err.message || 'تعذر تحميل بيانات مقارنة الأداء التاريخي.');
+      setError(extractApiErrorMessage(err, 'تعذر تحميل بيانات مقارنة الأداء التاريخي.'));
     } finally {
       setIsLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    fetchTrend();
+    void Promise.resolve().then(() => fetchTrend());
   }, [fetchTrend]);
 
   return {

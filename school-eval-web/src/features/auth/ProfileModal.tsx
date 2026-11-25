@@ -64,12 +64,14 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
   // Reset form when modal opens or user changes
   useEffect(() => {
     if (isOpen && user) {
-      setFullName(user.fullName || '');
-      setEmail(user.email || '');
-      setCurrentPassword('');
-      setNewPassword('');
-      setNewPasswordConfirmation('');
-      setErrors({});
+      void Promise.resolve().then(() => {
+        setFullName(user.fullName || '');
+        setEmail(user.email || '');
+        setCurrentPassword('');
+        setNewPassword('');
+        setNewPasswordConfirmation('');
+        setErrors({});
+      });
     }
   }, [isOpen, user]);
 
@@ -174,8 +176,13 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
         addToast('success', 'تم حفظ التفضيلات بنجاح في المتصفح.');
         onClose();
       }
-    } catch (err: any) {
-      const backendErrors = err?.response?.data?.errors || err?.errors;
+    } catch (err: unknown) {
+      const apiErr = err as {
+        response?: { data?: { errors?: Record<string, string[]>; message?: string } };
+        errors?: Record<string, string[]>;
+        message?: string;
+      };
+      const backendErrors = apiErr?.response?.data?.errors || apiErr?.errors;
       if (backendErrors) {
         const mapped: Record<string, string> = {};
         if (backendErrors.fullName) mapped.fullName = backendErrors.fullName[0];
@@ -184,7 +191,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
         if (backendErrors.newPassword) mapped.newPassword = backendErrors.newPassword[0];
         setErrors(mapped);
       } else {
-        const msg = err?.response?.data?.message || err?.message || 'فشلت العملية. يرجى التحقق من المدخلات والمحاولة لاحقاً.';
+        const msg = apiErr?.response?.data?.message || apiErr?.message || 'فشلت العملية. يرجى التحقق من المدخلات والمحاولة لاحقاً.';
         addToast('error', msg);
       }
     } finally {

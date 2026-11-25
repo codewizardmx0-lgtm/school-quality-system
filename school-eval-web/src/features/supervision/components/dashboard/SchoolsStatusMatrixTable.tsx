@@ -42,7 +42,7 @@ type SortDirection = 'asc' | 'desc';
  * مع منح شارة التأخير (+5) لرفع أولوية المدرسة المتأخرة داخل مجموعتها
  */
 const getStatusPriorityWeight = (school: SchoolStatusMatrixRow): number => {
-  let weight = 0;
+  let weight: number;
   switch (school.outputStatus) {
     case 'Submitted':
       weight = 50;
@@ -111,8 +111,8 @@ export const SchoolsStatusMatrixTable: React.FC<SchoolsStatusMatrixTableProps> =
   const sortedSchools = useMemo(() => {
     const list = [...schools];
     return list.sort((a, b) => {
-      let valA: any;
-      let valB: any;
+      let valA: string | number;
+      let valB: string | number;
 
       switch (sortKey) {
         case 'schoolName':

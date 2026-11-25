@@ -39,24 +39,26 @@ export const EditEvidenceMetadataModal: React.FC<EditEvidenceMetadataModalProps>
   evidence,
   onSave,
 }) => {
-  if (!isOpen || !evidence) return null;
-
-  const [title, setTitle] = useState(evidence.title || '');
-  const [documentType, setDocumentType] = useState(evidence.documentType || 'evidence');
-  const [description, setDescription] = useState(evidence.description || '');
-  const [justification, setJustification] = useState(evidence.justification || '');
+  const [title, setTitle] = useState(evidence?.title || '');
+  const [documentType, setDocumentType] = useState(evidence?.documentType || 'evidence');
+  const [description, setDescription] = useState(evidence?.description || '');
+  const [justification, setJustification] = useState(evidence?.justification || '');
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (evidence) {
-      setTitle(evidence.title || '');
-      setDocumentType(evidence.documentType || 'evidence');
-      setDescription(evidence.description || '');
-      setJustification(evidence.justification || '');
-      setError(null);
+      void Promise.resolve().then(() => {
+        setTitle(evidence.title || '');
+        setDocumentType(evidence.documentType || 'evidence');
+        setDescription(evidence.description || '');
+        setJustification(evidence.justification || '');
+        setError(null);
+      });
     }
   }, [evidence]);
+
+  if (!isOpen || !evidence) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -77,9 +79,10 @@ export const EditEvidenceMetadataModal: React.FC<EditEvidenceMetadataModalProps>
         linkId: evidence.linkId,
       });
       onClose();
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const apiErr = err as { response?: { data?: { message?: string } } };
       console.error('Failed to update evidence metadata:', err);
-      setError(err?.response?.data?.message || 'تعذر حفظ بيانات الشاهد، يرجى المحاولة مرة أخرى.');
+      setError(apiErr?.response?.data?.message || 'تعذر حفظ بيانات الشاهد، يرجى المحاولة مرة أخرى.');
     } finally {
       setIsSaving(false);
     }

@@ -101,6 +101,9 @@ class ImprovementSuggestionController extends Controller
                     'status'        => $latestPlan->status,
                     'isCurrentPlan' => false,
                 ];
+            } else {
+                // متبنى كمجال تحسين في الدورة الحالية قبل ربطه بخطة نشطة
+                $adoptedAreaMap[$area->result_id] = $area->area_id;
             }
         }
 

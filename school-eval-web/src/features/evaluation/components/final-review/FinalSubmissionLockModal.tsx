@@ -18,12 +18,12 @@ export const FinalSubmissionLockModal: React.FC<FinalSubmissionLockModalProps> =
   trackingCode,
   digitalHash,
 }) => {
-  if (!isOpen) return null;
-
   const [password, setPassword] = useState('');
   const [notes, setNotes] = useState('تم استيفاء وتدقيق كافة المعايير والشواهد الرسمية والتسليم النهائي للفحص والمراجعة الإشرافية.');
   const [isAgreed, setIsAgreed] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  if (!isOpen) return null;
 
   const displayTrackingCode = trackingCode || 'يُولَّد تلقائياً فور تأكيد الختم';
   const displayDigitalHash = digitalHash || 'تُحسب البصمة المشفرة (SHA-256) فور التحقق من كلمة المرور';

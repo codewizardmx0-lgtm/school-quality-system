@@ -48,11 +48,13 @@ export const AddActionModal: React.FC<AddActionModalProps> = ({
 
   useEffect(() => {
     if (isOpen) {
-      if (initialAreaId) {
-        setSelectedAreaId(String(initialAreaId));
-      } else if (uniqueAreas.length > 0 && !selectedAreaId) {
-        setSelectedAreaId(String(uniqueAreas[0].areaId));
-      }
+      void Promise.resolve().then(() => {
+        if (initialAreaId) {
+          setSelectedAreaId(String(initialAreaId));
+        } else if (uniqueAreas.length > 0 && !selectedAreaId) {
+          setSelectedAreaId(String(uniqueAreas[0].areaId));
+        }
+      });
     }
   }, [isOpen, initialAreaId, uniqueAreas, selectedAreaId]);
 
@@ -146,8 +148,9 @@ export const AddActionModal: React.FC<AddActionModalProps> = ({
         completionPercentage: status === 'Done' ? 100 : completionPercentage,
       });
       handleClose();
-    } catch (err: any) {
-      const msg = err?.response?.data?.message || (err as Error)?.message || 'فشل في حفظ إجراء التحسين.';
+    } catch (err: unknown) {
+      const apiErr = err as { response?: { data?: { message?: string } } };
+      const msg = apiErr?.response?.data?.message || (err as Error)?.message || 'فشل في حفظ إجراء التحسين.';
       setError(msg);
     }
   };

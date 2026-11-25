@@ -35,14 +35,20 @@ export const DocumentVersionsModal: React.FC<DocumentVersionsModalProps> = ({
 
   useEffect(() => {
     if (!isOpen || !documentId) {
-      setVersions([]);
-      setError(null);
+      void Promise.resolve().then(() => {
+        setVersions([]);
+        setError(null);
+      });
       return;
     }
 
     let isMounted = true;
-    setLoading(true);
-    setError(null);
+    void Promise.resolve().then(() => {
+      if (isMounted) {
+        setLoading(true);
+        setError(null);
+      }
+    });
 
     evaluatorApi
       .getDocumentVersions(documentId)
@@ -51,9 +57,10 @@ export const DocumentVersionsModal: React.FC<DocumentVersionsModalProps> = ({
           setVersions(res.versions || []);
         }
       })
-      .catch((err: any) => {
+      .catch((err: unknown) => {
+        const apiErr = err as { response?: { data?: { message?: string } } };
         if (isMounted) {
-          setError(err?.response?.data?.message || 'تعذر تحميل سجل إصدارات المستند.');
+          setError(apiErr?.response?.data?.message || 'تعذر تحميل سجل إصدارات المستند.');
         }
       })
       .finally(() => {

@@ -51,8 +51,8 @@ export const VerificationToolsManagerModal: React.FC<VerificationToolsManagerMod
     try {
       const data = await standardsApi.getVerificationTools();
       setTools(data.tools || []);
-    } catch (err: any) {
-      setError(err?.message || 'فشل تحميل أدوات التحقق.');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'فشل تحميل أدوات التحقق.');
     } finally {
       setIsLoading(false);
     }
@@ -60,9 +60,11 @@ export const VerificationToolsManagerModal: React.FC<VerificationToolsManagerMod
 
   useEffect(() => {
     if (isOpen) {
-      fetchTools();
-      setError(null);
-      setSuccess(null);
+      void Promise.resolve().then(() => {
+        setError(null);
+        setSuccess(null);
+        void fetchTools();
+      });
     }
   }, [isOpen]);
 
@@ -89,8 +91,9 @@ export const VerificationToolsManagerModal: React.FC<VerificationToolsManagerMod
       setSuccess('تمت إضافة أداة التحقق بنجاح واعتمادها.');
       await fetchTools();
       if (onToolsUpdated) onToolsUpdated();
-    } catch (err: any) {
-      setError(err?.response?.data?.message || err?.message || 'فشل إضافة أداة التحقق.');
+    } catch (err: unknown) {
+      const apiErr = err as { response?: { data?: { message?: string } }; message?: string };
+      setError(apiErr?.response?.data?.message || apiErr?.message || 'فشل إضافة أداة التحقق.');
     } finally {
       setIsSubmitting(false);
     }
@@ -106,8 +109,9 @@ export const VerificationToolsManagerModal: React.FC<VerificationToolsManagerMod
       setSuccess('تم حذف أداة التحقق بنجاح.');
       await fetchTools();
       if (onToolsUpdated) onToolsUpdated();
-    } catch (err: any) {
-      setError(err?.response?.data?.message || err?.message || 'تعذر حذف أداة التحقق.');
+    } catch (err: unknown) {
+      const apiErr = err as { response?: { data?: { message?: string } }; message?: string };
+      setError(apiErr?.response?.data?.message || apiErr?.message || 'تعذر حذف أداة التحقق.');
       setDeletingId(null);
     } finally {
       setIsDeleting(false);

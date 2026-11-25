@@ -38,13 +38,15 @@ export const QuickNavModal: React.FC<QuickNavModalProps> = ({
   // Initialize expanded standards when opened
   useEffect(() => {
     if (isOpen) {
-      setSearchQuery('');
-      setStatusFilter('all');
-      if (currentStandardId) {
-        setExpandedStandardIds([currentStandardId]);
-      } else if (standards.length > 0) {
-        setExpandedStandardIds([standards[0].standardId]);
-      }
+      void Promise.resolve().then(() => {
+        setSearchQuery('');
+        setStatusFilter('all');
+        if (currentStandardId) {
+          setExpandedStandardIds([currentStandardId]);
+        } else if (standards.length > 0) {
+          setExpandedStandardIds([standards[0].standardId]);
+        }
+      });
       const timer = setTimeout(() => searchInputRef.current?.focus(), 50);
       return () => clearTimeout(timer);
     }

@@ -32,7 +32,6 @@ export const SecurityAudit: React.FC<SecurityAuditProps> = ({ onNavigate, addToa
     return new Date().toLocaleTimeString('ar-YE', { hour: '2-digit', minute: '2-digit' });
   });
   const {
-    logs: _logs,
     filteredLogs,
     availableEventTypes,
     availableEventOptions,

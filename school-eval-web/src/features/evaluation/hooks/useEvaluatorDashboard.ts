@@ -22,7 +22,7 @@ export function useEvaluatorDashboard() {
   }, []);
 
   useEffect(() => {
-    fetchDashboard();
+    void Promise.resolve().then(() => fetchDashboard());
   }, [fetchDashboard]);
 
   return {

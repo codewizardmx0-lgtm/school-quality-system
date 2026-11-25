@@ -8,6 +8,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { standardsApi } from '../api/standardsApi';
+import { extractApiErrorMessage } from '../../../api/apiTypes';
 import type {
   StandardWeightItem,
   RubricLevelInfo,
@@ -47,15 +48,15 @@ export function useWeightsRubrics(versionId?: number | string) {
         setRubricLevels(rubricsRes);
       }
       setIsDirty(false);
-    } catch (err: any) {
-      setError(err?.message || 'فشل تحميل بيانات الأوزان وسلالم التقدير.');
+    } catch (err: unknown) {
+      setError(extractApiErrorMessage(err, 'فشل تحميل بيانات الأوزان وسلالم التقدير.'));
     } finally {
       setIsLoading(false);
     }
   }, [versionId]);
 
   useEffect(() => {
-    fetchWeightsAndRubrics();
+    void Promise.resolve().then(() => fetchWeightsAndRubrics());
   }, [fetchWeightsAndRubrics]);
 
   // الحساب الحي للمجموع الإجمالي للمعايير الرئيسية والتوازن 100%
@@ -319,8 +320,8 @@ export function useWeightsRubrics(versionId?: number | string) {
       setIsDirty(false);
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3500);
-    } catch (err: any) {
-      setError(err?.message || 'تعذر حفظ توزيع الأوزان في الخادم.');
+    } catch (err: unknown) {
+      setError(extractApiErrorMessage(err, 'تعذر حفظ توزيع الأوزان في الخادم.'));
       throw err;
     } finally {
       setIsSaving(false);

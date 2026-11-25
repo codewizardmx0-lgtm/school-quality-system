@@ -1,9 +1,11 @@
-import React, { useState, useEffect } from 'react';
-import { StandardsTreePage } from './StandardsTreePage';
-import { RubricAssessmentPage } from './RubricAssessmentPage';
-import { PendingIndicatorsTable } from '../dashboard/PendingIndicatorsTable';
+import React, { Suspense, lazy, useState, useEffect } from 'react';
 import { useEvaluatorDashboard } from '../../hooks/useEvaluatorDashboard';
+import { PortalLoader } from '../../../../components/ui/PortalLoader';
 import type { EvaluatorScreen } from '../../api/evaluationTypes';
+
+const StandardsTreePage = lazy(() => import('./StandardsTreePage').then((m) => ({ default: m.StandardsTreePage })));
+const RubricAssessmentPage = lazy(() => import('./RubricAssessmentPage').then((m) => ({ default: m.RubricAssessmentPage })));
+const PendingIndicatorsTable = lazy(() => import('../dashboard/PendingIndicatorsTable').then((m) => ({ default: m.PendingIndicatorsTable })));
 import {
   ClipboardList,
   SlidersHorizontal,
@@ -48,13 +50,13 @@ export const UnifiedStandardsAssessmentPage: React.FC<UnifiedStandardsAssessment
 
   useEffect(() => {
     if (selectedIndicatorId !== undefined && selectedIndicatorId !== null) {
-      setCurrentIndicatorId(selectedIndicatorId);
+      void Promise.resolve().then(() => setCurrentIndicatorId(selectedIndicatorId));
     }
   }, [selectedIndicatorId]);
 
   useEffect(() => {
     if (initialTab) {
-      setActiveTab(initialTab);
+      void Promise.resolve().then(() => setActiveTab(initialTab));
     }
   }, [initialTab]);
 
@@ -215,42 +217,44 @@ export const UnifiedStandardsAssessmentPage: React.FC<UnifiedStandardsAssessment
 
       {/* 3. Main Content Rendering */}
       <div style={{ flex: 1 }}>
-        {activeTab === 'tree' && (
-          <StandardsTreePage
-            onSelectIndicator={handleIndicatorSelect}
-            onNavigate={onNavigate}
-            isLocked={isLocked}
-            isPrincipal={isPrincipal}
-            onResetSuccess={refreshDashboard}
-          />
-        )}
-
-        {activeTab === 'rubric' && (
-          <RubricAssessmentPage
-            selectedIndicatorId={currentIndicatorId}
-            onSelectIndicator={(newId) => {
-              setCurrentIndicatorId(newId);
-              onSelectIndicator(newId);
-              if (targetPlanIndicatorId && Number(targetPlanIndicatorId) !== newId) {
-                sessionStorage.removeItem('navigated_from_improvement_plan');
-                sessionStorage.removeItem('navigated_from_improvement_plan_indicator_id');
-              }
-            }}
-            onNavigate={onNavigate}
-            isLocked={isLocked}
-            isPrincipal={isPrincipal}
-            onResetSuccess={refreshDashboard}
-          />
-        )}
-
-        {activeTab === 'pending' && (
-          <div style={{ padding: '24px', maxWidth: '1440px', margin: '0 auto' }}>
-            <PendingIndicatorsTable
-              indicators={dashboardData?.pendingIndicators || []}
-              onOpenIndicator={handleIndicatorSelect}
+        <Suspense fallback={<PortalLoader inline />}>
+          {activeTab === 'tree' && (
+            <StandardsTreePage
+              onSelectIndicator={handleIndicatorSelect}
+              onNavigate={onNavigate}
+              isLocked={isLocked}
+              isPrincipal={isPrincipal}
+              onResetSuccess={refreshDashboard}
             />
-          </div>
-        )}
+          )}
+
+          {activeTab === 'rubric' && (
+            <RubricAssessmentPage
+              selectedIndicatorId={currentIndicatorId}
+              onSelectIndicator={(newId) => {
+                setCurrentIndicatorId(newId);
+                onSelectIndicator(newId);
+                if (targetPlanIndicatorId && Number(targetPlanIndicatorId) !== newId) {
+                  sessionStorage.removeItem('navigated_from_improvement_plan');
+                  sessionStorage.removeItem('navigated_from_improvement_plan_indicator_id');
+                }
+              }}
+              onNavigate={onNavigate}
+              isLocked={isLocked}
+              isPrincipal={isPrincipal}
+              onResetSuccess={refreshDashboard}
+            />
+          )}
+
+          {activeTab === 'pending' && (
+            <div style={{ padding: '24px', maxWidth: '1440px', margin: '0 auto' }}>
+              <PendingIndicatorsTable
+                indicators={dashboardData?.pendingIndicators || []}
+                onOpenIndicator={handleIndicatorSelect}
+              />
+            </div>
+          )}
+        </Suspense>
       </div>
     </div>
   );

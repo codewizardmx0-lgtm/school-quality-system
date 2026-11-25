@@ -10,20 +10,22 @@
  * - ثيم الأزرق الملكي (#2563EB / #1D4ED8)
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { Suspense, lazy, useState, useEffect } from 'react';
 import { SupervisionSidebar } from './SupervisionSidebar';
 import { SupervisionTopBar } from './SupervisionTopBar';
 import { SchoolContextBar } from './SchoolContextBar';
-import { SupervisionDashboardPage } from '../dashboard/SupervisionDashboardPage';
-import { CyclesListPage } from '../cycles/CyclesListPage';
-import { ReviewSubmissionPage } from '../review/ReviewSubmissionPage';
-import { CreateCompletionRequestPage } from '../completion/CreateCompletionRequestPage';
-import { SchoolTrackingLogPage } from '../tracking/SchoolTrackingLogPage';
-import { CentralReportsPage } from '../reports/CentralReportsPage';
-import { HistoricalComparisonPage } from '../reports/HistoricalComparisonPage';
 import { SupervisionErrorBoundary } from '../common/SupervisionErrorBoundary';
+import { PortalLoader } from '../../../../components/ui/PortalLoader';
 import { useAuth } from '../../../../features/auth/AuthContext';
 import { supervisionApi } from '../../api/supervisionApi';
+
+const SupervisionDashboardPage = lazy(() => import('../dashboard/SupervisionDashboardPage').then((m) => ({ default: m.SupervisionDashboardPage })));
+const CyclesListPage = lazy(() => import('../cycles/CyclesListPage').then((m) => ({ default: m.CyclesListPage })));
+const ReviewSubmissionPage = lazy(() => import('../review/ReviewSubmissionPage').then((m) => ({ default: m.ReviewSubmissionPage })));
+const CreateCompletionRequestPage = lazy(() => import('../completion/CreateCompletionRequestPage').then((m) => ({ default: m.CreateCompletionRequestPage })));
+const SchoolTrackingLogPage = lazy(() => import('../tracking/SchoolTrackingLogPage').then((m) => ({ default: m.SchoolTrackingLogPage })));
+const CentralReportsPage = lazy(() => import('../reports/CentralReportsPage').then((m) => ({ default: m.CentralReportsPage })));
+const HistoricalComparisonPage = lazy(() => import('../reports/HistoricalComparisonPage').then((m) => ({ default: m.HistoricalComparisonPage })));
 import type {
   SupervisionScreenKey,
   PreloadedCompletionItem,
@@ -47,7 +49,7 @@ export const SupervisionLayout: React.FC<SupervisionLayoutProps> = ({
   const [selectedSchoolId, setSelectedSchoolId] = useState<number | undefined>(undefined);
   const [selectedSchoolName, setSelectedSchoolName] = useState<string | undefined>(undefined);
   const [selectedCycleId, setSelectedCycleId] = useState<number | undefined>(undefined);
-  const [prefillCycleLaunch, setPrefillCycleLaunch] = useState<any | undefined>(undefined);
+  const [prefillCycleLaunch, setPrefillCycleLaunch] = useState<Record<string, unknown> | undefined>(undefined);
   const [selectedTargetTab, setSelectedTargetTab] = useState<string | undefined>(undefined);
   const [preloadedItems, setPreloadedItems] = useState<PreloadedCompletionItem[] | undefined>(
     undefined
@@ -85,7 +87,7 @@ export const SupervisionLayout: React.FC<SupervisionLayoutProps> = ({
     let isMounted = true;
     supervisionApi.getActiveStandardVersion()
       .then((ver) => {
-        const num = ver?.versionNumber || (ver as any)?.versionNo;
+        const num = ver?.versionNumber || (ver as { versionNo?: string } | null)?.versionNo;
         if (isMounted && num) {
           setActiveStandardVersion(num);
         }
@@ -121,6 +123,7 @@ export const SupervisionLayout: React.FC<SupervisionLayoutProps> = ({
     return () => {
       isMounted = false;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const navigateToScreen = (
@@ -131,7 +134,7 @@ export const SupervisionLayout: React.FC<SupervisionLayoutProps> = ({
       schoolId?: number;
       schoolName?: string;
       preloadedItems?: PreloadedCompletionItem[];
-      prefillCycleLaunch?: any;
+      prefillCycleLaunch?: Record<string, unknown>;
       targetTab?: string;
     }
   ) => {
@@ -209,7 +212,7 @@ export const SupervisionLayout: React.FC<SupervisionLayoutProps> = ({
           <ReviewSubmissionPage
             submissionId={selectedSubmissionId}
             schoolId={selectedSchoolId}
-            initialTab={selectedTargetTab === 'standards-tree' ? 'standards' : (selectedTargetTab as any)}
+            initialTab={selectedTargetTab === 'standards-tree' ? 'standards' : (selectedTargetTab as 'standards' | 'vault' | 'plan' | 'decision' | undefined)}
             onSelectSchool={(schoolId, schoolName) => {
               setSelectedSchoolId(schoolId);
               setSelectedSchoolName(schoolName);
@@ -356,7 +359,9 @@ export const SupervisionLayout: React.FC<SupervisionLayoutProps> = ({
           }}
         >
           <SupervisionErrorBoundary onNavigateHome={() => navigateToScreen('dashboard')}>
-            {renderCurrentScreen()}
+            <Suspense fallback={<PortalLoader inline />}>
+              {renderCurrentScreen()}
+            </Suspense>
           </SupervisionErrorBoundary>
         </main>
       </div>

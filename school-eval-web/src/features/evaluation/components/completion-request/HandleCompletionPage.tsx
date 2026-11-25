@@ -304,9 +304,9 @@ export const HandleCompletionPage: React.FC<HandleCompletionPageProps> = ({
       }
 
       await resolveItem(item.itemId, notes, evidenceVersionId);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
-      setErrorMessage(err.message || 'حدث خطأ أثناء حفظ معالجة البند');
+      setErrorMessage(err instanceof Error ? err.message : 'حدث خطأ أثناء حفظ معالجة البند');
     }
   };
 
@@ -324,8 +324,8 @@ export const HandleCompletionPage: React.FC<HandleCompletionPageProps> = ({
     }
     try {
       await resubmitToMinistry(schoolGeneralNotes);
-    } catch (err: any) {
-      setErrorMessage(err.message || 'فشلت عملية إعادة الرفع للمشرف الوزاري.');
+    } catch (err: unknown) {
+      setErrorMessage(err instanceof Error ? err.message : 'فشلت عملية إعادة الرفع للمشرف الوزاري.');
     }
   };
 

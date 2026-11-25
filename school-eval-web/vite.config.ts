@@ -32,12 +32,6 @@ export default defineConfig({
             }
             return 'vendor';
           }
-          if (id.includes('features/admin') || id.includes('features\\admin')) {
-            return 'feature-admin';
-          }
-          if (id.includes('features/evaluation') || id.includes('features\\evaluation')) {
-            return 'feature-evaluation';
-          }
           if (id.includes('features/auth') || id.includes('features\\auth')) {
             return 'feature-auth';
           }

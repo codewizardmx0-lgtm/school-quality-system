@@ -5,9 +5,25 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { supervisionApi } from '../api/supervisionApi';
+import { extractApiErrorMessage } from '../../../api/apiTypes';
 import type { ActiveStandardVersion, CycleLaunchPayload } from '../api/supervisionTypes';
 
-export function useCycleLaunch(onSuccess?: () => void, prefillData?: any) {
+export interface CyclePrefillData {
+  academicYear?: string;
+  name?: string;
+  cycleTitle?: string;
+  targetTerm?: string;
+  startDate?: string;
+  endDate?: string;
+  completionDeadlineDays?: number;
+  publicDirectives?: string;
+  targetGovernorate?: string;
+  selectedStages?: string[];
+  schoolIds?: number[];
+  enrollAllSchools?: boolean;
+}
+
+export function useCycleLaunch(onSuccess?: () => void, prefillData?: CyclePrefillData) {
   const [activeVersion, setActiveVersion] = useState<ActiveStandardVersion | null>(null);
   const [isLoadingVersion, setIsLoadingVersion] = useState<boolean>(true);
   const [versionError, setVersionError] = useState<string | null>(null);
@@ -53,15 +69,15 @@ export function useCycleLaunch(onSuccess?: () => void, prefillData?: any) {
     try {
       const version = await supervisionApi.getActiveStandardVersion();
       setActiveVersion(version);
-    } catch (err: any) {
-      setVersionError(err?.message || 'تعذر استرجاع وثيقة المعايير المقفلة.');
+    } catch (err: unknown) {
+      setVersionError(extractApiErrorMessage(err, 'تعذر استرجاع وثيقة المعايير المقفلة.'));
     } finally {
       setIsLoadingVersion(false);
     }
   }, []);
 
   useEffect(() => {
-    fetchActiveVersion();
+    void Promise.resolve().then(() => fetchActiveVersion());
   }, [fetchActiveVersion]);
 
   // التحقق من صحة التواريخ والقواعد النظامية
@@ -121,8 +137,8 @@ export function useCycleLaunch(onSuccess?: () => void, prefillData?: any) {
       if (onSuccess) {
         onSuccess();
       }
-    } catch (err: any) {
-      setSubmitError(err?.message || 'تعذر إطلاق الدورة. يرجى التحقق من المدخلات والمحاولة مجدداً.');
+    } catch (err: unknown) {
+      setSubmitError(extractApiErrorMessage(err, 'تعذر إطلاق الدورة. يرجى التحقق من المدخلات والمحاولة مجدداً.'));
     } finally {
       setIsSubmitting(false);
     }

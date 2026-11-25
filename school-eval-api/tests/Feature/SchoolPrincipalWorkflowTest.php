@@ -485,4 +485,38 @@ class SchoolPrincipalWorkflowTest extends TestCase
             ]);
         $resForbidden->assertStatus(403);
     }
+
+    /**
+     * 15. التحقق من قبول تدوين ملاحظة المراجعة الإدارية حتى على مؤشر غير مرصود بعد (score = null)
+     */
+    public function test_principal_can_submit_review_note_on_unscored_indicator_safely(): void
+    {
+        $principal = User::where('username', 'principal_farouq')->firstOrFail();
+        $evaluation = Evaluation::where('school_id', $this->schoolFarouq->school_id)->firstOrFail();
+        $subStandard = \App\Models\SubStandard::firstOrFail();
+
+        $indicator = Indicator::create([
+            'sub_standard_id' => $subStandard->sub_standard_id,
+            'code'            => '9.9.9',
+            'name'            => 'مؤشر اختباري غير مرصود للمراجعة الإدارية',
+            'description'     => 'مؤشر معزول لاختبار إنشاء نتيجة Pending بدرجة null',
+            'weight'          => 0,
+            'status'          => 'Active',
+        ]);
+
+        $res = $this->actingAs($principal, 'sanctum')
+            ->postJson("/api/v1/evaluator/audit-hub/indicators/{$indicator->indicator_id}/review-note", [
+                'text' => 'ملاحظة مراجعة لمؤشر لم يتم رصد درجته بعد.',
+            ]);
+
+        $res->assertStatus(200)
+            ->assertJsonPath('data.text', 'ملاحظة مراجعة لمؤشر لم يتم رصد درجته بعد.');
+
+        $this->assertDatabaseHas('evaluation_results', [
+            'evaluation_id'     => $evaluation->evaluation_id,
+            'indicator_id'      => $indicator->indicator_id,
+            'completion_status' => 'Pending',
+            'score'             => null,
+        ]);
+    }
 }

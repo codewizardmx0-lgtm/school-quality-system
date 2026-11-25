@@ -5,6 +5,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { standardsApi } from '../api/standardsApi';
+import { extractApiErrorMessage } from '../../../api/apiTypes';
 import type {
   StandardNode,
   SubStandardNode,
@@ -62,15 +63,15 @@ export function useStandardsTree(versionId?: number | string) {
           return targetStd;
         });
       }
-    } catch (err: any) {
-      setError(err?.message || 'فشل تحميل الشجرة الهرمية للمعايير.');
+    } catch (err: unknown) {
+      setError(extractApiErrorMessage(err, 'فشل تحميل الشجرة الهرمية للمعايير.'));
     } finally {
       setIsLoading(false);
     }
   }, [versionId]);
 
   useEffect(() => {
-    fetchTree();
+    void Promise.resolve().then(() => fetchTree());
   }, [fetchTree]);
 
   // تحديد مؤشر بالضغط عليه في الشجرة
@@ -87,8 +88,8 @@ export function useStandardsTree(versionId?: number | string) {
     try {
       await standardsApi.createStandard(versionId, payload);
       await fetchTree();
-    } catch (err: any) {
-      setError(err?.message || 'فشل إضافة المعيار الرئيسي.');
+    } catch (err: unknown) {
+      setError(extractApiErrorMessage(err, 'فشل إضافة المعيار الرئيسي.'));
       throw err;
     } finally {
       setIsSaving(false);
@@ -100,8 +101,8 @@ export function useStandardsTree(versionId?: number | string) {
     try {
       await standardsApi.updateStandard(standardId, payload);
       await fetchTree();
-    } catch (err: any) {
-      setError(err?.message || 'فشل تحديث المعيار الرئيسي.');
+    } catch (err: unknown) {
+      setError(extractApiErrorMessage(err, 'فشل تحديث المعيار الرئيسي.'));
       throw err;
     } finally {
       setIsSaving(false);
@@ -118,8 +119,8 @@ export function useStandardsTree(versionId?: number | string) {
         setSelectedIndicator(null);
       }
       await fetchTree();
-    } catch (err: any) {
-      setError(err?.message || 'تعذر حذف المعيار الرئيسي.');
+    } catch (err: unknown) {
+      setError(extractApiErrorMessage(err, 'تعذر حذف المعيار الرئيسي.'));
       throw err;
     } finally {
       setIsSaving(false);
@@ -133,8 +134,8 @@ export function useStandardsTree(versionId?: number | string) {
     try {
       await standardsApi.createSubStandard(versionId, stdId, payload);
       await fetchTree();
-    } catch (err: any) {
-      setError(err?.message || 'فشل إضافة المعيار الفرعي.');
+    } catch (err: unknown) {
+      setError(extractApiErrorMessage(err, 'فشل إضافة المعيار الفرعي.'));
       throw err;
     } finally {
       setIsSaving(false);
@@ -146,8 +147,8 @@ export function useStandardsTree(versionId?: number | string) {
     try {
       await standardsApi.updateSubStandard(subStandardId, payload);
       await fetchTree();
-    } catch (err: any) {
-      setError(err?.message || 'فشل تحديث المعيار الفرعي.');
+    } catch (err: unknown) {
+      setError(extractApiErrorMessage(err, 'فشل تحديث المعيار الفرعي.'));
       throw err;
     } finally {
       setIsSaving(false);
@@ -163,8 +164,8 @@ export function useStandardsTree(versionId?: number | string) {
         setSelectedIndicator(null);
       }
       await fetchTree();
-    } catch (err: any) {
-      setError(err?.message || 'تعذر حذف المعيار الفرعي.');
+    } catch (err: unknown) {
+      setError(extractApiErrorMessage(err, 'تعذر حذف المعيار الفرعي.'));
       throw err;
     } finally {
       setIsSaving(false);
@@ -177,8 +178,8 @@ export function useStandardsTree(versionId?: number | string) {
     try {
       await standardsApi.createIndicator(subStandardId, payload);
       await fetchTree();
-    } catch (err: any) {
-      setError(err?.message || 'فشل إضافة المؤشر.');
+    } catch (err: unknown) {
+      setError(extractApiErrorMessage(err, 'فشل إضافة المؤشر.'));
       throw err;
     } finally {
       setIsSaving(false);
@@ -240,9 +241,9 @@ export function useStandardsTree(versionId?: number | string) {
 
       setSaveStatus('saved');
       setTimeout(() => setSaveStatus('idle'), 3000);
-    } catch (err: any) {
+    } catch (err: unknown) {
       setSaveStatus('error');
-      setError(err?.message || 'تعذر حفظ تعديلات المؤشر.');
+      setError(extractApiErrorMessage(err, 'تعذر حفظ تعديلات المؤشر.'));
       throw err;
     } finally {
       setIsSaving(false);
@@ -257,8 +258,8 @@ export function useStandardsTree(versionId?: number | string) {
         setSelectedIndicator(null);
       }
       await fetchTree();
-    } catch (err: any) {
-      setError(err?.message || 'تعذر حذف المؤشر المعياري.');
+    } catch (err: unknown) {
+      setError(extractApiErrorMessage(err, 'تعذر حذف المؤشر المعياري.'));
       throw err;
     } finally {
       setIsSaving(false);
@@ -280,8 +281,8 @@ export function useStandardsTree(versionId?: number | string) {
       });
       await fetchTree();
       return created;
-    } catch (err: any) {
-      setError(err?.message || 'فشل إضافة متطلب الشاهد.');
+    } catch (err: unknown) {
+      setError(extractApiErrorMessage(err, 'فشل إضافة متطلب الشاهد.'));
       throw err;
     } finally {
       setIsSaving(false);
@@ -306,8 +307,8 @@ export function useStandardsTree(versionId?: number | string) {
       });
       await fetchTree();
       return updated;
-    } catch (err: any) {
-      setError(err?.message || 'فشل تحديث متطلب الشاهد.');
+    } catch (err: unknown) {
+      setError(extractApiErrorMessage(err, 'فشل تحديث متطلب الشاهد.'));
       throw err;
     } finally {
       setIsSaving(false);
@@ -327,8 +328,8 @@ export function useStandardsTree(versionId?: number | string) {
         };
       });
       await fetchTree();
-    } catch (err: any) {
-      setError(err?.message || 'تعذر حذف متطلب الشاهد.');
+    } catch (err: unknown) {
+      setError(extractApiErrorMessage(err, 'تعذر حذف متطلب الشاهد.'));
       throw err;
     } finally {
       setIsSaving(false);
@@ -349,8 +350,8 @@ export function useStandardsTree(versionId?: number | string) {
       });
       await fetchTree();
       return updated;
-    } catch (err: any) {
-      setError(err?.message || 'تعذر تحديث واصفات سلم التقدير.');
+    } catch (err: unknown) {
+      setError(extractApiErrorMessage(err, 'تعذر تحديث واصفات سلم التقدير.'));
       throw err;
     } finally {
       setIsSaving(false);

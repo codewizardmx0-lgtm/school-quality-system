@@ -6,7 +6,10 @@
  */
 
 import { get, post, patch, del, apiClient } from '../../../api/apiClient';
+import type { JsonRecord } from '../../../api/apiTypes';
 import type {
+  AvailableCycleSummary,
+  ParticipatingSchoolItem,
   SupervisionDashboardData,
   ActiveStandardVersion,
   CycleLaunchPayload,
@@ -22,6 +25,41 @@ import type {
   CentralAnalyticsParams,
   HistoricalComparisonData,
 } from './supervisionTypes';
+
+/** استخلاص مصفوفة من استجابة مباشرة أو مغلفة بـ data */
+function unwrapArray<T>(raw: unknown): T[] {
+  if (Array.isArray(raw)) return raw as T[];
+  if (raw && typeof raw === 'object' && 'data' in raw) {
+    const inner = (raw as { data: unknown }).data;
+    if (Array.isArray(inner)) return inner as T[];
+    if (inner && typeof inner === 'object' && 'data' in inner) {
+      const nested = (inner as { data: unknown }).data;
+      if (Array.isArray(nested)) return nested as T[];
+    }
+  }
+  return [];
+}
+
+/** جلب ملف نسخة وثيقة ككائن Blob عبر رابط أو معرف رقمي */
+async function fetchDocumentVersionBlob(versionIdOrUrl: number | string, defaultType?: string): Promise<Blob> {
+  let endpoint =
+    typeof versionIdOrUrl === 'number' ? `/document-versions/${versionIdOrUrl}/download` : versionIdOrUrl;
+  if (typeof versionIdOrUrl === 'string' && versionIdOrUrl.includes('/document-versions/')) {
+    const match = versionIdOrUrl.match(/\/document-versions\/(\d+)\/download/);
+    if (match) {
+      endpoint = `/document-versions/${match[1]}/download`;
+    }
+  }
+  const response = await apiClient.get(endpoint, { responseType: 'blob' });
+  const rawData =
+    response && typeof response === 'object' && 'data' in response && (response as { data: unknown }).data instanceof Blob
+      ? (response as { data: Blob }).data
+      : response;
+  if (rawData instanceof Blob) {
+    return defaultType ? new Blob([rawData], { type: rawData.type || defaultType }) : rawData;
+  }
+  return new Blob([rawData as unknown as BlobPart], defaultType ? { type: defaultType } : undefined);
+}
 
 export const supervisionApi = {
   /**
@@ -53,23 +91,17 @@ export const supervisionApi = {
    * 2.1. استرجاع قائمة الدورات التقييمية المسجلة في النظام
    * GET /api/v1/evaluation-cycles
    */
-  async getEvaluationCycles(): Promise<any[]> {
-    const response = await get<any>('/evaluation-cycles');
-    if (Array.isArray(response?.data)) {
-      return response.data;
-    }
-    if (Array.isArray((response?.data as any)?.data)) {
-      return (response.data as any).data;
-    }
-    return [];
+  async getEvaluationCycles(): Promise<AvailableCycleSummary[]> {
+    const response = await get<unknown>('/evaluation-cycles');
+    return unwrapArray<AvailableCycleSummary>(response);
   },
 
   /**
    * 2.2. استرجاع المدارس المتاحة للتسجيل في الدورة والغير مسجلة بعد
    * GET /api/v1/evaluation-cycles/{id}/available-schools
    */
-  async getAvailableSchoolsForCycle(cycleId: number): Promise<any[]> {
-    const response = await get<any[]>(`/evaluation-cycles/${cycleId}/available-schools`);
+  async getAvailableSchoolsForCycle(cycleId: number): Promise<ParticipatingSchoolItem[]> {
+    const response = await get<ParticipatingSchoolItem[]>(`/evaluation-cycles/${cycleId}/available-schools`);
     return Array.isArray(response?.data) ? response.data : [];
   },
 
@@ -77,41 +109,38 @@ export const supervisionApi = {
    * 2.3. إلحاق وتسجيل مدارس إضافية بالدورة التقييمية
    * POST /api/v1/evaluation-cycles/{id}/participations
    */
-  async enrollSchoolsInCycle(cycleId: number, schoolIds: number[]): Promise<any> {
-    const response = await post<any>(`/evaluation-cycles/${cycleId}/participations`, {
+  async enrollSchoolsInCycle(cycleId: number, schoolIds: number[]): Promise<JsonRecord> {
+    const response = await post<JsonRecord>(`/evaluation-cycles/${cycleId}/participations`, {
       school_ids: schoolIds,
     });
-    return response?.data ?? response;
+    return (response?.data ?? response) as JsonRecord;
   },
 
   /**
    * 2.4. استرجاع قائمة المدارس الفعّالة (مع فلترة اختيارية بحسب المحافظة)
    * GET /api/v1/schools?status=Active
    */
-  async getActiveSchools(governorate?: string | null): Promise<any[]> {
+  async getActiveSchools(governorate?: string | null): Promise<JsonRecord[]> {
     const params = new URLSearchParams();
     params.set('status', 'Active');
     if (governorate && governorate !== 'كافة المحافظات') {
       params.set('governorate', governorate);
     }
-    const response = await get<any>(`/schools?${params.toString()}`);
-    if (Array.isArray(response)) return response;
-    if (Array.isArray(response?.data)) return response.data;
-    if (Array.isArray((response?.data as any)?.data)) return (response.data as any).data;
-    return [];
+    const response = await get<unknown>(`/schools?${params.toString()}`);
+    return unwrapArray<JsonRecord>(response);
   },
 
   /**
    * 3. إطلاق دورة تقييمية جديدة وربطها بنطاق المدارس
    * POST /api/v1/evaluation-cycles
    */
-  async launchCycle(payload: CycleLaunchPayload): Promise<any> {
+  async launchCycle(payload: CycleLaunchPayload): Promise<JsonRecord> {
     const scopeGov =
       payload.targetGovernorate && payload.targetGovernorate !== 'كافة المحافظات'
         ? payload.targetGovernorate
         : null;
 
-    const response = await post<any>('/evaluation-cycles', {
+    const response = await post<JsonRecord>('/evaluation-cycles', {
       academic_year: payload.academicYear,
       name: payload.name,
       scope_governorate: scopeGov,
@@ -126,7 +155,7 @@ export const supervisionApi = {
       const firstError = Object.values(response.errors)[0]?.[0];
       throw new Error(firstError || response.message || 'فشل إطلاق دورة التقييم.');
     }
-    return response?.data ?? response;
+    return (response?.data ?? response) as JsonRecord;
   },
 
   /**
@@ -143,8 +172,8 @@ export const supervisionApi = {
       status?: 'Active' | 'Closed';
       maxCompletionDays?: number;
     }
-  ): Promise<any> {
-    const body: Record<string, any> = {};
+  ): Promise<JsonRecord> {
+    const body: JsonRecord = {};
     if (payload.name !== undefined) body.name = payload.name;
     if (payload.startDate !== undefined) body.start_date = payload.startDate;
     if (payload.endDate !== undefined) body.end_date = payload.endDate;
@@ -157,19 +186,19 @@ export const supervisionApi = {
     if (payload.status !== undefined) body.status = payload.status;
     if (payload.maxCompletionDays !== undefined) body.max_completion_days = payload.maxCompletionDays;
 
-    const response = await patch<any>(`/evaluation-cycles/${cycleId}`, body);
+    const response = await patch<JsonRecord>(`/evaluation-cycles/${cycleId}`, body);
     if (!response?.data && response?.errors) {
       const firstError = Object.values(response.errors)[0]?.[0];
       throw new Error(firstError || response.message || 'فشل تحديث بيانات دورة التقييم.');
     }
-    return response?.data ?? response;
+    return (response?.data ?? response) as JsonRecord;
   },
 
   /**
    * 3.2. إغلاق وأرشفة الدورة التقييمية النشطة
    * PATCH /api/v1/evaluation-cycles/{id} (status: 'Closed')
    */
-  async closeCycle(cycleId: number): Promise<any> {
+  async closeCycle(cycleId: number): Promise<JsonRecord> {
     return this.updateCycle(cycleId, { status: 'Closed' });
   },
 
@@ -208,9 +237,9 @@ export const supervisionApi = {
       directives?: string;
       allowedActions?: string[];
     }
-  ): Promise<any> {
+  ): Promise<JsonRecord> {
     const cats = payload.deficiencyCategories || (payload.deficiencyCategory ? [payload.deficiencyCategory] : []);
-    const response = await post<any>(`/evaluation-submissions/${id}/deficiency-notes`, {
+    const response = await post<JsonRecord>(`/evaluation-submissions/${id}/deficiency-notes`, {
       indicator_id: payload.indicatorId,
       deficiency_category: payload.deficiencyCategory || cats.join('، ') || 'نقص الشواهد الإلزامية المطلوبة في أداة التحقق',
       deficiency_categories: cats,
@@ -222,16 +251,16 @@ export const supervisionApi = {
       const firstError = Object.values(response.errors)[0]?.[0];
       throw new Error(firstError || response.message || 'تعذر حفظ رصد النقص.');
     }
-    return response?.data ?? response;
+    return (response?.data ?? response) as JsonRecord;
   },
 
   /**
    * 4.3. إلغاء رصد النقص عن مؤشر محدد
    * DELETE /api/v1/evaluation-submissions/{id}/deficiency-notes/{indicatorId}
    */
-  async deleteDeficiencyNote(id: number, indicatorId: number): Promise<any> {
-    const response = await del<any>(`/evaluation-submissions/${id}/deficiency-notes/${indicatorId}`);
-    return response?.data ?? response;
+  async deleteDeficiencyNote(id: number, indicatorId: number): Promise<JsonRecord> {
+    const response = await del<JsonRecord>(`/evaluation-submissions/${id}/deficiency-notes/${indicatorId}`);
+    return (response?.data ?? response) as JsonRecord;
   },
 
   /**
@@ -297,8 +326,8 @@ export const supervisionApi = {
    * تمديد مهلة طلب الاستكمال وتوثيق المبرر (FR-SUP-11)
    * PATCH /api/v1/completion-requests/{id}/deadline
    */
-  async extendCompletionDeadline(requestId: number, newDeadline: string, reason?: string): Promise<any> {
-    const response = await patch<any>(
+  async extendCompletionDeadline(requestId: number, newDeadline: string, reason?: string): Promise<JsonRecord> {
+    const response = await patch<JsonRecord>(
       `/completion-requests/${requestId}/deadline`,
       { new_deadline: newDeadline, reason }
     );
@@ -345,8 +374,8 @@ export const supervisionApi = {
    * 7. استرجاع تفاصيل طلب استكمال برقم المعرف
    * GET /api/v1/completion-requests/{id}
    */
-  async getCompletionRequest(requestId: number): Promise<any> {
-    const response = await get<any>(`/completion-requests/${requestId}`);
+  async getCompletionRequest(requestId: number): Promise<JsonRecord> {
+    const response = await get<JsonRecord>(`/completion-requests/${requestId}`);
     if (!response?.data) {
       throw new Error(response?.message || 'تعذر استرجاع تفاصيل طلب الاستكمال.');
     }
@@ -449,14 +478,14 @@ export const supervisionApi = {
     window.URL.revokeObjectURL(url);
   },
 
-  async exportTrackingLogPdf(schoolId: number): Promise<any> {
-    const response = await get<any>(`/schools/${schoolId}/tracking-log/pdf`);
-    return response?.data ?? response;
+  async exportTrackingLogPdf(schoolId: number): Promise<JsonRecord> {
+    const response = await get<JsonRecord>(`/schools/${schoolId}/tracking-log/pdf`);
+    return (response?.data ?? response) as JsonRecord;
   },
 
-  async exportTrackingLogExcel(schoolId: number): Promise<any> {
-    const response = await get<any>(`/schools/${schoolId}/tracking-log/excel`);
-    return response?.data ?? response;
+  async exportTrackingLogExcel(schoolId: number): Promise<JsonRecord> {
+    const response = await get<JsonRecord>(`/schools/${schoolId}/tracking-log/excel`);
+    return (response?.data ?? response) as JsonRecord;
   },
 
   async exportHistoricalComparisonPdf(
@@ -532,20 +561,7 @@ export const supervisionApi = {
    * 15. تحميل ملف نسخة المستند أو الشاهد عبر Token مصادق
    */
   async downloadDocumentVersion(versionIdOrUrl: number | string, fileName?: string): Promise<void> {
-    let endpoint = typeof versionIdOrUrl === 'number'
-      ? `/document-versions/${versionIdOrUrl}/download`
-      : versionIdOrUrl;
-    if (typeof versionIdOrUrl === 'string' && versionIdOrUrl.includes('/document-versions/')) {
-      const match = versionIdOrUrl.match(/\/document-versions\/(\d+)\/download/);
-      if (match) {
-        endpoint = `/document-versions/${match[1]}/download`;
-      }
-    }
-    const response: any = await apiClient.get(endpoint, {
-      responseType: 'blob',
-    });
-    const rawData = response?.data instanceof Blob ? response.data : response;
-    const blob = rawData instanceof Blob ? rawData : new Blob([rawData]);
+    const blob = await fetchDocumentVersionBlob(versionIdOrUrl);
     const url = window.URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
@@ -560,22 +576,7 @@ export const supervisionApi = {
    * 16. معاينة ملف نسخة المستند أو الشاهد في نافذة متصفح جديدة عبر Token مصادق
    */
   async previewDocumentVersion(versionIdOrUrl: number | string): Promise<void> {
-    let endpoint = typeof versionIdOrUrl === 'number'
-      ? `/document-versions/${versionIdOrUrl}/download`
-      : versionIdOrUrl;
-    if (typeof versionIdOrUrl === 'string' && versionIdOrUrl.includes('/document-versions/')) {
-      const match = versionIdOrUrl.match(/\/document-versions\/(\d+)\/download/);
-      if (match) {
-        endpoint = `/document-versions/${match[1]}/download`;
-      }
-    }
-    const response: any = await apiClient.get(endpoint, {
-      responseType: 'blob',
-    });
-    const rawData = response?.data instanceof Blob ? response.data : response;
-    const blob = rawData instanceof Blob
-      ? new Blob([rawData], { type: rawData.type || 'application/pdf' })
-      : new Blob([rawData], { type: 'application/pdf' });
+    const blob = await fetchDocumentVersionBlob(versionIdOrUrl, 'application/pdf');
     const url = window.URL.createObjectURL(blob);
     window.open(url, '_blank');
   },

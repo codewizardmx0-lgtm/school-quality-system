@@ -78,15 +78,15 @@ export const HistoricalPerformancePage: React.FC<HistoricalPerformancePageProps>
       if (!compareCycle && res.comparedCycle?.academicYear) {
         setSelectedCompareCycle(res.comparedCycle.academicYear);
       }
-    } catch (err: any) {
-      setError(err?.message || 'تعذر تحميل بيانات المقارنة التاريخية للمدرسة.');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'تعذر تحميل بيانات المقارنة التاريخية للمدرسة.');
     } finally {
       setIsLoading(false);
     }
   }, [schoolId]);
 
   useEffect(() => {
-    fetchComparison();
+    void Promise.resolve().then(() => fetchComparison());
   }, [fetchComparison]);
 
   // Handle cycle change
@@ -135,8 +135,8 @@ export const HistoricalPerformancePage: React.FC<HistoricalPerformancePageProps>
       );
       setExportSuccessMessage('تم تصدير مصفوفة المقارنة التراكمية (Excel) بنجاح.');
       setTimeout(() => setExportSuccessMessage(null), 3500);
-    } catch (err: any) {
-      setError(err?.message || 'حدث خطأ أثناء تصدير ملف Excel.');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'حدث خطأ أثناء تصدير ملف Excel.');
     } finally {
       setIsExportingExcel(false);
     }
@@ -155,8 +155,8 @@ export const HistoricalPerformancePage: React.FC<HistoricalPerformancePageProps>
       );
       setExportSuccessMessage('تم تحميل تقرير المقارنة التاريخية الرسمي (PDF) بنجاح.');
       setTimeout(() => setExportSuccessMessage(null), 3500);
-    } catch (err: any) {
-      setError(err?.message || 'حدث خطأ أثناء تحميل تقرير PDF.');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'حدث خطأ أثناء تحميل تقرير PDF.');
     } finally {
       setIsExportingPdf(false);
     }

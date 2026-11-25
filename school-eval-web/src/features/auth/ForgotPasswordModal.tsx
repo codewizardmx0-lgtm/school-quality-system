@@ -14,13 +14,13 @@ export const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({
   onClose,
   onNavigateToReset,
 }) => {
-  if (!isOpen) return null;
-
   const [email, setEmail] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [devResetToken, setDevResetToken] = useState<string | null>(null);
+
+  if (!isOpen) return null;
 
   const handleClose = () => {
     if (isLoading) return;
@@ -50,9 +50,9 @@ export const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({
 
     setIsLoading(true);
     try {
-      const response: any = await apiClient.post('/auth/password/forgot', {
+      const response = (await apiClient.post('/auth/password/forgot', {
         email: trimmedEmail,
-      });
+      })) as unknown as { message?: string; data?: { resetToken?: string } };
 
       setSuccessMessage(
         response?.message || 'إذا كان البريد الإلكتروني مسجلاً، فقد تم إرسال تعليمات استعادة كلمة المرور.'
@@ -62,10 +62,11 @@ export const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({
       if (response?.data?.resetToken) {
         setDevResetToken(response.data.resetToken);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const apiErr = err as { response?: { data?: { errors?: { email?: string[] }; message?: string } } };
       const errMsg =
-        err?.response?.data?.errors?.email?.[0] ||
-        err?.response?.data?.message ||
+        apiErr?.response?.data?.errors?.email?.[0] ||
+        apiErr?.response?.data?.message ||
         'حدث خطأ أثناء معالجة طلب الاستعادة. يرجى المحاولة لاحقاً.';
       setError(errMsg);
     } finally {

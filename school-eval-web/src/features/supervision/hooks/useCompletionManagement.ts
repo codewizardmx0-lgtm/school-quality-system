@@ -6,6 +6,7 @@
 
 import { useState, useEffect } from 'react';
 import { supervisionApi } from '../api/supervisionApi';
+import { extractApiErrorMessage } from '../../../api/apiTypes';
 import type {
   CompletionItemPayload,
   CreateCompletionRequestPayload,
@@ -24,13 +25,13 @@ export function useCompletionManagement(
 
   useEffect(() => {
     if (initialSubmissionId) {
-      setSubmissionId(initialSubmissionId);
+      void Promise.resolve().then(() => setSubmissionId(initialSubmissionId));
     }
   }, [initialSubmissionId]);
 
   useEffect(() => {
     if (initialItems && initialItems.length > 0) {
-      setItems(initialItems);
+      void Promise.resolve().then(() => setItems(initialItems));
     }
   }, [initialItems]);
 
@@ -79,7 +80,11 @@ export function useCompletionManagement(
   };
 
   // تعديل بند
-  const updateItem = (indicatorId: number, field: keyof PreloadedCompletionItem, value: any) => {
+  const updateItem = <K extends keyof PreloadedCompletionItem>(
+    indicatorId: number,
+    field: K,
+    value: PreloadedCompletionItem[K]
+  ) => {
     setItems((prev) =>
       prev.map((i) => (i.indicatorId === indicatorId ? { ...i, [field]: value } : i))
     );
@@ -133,8 +138,8 @@ export function useCompletionManagement(
       if (onSuccess) {
         onSuccess();
       }
-    } catch (err: any) {
-      setErrorMessage(err?.message || 'تعذر إصدار طلب الاستكمال.');
+    } catch (err: unknown) {
+      setErrorMessage(extractApiErrorMessage(err, 'تعذر إصدار طلب الاستكمال.'));
     } finally {
       setIsSubmitting(false);
     }

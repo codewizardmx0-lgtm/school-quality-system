@@ -28,10 +28,12 @@ export const SafeResetConfirmModal: React.FC<SafeResetConfirmModalProps> = ({
 
   useEffect(() => {
     if (isOpen) {
-      setUnlinkEvidences(false);
-      setStep(1);
-      setDoubleConfirmChecked(false);
-      setErrorMsg(null);
+      void Promise.resolve().then(() => {
+        setUnlinkEvidences(false);
+        setStep(1);
+        setDoubleConfirmChecked(false);
+        setErrorMsg(null);
+      });
     }
   }, [isOpen]);
 
@@ -53,10 +55,11 @@ export const SafeResetConfirmModal: React.FC<SafeResetConfirmModalProps> = ({
     try {
       await onConfirm(unlinkEvidences);
       onClose();
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const apiErr = err as { response?: { data?: { message?: string } }; message?: string };
       setErrorMsg(
-        err?.response?.data?.message ||
-          err?.message ||
+        apiErr?.response?.data?.message ||
+          apiErr?.message ||
           'تعذر تنفيذ عملية التصفير. قد يكون ملف التقييم مقفلاً أو مُرسلاً للمراجعة.'
       );
     } finally {

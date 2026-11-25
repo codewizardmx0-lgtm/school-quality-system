@@ -495,7 +495,7 @@ export interface SubmissionReviewData {
     documents: SupervisionVaultDocument[];
     stats: SupervisionVaultStats;
   };
-  evidenceInventory?: any;
+  evidenceInventory?: unknown;
   planDetails?: SupervisionPlanDetails | null;
   plans?: SupervisionPlanDetails[];
   allPlans?: SupervisionPlanDetails[];
@@ -905,7 +905,16 @@ export interface HistoricalComparisonData {
   standardsDeltas: HistoricalStandardDelta[];
   allIndicatorsDeltas?: HistoricalIndicatorDelta[];
   recommendations?: string[];
-  availableCycles?: any[];
+  availableCycles?: AvailableCycleSummary[];
+}
+
+export interface AvailableCycleSummary {
+  cycleId?: number;
+  id?: number;
+  academicYear?: string;
+  academic_year?: string;
+  name?: string;
+  [key: string]: unknown;
 }
 
 export interface ParticipatingSchoolItem {

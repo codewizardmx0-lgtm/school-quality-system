@@ -43,8 +43,10 @@ export const ResetPasswordPage: React.FC<ResetPasswordPageProps> = ({
       const searchParams = new URLSearchParams(window.location.search);
       const urlEmail = searchParams.get('email');
       const urlToken = searchParams.get('token');
-      if (urlEmail && !email) setEmail(urlEmail);
-      if (urlToken && !token) setToken(urlToken);
+      void Promise.resolve().then(() => {
+        if (urlEmail) setEmail((prev) => prev || urlEmail);
+        if (urlToken) setToken((prev) => prev || urlToken);
+      });
     }
   }, []);
 
@@ -93,18 +95,19 @@ export const ResetPasswordPage: React.FC<ResetPasswordPageProps> = ({
 
     setIsSubmitting(true);
     try {
-      const response: any = await apiClient.post('/auth/password/reset', {
+      const response = (await apiClient.post('/auth/password/reset', {
         email: trimmedEmail,
         token: trimmedToken,
         password,
         password_confirmation: passwordConfirmation,
-      });
+      })) as unknown as { message?: string };
 
       setSuccessMessage(
         response?.message || 'تمت إعادة تعيين كلمة المرور بنجاح. يمكنك الآن تسجيل الدخول بكلمة المرور الجديدة.'
       );
-    } catch (err: any) {
-      const resp = err?.response?.data;
+    } catch (err: unknown) {
+      const apiErr = err as { response?: { data?: { errors?: Record<string, string[]>; message?: string } } };
+      const resp = apiErr?.response?.data;
       if (resp?.errors) {
         setFieldErrors(resp.errors);
       }

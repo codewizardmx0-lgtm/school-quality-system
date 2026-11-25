@@ -1,16 +1,18 @@
-import React, { useState, useEffect } from 'react';
+import React, { Suspense, lazy, useState, useEffect } from 'react';
 import { AdminSidebar } from './AdminSidebar';
 import { AdminTopBar } from './AdminTopBar';
 import { ToastNotification } from '../common/ToastNotification';
 import { useToast } from '../common/useToast';
-import { AdminDashboard } from '../dashboard/AdminDashboard';
-import { UsersManagement } from '../users/UsersManagement';
-import { SchoolsDirectory } from '../schools/SchoolsDirectory';
-import { SecurityAudit } from '../audit/SecurityAudit';
-import { BackupAndSettings } from '../backup/BackupAndSettings';
-import { ChangePasswordModal } from '../../../auth/ChangePasswordModal';
+import { PortalLoader } from '../../../../components/ui/PortalLoader';
 import { backupApi } from '../../api/backupApi';
 import type { AdminScreen } from '../../types/admin.types';
+
+const AdminDashboard = lazy(() => import('../dashboard/AdminDashboard').then((m) => ({ default: m.AdminDashboard })));
+const UsersManagement = lazy(() => import('../users/UsersManagement').then((m) => ({ default: m.UsersManagement })));
+const SchoolsDirectory = lazy(() => import('../schools/SchoolsDirectory').then((m) => ({ default: m.SchoolsDirectory })));
+const SecurityAudit = lazy(() => import('../audit/SecurityAudit').then((m) => ({ default: m.SecurityAudit })));
+const BackupAndSettings = lazy(() => import('../backup/BackupAndSettings').then((m) => ({ default: m.BackupAndSettings })));
+const ChangePasswordModal = lazy(() => import('../../../auth/ChangePasswordModal').then((m) => ({ default: m.ChangePasswordModal })));
 
 interface AdminLayoutProps {
   initialScreen?: AdminScreen;
@@ -76,7 +78,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
           ? 'تم تفعيل وضع الصيانة المجدولة: تم تعليق وصول المستخدمين العاديين للنظام'
           : 'تم إلغاء وضع الصيانة: النظام متاح الآن لكافة المدارس والمشرفين'
       );
-    } catch (err) {
+    } catch {
       addToast('error', 'تعذر تغيير حالة وضع الصيانة، يرجى المحاولة لاحقاً');
     } finally {
       setIsTogglingMaintenance(false);
@@ -177,16 +179,22 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
             maxWidth: '100%',
           }}
         >
-          {renderScreen()}
+          <Suspense fallback={<PortalLoader inline />}>
+            {renderScreen()}
+          </Suspense>
         </main>
       </div>
 
       {/* Change Password Modal */}
-      <ChangePasswordModal
-        isOpen={isChangePasswordOpen}
-        onClose={() => setIsChangePasswordOpen(false)}
-        addToast={addToast}
-      />
+      {isChangePasswordOpen && (
+        <Suspense fallback={null}>
+          <ChangePasswordModal
+            isOpen={isChangePasswordOpen}
+            onClose={() => setIsChangePasswordOpen(false)}
+            addToast={addToast}
+          />
+        </Suspense>
+      )}
 
       {/* Global Toast Notifications */}
       <ToastNotification toasts={toasts} onDismiss={dismissToast} />

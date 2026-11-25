@@ -48,9 +48,10 @@ export const EvaluatorDashboard: React.FC<EvaluatorDashboardProps> = ({
     setIsExportingPdf(true);
     try {
       await evaluatorApi.exportReportPdf();
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const apiErr = err as { response?: { data?: { message?: string } } };
       console.error('Failed to export PDF:', err);
-      alert(err?.response?.data?.message || 'تعذر تصدير تقرير التقييم PDF.');
+      alert(apiErr?.response?.data?.message || 'تعذر تصدير تقرير التقييم PDF.');
     } finally {
       setIsExportingPdf(false);
     }

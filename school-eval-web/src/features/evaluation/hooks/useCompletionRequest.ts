@@ -23,7 +23,7 @@ export function useCompletionRequest() {
   }, []);
 
   useEffect(() => {
-    fetchCompletionRequest();
+    void Promise.resolve().then(() => fetchCompletionRequest());
   }, [fetchCompletionRequest]);
 
   // التحقق مما إذا كان مؤشر معين مفتوحاً للتعديل الجزئي

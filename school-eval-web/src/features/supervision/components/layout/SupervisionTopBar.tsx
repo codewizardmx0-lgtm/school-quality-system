@@ -31,7 +31,7 @@ import { get } from '../../../../api/apiClient';
 
 interface SupervisionTopBarProps {
   activeScreen: SupervisionScreenKey;
-  onNavigate: (screen: SupervisionScreenKey, params?: any) => void;
+  onNavigate: (screen: SupervisionScreenKey, params?: Record<string, unknown>) => void;
   scopeText?: string;
   userName?: string;
   userRole?: string;
@@ -518,7 +518,9 @@ export const SupervisionTopBar: React.FC<SupervisionTopBarProps> = ({
       <UniversalNotificationsDrawer
         isOpen={isNotificationsDrawerOpen}
         onClose={() => setIsNotificationsDrawerOpen(false)}
-        onNavigate={(screen, param) => onNavigate(screen as SupervisionScreenKey, param)}
+        onNavigate={(screen, param) =>
+          onNavigate(screen as SupervisionScreenKey, (param && typeof param === 'object' ? param : undefined) as Record<string, unknown> | undefined)
+        }
       />
     </>
   );

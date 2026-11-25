@@ -27,7 +27,7 @@ interface GovernanceChecksListProps {
   isDraft?: boolean;
   isApproved?: boolean;
   isLocking: boolean;
-  onLock: (approvalCode: string, legalConfirmed: boolean, action?: 'approve' | 'activate' | 'schedule') => Promise<any>;
+  onLock: (approvalCode: string, legalConfirmed: boolean, action?: 'approve' | 'activate' | 'schedule') => Promise<unknown>;
 }
 
 export const GovernanceChecksList: React.FC<GovernanceChecksListProps> = ({
@@ -55,9 +55,9 @@ export const GovernanceChecksList: React.FC<GovernanceChecksListProps> = ({
 
   useEffect(() => {
     if (preconditions?.isScheduled !== undefined) {
-      setIsScheduledState(preconditions.isScheduled);
+      void Promise.resolve().then(() => setIsScheduledState(Boolean(preconditions.isScheduled)));
     } else if (diffData?.isScheduled !== undefined) {
-      setIsScheduledState(diffData.isScheduled);
+      void Promise.resolve().then(() => setIsScheduledState(Boolean(diffData.isScheduled)));
     }
   }, [preconditions?.isScheduled, diffData?.isScheduled]);
 
@@ -67,16 +67,18 @@ export const GovernanceChecksList: React.FC<GovernanceChecksListProps> = ({
     try {
       await onLock(approvalCode || 'DEC-NAT-2026-88', true, 'schedule');
       setIsScheduledState(true);
-    } catch (err: any) {
-      setError(err?.message || 'تعذر جدولة الإصدار للدورة القادمة.');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : undefined;
+      setError(msg || 'تعذر جدولة الإصدار للدورة القادمة.');
     } finally {
       setIsScheduling(false);
     }
   };
 
   useEffect(() => {
-    if (!approvalCode && (preconditions?.approvalCode || diffData?.approvalCode)) {
-      setApprovalCode(preconditions?.approvalCode || diffData?.approvalCode || '');
+    const fallbackCode = preconditions?.approvalCode || diffData?.approvalCode;
+    if (fallbackCode) {
+      void Promise.resolve().then(() => setApprovalCode((prev) => prev || fallbackCode));
     }
   }, [preconditions?.approvalCode, diffData?.approvalCode]);
 
@@ -152,8 +154,9 @@ export const GovernanceChecksList: React.FC<GovernanceChecksListProps> = ({
     try {
       await onLock(approvalCode.trim(), legalConfirmed, 'approve');
       setIsPasswordModalOpen(false);
-    } catch (err: any) {
-      setPasswordError(err?.message || 'فشل إتمام القفل الرقمي والإقرار.');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : undefined;
+      setPasswordError(msg || 'فشل إتمام القفل الرقمي والإقرار.');
     }
   };
 

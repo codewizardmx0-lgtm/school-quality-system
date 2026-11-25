@@ -303,7 +303,16 @@ class EvaluatorScreenRegressionTest extends TestCase
     {
         Sanctum::actingAs($this->evaluatorBelqees);
 
-        $doc = \App\Models\SchoolDocument::where('school_id', $this->evaluatorBelqees->school_id)->firstOrFail();
+        $doc = \App\Models\SchoolDocument::where('school_id', $this->evaluatorBelqees->school_id)->first();
+        if (!$doc) {
+            $doc = \App\Models\SchoolDocument::create([
+                'school_id'          => $this->evaluatorBelqees->school_id,
+                'created_by_user_id' => $this->evaluatorBelqees->user_id,
+                'title'              => 'شاهد توثيقي أولي للاختبار',
+                'document_type'      => 'report',
+                'description'        => 'شاهد اختباري مستقل للبيئة النظيفة',
+            ]);
+        }
 
         $response = $this->patchJson("/api/v1/evidences/documents/{$doc->id}", [
             'title' => 'محضر مراجعة معايير الجودة المحدث',

@@ -99,8 +99,9 @@ export const CreateUserModal: React.FC<CreateUserModalProps> = ({ isOpen, onClos
     const cleanGov = normalizedGov.replace('محافظة', '').trim();
 
     return directorates.filter((d) => {
-      if (!d.governorate && !(d as any).governorateName) return false;
-      const dGov = (d.governorate || (d as any).governorateName || '').trim().toLowerCase();
+      const extDir = d as Directorate & { governorateName?: string };
+      if (!extDir.governorate && !extDir.governorateName) return false;
+      const dGov = (extDir.governorate || extDir.governorateName || '').trim().toLowerCase();
       const cleanDGov = dGov.replace('محافظة', '').trim();
       return (
         dGov === normalizedGov ||
@@ -134,12 +135,15 @@ export const CreateUserModal: React.FC<CreateUserModalProps> = ({ isOpen, onClos
 
   if (!isOpen) return null;
 
-  const schoolOptions: SearchableOption[] = schools.map((s) => ({
-    value: s.schoolId,
-    label: s.schoolName,
-    code: s.schoolCode,
-    sublabel: (s as any).educationalDistrict || (s as any).directorate,
-  }));
+  const schoolOptions: SearchableOption[] = schools.map((s) => {
+    const extSchool = s as { schoolId: number; schoolName: string; schoolCode: string; educationalDistrict?: string; directorate?: string };
+    return {
+      value: extSchool.schoolId,
+      label: extSchool.schoolName,
+      code: extSchool.schoolCode,
+      sublabel: extSchool.educationalDistrict || extSchool.directorate,
+    };
+  });
 
   // Filter roles dynamically according to official DB roles
   const filteredRoles = roles.filter((r) => {
@@ -219,12 +223,13 @@ export const CreateUserModal: React.FC<CreateUserModalProps> = ({ isOpen, onClos
       addToast('success', `تم إنشاء حساب ${form.fullName} بنجاح`);
       onSuccess();
       onClose();
-    } catch (err: any) {
-      if (err?.errors) {
+    } catch (err: unknown) {
+      const apiErr = err as { errors?: Record<string, unknown>; message?: string };
+      if (apiErr?.errors) {
         const mappedErrors: Record<string, string> = {};
         const unmappedMessages: string[] = [];
-        Object.entries(err.errors).forEach(([field, msgs]) => {
-          const msg = Array.isArray(msgs) ? (msgs as string[])[0] : String(msgs);
+        Object.entries(apiErr.errors).forEach(([field, msgs]) => {
+          const msg = Array.isArray(msgs) ? String(msgs[0]) : String(msgs);
           mappedErrors[field] = msg;
           if (!['fullName', 'username', 'email', 'password', 'schoolId', 'directorateId', 'governorate', 'roleId'].includes(field)) {
             unmappedMessages.push(msg);
@@ -233,11 +238,11 @@ export const CreateUserModal: React.FC<CreateUserModalProps> = ({ isOpen, onClos
         setErrors(mappedErrors);
         if (unmappedMessages.length > 0) {
           addToast('error', unmappedMessages.join(' • '));
-        } else if (err?.message) {
-          addToast('error', err.message);
+        } else if (apiErr?.message) {
+          addToast('error', apiErr.message);
         }
       } else {
-        addToast('error', err?.message || 'فشل إنشاء الحساب، يرجى المحاولة لاحقاً');
+        addToast('error', apiErr?.message || 'فشل إنشاء الحساب، يرجى المحاولة لاحقاً');
       }
     } finally {
       setLoading(false);

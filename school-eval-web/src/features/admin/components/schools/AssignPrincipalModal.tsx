@@ -30,7 +30,9 @@ export const AssignPrincipalModal: React.FC<AssignPrincipalModalProps> = ({
   useEffect(() => {
     if (!isOpen) return;
     let ignore = false;
-    setLoadingUsers(true);
+    void Promise.resolve().then(() => {
+      if (!ignore) setLoadingUsers(true);
+    });
     usersApi
       .getUsers()
       .then((res) => {
@@ -94,8 +96,9 @@ export const AssignPrincipalModal: React.FC<AssignPrincipalModalProps> = ({
       addToast('success', res.message || 'تم إسناد مدير المدرسة بنجاح');
       onSuccess();
       onClose();
-    } catch (err: any) {
-      const msg = err?.errors?.userId?.[0] || err?.message || 'فشل إسناد مدير المدرسة';
+    } catch (err: unknown) {
+      const apiErr = err as { errors?: { userId?: string[] }; message?: string };
+      const msg = apiErr?.errors?.userId?.[0] || apiErr?.message || 'فشل إسناد مدير المدرسة';
       setError(msg);
       addToast('error', msg);
     } finally {
@@ -113,8 +116,9 @@ export const AssignPrincipalModal: React.FC<AssignPrincipalModalProps> = ({
       addToast('info', res.message || 'تم فك ارتباط مدير المدرسة بنجاح');
       onSuccess();
       onClose();
-    } catch (err: any) {
-      addToast('error', err?.message || 'فشل فك ارتباط مدير المدرسة');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : undefined;
+      addToast('error', msg || 'فشل فك ارتباط مدير المدرسة');
     } finally {
       setLoading(false);
     }

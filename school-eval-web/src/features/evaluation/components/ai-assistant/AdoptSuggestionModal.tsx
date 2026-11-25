@@ -6,8 +6,8 @@ import type {
   AiInitiative,
   PriorityLevel,
   ImprovementPlanListItem,
-  PlanType,
 } from '../../api/evaluationTypes';
+import { getRecommendedPlanType } from '../../utils/planRecommendation';
 
 interface AdoptSuggestionModalProps {
   isOpen: boolean;
@@ -16,56 +16,6 @@ interface AdoptSuggestionModalProps {
   initiative?: AiInitiative | null;
   onSuccess: (message: string) => void;
 }
-
-export const getRecommendedPlanType = (
-  item: ImprovementSuggestion | AiInitiative
-): { type: PlanType; label: string; reason: string } => {
-  const code = ('indicatorCode' in item ? (item.indicatorCode || item.standardCode || '') : '').toUpperCase();
-  const text = (
-    'title' in item
-      ? `${item.title} ${item.description || ''}`
-      : `${item.standardName || ''} ${item.indicatorName || ''} ${item.suggestedName || ''}`
-  ).toLowerCase();
-
-  if (
-    code.includes('STD-02') ||
-    text.includes('معلم') ||
-    text.includes('تدريب') ||
-    text.includes('مهني') ||
-    text.includes('كوادر') ||
-    text.includes('تأهيل') ||
-    text.includes('تدريسي')
-  ) {
-    return {
-      type: 'StaffProfessionalDevelopment',
-      label: 'خطة التطوير المهني والتربوي للكوادر',
-      reason: 'يرتبط هذا الإجراء بالمعيار الثاني وتطوير الكفايات المهنية والتربوية للكوادر التعليمية والإدارية',
-    };
-  }
-
-  if (
-    text.includes('تشغيل') ||
-    text.includes('سنوي') ||
-    text.includes('مبنى') ||
-    text.includes('مرافق') ||
-    text.includes('تجهيزات') ||
-    text.includes('أمن') ||
-    text.includes('سلامة') ||
-    text.includes('صيانة')
-  ) {
-    return {
-      type: 'AnnualOperational',
-      label: 'الخطة التشغيلية السنوية للمدرسة',
-      reason: 'يرتبط هذا الإجراء بالعمليات والموارد التشغيلية والبيئة المادية للمدرسة',
-    };
-  }
-
-  return {
-    type: 'QualityImprovement',
-    label: 'خطة تحسين الجودة المدرسية الشاملة',
-    reason: 'يرتبط هذا الإجراء بمعايير نواتج التعليم والتعلم والفاعلية المؤسسية العامة',
-  };
-};
 
 export const AdoptSuggestionModal: React.FC<AdoptSuggestionModalProps> = ({
   isOpen,
@@ -91,7 +41,7 @@ export const AdoptSuggestionModal: React.FC<AdoptSuggestionModalProps> = ({
   // Load available improvement plans
   useEffect(() => {
     if (isOpen) {
-      setIsLoadingPlans(true);
+      void Promise.resolve().then(() => setIsLoadingPlans(true));
       evaluatorApi
         .getSchoolImprovementPlans()
         .then((list) => {
@@ -120,43 +70,47 @@ export const AdoptSuggestionModal: React.FC<AdoptSuggestionModalProps> = ({
     defaultDue.setMonth(defaultDue.getMonth() + 3);
     const defaultDueStr = defaultDue.toISOString().split('T')[0];
 
-    if (suggestion) {
-      setName(suggestion.suggestedName || `تحسين أداء: ${suggestion.indicatorName}`);
-      setLeader('فريق التطوير والجودة المدرسية');
-      setStartDate(today);
-      setDueDate(defaultDueStr);
-      setPriority(suggestion.suggestedPriority || 'High');
-      setTargetScore(suggestion.targetScore || 3);
-      setDescription(
-        `إجراء تحسين مبني على نتائج التقييم الذاتي للمؤشر (${suggestion.indicatorCode}). الدرجة المرصودة (${suggestion.score}) والدرجة المستهدفة (${suggestion.targetScore}) بفجوة قدرها (${suggestion.gap}).`
-      );
-    } else if (initiative) {
-      setName(initiative.humanModifications || initiative.title || '');
-      setLeader('مسؤول الجودة والتطوير المدرسي');
-      setStartDate(today);
-      setDueDate(defaultDueStr);
-      setPriority(initiative.priority || 'High');
-      setTargetScore(3);
-      setDescription(initiative.description || '');
-    }
+    void Promise.resolve().then(() => {
+      if (suggestion) {
+        setName(suggestion.suggestedName || `تحسين أداء: ${suggestion.indicatorName}`);
+        setLeader('فريق التطوير والجودة المدرسية');
+        setStartDate(today);
+        setDueDate(defaultDueStr);
+        setPriority(suggestion.suggestedPriority || 'High');
+        setTargetScore(suggestion.targetScore || 3);
+        setDescription(
+          `إجراء تحسين مبني على نتائج التقييم الذاتي للمؤشر (${suggestion.indicatorCode}). الدرجة المرصودة (${suggestion.score}) والدرجة المستهدفة (${suggestion.targetScore}) بفجوة قدرها (${suggestion.gap}).`
+        );
+      } else if (initiative) {
+        setName(initiative.humanModifications || initiative.title || '');
+        setLeader('مسؤول الجودة والتطوير المدرسي');
+        setStartDate(today);
+        setDueDate(defaultDueStr);
+        setPriority(initiative.priority || 'High');
+        setTargetScore(3);
+        setDescription(initiative.description || '');
+      }
+    });
   }, [suggestion, initiative]);
 
   // Auto-select recommended plan
   useEffect(() => {
     if (plans.length > 0 && recommendation) {
-      const matchingActive = plans.find(
-        (p) => p.planType === recommendation.type && (p.status === 'Active' || p.status === 'Draft')
-      );
-      if (matchingActive) {
-        setSelectedPlanId(String(matchingActive.planId));
-        return;
-      }
-      const anyActive = plans.find((p) => p.status === 'Active' || p.status === 'Draft');
-      if (anyActive) {
-        setSelectedPlanId(String(anyActive.planId));
-        return;
-      }
-      setSelectedPlanId(String(plans[0].planId));
+      void Promise.resolve().then(() => {
+        const matchingActive = plans.find(
+          (p) => p.planType === recommendation.type && (p.status === 'Active' || p.status === 'Draft')
+        );
+        if (matchingActive) {
+          setSelectedPlanId(String(matchingActive.planId));
+          return;
+        }
+        const anyActive = plans.find((p) => p.status === 'Active' || p.status === 'Draft');
+        if (anyActive) {
+          setSelectedPlanId(String(anyActive.planId));
+          return;
+        }
+        setSelectedPlanId(String(plans[0].planId));
+      });
     }
   }, [plans, recommendation]);
 

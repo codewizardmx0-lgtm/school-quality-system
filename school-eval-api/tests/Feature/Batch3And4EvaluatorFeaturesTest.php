@@ -6,10 +6,12 @@ use App\Models\Evaluation;
 use App\Models\School;
 use App\Models\User;
 use Database\Seeders\DemoEvaluationSeeder;
+use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Tests\TestCase;
 
 class Batch3And4EvaluatorFeaturesTest extends TestCase
 {
+    use DatabaseTransactions;
     /**
      * التحقق من توفر توزيع الدرجات (scoreDistribution) داخل كل معيار في standardsProgress لدعم التصفية المتعددة
      */
